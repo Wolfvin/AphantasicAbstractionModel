@@ -1,4 +1,10 @@
-"""RSVS FastAPI server — async, OpenAPI docs, production-grade."""
+"""RSVS FastAPI server — async, OpenAPI docs, production-grade.
+
+Updated for RSVS v5.0 compositional architecture with:
+  - Structural similarity and substitution analysis endpoints
+  - Compose with (label, sense_id) pairs
+  - Enriched return types from Rust core (layer, grounding_score, compositions, etc.)
+"""
 
 from __future__ import annotations
 
@@ -6,7 +12,7 @@ import json
 from contextlib import asynccontextmanager
 from typing import Any, List, Optional
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
@@ -41,8 +47,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="RSVS — Relational Symbolic Vocabulary System",
-    version="4.2.0",
-    description="Hard-attention symbolic knowledge engine with Rust core",
+    version="5.0.0",
+    description="Hard-attention symbolic knowledge engine with Rust core (v5.0 compositional architecture)",
     lifespan=lifespan,
 )
 
@@ -79,7 +85,7 @@ class IngestRequest(BaseModel):
 
 
 class RunRequest(BaseModel):
-    mode: str = Field(..., description="Mode: ingest | query | appraise | relate")
+    mode: str = Field(..., description="Mode: ingest | query | appraise | relate | compose | structural_similarity | substitution_analysis")
     text: str = Field(..., min_length=1)
     target: str | None = None
     source: str | None = None
@@ -104,10 +110,31 @@ class RelateRequest(BaseModel):
     target: str = Field(..., min_length=1)
 
 
+class CompositionPair(BaseModel):
+    """A (label, sense_id) pair for compositional node creation."""
+    label: str = Field(..., min_length=1, description="Atom label")
+    sense_id: int = Field(0, ge=0, description="Sense ID within the atom (0 = default)")
+
+
 class ComposeRequest(BaseModel):
     label: str = Field(..., min_length=1, description="Label for the composite node")
-    atom_ids: List[int] = Field(..., min_length=1, description="List of atom node IDs to compose from")
+    compositions: Optional[List[CompositionPair]] = Field(
+        None,
+        description="List of (label, sense_id) pairs for v5.0 compose. Mutually exclusive with atom_ids.",
+    )
+    atom_ids: Optional[List[int]] = Field(
+        None,
+        description="List of atom node IDs to compose from (backward compat). Mutually exclusive with compositions.",
+    )
     lang: Optional[str] = Field(None, description="Language code (e.g. 'id', 'en')")
+
+
+class NodeInfoRequest(BaseModel):
+    label: str = Field(..., min_length=1)
+
+
+class SensesRequest(BaseModel):
+    label: str = Field(..., min_length=1)
 
 
 # --- Exception mapping ---
@@ -128,6 +155,43 @@ async def rsvs_error_handler(request: Request, exc: RsvsError) -> JSONResponse:
         status_code=status,
         content={"error": type(exc).__name__, "detail": str(exc)},
     )
+
+
+# ---------------------------------------------------------------------------
+# Helper: extract enriched fields from PyO3 result objects
+# ---------------------------------------------------------------------------
+
+def _enriched_node_info(raw: Any) -> dict[str, Any]:
+    """Convert a PyNodeInfo (v5.0) to a dict, including layer."""
+    result: dict[str, Any] = {}
+    for attr in ("id", "label", "surface_label", "tier", "confidence",
+                 "status", "is_seed", "is_locked", "layer"):
+        val = getattr(raw, attr, None)
+        if val is not None:
+            result[attr] = val
+    return result
+
+
+def _enriched_sense_info(raw: Any) -> dict[str, Any]:
+    """Convert a PySenseInfo (v5.0) to a dict, including layer, grounding_score, compositions."""
+    result: dict[str, Any] = {}
+    for attr in ("sense_idx", "label", "tier", "confidence",
+                 "status", "layer", "grounding_score", "compositions"):
+        val = getattr(raw, attr, None)
+        if val is not None:
+            result[attr] = val
+    return result
+
+
+def _enriched_query_result(raw: Any) -> dict[str, Any]:
+    """Convert a PyQueryResult (v5.0) to a dict, including layer, grounding_score, compositions."""
+    result: dict[str, Any] = {}
+    for attr in ("label", "tier", "confidence", "status",
+                 "layer", "grounding_score", "compositions"):
+        val = getattr(raw, attr, None)
+        if val is not None:
+            result[attr] = val
+    return result
 
 
 # --- Endpoints ---
@@ -161,7 +225,12 @@ async def ingest_endpoint(request: Request, req: IngestRequest) -> dict[str, Any
 async def query_endpoint(request: Request, req: QueryRequest) -> dict[str, Any]:
     try:
         rsvs: RsvsCoreProtocol = get_rsvs_instance()
-        return run_mode(rsvs, "query", text=req.text, top_k=req.top_k)
+        result = rsvs.query(req.text, "")
+        if result is None:
+            return {"ok": True, "result": None}
+        # v5.0: PyQueryResult with layer, grounding_score, compositions
+        enriched = _enriched_query_result(result)
+        return {"ok": True, "result": enriched}
     except RsvsError:
         raise
     except Exception as e:
@@ -182,6 +251,80 @@ async def similarity_endpoint(request: Request, req: SimilarityRequest) -> dict[
             "only_b": sim.only_b,
         }
         return {"label_a": req.label_a, "label_b": req.label_b, "similarity": sim_dict}
+    except RsvsError:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/structural-similarity", tags=["structural"])
+@limiter.limit("30/minute")
+async def structural_similarity_endpoint(
+    request: Request,
+    a: str = Query(..., min_length=1, description="First label (e.g. 'raja')"),
+    b: str = Query(..., min_length=1, description="Second label (e.g. 'ratu')"),
+) -> dict[str, Any]:
+    """Get structural similarity between two labels.
+
+    Returns PyStructuralSimResult with shared/differing compositions,
+    layer information, and structural similarity score.
+    """
+    try:
+        rsvs: RsvsCoreProtocol = get_rsvs_instance()
+        sim_result = rsvs.structural_similarity(a, b)
+        return {
+            "ok": True,
+            "a": a,
+            "b": b,
+            "sense_idx_a": getattr(sim_result, "sense_idx_a", None),
+            "sense_idx_b": getattr(sim_result, "sense_idx_b", None),
+            "structural_similarity": getattr(sim_result, "structural_similarity", 0.0),
+            "shared_compositions": list(getattr(sim_result, "shared_compositions", [])),
+            "only_a_compositions": list(getattr(sim_result, "only_a_compositions", [])),
+            "only_b_compositions": list(getattr(sim_result, "only_b_compositions", [])),
+            "layer_a": getattr(sim_result, "layer_a", None),
+            "layer_b": getattr(sim_result, "layer_b", None),
+        }
+    except RsvsError:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/substitution-analysis", tags=["structural"])
+@limiter.limit("30/minute")
+async def substitution_analysis_endpoint(
+    request: Request,
+    a: str = Query(..., min_length=1, description="First label (e.g. 'raja')"),
+    b: str = Query(..., min_length=1, description="Second label (e.g. 'ratu')"),
+) -> dict[str, Any]:
+    """Get substitution analysis between two labels.
+
+    Returns PySubstitutionResult with substitution pairs and unpaired
+    compositions, revealing how two concepts differ structurally.
+    """
+    try:
+        rsvs: RsvsCoreProtocol = get_rsvs_instance()
+        sub_result = rsvs.substitution_analysis(a, b)
+
+        # Convert substitution pairs to serializable format
+        raw_substitutions = list(getattr(sub_result, "substitutions", []))
+        substitutions = [
+            {"a": pair[0], "b": pair[1]} if isinstance(pair, (list, tuple)) else pair
+            for pair in raw_substitutions
+        ]
+
+        return {
+            "ok": True,
+            "a": a,
+            "b": b,
+            "sense_idx_a": getattr(sub_result, "sense_idx_a", None),
+            "sense_idx_b": getattr(sub_result, "sense_idx_b", None),
+            "structural_similarity": getattr(sub_result, "structural_similarity", 0.0),
+            "substitutions": substitutions,
+            "unpaired_only_a": list(getattr(sub_result, "unpaired_only_a", [])),
+            "unpaired_only_b": list(getattr(sub_result, "unpaired_only_b", [])),
+        }
     except RsvsError:
         raise
     except Exception as e:
@@ -215,34 +358,97 @@ async def relate_endpoint(request: Request, req: RelateRequest) -> dict[str, Any
 @app.post("/compose", tags=["compose"])
 async def compose_node(request: ComposeRequest):
     """
-    Create a composite node from explicit atom IDs.
+    Create a composite node from explicit compositions or atom IDs.
 
-    This is the core compositional mechanism of RSVS: higher-level concepts
-    are built from lower-level atoms. For example:
+    v5.0 Compositional Architecture:
+    - **compositions**: List of (label, sense_id) pairs, e.g.
+      `[{"label": "tahta_tertinggi", "sense_id": 0}, {"label": "laki_laki", "sense_id": 0}]`
+    - **atom_ids**: Legacy list of integer node IDs (backward compat, uses sense_id=0)
+
+    The compositional mechanism builds higher-level concepts from lower-level atoms:
     - "raja" = tahta_tertinggi + laki_laki + kerajaan
     - "ratu" = tahta_tertinggi + perempuan + kerajaan
 
-    The shared atoms (tahta_tertinggi, kerajaan) create a semantic
-    relationship between "raja" and "ratu" with Jaccard similarity = 0.5.
+    Shared atoms (tahta_tertinggi, kerajaan) create semantic relationships.
     """
     rsvs = get_rsvs_instance()
     if rsvs is None:
         raise RustCoreUnavailableError()
 
+    # Validate mutually exclusive fields
+    if request.compositions and request.atom_ids:
+        raise HTTPException(
+            status_code=400,
+            detail="Provide either 'compositions' or 'atom_ids', not both.",
+        )
+
+    if not request.compositions and not request.atom_ids:
+        raise HTTPException(
+            status_code=400,
+            detail="Either 'compositions' or 'atom_ids' must be provided.",
+        )
+
     try:
-        node_id = rsvs.compose(request.label, request.atom_ids, request.lang)
+        if request.compositions:
+            # v5.0: compose with (label, sense_id) pairs
+            compositions_tuples = [(c.label, c.sense_id) for c in request.compositions]
+            node_id = rsvs.compose(request.label, compositions_tuples, request.lang)
+            composed_from = [{"label": c.label, "sense_id": c.sense_id} for c in request.compositions]
+            composed_type = "compositions"
+        else:
+            # Backward compat: compose_from_ids
+            node_id = rsvs.compose_from_ids(request.label, request.atom_ids, request.lang)
+            composed_from = request.atom_ids
+            composed_type = "atom_ids"
+
         snapshot = rsvs.snapshot_v1()
         events = rsvs.consume_events_v1()
         return {
+            "ok": True,
             "status": "ok",
             "node_id": node_id,
             "label": request.label,
-            "atom_ids": request.atom_ids,
+            composed_type: composed_from,
+            "lang": request.lang,
             "snapshot": snapshot,
             "events": events,
         }
+    except RsvsError:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/node-info", tags=["node"])
+@limiter.limit("30/minute")
+async def node_info_endpoint(request: Request, req: NodeInfoRequest) -> dict[str, Any]:
+    """Get enriched node info (v5.0: includes layer field)."""
+    try:
+        rsvs: RsvsCoreProtocol = get_rsvs_instance()
+        info = rsvs.node_info(req.label)
+        if info is None:
+            return {"ok": True, "result": None}
+        enriched = _enriched_node_info(info)
+        return {"ok": True, "result": enriched}
+    except RsvsError:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/senses", tags=["node"])
+@limiter.limit("30/minute")
+async def senses_endpoint(request: Request, req: SensesRequest) -> dict[str, Any]:
+    """Get sense info for a label (v5.0: includes layer, grounding_score, compositions)."""
+    try:
+        rsvs: RsvsCoreProtocol = get_rsvs_instance()
+        senses = rsvs.senses(req.label)
+        enriched_senses = [_enriched_sense_info(s) for s in senses]
+        return {"ok": True, "label": req.label, "senses": enriched_senses}
+    except RsvsError:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/snapshot")
@@ -272,13 +478,13 @@ async def events_endpoint(request: Request) -> dict[str, Any]:
 @app.get("/health")
 @limiter.limit("60/minute")
 async def health(request: Request) -> dict[str, str]:
-    return {"status": "ok", "version": "4.2.0"}
+    return {"status": "ok", "version": "5.0.0"}
 
 
 @app.get("/")
 @limiter.limit("60/minute")
 async def root(request: Request) -> dict[str, str]:
-    return {"name": "RSVS", "version": "4.2.0", "docs": "/docs"}
+    return {"name": "RSVS", "version": "5.0.0", "docs": "/docs"}
 
 
 def main() -> None:

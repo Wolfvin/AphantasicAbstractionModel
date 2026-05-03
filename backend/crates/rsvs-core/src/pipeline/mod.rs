@@ -1,16 +1,15 @@
-//! End-to-end pipeline — RSVS v4.2
+//! End-to-end pipeline — RSVS v5.0 Compositional Architecture
 //!
 //! Wires all modules together:
 //!   text → CoocStats → EntityDetector → node promotion
-//!   → SenseManager ingest → AutonomyEngine update → graph query
+//!   → SenseManager ingest (with composition induction) → AutonomyEngine update → graph query
 //!
-//! v4.2: Unified node model, status lifecycle, policy engine.
-//!   - ingest mode: produce v4.2 nodes with surface_label, semantic metadata, policy_meta
-//!   - appraise mode: evaluate text against graph (agree/disagree %, verdict, evidence)
-//!   - relate mode: find related nodes/edges by overlap scoring
-//!   - query: context-aware lookup
-//!   - snapshot_v1: produce v4.2 format snapshot
-//!   - Seed bootstrap with new 24 atoms
+//! v5.0: Compositional architecture — every sense is formed by compositions.
+//!   - ingest mode: induce senses with compositions from active context
+//!   - compose mode: create compositional nodes with explicit (ID, sense) references
+//!   - structural_similarity: compare nodes by shared/differing compositions
+//!   - substitution_analysis: find what transforms one sense into another
+//!   - Layer tracking: Layer 0 = primitive, Layer N = composed from Layer N-1
 
 pub mod compose;
 pub mod ingest;
@@ -25,7 +24,7 @@ use crate::events::{API_VERSION, SCHEMA_VERSION};
 use crate::graph::RsvsGraph;
 use crate::seed;
 use crate::sense::SenseManager;
-use crate::types::{NodeId, Tier};
+use crate::types::{NodeId, SenseId, Tier};
 
 use std::collections::HashMap;
 use std::collections::VecDeque;
@@ -60,7 +59,6 @@ pub struct PipelineConfig {
     pub current_domain: usize,
 
     /// Custom seed labels to use instead of the default 24 epistemological seeds.
-    /// When provided, these become the Layer 1 atoms for the domain.
     pub custom_seeds: Option<Vec<String>>,
 }
 
@@ -90,13 +88,14 @@ impl Default for PipelineConfig {
 }
 
 // -----------------------------------------------------------------------
-// Rsvs — the main system struct (v4.2)
+// Rsvs — the main system struct (v5.0)
 // -----------------------------------------------------------------------
 
-/// The main RSVS system struct (v4.2).
+/// The main RSVS system struct (v5.0 — Compositional).
 ///
-/// Holds the knowledge graph, sense managers, autonomy engine, co-occurrence
-/// statistics, entity detector, and attention scorer.
+/// Holds the knowledge graph, sense managers (with compositions),
+/// autonomy engine, co-occurrence statistics, entity detector, and
+/// attention scorer.
 pub struct Rsvs {
     /// The knowledge graph.
     pub graph: RsvsGraph,
@@ -132,22 +131,14 @@ pub struct Rsvs {
 }
 
 impl Rsvs {
-    /// Create a new RSVS instance and bootstrap the 24 seed atoms.
-    ///
-    /// # Examples
-    /// ```ignore
-    /// let mut rsvs = Rsvs::new(PipelineConfig::default())?;
-    /// ```
+    /// Create a new RSVS instance and bootstrap the seed atoms.
     pub fn new(config: PipelineConfig) -> Result<Self, RsvsError> {
         let mut graph = RsvsGraph::new();
         let mut autonomy = AutonomyEngine::new(config.autonomy.clone());
         let attention = RsvsAttention::new(config.attention.clone());
 
-        // Bootstrap seed nodes (v4.2 format) — use custom seeds if provided
         let seed_map = seed::bootstrap(&mut graph, config.custom_seeds.as_ref().map(|v| &v[..]))?;
         let mut token_to_id: HashMap<String, NodeId> = HashMap::new();
-
-        // Update seed_labels in config to match the actual seeds used
         let effective_seed_labels: Vec<String> = seed_map.keys().cloned().collect();
 
         for (label, &id) in &seed_map {
@@ -155,7 +146,6 @@ impl Rsvs {
             token_to_id.insert(label.clone(), id);
         }
 
-        // Each ID gets its own SenseManager
         let mut senses: HashMap<NodeId, SenseManager> = HashMap::new();
         for &id in seed_map.values() {
             senses.insert(id, SenseManager::new(config.sense.clone()));
@@ -211,16 +201,54 @@ impl Rsvs {
     }
 
     /// Save the full RSVS state to a JSON file.
-    ///
-    /// Delegates to [`crate::persist::save`].
     pub fn save(&self, path: &std::path::Path) -> Result<(), RsvsError> {
         crate::persist::save(self, path)
     }
 
     /// Load the full RSVS state from a JSON file.
-    ///
-    /// Delegates to [`crate::persist::load`].
     pub fn load(path: &std::path::Path) -> Result<Self, RsvsError> {
         crate::persist::load(path)
+    }
+
+    /// Compute the layer for a new compositional node based on its composition targets.
+    ///
+    /// The layer is max(layer of all composition targets) + 1.
+    /// If no compositions, layer = 0 (primitive).
+    pub fn compute_layer(&self, composition_ids: &[NodeId]) -> u32 {
+        if composition_ids.is_empty() {
+            return 0;
+        }
+
+        let max_layer = composition_ids
+            .iter()
+            .filter_map(|&id| self.graph.get_node(id))
+            .map(|n| n.semantic.layer)
+            .max()
+            .unwrap_or(0);
+
+        max_layer + 1
+    }
+
+    /// Get the active sense for a node in a given context.
+    ///
+    /// Returns (sense_idx, sense_id) or None if the node has no senses.
+    pub fn active_sense_for_node(
+        &self,
+        node_id: NodeId,
+        context_node_ids: &[NodeId],
+    ) -> Option<(usize, SenseId)> {
+        let sm = self.senses.get(&node_id)?;
+        if sm.senses.is_empty() {
+            return None;
+        }
+
+        // Try lazy_lookup with context
+        let context_atoms: Vec<NodeId> = context_node_ids.to_vec();
+        if let Some(idx) = sm.lazy_lookup(&context_atoms) {
+            return Some((idx, sm.senses[idx].id));
+        }
+
+        // Fallback: first sense
+        Some((0, sm.senses[0].id))
     }
 }

@@ -17,6 +17,8 @@ import type {
   RelateResult,
   ComposeResult,
   ModeResult,
+  StructuralSimilarityResult,
+  SubstitutionAnalysisResult,
 } from '@/lib/types';
 
 // ── Graph Domain State ──
@@ -414,7 +416,7 @@ export const useAnimationStore = create<AnimationQueueStore>((set) => ({
 }));
 
 // ── Mode Result State ──
-// Stores the latest appraise/relate result for display in panels.
+// Stores the latest appraise/relate/compose/similarity/substitution result for display in panels.
 
 interface ModeResultState {
   currentResult: ModeResult;
@@ -424,6 +426,8 @@ interface ModeResultState {
   setAppraiseResult: (result: AppraiseResult) => void;
   setRelateResult: (result: RelateResult) => void;
   setComposeResult: (result: ComposeResult) => void;
+  setStructuralSimilarityResult: (result: StructuralSimilarityResult) => void;
+  setSubstitutionAnalysisResult: (result: SubstitutionAnalysisResult) => void;
   clearResult: () => void;
   setResultLoading: (loading: boolean) => void;
   setResultError: (error: string | null) => void;
@@ -442,6 +446,12 @@ export const useModeResultStore = create<ModeResultState>((set) => ({
 
   setComposeResult: (result) =>
     set({ currentResult: { type: 'compose', data: result }, isResultLoading: false, resultError: null }),
+
+  setStructuralSimilarityResult: (result) =>
+    set({ currentResult: { type: 'structural_similarity', data: result }, isResultLoading: false, resultError: null }),
+
+  setSubstitutionAnalysisResult: (result) =>
+    set({ currentResult: { type: 'substitution_analysis', data: result }, isResultLoading: false, resultError: null }),
 
   clearResult: () =>
     set({ currentResult: null, isResultLoading: false, resultError: null }),

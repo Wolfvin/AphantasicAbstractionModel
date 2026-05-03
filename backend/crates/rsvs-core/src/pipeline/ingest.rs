@@ -1,6 +1,10 @@
-//! Ingest pipeline — RSVS v4.2
+//! Ingest pipeline — RSVS v5.0 Compositional Architecture
 //!
 //! Contains `ingest_text()`, `update_node_atoms()`, and all ingest-related helpers.
+//!
+//! v5.0: When a new sense is induced from text, the system identifies which
+//! (ID, sense) pairs are active in the context and uses them as the
+//! compositions of the new sense. This is the INDUCTION mechanism.
 
 use super::Rsvs;
 use crate::attention::{is_groundable_to_seeds, text_to_sentences};
@@ -33,20 +37,20 @@ pub struct IngestStats {
     pub watchlist_additions: usize,
     /// Number of frozen batches (rollback triggered).
     pub frozen_batches: usize,
+    /// Number of compositions induced (v5.0).
+    pub compositions_induced: usize,
 }
 
 impl Rsvs {
     /// Ingest raw text into the knowledge graph.
     ///
     /// Runs the full pipeline: tokenize → co-occurrence → entity detection →
-    /// node promotion → attention scoring → sense assignment → confidence update →
-    /// stability check.
+    /// node promotion → attention scoring → sense induction (with compositions) →
+    /// confidence update → stability check.
     ///
-    /// # Examples
-    /// ```ignore
-    /// let mut rsvs = Rsvs::new(PipelineConfig::default())?;
-    /// rsvs.ingest_text("Stone is hard and solid. Rock is heavy.")?;
-    /// ```
+    /// v5.0: When new senses are created, their compositions are induced from
+    /// the active senses of context tokens. This is the INDUCTION mechanism
+    /// (Problem 1 from the architecture spec).
     pub fn ingest_text(&mut self, text: &str) -> Result<IngestStats, RsvsError> {
         let mut stats = IngestStats::default();
         let correlation_id = self.next_correlation_id();
@@ -66,7 +70,6 @@ impl Rsvs {
         }
 
         // --- Step 1: Update co-occurrence statistics ---
-        // Use rayon for parallel entity detection across sentences
         let seed_refs: Vec<&str> = self.config.seed_labels.iter().map(|s| s.as_str()).collect();
         let entity_records: Vec<Vec<(String, bool)>> = sentences
             .par_iter()
@@ -90,7 +93,7 @@ impl Rsvs {
             }
         }
 
-        // --- Step 2: Promote new entity candidates to nodes (v4.2 format) ---
+        // --- Step 2: Promote new entity candidates to nodes ---
         let candidates = self.entities.candidates(self.config.entity_promote_n);
         for token in &candidates {
             if self.token_to_id.contains_key(token.as_str()) {
@@ -111,11 +114,12 @@ impl Rsvs {
 
                 semantic: SemanticMeta {
                     compression_state: CompressionState::Raw,
+                    layer: 0,
                     derived_from_node_ids: vec![],
                     compression_reason: None,
                 },
                 policy_meta: Some(PolicyMeta {
-                    policy_version: "4.2".to_string(),
+                    policy_version: "5.0".to_string(),
                     governance_score: 0.0,
                     candidate_evidence_pool: 0.0,
                     status_flip_count: 0,
@@ -146,7 +150,8 @@ impl Rsvs {
                     "tier": 2,
                     "confidence": 0.5,
                     "status": "candidate",
-                    "compression_state": "raw"
+                    "compression_state": "raw",
+                    "layer": 0
                 }),
             );
         }
@@ -154,7 +159,7 @@ impl Rsvs {
         // --- Step 2b: Build/update node atom sets from co-occurrence ---
         self.update_node_atoms(&candidates, &correlation_id);
 
-        // --- Step 3: For each sentence, run attention + feed senses ---
+        // --- Step 3: For each sentence, run attention + induce senses with compositions ---
         self.autonomy.begin_batch();
         let snapshot = self.autonomy.snapshot();
 
@@ -165,6 +170,12 @@ impl Rsvs {
             let selected = self
                 .attention
                 .select(tokens, &self.stats_db, &self.atom_sets);
+
+            // Build context node IDs for this sentence
+            let context_node_ids: Vec<NodeId> = tokens
+                .iter()
+                .filter_map(|t| self.token_to_id.get(t.as_str()).copied())
+                .collect();
 
             for token in tokens {
                 let token_id = match self.token_to_id.get(token.as_str()) {
@@ -189,12 +200,37 @@ impl Rsvs {
                     continue;
                 }
 
+                // --- v5.0: Build active senses for composition induction ---
+                let active_senses: Vec<(NodeId, crate::types::SenseId)> = context
+                    .iter()
+                    .filter_map(|&ctx_id| {
+                        self.active_sense_for_node(ctx_id, &context_node_ids)
+                            .map(|(_, sense_id)| (ctx_id, sense_id))
+                    })
+                    .collect();
+
+                // Compute the layer for this induced sense
+                let context_ids: Vec<NodeId> = active_senses.iter().map(|(id, _)| *id).collect();
+                let layer = self.compute_layer(&context_ids);
+
                 let sense_mgr = self
                     .senses
                     .entry(token_id)
                     .or_insert_with(|| crate::sense::SenseManager::new(self.config.sense.clone()));
 
-                let ingest_result = sense_mgr.ingest(context.clone());
+                // Use compositional induction if we have active senses
+                let ingest_result = if active_senses.is_empty() {
+                    // Fallback to basic ingest (no compositions available)
+                    sense_mgr.ingest(context.clone())
+                } else {
+                    // Compositional induction
+                    let result = sense_mgr.induce_sense(context.clone(), &active_senses, layer);
+                    if matches!(result, IngestResult::Created(_)) {
+                        stats.compositions_induced += active_senses.len();
+                    }
+                    result
+                };
+
                 let sense_event: Option<serde_json::Value> = match ingest_result {
                     IngestResult::Assigned(idx) => {
                         stats.sense_assigned += 1;
@@ -206,10 +242,24 @@ impl Rsvs {
                     }
                     IngestResult::Created(idx) => {
                         stats.sense_created += 1;
+                        // Update node layer if this sense has a higher layer
+                        if let Some(node) = self.graph.get_node_mut(token_id) {
+                            if layer > node.semantic.layer {
+                                node.semantic.layer = layer;
+                            }
+                            if layer > 0 {
+                                node.semantic.compression_state = CompressionState::Compressed;
+                                node.semantic.derived_from_node_ids = context_ids.clone();
+                                node.semantic.compression_reason =
+                                    Some("compositional induction".to_string());
+                            }
+                        }
                         Some(serde_json::json!({
                             "id": token_id,
                             "sense_idx": idx,
-                            "action": "created"
+                            "action": "created",
+                            "layer": layer,
+                            "compositions": active_senses.len()
                         }))
                     }
                 };
@@ -217,7 +267,6 @@ impl Rsvs {
                 let active_coherence = sense_mgr.senses.first().map(|s| s.coherence).unwrap_or(0.5);
 
                 let freq = 1.0f32;
-
                 let co_ids: Vec<NodeId> = context.clone();
                 let old_conf = self.autonomy.confidence(token_id).unwrap_or(0.0);
                 let old_tier = self.autonomy.tier(token_id).cloned();
@@ -315,20 +364,17 @@ impl Rsvs {
                 "sense_created": stats.sense_created,
                 "confidence_updated": stats.confidence_updated,
                 "frozen_batches": stats.frozen_batches,
-                "watchlist_additions": stats.watchlist_additions
+                "compositions_induced": stats.compositions_induced
             }),
         );
         Ok(stats)
     }
 
     // -----------------------------------------------------------------------
-    // Build/update node atom sets from co-occurrence data (v4.2)
+    // Build/update node atom sets from co-occurrence data
     // -----------------------------------------------------------------------
 
     /// Update node atom sets from co-occurrence data.
-    ///
-    /// For each promoted token, collects top co-occurring nodes and updates
-    /// the node's atoms field, compression state, and edges.
     pub(super) fn update_node_atoms(&mut self, tokens: &[String], correlation_id: &str) {
         for token in tokens {
             let token_id = match self.token_to_id.get(token.as_str()) {
@@ -336,7 +382,6 @@ impl Rsvs {
                 None => continue,
             };
 
-            // Skip seed nodes — they stay Raw
             if let Some(node) = self.graph.get_node(token_id) {
                 if node.is_seed {
                     continue;
@@ -344,11 +389,10 @@ impl Rsvs {
                 if node.semantic.compression_state == CompressionState::Compressed
                     && !node.atoms.is_empty()
                 {
-                    continue; // already built
+                    continue;
                 }
             }
 
-            // Collect top co-occurring nodes from stats
             let mut cooc_nodes: Vec<(NodeId, f32)> = self
                 .token_to_id
                 .iter()
@@ -372,21 +416,25 @@ impl Rsvs {
 
             let atom_ids: Vec<NodeId> = cooc_nodes.iter().map(|(id, _)| *id).collect();
 
-            // Update node: set atoms and mark as compressed if has derived nodes
+            // Compute layer BEFORE mutable borrow of graph
+            let layer = if !atom_ids.is_empty() {
+                self.compute_layer(&atom_ids)
+            } else {
+                0
+            };
+
             if let Some(node) = self.graph.nodes.get_mut(&token_id) {
                 let old_atoms = node.atoms.clone();
                 node.atoms = atom_ids.clone();
 
-                // If node has derived atoms, mark as compressed
                 if !atom_ids.is_empty() {
                     node.semantic.compression_state = CompressionState::Compressed;
                     node.semantic.derived_from_node_ids = atom_ids.clone();
                     node.semantic.compression_reason =
                         Some("co-occurrence aggregation".to_string());
+                    node.semantic.layer = layer;
                 }
 
-                // CRITICAL FIX (Bug 1): Sync atom_sets so the attention scorer's
-                // Jaccard component uses the updated atoms, not the initial [id].
                 self.atom_sets.insert(token.clone(), atom_ids.clone());
 
                 for removed in old_atoms.iter().filter(|a| !atom_ids.contains(a)) {

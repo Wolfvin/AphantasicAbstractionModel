@@ -24,6 +24,10 @@ export interface NodeSense {
   count: number;
   active_index: number | null;
   coherence: number | null;
+  // v5.0 compositional fields
+  layer?: number;
+  grounding_score?: number;
+  compositions?: CompositionPair[];
 }
 
 export interface NodeMetrics {
@@ -41,6 +45,12 @@ export interface CompositionAtom {
 export interface CompositionComposite {
   composite_id: number;
   weight: number;
+}
+
+// v5.0: Composition pair — [label, sense_id] used in compose API
+export interface CompositionPair {
+  label: string;
+  sense_id: string;
 }
 
 export interface NodeComposition {
@@ -103,6 +113,10 @@ export interface RSVSNode {
   // Composition visualization fields
   atoms?: number[];
   compression_reason?: string;
+  // v5.0 compositional architecture fields
+  layer?: number; // 0=primitive, N=compositional
+  grounding_score?: number;
+  compositions?: CompositionPair[]; // list of [label, sense_id] pairs
 }
 
 export interface EdgeMetrics {
@@ -219,13 +233,56 @@ export interface ComposeResult {
     composite_label: string;
     similarity: number;
   }>;
+  // v5.0: compositions used (if any)
+  compositions?: CompositionPair[];
 }
 
 export type ModeResult =
   | { type: 'appraise'; data: AppraiseResult }
   | { type: 'relate'; data: RelateResult }
   | { type: 'compose'; data: ComposeResult }
+  | { type: 'structural_similarity'; data: StructuralSimilarityResult }
+  | { type: 'substitution_analysis'; data: SubstitutionAnalysisResult }
   | null;
+
+// ── v5.0: Structural Similarity ──
+
+export interface SharedComposition {
+  label: string;
+  sense_id_a: string;
+  sense_id_b: string;
+  similarity: number;
+}
+
+export interface DifferingComposition {
+  label: string;
+  present_in: 'a' | 'b';
+  sense_id: string;
+  weight: number;
+}
+
+export interface StructuralSimilarityResult {
+  node_a: { label: string; id: number };
+  node_b: { label: string; id: number };
+  similarity_score: number;
+  shared_compositions: SharedComposition[];
+  differing_compositions: DifferingComposition[];
+}
+
+// ── v5.0: Substitution Analysis ──
+
+export interface SubstitutionPair {
+  atom_a: { label: string; id: number };
+  atom_b: { label: string; id: number };
+  substitution_score: number;
+  semantic_shift: string;
+}
+
+export interface SubstitutionAnalysisResult {
+  node_a: { label: string; id: number };
+  node_b: { label: string; id: number };
+  substitution_pairs: SubstitutionPair[];
+}
 
 // 3D layout types
 export interface ForceNode extends RSVSNode {
@@ -279,6 +336,10 @@ export interface RelateNode {
   score: number;
   tier: Tier;
   kind: NodeKind;
+  // v5.0 fields
+  layer?: number;
+  grounding_score?: number;
+  compositions?: CompositionPair[];
 }
 
 export interface RelateEdge {
@@ -289,8 +350,18 @@ export interface RelateEdge {
   label?: string;
 }
 
+export interface StructuralRelation {
+  relation_type: string;
+  source_label: string;
+  target_label: string;
+  weight: number;
+  description?: string;
+}
+
 export interface RelateResult {
   query_terms: string[];
   related_nodes: RelateNode[];
   related_edges: RelateEdge[];
+  // v5.0 field
+  structural_relations?: StructuralRelation[];
 }

@@ -1,19 +1,16 @@
-#![deny(missing_docs)]
+#![warn(missing_docs)]
 
-//! RSVS Core — v4.2
+//! RSVS Core — v5.0 Compositional Architecture
 //!
-//! v4.2: Unified node model, status lifecycle, policy engine in Rust
+//! Every sense is formed by compositions — pairs of (ID, sense_id).
+//! Relationships between IDs are structural, derived from shared/differing
+//! compositions, not statistical co-occurrence alone.
 //!
-//! v0.5: End-to-end pipeline (Rsvs struct)
-//!   text → CoocStats → EntityDetector → atom promotion
-//!   → RSVS Attention → SenseManager ingest
-//!   → AutonomyEngine confidence update
-//!   → context-aware query + similarity
-//!
-//! v0.4: AutonomyEngine — confidence, tiered autonomy, adaptive thresholds
-//! v0.3: RSVS Attention — NPMI+Jaccard+cooc, text pipeline, entity detection
-//! v0.2: Multi-sense — SenseManager, coherence, lazy lookup, merge
-//! v0.1: DAG, integer IDs, circular ref, Jaccard, seed graph
+//! Key concepts:
+//! - `CompositionRef`: Reference to a specific sense of a specific node
+//! - `layer`: Compositional depth (0 = primitive, N = composed from layer N-1)
+//! - `structural_similarity`: Compare nodes by shared/differing compositions
+//! - `substitution_analysis`: Find what transforms one sense into another
 
 pub mod attention;
 pub mod autonomy;
@@ -39,7 +36,9 @@ pub use autonomy::{
 };
 pub use error::RsvsError;
 pub use events::{EventBatch, RuntimeEvent, RuntimeSnapshot, API_VERSION, SCHEMA_VERSION};
-pub use graph::{jaccard_sets, RsvsGraph, SimilarityResult};
+pub use graph::{
+    jaccard_sets, RsvsGraph, SimilarityResult, StructuralSimResult, SubstitutionResult,
+};
 pub use pipeline::{
     AppraiseResult, IngestStats, PipelineConfig, PipelineStatus, QueryResult, RelateResult, Rsvs,
 };

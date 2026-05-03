@@ -86,6 +86,102 @@ const COMPOSITE_COLORS: Record<string, string> = {
   compressed: '#B388FF',  // Purple for compressed
 };
 
+// ── v5.0: Layer Color Map ──
+// Layer 0 = blue (primitive), Layer 1 = green, Layer 2 = orange, Layer 3+ = deeper colors
+const LAYER_COLORS: Record<number, string> = {
+  0: '#42A5F5',   // Blue — primitive/atom nodes
+  1: '#66BB6A',   // Green — first-level compositional
+  2: '#FFA726',   // Orange — second-level compositional
+  3: '#AB47BC',   // Purple — third-level compositional
+  4: '#EF5350',   // Red — fourth-level compositional
+};
+
+const DEFAULT_LAYER_COLOR = '#EC407A'; // Pink for layer 5+
+
+const LAYER_Y_OFFSET = 6; // Y-axis spacing between layers in 3D space
+
+/**
+ * v5.0: Get the color for a compositional layer.
+ * Layer 0 = blue (primitive), Layer 1 = green, Layer 2 = orange, etc.
+ */
+export function getLayerColor(layer: number): string {
+  return LAYER_COLORS[layer] ?? DEFAULT_LAYER_COLOR;
+}
+
+/**
+ * v5.0: Get the Y-axis offset for a layer in the 3D visualization.
+ * Layer 0 at bottom (y=0), higher layers stacked up.
+ */
+export function getLayerYOffset(layer: number): number {
+  return layer * LAYER_Y_OFFSET;
+}
+
+/**
+ * v5.0: Get the layer label for display.
+ */
+export function getLayerLabel(layer: number): string {
+  if (layer === 0) return 'Layer 0 — Primitive';
+  return `Layer ${layer} — Compositional`;
+}
+
+/**
+ * v5.0: Get all defined layer color entries for legend rendering.
+ */
+export function getLayerColorEntries(): Array<{ layer: number; color: string; label: string }> {
+  return Object.entries(LAYER_COLORS).map(([layer, color]) => ({
+    layer: Number(layer),
+    color,
+    label: getLayerLabel(Number(layer)),
+  }));
+}
+
+/**
+ * v5.0: Compute the effective layer for a node.
+ * Uses the `layer` field if available, otherwise infers from composition state.
+ */
+export function computeNodeLayer(node: {
+  layer?: number;
+  compression_state?: string;
+  semantic?: { compression_state?: string };
+  derived_from_node_ids?: number[];
+  atoms?: number[];
+  compositions?: Array<unknown>;
+}): number {
+  // If layer is explicitly set, use it
+  if (node.layer !== undefined && node.layer !== null) return node.layer;
+  // Otherwise, infer from composition state
+  if (isCompositeNode(node)) return 1;
+  return 0;
+}
+
+/**
+ * v5.0: Build a composition chain string for display.
+ * E.g., "raja = tahta_tertinggi + laki_laki + kerajaan"
+ */
+export function buildCompositionChain(
+  nodeLabel: string,
+  compositions?: Array<{ label: string }>,
+  derivedFromNodeIds?: number[],
+  allNodes?: Map<number, { label: string }>,
+): string | null {
+  // Try compositions first (v5.0)
+  if (compositions && compositions.length > 0) {
+    const parts = compositions.map(c => c.label).join(' + ');
+    return parts.length > 0 ? `${nodeLabel} = ${parts}` : null;
+  }
+
+  // Fall back to derived_from_node_ids
+  if (derivedFromNodeIds && derivedFromNodeIds.length > 0 && allNodes) {
+    const labels = derivedFromNodeIds
+      .map(id => allNodes.get(id)?.label ?? `#${id}`);
+    if (labels.length > 0) {
+      return `${nodeLabel} = ${labels.join(' + ')}`;
+    }
+  }
+
+  return null;
+}
+
 export function computeNodeRenderProps(node: {
   tier?: number;
   status?: string;
@@ -97,12 +193,18 @@ export function computeNodeRenderProps(node: {
   derived_from_node_ids?: number[];
   atoms?: number[];
   composition?: { atoms: Array<{ atom_id: number }>; related_composites: Array<{ composite_id: number }> };
+  // v5.0 fields
+  layer?: number;
+  compositions?: Array<unknown>;
 }): NodeRenderProps {
   const tier = node.tier ?? 3;
   const status = node.status ?? 'new';
   const confidence = node.confidence ?? 0.5;
   const composite = isCompositeNode(node);
   const atomCount = getAtomCount(node);
+
+  // v5.0: Determine effective layer
+  const layer = computeNodeLayer(node);
 
   // Composites are slightly larger, scaling with atom count
   const baseSize = node.is_seed
@@ -113,11 +215,20 @@ export function computeNodeRenderProps(node: {
     ? baseSize * (1 + Math.min(atomCount * 0.1, 0.5))
     : baseSize;
 
-  // Composites get a special color, atoms use status-based color
-  const cs = node.compression_state ?? node.semantic?.compression_state ?? 'raw';
-  const color = composite
-    ? (COMPOSITE_COLORS[cs] ?? '#B388FF')
-    : (STATUS_COLORS[status] ?? '#B388FF');
+  // v5.0: Color-code by layer (overrides composite/status color when layer > 0)
+  // Layer 0 nodes (primitives) use status-based color tinted with layer blue
+  // Higher layers use the layer color directly
+  const layerColor = getLayerColor(layer);
+  let color: string;
+  if (layer === 0) {
+    // Primitive: blend status color with a blue tint
+    color = composite
+      ? (COMPOSITE_COLORS[node.compression_state ?? node.semantic?.compression_state ?? 'raw'] ?? layerColor)
+      : (STATUS_COLORS[status] ?? layerColor);
+  } else {
+    // Compositional: use layer color
+    color = layerColor;
+  }
 
   const glow = composite
     ? Math.max(0.4, Math.min(0.95, confidence + 0.1))

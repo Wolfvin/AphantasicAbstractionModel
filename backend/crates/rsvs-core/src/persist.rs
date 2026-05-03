@@ -1,10 +1,10 @@
-//! Persistence — RSVS v4.2
+//! Persistence — RSVS v5.0 Compositional Architecture
 //!
 //! Serialize/deserialize the full RSVS state to/from disk.
 //! Format: JSON (human-readable, debuggable).
 //!
-//! v4.2: Updated for unified node model, NodeStatus, CompressionState,
-//! SemanticMeta, PolicyMeta. No more NodeKind.
+//! v5.0: Updated for compositional architecture — layer, compositions,
+//! grounding_score in senses.
 
 use std::collections::HashMap;
 use std::fs::File;
@@ -20,189 +20,134 @@ use crate::graph::RsvsGraph;
 use crate::pipeline::{PipelineConfig, Rsvs};
 use crate::sense::{Sense, SenseConfig, SenseManager, SenseStatus};
 use crate::types::{
-    CompressionState, Edge, EdgeSource, Node, NodeId, NodeStatus, PolicyMeta, SemanticMeta, Tier,
+    CompositionRef, CompressionState, Edge, EdgeSource, Node, NodeId, NodeStatus, PolicyMeta,
+    SemanticMeta, Tier,
 };
 
 // -----------------------------------------------------------------------
-// Serializable mirror types (v4.2 serde-friendly)
+// Serializable mirror types (v5.0 serde-friendly)
 // -----------------------------------------------------------------------
 
 /// Serializable mirror of a `Node` for JSON persistence.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SavedNode {
-    /// Unique integer node ID.
     pub id: u32,
-    /// Canonical label string.
     pub label: String,
-    /// Surface form with language tag.
     pub surface_label: String,
-    /// Node kind — always "node" in v4.2.
     pub kind: String,
-    /// Tier number (1, 2, or 3).
     pub tier: u8,
-    /// Confidence score.
     pub confidence: f32,
-    /// Lifecycle status as string.
     pub status: String,
-    /// Whether this is a seed node.
     pub is_seed: bool,
-    /// Whether this node is locked.
     pub is_locked: bool,
-    /// Compression state ("raw" or "compressed").
     pub compression_state: String,
-    /// Node IDs this node was derived from.
+    pub layer: u32,
     pub derived_from_node_ids: Vec<u32>,
-    /// Reason for compression, if any.
     pub compression_reason: Option<String>,
-    /// Policy metadata, if present.
     pub policy_meta: Option<SavedPolicyMeta>,
-    /// Atom set for similarity/attention.
     pub atoms: Vec<u32>,
 }
 
 /// Serializable mirror of `PolicyMeta` for JSON persistence.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SavedPolicyMeta {
-    /// Policy engine version.
     pub policy_version: String,
-    /// Governance score (0.0–1.0).
     pub governance_score: f32,
-    /// Accumulated candidate evidence pool.
     pub candidate_evidence_pool: f32,
-    /// Number of status flip-flops detected.
     pub status_flip_count: u32,
-    /// Content fingerprints already seen for dedup.
     pub seen_fingerprints: Vec<String>,
-    /// ISO timestamp of last observation.
     pub last_seen_at: Option<String>,
 }
 
 /// Serializable mirror of an `Edge` for JSON persistence.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SavedEdge {
-    /// Source node ID.
     pub from: u32,
-    /// Target node ID.
     pub to: u32,
-    /// Edge weight.
     pub weight: f32,
-    /// Edge source ("bootstrap", "learned", or "composition").
     pub source: String,
 }
 
-/// Serializable mirror of a `Sense` for JSON persistence.
+/// Serializable mirror of a `CompositionRef` for JSON persistence.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct SavedCompositionRef {
+    pub node_id: u32,
+    pub sense_id: u32,
+}
+
+/// Serializable mirror of a `Sense` for JSON persistence (v5.0).
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SavedSense {
-    /// Context atom sets assigned to this sense.
+    pub compositions: Vec<SavedCompositionRef>,
+    pub layer: u32,
     pub contexts: Vec<Vec<u32>>,
-    /// Frequency counts per atom.
     pub freq_counts: HashMap<u32, usize>,
-    /// Sum of pairwise similarities.
     pub sum_sim: f64,
-    /// Number of pairs used in coherence.
     pub pair_count: usize,
-    /// Cached coherence value.
     pub coherence: f32,
-    /// Sense status ("fragile" or "mature").
     pub status: String,
-    /// Contexts of inactivity since last assignment.
     pub inactivity: usize,
+    pub grounding_score: f32,
 }
 
 /// Serializable mirror of a `SenseManager` for JSON persistence.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SavedSenseManager {
-    /// The sense clusters.
     pub senses: Vec<SavedSense>,
-    /// Next sense ID to allocate.
-    pub next_sense_id: usize,
-    /// Global context counter.
+    pub next_sense_id: u32,
     pub global_context_count: usize,
 }
 
 /// Serializable mirror of an `AtomRecord` for JSON persistence.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SavedAtomRecord {
-    /// Node ID.
     pub id: u32,
-    /// Confidence score.
     pub confidence: f32,
-    /// Tier number.
     pub tier: u8,
-    /// Status as string.
     pub status: String,
-    /// Memory class ("stable" or "working").
     pub memory: String,
-    /// Number of domains observed.
     pub domain_count: usize,
-    /// Co-occurring mature node IDs.
     pub cooccurring_mature: Vec<u32>,
-    /// Number of observations.
     pub observation_count: usize,
-    /// Whether this is a seed node.
     pub is_seed: bool,
-    /// Number of status flip-flops.
     pub status_flip_count: u32,
-    /// Governance score.
     pub governance_score: f32,
-    /// Candidate evidence pool.
     pub candidate_evidence_pool: f32,
 }
 
 /// Serializable mirror of `CoocStats` for JSON persistence.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SavedCoocStats {
-    /// Per-token count.
     pub token_count: HashMap<String, usize>,
-    /// Pair count stored as "a|b" → count.
     pub pair_count: HashMap<String, usize>,
-    /// Total tokens seen.
     pub total_tokens: usize,
-    /// Total sentences seen.
     pub total_sentences: usize,
 }
 
 /// Serializable mirror of `EntityDetector` for JSON persistence.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SavedEntityDetector {
-    /// Per-token sentence count.
     pub sentence_count: HashMap<String, usize>,
-    /// Per-token groundable flag.
     pub groundable: HashMap<String, bool>,
 }
 
-/// Top-level snapshot of the entire RSVS state (v4.2).
+/// Top-level snapshot of the entire RSVS state (v5.0).
 #[derive(Serialize, Deserialize, Debug)]
 pub struct RsvsSnapshot {
-    /// Snapshot format version.
     pub version: String,
-    /// Total contexts processed.
     pub total_contexts: usize,
-    /// Token string to node ID mapping.
     pub token_to_id: HashMap<String, u32>,
-    /// Next node ID to allocate.
     pub next_node_id: u32,
-    /// All saved nodes.
     pub nodes: Vec<SavedNode>,
-    /// All saved edges.
     pub edges: Vec<SavedEdge>,
-    /// Per-node sense managers.
     pub sense_managers: HashMap<u32, SavedSenseManager>,
-    /// All atom records.
     pub atom_records: Vec<SavedAtomRecord>,
-    /// Co-occurrence statistics.
     pub cooc_stats: SavedCoocStats,
-    /// Entity detector state.
     pub entity_detector: SavedEntityDetector,
-    /// Entity promotion threshold.
     pub entity_promote_n: usize,
-    /// Sense assignment threshold.
     pub theta_assign: f32,
-    /// Number of warm-up contexts.
     pub n_warm: usize,
-    /// EMA smoothing factor.
     pub eta: f32,
-    /// Current domain tag.
     pub current_domain: usize,
 }
 
@@ -272,12 +217,6 @@ fn pair_key(a: &str, b: &str) -> String {
 // -----------------------------------------------------------------------
 
 /// Save the full RSVS state to a JSON file.
-///
-/// # Examples
-/// ```ignore
-/// use rsvs::persist;
-/// persist::save(&rsvs, Path::new("rsvs-state.json"))?;
-/// ```
 pub fn save(rsvs: &Rsvs, path: &Path) -> Result<(), RsvsError> {
     let snapshot = to_snapshot(rsvs);
     let file = File::create(path).map_err(|e| RsvsError::Persistence(e.to_string()))?;
@@ -287,9 +226,8 @@ pub fn save(rsvs: &Rsvs, path: &Path) -> Result<(), RsvsError> {
     Ok(())
 }
 
-/// Serialize the RSVS state into a snapshot struct (for programmatic use).
+/// Serialize the RSVS state into a snapshot struct.
 pub fn to_snapshot(rsvs: &Rsvs) -> RsvsSnapshot {
-    // --- Nodes (v4.2) ---
     let nodes: Vec<SavedNode> = rsvs
         .graph
         .nodes
@@ -305,6 +243,7 @@ pub fn to_snapshot(rsvs: &Rsvs) -> RsvsSnapshot {
             is_seed: n.is_seed,
             is_locked: n.is_locked,
             compression_state: compression_to_str(&n.semantic.compression_state).to_string(),
+            layer: n.semantic.layer,
             derived_from_node_ids: n.semantic.derived_from_node_ids.clone(),
             compression_reason: n.semantic.compression_reason.clone(),
             policy_meta: n.policy_meta.as_ref().map(|pm| SavedPolicyMeta {
@@ -319,7 +258,6 @@ pub fn to_snapshot(rsvs: &Rsvs) -> RsvsSnapshot {
         })
         .collect();
 
-    // --- Edges ---
     let mut edges: Vec<SavedEdge> = Vec::new();
     for node_id in rsvs.graph.nodes.keys() {
         for e in rsvs.graph.edges_from(*node_id) {
@@ -332,13 +270,21 @@ pub fn to_snapshot(rsvs: &Rsvs) -> RsvsSnapshot {
         }
     }
 
-    // --- Sense managers ---
     let mut sense_managers: HashMap<u32, SavedSenseManager> = HashMap::new();
     for (&node_id, sm) in &rsvs.senses {
         let saved_senses = sm
             .senses
             .iter()
             .map(|s| SavedSense {
+                compositions: s
+                    .compositions
+                    .iter()
+                    .map(|c| SavedCompositionRef {
+                        node_id: c.node_id,
+                        sense_id: c.sense_id,
+                    })
+                    .collect(),
+                layer: s.layer,
                 contexts: s.contexts.clone(),
                 freq_counts: s.freq_counts.clone(),
                 sum_sim: s.sum_sim,
@@ -350,6 +296,7 @@ pub fn to_snapshot(rsvs: &Rsvs) -> RsvsSnapshot {
                     "mature".into()
                 },
                 inactivity: s.inactivity,
+                grounding_score: s.grounding_score,
             })
             .collect();
 
@@ -363,7 +310,6 @@ pub fn to_snapshot(rsvs: &Rsvs) -> RsvsSnapshot {
         );
     }
 
-    // --- Atom records (v4.2) ---
     let atom_records: Vec<SavedAtomRecord> = rsvs
         .autonomy
         .records
@@ -388,7 +334,6 @@ pub fn to_snapshot(rsvs: &Rsvs) -> RsvsSnapshot {
         })
         .collect();
 
-    // --- CoocStats ---
     let pair_count_serialized: HashMap<String, usize> = rsvs
         .stats_db
         .pair_count
@@ -409,7 +354,7 @@ pub fn to_snapshot(rsvs: &Rsvs) -> RsvsSnapshot {
     };
 
     RsvsSnapshot {
-        version: "4.2".to_string(),
+        version: "5.0".to_string(),
         total_contexts: rsvs.total_contexts,
         token_to_id: rsvs.token_to_id.clone(),
         next_node_id: rsvs.graph.next_id,
@@ -432,12 +377,6 @@ pub fn to_snapshot(rsvs: &Rsvs) -> RsvsSnapshot {
 // -----------------------------------------------------------------------
 
 /// Load the full RSVS state from a JSON file.
-///
-/// # Examples
-/// ```ignore
-/// use rsvs::persist;
-/// let rsvs = persist::load(Path::new("rsvs-state.json"))?;
-/// ```
 pub fn load(path: &Path) -> Result<Rsvs, RsvsError> {
     let file = File::open(path).map_err(|e| RsvsError::Persistence(e.to_string()))?;
     let reader = BufReader::new(file);
@@ -448,7 +387,6 @@ pub fn load(path: &Path) -> Result<Rsvs, RsvsError> {
 
 /// Reconstruct an `Rsvs` instance from a deserialized snapshot.
 pub fn from_snapshot(snap: RsvsSnapshot) -> Rsvs {
-    // Rebuild config from snapshot
     let config = PipelineConfig {
         entity_promote_n: snap.entity_promote_n,
         current_domain: snap.current_domain,
@@ -465,7 +403,7 @@ pub fn from_snapshot(snap: RsvsSnapshot) -> Rsvs {
         ..PipelineConfig::default()
     };
 
-    // --- Rebuild graph (v4.2) ---
+    // --- Rebuild graph ---
     let mut graph = RsvsGraph::new();
     graph.next_id = snap.next_node_id;
 
@@ -482,6 +420,7 @@ pub fn from_snapshot(snap: RsvsSnapshot) -> Rsvs {
             is_locked: sn.is_locked,
             semantic: SemanticMeta {
                 compression_state: str_to_compression(&sn.compression_state),
+                layer: sn.layer,
                 derived_from_node_ids: sn.derived_from_node_ids.clone(),
                 compression_reason: sn.compression_reason.clone(),
             },
@@ -504,7 +443,6 @@ pub fn from_snapshot(snap: RsvsSnapshot) -> Rsvs {
         graph.nodes.insert(node.id, node);
     }
 
-    // Restore edges
     for se in &snap.edges {
         let source = if se.source == "bootstrap" {
             EdgeSource::Bootstrap
@@ -521,15 +459,27 @@ pub fn from_snapshot(snap: RsvsSnapshot) -> Rsvs {
         });
     }
 
-    // --- Rebuild sense managers ---
+    // --- Rebuild sense managers (v5.0) ---
     let mut senses: HashMap<NodeId, SenseManager> = HashMap::new();
     for (node_id, ssm) in snap.sense_managers {
         let mut sm = SenseManager::new(config.sense.clone());
         sm.next_sense_id = ssm.next_sense_id;
         sm.global_context_count = ssm.global_context_count;
 
-        for (i, ss) in ssm.senses.into_iter().enumerate() {
-            let mut sense = Sense::new(i, vec![]);
+        for ss in ssm.senses.into_iter() {
+            let compositions: Vec<CompositionRef> = ss
+                .compositions
+                .into_iter()
+                .map(|sc| CompositionRef::new(sc.node_id, sc.sense_id))
+                .collect();
+
+            let mut sense = Sense::new_compositional(
+                0, // placeholder, will be set by id field
+                compositions,
+                vec![],
+                ss.layer,
+            );
+            sense.id = 0; // Will be reassigned
             sense.contexts = ss.contexts;
             sense.freq_counts = ss.freq_counts;
             sense.sum_sim = ss.sum_sim;
@@ -541,6 +491,7 @@ pub fn from_snapshot(snap: RsvsSnapshot) -> Rsvs {
                 SenseStatus::Fragile
             };
             sense.inactivity = ss.inactivity;
+            sense.grounding_score = ss.grounding_score;
             sm.senses.push(sense);
         }
         senses.insert(node_id, sm);
@@ -552,7 +503,7 @@ pub fn from_snapshot(snap: RsvsSnapshot) -> Rsvs {
             .or_insert_with(|| SenseManager::new(config.sense.clone()));
     }
 
-    // --- Rebuild autonomy engine (v4.2) ---
+    // --- Rebuild autonomy engine ---
     let mut autonomy = AutonomyEngine::new(config.autonomy.clone());
 
     if snap.total_contexts >= snap.n_warm {
@@ -593,18 +544,13 @@ pub fn from_snapshot(snap: RsvsSnapshot) -> Rsvs {
         }
     }
 
-    // --- Rebuild EntityDetector ---
     let mut entities = crate::attention::EntityDetector::new();
     entities.sentence_count = snap.entity_detector.sentence_count;
     entities.groundable = snap.entity_detector.groundable;
 
-    // --- Rebuild token_to_id and atom_sets ---
     let token_to_id = snap.token_to_id;
     let mut atom_sets: HashMap<String, Vec<NodeId>> = HashMap::new();
     for (token, &id) in &token_to_id {
-        // BUG FIX: Use the actual node.atoms from the graph instead of
-        // always resetting to vec![id], which would zero out the
-        // attention scorer's Jaccard component after a load.
         let atoms = graph
             .get_node(id)
             .map(|n| n.atoms.clone())

@@ -11,8 +11,8 @@ Architecture:
     Graph, Attention, Autonomy, Sense, Pipeline
 """
 
-__version__ = "4.2.0"
-__schema_version__ = "v4.2"
+__version__ = "5.0.0"
+__schema_version__ = "v5.0"
 __api_version__ = "v1"
 
 # Try to import the Rust native module. If not available (e.g. maturin not built),
@@ -32,6 +32,9 @@ try:
         PyNodeInfo as NodeInfo,
         PyAppraiseResult as AppraiseResult,
         PyRelateResult as RelateResult,
+        # v5.0 compositional architecture types
+        PyStructuralSimResult as StructuralSimResult,
+        PySubstitutionResult as SubstitutionResult,
     )
     _rust_core_available = True
 except ImportError:
@@ -55,6 +58,9 @@ __all__ = [
     "NodeInfo",
     "AppraiseResult",
     "RelateResult",
+    # v5.0
+    "StructuralSimResult",
+    "SubstitutionResult",
     # Bridge modules (lazy-loaded)
     "get_rsvs_instance",
     "run_mode",

@@ -80,6 +80,9 @@ function generateNode(tier?: Tier): RSVSNode {
   // Sometimes use Indonesian labels for atom nodes
   const useIdLabels = Math.random() > 0.7;
 
+  // v5.0: Compute layer based on composition
+  const layer = isComposite ? Math.floor(rand(1, 4)) : 0;
+
   return {
     id,
     label: isComposite ? pick(COMPOSITE_LABELS) : (useIdLabels ? pick(ATOM_LABELS_ID) : pick(ATOM_LABELS)),
@@ -91,6 +94,9 @@ function generateNode(tier?: Tier): RSVSNode {
       count: randInt(1, 6),
       active_index: 0,
       coherence: rand(0.2, 1.0),
+      // v5.0 fields
+      layer: layer,
+      grounding_score: isComposite ? rand(0.3, 0.9) : 1.0,
     },
     metrics: {
       degree: randInt(1, 12),
@@ -125,6 +131,13 @@ function generateNode(tier?: Tier): RSVSNode {
     atoms: isComposite ? [randInt(100, 130), randInt(100, 130), randInt(100, 130)] : undefined,
     compression_reason: isComposite && Math.random() > 0.5 ? 'semantic merge' : undefined,
     is_seed: Math.random() > 0.9, // ~10% chance seed
+    // v5.0 compositional fields
+    layer: layer,
+    grounding_score: isComposite ? rand(0.3, 0.9) : 1.0,
+    compositions: isComposite ? [
+      { label: pick(ATOM_LABELS_ID), sense_id: `sense_${id}_1` },
+      { label: pick(ATOM_LABELS_ID), sense_id: `sense_${id}_2` },
+    ] : undefined,
   };
 }
 

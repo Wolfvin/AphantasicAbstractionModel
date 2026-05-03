@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { useUIStore, useGraphStore } from '@/store/rsvsStore';
 import { DemoControls } from './TimelineBar';
 import type { ViewMode, Tier } from '@/lib/types';
+import { getLayerColorEntries } from '@/lib/nodeRendering';
 
 const TIER_COLORS: Record<Tier, string> = { 1: '#00E5FF', 2: '#FFB74D', 3: '#FF5252' };
 const TIER_LABELS: Record<Tier, string> = { 1: 'Tier 1 — Stable', 2: 'Tier 2 — Alert', 3: 'Tier 3 — Critical' };
@@ -98,18 +99,14 @@ export default function GraphHUD() {
         <div className="bg-[#0a0e18]/80 backdrop-blur-md rounded-lg p-3 border border-[#1e293b]">
           <div className="text-[9px] uppercase tracking-widest text-[#475569] mb-2">Legend</div>
           <div className="flex flex-col gap-1.5">
-            <div className="flex items-center gap-2 text-[10px] text-[#94a3b8]">
-              <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: '#00E5FF' }} />
-              {TIER_LABELS[1]}
-            </div>
-            <div className="flex items-center gap-2 text-[10px] text-[#94a3b8]">
-              <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: '#FFB74D' }} />
-              {TIER_LABELS[2]}
-            </div>
-            <div className="flex items-center gap-2 text-[10px] text-[#94a3b8]">
-              <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: '#FF5252' }} />
-              {TIER_LABELS[3]}
-            </div>
+            {/* v5.0: Layer colors (replacing tier-based legend) */}
+            {getLayerColorEntries().map(({ layer, color, label }) => (
+              <div key={layer} className="flex items-center gap-2 text-[10px] text-[#94a3b8]">
+                <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: color }} />
+                {label}
+              </div>
+            ))}
+            <div className="w-full h-px bg-[#1e293b] my-1" />
             <div className="flex items-center gap-2 text-[10px] text-[#94a3b8]">
               <div className="w-2.5 h-2.5 rounded-md" style={{ backgroundColor: '#B388FF' }} />
               Seed node
@@ -121,6 +118,10 @@ export default function GraphHUD() {
             <div className="flex items-center gap-2 text-[10px] text-[#94a3b8]">
               <div className="w-5 h-0.5 rounded-full" style={{ backgroundColor: '#69F0AE', opacity: 0.7 }} />
               Learned edge
+            </div>
+            <div className="flex items-center gap-2 text-[10px] text-[#94a3b8]">
+              <div className="w-5 h-0.5 rounded-full" style={{ backgroundColor: '#FF80AB', opacity: 0.7 }} />
+              Composition link
             </div>
           </div>
         </div>

@@ -3,6 +3,8 @@
 Public API:
     run_mode  — unified mode dispatch for FastAPI server
     _run_mode — internal mode dispatch for bridge_server
+
+Updated for RSVS v5.0 compositional architecture.
 """
 
 from __future__ import annotations
@@ -51,6 +53,8 @@ __all__ = [
     "_run_appraise_rust",
     "_run_relate_rust",
     "_run_compose_rust",
+    "_run_structural_similarity_rust",
+    "_run_substitution_analysis_rust",
     "_run_mode",
     "_read_latest_mode",
     "run_mode",
@@ -124,10 +128,14 @@ def _run_ingest_rust(
     # Persist the Rust core state
     _save_rsvs()
 
-    # Build stats from Rust metadata
+    # Build stats from Rust metadata (v5.0: include compositions_induced)
     tokens = _tokenize(text)
     nodes = snapshot.get("nodes", [])
     edges = snapshot.get("edges", [])
+
+    # Extract compositions_induced from PyIngestStats if available
+    compositions_induced = getattr(meta, "compositions_induced", 0)
+
     stats = {
         "batch_id": rust_correlation_id,
         "token_count": len(tokens),
@@ -140,6 +148,7 @@ def _run_ingest_rust(
         "sense_assigned": meta.sense_assigned,
         "sense_created": meta.sense_created,
         "confidence_updated": meta.confidence_updated,
+        "compositions_induced": compositions_induced,
     }
 
     # Write artifacts
@@ -163,6 +172,7 @@ def _run_ingest_rust(
                 f"Ingesting batch {rust_correlation_id} — "
                 f"{meta.sentences_processed} sentences, "
                 f"{meta.atoms_promoted} atoms promoted, "
+                f"{compositions_induced} compositions induced, "
                 f"{len(edges)} edges (via Rust core)."
             ),
             "timestamp": iso_now(),
@@ -279,7 +289,10 @@ def _run_relate_rust(
     correlation_id: str,
     options: dict[str, Any] | None,
 ) -> tuple[dict[str, Any], list[dict[str, Any]], dict[str, str]]:
-    """Relate via the Rust core: r.relate(concept)."""
+    """Relate via the Rust core: r.relate(concept).
+
+    v5.0: PyRelateResult now includes structural_relations.
+    """
     r = _get_rsvs()
     if r is None:
         raise RustCoreUnavailableError("Rust core required for relate mode")
@@ -326,12 +339,16 @@ def _run_relate_rust(
                 "score": round(float(weight), 3),
             })
 
+        # v5.0: Extract structural_relations from PyRelateResult
+        structural_relations = getattr(relate_result, "structural_relations", [])
+
         result = {
             "view": view,
             "query_terms": input_tokens,
             "related_nodes": related_nodes,
             "related_edges": related_edges,
             "clusters": [],
+            "structural_relations": structural_relations,
         }
 
         messages = [
@@ -339,8 +356,10 @@ def _run_relate_rust(
                 "id": make_id("msg"),
                 "type": "system_ingest_status",
                 "content": (
-                    f"Relate found {len(related_nodes)} nodes and "
-                    f"{len(related_edges)} edges [Rust core, token='{used_token}']."
+                    f"Relate found {len(related_nodes)} nodes, "
+                    f"{len(related_edges)} edges, and "
+                    f"{len(structural_relations)} structural relations "
+                    f"[Rust core, token='{used_token}']."
                 ),
                 "timestamp": iso_now(),
                 "correlation_id": correlation_id,
@@ -385,6 +404,7 @@ def _run_relate_rust(
             "related_nodes": related_nodes,
             "related_edges": related_edges,
             "clusters": [],
+            "structural_relations": [],
         }
 
         messages = [
@@ -415,7 +435,7 @@ def _run_relate_rust(
 
 
 # ---------------------------------------------------------------------------
-# Mode: compose (Rust core)
+# Mode: compose (Rust core) — v5.0 compositional architecture
 # ---------------------------------------------------------------------------
 
 
@@ -424,19 +444,39 @@ def _run_compose_rust(
     correlation_id: str,
     options: dict[str, Any] | None,
 ) -> tuple[dict[str, Any], list[dict[str, Any]], dict[str, str]]:
-    """Compose via the Rust core: r.compose(label, atom_ids, lang)."""
+    """Compose via the Rust core.
+
+    v5.0 supports two calling patterns:
+      - compositions: list of [label, sense_id] pairs → r.compose(label, compositions, lang)
+      - atom_ids: list of integer node IDs → r.compose_from_ids(label, atom_ids, lang)
+    """
     r = _get_rsvs()
     if r is None:
         raise RustCoreUnavailableError("Rust core required for compose mode")
 
     label = text  # In compose mode, text carries the label
-    atom_ids = (options or {}).get("atom_ids", [])
-    lang = (options or {}).get("lang")
+    options = options or {}
 
-    if not atom_ids:
-        raise ValueError("atom_ids must be a non-empty list of integer node IDs")
+    lang = options.get("lang")
+    compositions = options.get("compositions")  # list of [label, sense_id] pairs
+    atom_ids = options.get("atom_ids")  # list of int node IDs (backward compat)
 
-    node_id = r.compose(label, atom_ids, lang)
+    if compositions:
+        # v5.0: New compose with (label, sense_id) pairs
+        compositions_tuples = [(c[0], int(c[1])) for c in compositions]
+        node_id = r.compose(label, compositions_tuples, lang)
+        composed_from = compositions
+        composed_type = "compositions"
+    elif atom_ids:
+        # Backward compat: compose_from_ids with sense_id=0
+        node_id = r.compose_from_ids(label, atom_ids, lang)
+        composed_from = atom_ids
+        composed_type = "atom_ids"
+    else:
+        raise ValueError(
+            "Either 'compositions' (list of [label, sense_id] pairs) or "
+            "'atom_ids' (list of integer node IDs) must be provided"
+        )
 
     # Get snapshot and convert
     snapshot_raw = json.loads(r.snapshot_v1())
@@ -454,7 +494,7 @@ def _run_compose_rust(
         "mode": "compose",
         "node_id": node_id,
         "label": label,
-        "atom_ids": atom_ids,
+        composed_type: composed_from,
         "snapshot": snapshot,
         "events": events,
     }
@@ -465,7 +505,7 @@ def _run_compose_rust(
             "type": "system_ingest_status",
             "content": (
                 f"Composed node '{label}' (id={node_id}) from "
-                f"{len(atom_ids)} atoms [Rust core]."
+                f"{len(composed_from)} {composed_type} [Rust core]."
             ),
             "timestamp": iso_now(),
             "correlation_id": correlation_id,
@@ -480,12 +520,169 @@ def _run_compose_rust(
         "timestamp": iso_now(),
         "correlation_id": correlation_id,
         "input": label,
-        "atom_ids": atom_ids,
+        composed_type: composed_from,
         "lang": lang,
         "result": result,
     }
     _write_json(path, payload)
     return result, messages, {"compose": str(path)}
+
+
+# ---------------------------------------------------------------------------
+# Mode: structural_similarity (Rust core) — v5.0
+# ---------------------------------------------------------------------------
+
+
+def _run_structural_similarity_rust(
+    text: str,
+    correlation_id: str,
+    options: dict[str, Any] | None,
+) -> tuple[dict[str, Any], list[dict[str, Any]], dict[str, str]]:
+    """Structural similarity via the Rust core: r.structural_similarity(a, b).
+
+    Returns PyStructuralSimResult with:
+        sense_idx_a, sense_idx_b, structural_similarity,
+        shared_compositions, only_a_compositions, only_b_compositions,
+        layer_a, layer_b
+    """
+    r = _get_rsvs()
+    if r is None:
+        raise RustCoreUnavailableError("Rust core required for structural_similarity mode")
+
+    options = options or {}
+    label_a = options.get("a", text)
+    label_b = options.get("b", "")
+
+    if not label_b:
+        raise ValueError("Parameter 'b' is required for structural similarity")
+
+    sim_result = r.structural_similarity(label_a, label_b)
+
+    # Extract fields from PyStructuralSimResult
+    result = {
+        "a": label_a,
+        "b": label_b,
+        "sense_idx_a": getattr(sim_result, "sense_idx_a", None),
+        "sense_idx_b": getattr(sim_result, "sense_idx_b", None),
+        "structural_similarity": getattr(sim_result, "structural_similarity", 0.0),
+        "shared_compositions": list(getattr(sim_result, "shared_compositions", [])),
+        "only_a_compositions": list(getattr(sim_result, "only_a_compositions", [])),
+        "only_b_compositions": list(getattr(sim_result, "only_b_compositions", [])),
+        "layer_a": getattr(sim_result, "layer_a", None),
+        "layer_b": getattr(sim_result, "layer_b", None),
+    }
+
+    shared = len(result["shared_compositions"])
+    only_a = len(result["only_a_compositions"])
+    only_b = len(result["only_b_compositions"])
+
+    messages = [
+        {
+            "id": make_id("msg"),
+            "type": "system_ingest_status",
+            "content": (
+                f"Structural similarity '{label_a}' vs '{label_b}': "
+                f"{result['structural_similarity']:.3f} "
+                f"({shared} shared, {only_a} only-A, {only_b} only-B) [Rust core]."
+            ),
+            "timestamp": iso_now(),
+            "correlation_id": correlation_id,
+        }
+    ]
+
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    path = CONFIG.atom_dir / f"structural-similarity-{stamp}.json"
+    payload = {
+        "schema_version": SCHEMA_VERSION,
+        "mode": "structural_similarity",
+        "timestamp": iso_now(),
+        "correlation_id": correlation_id,
+        "input": f"{label_a} vs {label_b}",
+        "result": result,
+    }
+    _write_json(path, payload)
+    return result, messages, {"structural_similarity": str(path)}
+
+
+# ---------------------------------------------------------------------------
+# Mode: substitution_analysis (Rust core) — v5.0
+# ---------------------------------------------------------------------------
+
+
+def _run_substitution_analysis_rust(
+    text: str,
+    correlation_id: str,
+    options: dict[str, Any] | None,
+) -> tuple[dict[str, Any], list[dict[str, Any]], dict[str, str]]:
+    """Substitution analysis via the Rust core: r.substitution_analysis(a, b).
+
+    Returns PySubstitutionResult with:
+        sense_idx_a, sense_idx_b, structural_similarity,
+        substitutions, unpaired_only_a, unpaired_only_b
+    """
+    r = _get_rsvs()
+    if r is None:
+        raise RustCoreUnavailableError("Rust core required for substitution_analysis mode")
+
+    options = options or {}
+    label_a = options.get("a", text)
+    label_b = options.get("b", "")
+
+    if not label_b:
+        raise ValueError("Parameter 'b' is required for substitution analysis")
+
+    sub_result = r.substitution_analysis(label_a, label_b)
+
+    # Extract fields from PySubstitutionResult
+    # substitutions is a list of (comp_a, comp_b) pairs
+    raw_substitutions = list(getattr(sub_result, "substitutions", []))
+    substitutions = [
+        {"a": pair[0], "b": pair[1]} if isinstance(pair, (list, tuple)) else pair
+        for pair in raw_substitutions
+    ]
+
+    result = {
+        "a": label_a,
+        "b": label_b,
+        "sense_idx_a": getattr(sub_result, "sense_idx_a", None),
+        "sense_idx_b": getattr(sub_result, "sense_idx_b", None),
+        "structural_similarity": getattr(sub_result, "structural_similarity", 0.0),
+        "substitutions": substitutions,
+        "unpaired_only_a": list(getattr(sub_result, "unpaired_only_a", [])),
+        "unpaired_only_b": list(getattr(sub_result, "unpaired_only_b", [])),
+    }
+
+    n_subs = len(substitutions)
+    unpaired_a = len(result["unpaired_only_a"])
+    unpaired_b = len(result["unpaired_only_b"])
+
+    messages = [
+        {
+            "id": make_id("msg"),
+            "type": "system_ingest_status",
+            "content": (
+                f"Substitution analysis '{label_a}' vs '{label_b}': "
+                f"{n_subs} substitution pairs, "
+                f"{unpaired_a} unpaired-A, {unpaired_b} unpaired-B "
+                f"[Rust core]."
+            ),
+            "timestamp": iso_now(),
+            "correlation_id": correlation_id,
+        }
+    ]
+
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    path = CONFIG.atom_dir / f"substitution-analysis-{stamp}.json"
+    payload = {
+        "schema_version": SCHEMA_VERSION,
+        "mode": "substitution_analysis",
+        "timestamp": iso_now(),
+        "correlation_id": correlation_id,
+        "input": f"{label_a} vs {label_b}",
+        "result": result,
+    }
+    _write_json(path, payload)
+    return result, messages, {"substitution_analysis": str(path)}
 
 
 # ---------------------------------------------------------------------------
@@ -497,6 +694,8 @@ _MODE_HANDLERS = {
     "appraise": _run_appraise_rust,
     "relate": _run_relate_rust,
     "compose": _run_compose_rust,
+    "structural_similarity": _run_structural_similarity_rust,
+    "substitution_analysis": _run_substitution_analysis_rust,
 }
 
 
@@ -540,6 +739,7 @@ def run_mode(
     target: str | None = None,
     source: str | None = None,
     top_k: int = 10,
+    options: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Public unified mode dispatch for the FastAPI server.
 
@@ -548,14 +748,14 @@ def run_mode(
     """
     from .config import make_id
     correlation_id = make_id("corr")
-    options: dict[str, Any] = {}
+    merged_options: dict[str, Any] = dict(options) if options else {}
     if target is not None:
-        options["target"] = target
+        merged_options["target"] = target
     if source is not None:
-        options["source"] = source
+        merged_options["source"] = source
     if top_k != 10:
-        options["top_k"] = top_k
-    return _run_mode(mode, text, correlation_id, options)
+        merged_options["top_k"] = top_k
+    return _run_mode(mode, text, correlation_id, merged_options)
 
 
 def _read_latest_mode(mode: str) -> dict[str, Any] | None:

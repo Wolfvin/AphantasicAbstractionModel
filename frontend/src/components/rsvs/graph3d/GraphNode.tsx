@@ -7,7 +7,7 @@ import { Html, Billboard } from '@react-three/drei';
 import * as THREE from 'three';
 import type { RSVSNode } from '@/lib/types';
 import { useGraphStore, useUIStore } from '@/store/rsvsStore';
-import { isCompositeNode, isAtomNode, getAtomCount } from '@/lib/nodeRendering';
+import { isCompositeNode, isAtomNode, getAtomCount, computeNodeLayer, getLayerColor, buildCompositionChain } from '@/lib/nodeRendering';
 
 // ── Animation constants ──
 const SPAWN_DURATION_MS = 500;
@@ -53,6 +53,20 @@ const GraphNodeComponent: React.FC<GraphNodeProps> = ({
   const composite = isCompositeNode(node);
   const atom = isAtomNode(node);
   const atomCount = getAtomCount(node);
+
+  // v5.0: Compute effective layer
+  const layer = computeNodeLayer(node);
+  const layerColor = getLayerColor(layer);
+
+  // v5.0: Build composition chain string for hover tooltip
+  const compositionChain = useMemo(() => {
+    return buildCompositionChain(
+      node.label,
+      node.compositions,
+      node.derived_from_node_ids ?? node.semantic?.derived_from_node_ids,
+      useGraphStore.getState().nodes as Map<number, { label: string }>,
+    );
+  }, [node.label, node.compositions, node.derived_from_node_ids, node.semantic?.derived_from_node_ids]);
 
   // Get atom IDs for tendril lines
   const atomIds = useMemo(() => {
@@ -367,8 +381,11 @@ const GraphNodeComponent: React.FC<GraphNodeProps> = ({
   const displayLabel =
     node.label.length > 20 ? node.label.slice(0, 18) + '…' : node.label;
 
-  // Composite label prefix
-  const labelPrefix = composite ? '◆ ' : atom ? '● ' : '';
+  // v5.0: Layer prefix
+  const layerPrefix = layer === 0 ? '● ' : `◆L${layer} `;
+
+  // v5.0: Composition chain tooltip (shown on hover for compositional nodes)
+  const showCompositionChain = isHovered && compositionChain !== null;
 
   return (
     <group ref={groupRef}>
@@ -420,21 +437,53 @@ const GraphNodeComponent: React.FC<GraphNodeProps> = ({
             <div
               style={{
                 background: 'rgba(10, 14, 26, 0.85)',
-                border: `1px solid ${composite ? '#FF80AB40' : atom ? '#69F0AE40' : `${nodeColor}40`}`,
+                border: `1px solid ${composite ? '#FF80AB40' : atom ? '#69F0AE40' : `${layerColor}40`}`,
                 borderRadius: '6px',
                 padding: '2px 8px',
-                color: composite ? '#FF80AB' : atom ? '#69F0AE' : nodeColor,
+                color: composite ? '#FF80AB' : atom ? '#69F0AE' : layerColor,
                 fontSize: '11px',
                 fontFamily: 'monospace',
                 whiteSpace: 'nowrap',
                 textOverflow: 'ellipsis',
                 overflow: 'hidden',
                 maxWidth: '140px',
-                boxShadow: `0 0 8px ${composite ? '#FF80AB20' : atom ? '#69F0AE20' : `${nodeColor}20`}`,
+                boxShadow: `0 0 8px ${composite ? '#FF80AB20' : atom ? '#69F0AE20' : `${layerColor}20`}`,
                 backdropFilter: 'blur(4px)',
               }}
             >
-              {labelPrefix}{displayLabel}
+              {layerPrefix}{displayLabel}
+            </div>
+          </Html>
+        </Billboard>
+      )}
+
+      {/* v5.0: Composition chain tooltip on hover */}
+      {showCompositionChain && (
+        <Billboard follow lockX={false} lockY lockZ={false}>
+          <Html
+            position={[0, (atom ? 1.5 : 2.0) * nodeSize, 0]}
+            center
+            distanceFactor={12}
+            style={{
+              pointerEvents: 'none',
+              userSelect: 'none',
+            }}
+          >
+            <div
+              style={{
+                background: 'rgba(10, 14, 26, 0.92)',
+                border: `1px solid ${layerColor}60`,
+                borderRadius: '8px',
+                padding: '4px 10px',
+                color: '#e2e8f0',
+                fontSize: '11px',
+                fontFamily: 'monospace',
+                whiteSpace: 'nowrap',
+                boxShadow: `0 0 12px ${layerColor}30`,
+                backdropFilter: 'blur(8px)',
+              }}
+            >
+              <span style={{ color: layerColor, fontWeight: 'bold' }}>{compositionChain}</span>
             </div>
           </Html>
         </Billboard>

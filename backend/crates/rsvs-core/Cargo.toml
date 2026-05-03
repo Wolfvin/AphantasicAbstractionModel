@@ -1,11 +1,11 @@
 [package]
 name = "rsvs"
-version = "4.2.0"
+version = "5.0.0"
 edition = "2021"
-description = "Relational Symbolic Vocabulary System — cognitive symbolic engine with hard attention"
+description = "Relational Symbolic Vocabulary System — compositional symbolic engine with structural meaning"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/Wolfvin/SymbolicPuzzle3D"
-keywords = ["symbolic", "knowledge-graph", "attention", "cognitive", "nlp"]
+keywords = ["symbolic", "knowledge-graph", "compositional", "cognitive", "nlp"]
 categories = ["science", "data-structures", "algorithms"]
 readme = "README.md"
 

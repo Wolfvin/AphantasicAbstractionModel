@@ -1,4 +1,4 @@
-import type { ChatMessage, GraphSnapshot, RSVSEvent, ComposeResult } from '@/lib/types';
+import type { ChatMessage, GraphSnapshot, RSVSEvent, ComposeResult, StructuralSimilarityResult, SubstitutionAnalysisResult, CompositionPair } from '@/lib/types';
 export type RSVSMode = 'ingest' | 'appraise' | 'relate' | 'compose';
 
 export interface BackendIngestResponse {
@@ -108,6 +108,57 @@ export async function composeToBackend(
     atom_ids: atomIds,
     lang,
   });
+}
+
+/**
+ * v5.0: Compose with composition pairs instead of atom IDs.
+ * POST /compose accepts `compositions` (list of {label, sense_id} pairs) OR `atom_ids`.
+ */
+export async function composeWithCompositions(
+  label: string,
+  compositions: CompositionPair[],
+  lang: string,
+  correlationId: string,
+): Promise<BackendRunEnvelope> {
+  return runModeToBackend('compose', `${label} = ${compositions.map(c => c.label).join(' + ')}`, correlationId, {
+    label,
+    compositions,
+    lang,
+  });
+}
+
+/**
+ * v5.0: Fetch structural similarity between two nodes.
+ * GET /structural-similarity?a=raja&b=ratu
+ */
+export async function fetchStructuralSimilarity(
+  labelA: string,
+  labelB: string,
+): Promise<StructuralSimilarityResult> {
+  const url = `${getBackendBaseUrl()}/structural-similarity?a=${encodeURIComponent(labelA)}&b=${encodeURIComponent(labelB)}`;
+  const res = await fetch(url, { method: 'GET' });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Structural similarity failed (${res.status}): ${body}`);
+  }
+  return (await res.json()) as StructuralSimilarityResult;
+}
+
+/**
+ * v5.0: Fetch substitution analysis between two nodes.
+ * GET /substitution-analysis?a=raja&b=ratu
+ */
+export async function fetchSubstitutionAnalysis(
+  labelA: string,
+  labelB: string,
+): Promise<SubstitutionAnalysisResult> {
+  const url = `${getBackendBaseUrl()}/substitution-analysis?a=${encodeURIComponent(labelA)}&b=${encodeURIComponent(labelB)}`;
+  const res = await fetch(url, { method: 'GET' });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Substitution analysis failed (${res.status}): ${body}`);
+  }
+  return (await res.json()) as SubstitutionAnalysisResult;
 }
 
 export async function fetchLatestFromBackend(): Promise<BackendIngestResponse> {

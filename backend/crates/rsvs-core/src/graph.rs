@@ -1,14 +1,22 @@
-//! The RSVS graph — in-memory, DAG, integer-keyed (v4.2)
+//! The RSVS graph — in-memory, DAG, integer-keyed (v5.0 — Compositional)
 //!
-//! v4.2: Unified node model. No more Atom/Composite distinction.
-//! expand() checks CompressionState to decide expansion strategy.
+//! v5.0: Compositional architecture. Nodes can have multiple senses,
+//! each defined by compositions (references to specific senses of other nodes).
+//!
+//! Key additions:
+//! - `structural_similarity()`: Compare two nodes based on shared/differing
+//!   compositions at the sense level.
+//! - `substitution_analysis()`: Find what composition substitutions transform
+//!   one sense into another (e.g., raja→ratu by substituting laki-laki→perempuan).
+//! - `expand()` now recurses through compositions, not just atom sets.
 
 use crate::error::RsvsError;
-use crate::types::{AtomSet, CompressionState, Edge, Node, NodeId};
+use crate::sense::SenseManager;
+use crate::types::{AtomSet, CompositionRef, CompressionState, Edge, Node, NodeId};
 use std::collections::HashMap;
 
 #[derive(Debug)]
-/// The RSVS knowledge graph — in-memory, DAG, integer-keyed (v4.2).
+/// The RSVS knowledge graph — in-memory, DAG, integer-keyed (v5.0).
 pub struct RsvsGraph {
     /// All nodes indexed by integer ID.
     pub nodes: HashMap<NodeId, Node>,
@@ -40,37 +48,18 @@ impl RsvsGraph {
         }
     }
 
-    // ---------------------------------------------------------------
-    // ID allocation
-    // ---------------------------------------------------------------
-
     fn alloc_id(&mut self) -> NodeId {
         let id = self.next_id;
         self.next_id += 1;
         id
     }
 
-    // ---------------------------------------------------------------
-    // Node insertion (v4.2)
-    // ---------------------------------------------------------------
-
     /// Insert a new node into the graph.
-    ///
-    /// Returns the assigned `NodeId`. Returns `Err` if a circular reference is detected
-    /// in `derived_from_node_ids` or if a referenced derived node does not exist.
-    ///
-    /// # Examples
-    /// ```ignore
-    /// let mut g = RsvsGraph::new();
-    /// let id = g.insert_node(Node { id: 0, label: "test".into(), ..Default::default() })?;
-    /// ```
     pub fn insert_node(&mut self, mut node: Node) -> Result<NodeId, RsvsError> {
-        // Assign ID if not already set (0 = unassigned sentinel)
         if node.id == 0 {
             node.id = self.alloc_id();
         }
 
-        // v4.2 DAG constraint: no self-reference in derived_from_node_ids
         if node.semantic.compression_state == CompressionState::Compressed {
             if node.semantic.derived_from_node_ids.contains(&node.id) {
                 return Err(RsvsError::CircularRef {
@@ -78,7 +67,6 @@ impl RsvsGraph {
                     to: node.id,
                 });
             }
-            // All referenced derived nodes must already exist
             for &derived_id in &node.semantic.derived_from_node_ids {
                 if !self.nodes.contains_key(&derived_id) {
                     return Err(RsvsError::NodeNotFound { id: derived_id });
@@ -87,7 +75,6 @@ impl RsvsGraph {
         }
 
         let id = node.id;
-        // Register label in both label and surface_label lookups
         self.label_to_id.insert(node.label.clone(), id);
         if node.surface_label != node.label {
             self.label_to_id.insert(node.surface_label.clone(), id);
@@ -96,23 +83,8 @@ impl RsvsGraph {
         Ok(id)
     }
 
-    // ---------------------------------------------------------------
-    // Edge insertion (v4.2: any node → any node)
-    // ---------------------------------------------------------------
-
     /// Insert a directed edge between two existing nodes.
-    ///
-    /// Returns `Err` if either endpoint does not exist in the graph.
-    ///
-    /// # Examples
-    /// ```ignore
-    /// let mut g = RsvsGraph::new();
-    /// let a = g.insert_node(Node { id: 0, label: "a".into(), ..Default::default() })?;
-    /// let b = g.insert_node(Node { id: 0, label: "b".into(), ..Default::default() })?;
-    /// g.insert_edge(Edge { from: a, to: b, weight: 0.8, source: EdgeSource::Learned })?;
-    /// ```
     pub fn insert_edge(&mut self, edge: Edge) -> Result<(), RsvsError> {
-        // Both endpoints must exist
         if !self.nodes.contains_key(&edge.from) {
             return Err(RsvsError::NodeNotFound { id: edge.from });
         }
@@ -123,26 +95,22 @@ impl RsvsGraph {
         Ok(())
     }
 
-    // ---------------------------------------------------------------
-    // Lookup
-    // ---------------------------------------------------------------
-
-    /// Look up a node by its integer ID.
+    /// Get a reference to a node by ID.
     pub fn get_node(&self, id: NodeId) -> Option<&Node> {
         self.nodes.get(&id)
     }
 
-    /// Look up a node by its integer ID with mutable access.
+    /// Get a mutable reference to a node by ID.
     pub fn get_node_mut(&mut self, id: NodeId) -> Option<&mut Node> {
         self.nodes.get_mut(&id)
     }
 
-    /// Look up a node ID by its label string.
+    /// Look up a node ID by its label.
     pub fn id_for_label(&self, label: &str) -> Option<NodeId> {
         self.label_to_id.get(label).copied()
     }
 
-    /// Return the outgoing edges from a node.
+    /// Get all edges originating from a node.
     pub fn edges_from(&self, node_id: NodeId) -> &[Edge] {
         self.edges
             .get(&node_id)
@@ -150,54 +118,40 @@ impl RsvsGraph {
             .unwrap_or(&[])
     }
 
-    /// Return the number of nodes in the graph.
+    /// Return the total number of nodes.
     pub fn node_count(&self) -> usize {
         self.nodes.len()
     }
 
-    /// Return the total number of edges in the graph.
+    /// Return the total number of edges.
     pub fn edge_count(&self) -> usize {
         self.edges.values().map(|v| v.len()).sum()
     }
 
-    // ---------------------------------------------------------------
-    // Expand (v4.2: based on CompressionState)
-    //
-    // If compressed: expand to derived_from_node_ids
-    // If raw: expand to atoms, or just [id] if atoms is empty
-    // ---------------------------------------------------------------
-
     /// Expand a node into its atom set based on `CompressionState`.
-    ///
-    /// Compressed nodes expand to `derived_from_node_ids`; raw nodes expand to
-    /// their `atoms` field, or just `[id]` if atoms is empty.
     pub fn expand(&self, id: NodeId) -> AtomSet {
         match self.nodes.get(&id) {
             None => vec![],
-            Some(node) => {
-                match node.semantic.compression_state {
-                    CompressionState::Compressed => {
-                        // Compressed node expands to its derivation
-                        let mut expanded = node.semantic.derived_from_node_ids.clone();
-                        if expanded.is_empty() {
-                            expanded.push(id);
-                        }
-                        expanded
+            Some(node) => match node.semantic.compression_state {
+                CompressionState::Compressed => {
+                    let mut expanded = node.semantic.derived_from_node_ids.clone();
+                    if expanded.is_empty() {
+                        expanded.push(id);
                     }
-                    CompressionState::Raw => {
-                        // Raw node expands to its atom set, or self
-                        if node.atoms.is_empty() {
-                            vec![id]
-                        } else {
-                            node.atoms.clone()
-                        }
+                    expanded
+                }
+                CompressionState::Raw => {
+                    if node.atoms.is_empty() {
+                        vec![id]
+                    } else {
+                        node.atoms.clone()
                     }
                 }
-            }
+            },
         }
     }
 
-    /// Compute the full similarity breakdown between two nodes.
+    /// Compute the full similarity breakdown between two nodes (flat, v4 compat).
     pub fn similarity(&self, a: NodeId, b: NodeId) -> SimilarityResult {
         let atoms_a = self.expand(a);
         let atoms_b = self.expand(b);
@@ -225,16 +179,148 @@ impl RsvsGraph {
         }
     }
 
-    // ---------------------------------------------------------------
-    // Jaccard between two atom sets (used by attention scoring)
-    // ---------------------------------------------------------------
+    /// Compute structural similarity between two nodes at the sense level (v5.0).
+    ///
+    /// This is the core of RSVS v5.0's compositional architecture. Two nodes
+    /// are structurally similar if their senses share compositions.
+    ///
+    /// Example:
+    ///   raja.sense_0 = [(tahta_tertinggi, 0), (laki_laki, 0), (kerajaan, 0)]
+    ///   ratu.sense_0 = [(tahta_tertinggi, 0), (perempuan, 0), (kerajaan, 0)]
+    ///   → shared: [(tahta_tertinggi, 0), (kerajaan, 0)]
+    ///   → only_a: [(laki_laki, 0)]
+    ///   → only_b: [(perempuan, 0)]
+    ///   → structural_similarity: 2/3 = 0.667
+    pub fn structural_similarity(
+        &self,
+        _a: NodeId,
+        _b: NodeId,
+        senses_a: &SenseManager,
+        senses_b: &SenseManager,
+    ) -> StructuralSimResult {
+        let mut best_result: Option<StructuralSimResult> = None;
+
+        for (idx_a, sense_a) in senses_a.senses.iter().enumerate() {
+            for (idx_b, sense_b) in senses_b.senses.iter().enumerate() {
+                if !sense_a.is_compositional() && !sense_b.is_compositional() {
+                    continue;
+                }
+
+                let shared: Vec<CompositionRef> = sense_a
+                    .compositions
+                    .iter()
+                    .filter(|c| sense_b.compositions.contains(c))
+                    .cloned()
+                    .collect();
+
+                let only_a: Vec<CompositionRef> = sense_a
+                    .compositions
+                    .iter()
+                    .filter(|c| !sense_b.compositions.contains(c))
+                    .cloned()
+                    .collect();
+
+                let only_b: Vec<CompositionRef> = sense_b
+                    .compositions
+                    .iter()
+                    .filter(|c| !sense_a.compositions.contains(c))
+                    .cloned()
+                    .collect();
+
+                let union_len = sense_a.compositions.len()
+                    + sense_b.compositions.len()
+                    - shared.len();
+
+                let score = if union_len == 0 {
+                    0.0
+                } else {
+                    shared.len() as f32 / union_len as f32
+                };
+
+                let is_better = best_result
+                    .as_ref()
+                    .map(|r| score > r.structural_similarity)
+                    .unwrap_or(true);
+
+                if is_better {
+                    best_result = Some(StructuralSimResult {
+                        sense_idx_a: idx_a,
+                        sense_idx_b: idx_b,
+                        shared_compositions: shared,
+                        only_a_compositions: only_a,
+                        only_b_compositions: only_b,
+                        structural_similarity: score,
+                        layer_a: sense_a.layer,
+                        layer_b: sense_b.layer,
+                    });
+                }
+            }
+        }
+
+        best_result.unwrap_or_else(|| StructuralSimResult {
+            sense_idx_a: 0,
+            sense_idx_b: 0,
+            shared_compositions: vec![],
+            only_a_compositions: vec![],
+            only_b_compositions: vec![],
+            structural_similarity: 0.0,
+            layer_a: 0,
+            layer_b: 0,
+        })
+    }
+
+    /// Analyze what substitution transforms one node's sense into another's (v5.0).
+    ///
+    /// This is the "why" of RSVS: it doesn't just say two things are
+    /// related, it says exactly WHICH composition needs to change to
+    /// transform one into the other.
+    pub fn substitution_analysis(
+        &self,
+        a: NodeId,
+        b: NodeId,
+        senses_a: &SenseManager,
+        senses_b: &SenseManager,
+    ) -> Option<SubstitutionResult> {
+        let sim = self.structural_similarity(a, b, senses_a, senses_b);
+
+        if sim.only_a_compositions.is_empty() && sim.only_b_compositions.is_empty() {
+            return None;
+        }
+
+        let substitutions: Vec<(CompositionRef, CompositionRef)> = sim
+            .only_a_compositions
+            .iter()
+            .zip(sim.only_b_compositions.iter())
+            .map(|(from, to)| (from.clone(), to.clone()))
+            .collect();
+
+        let unpaired_a: Vec<CompositionRef> = if sim.only_a_compositions.len()
+            > sim.only_b_compositions.len()
+        {
+            sim.only_a_compositions[sim.only_b_compositions.len()..].to_vec()
+        } else {
+            vec![]
+        };
+
+        let unpaired_b: Vec<CompositionRef> = if sim.only_b_compositions.len()
+            > sim.only_a_compositions.len()
+        {
+            sim.only_b_compositions[sim.only_a_compositions.len()..].to_vec()
+        } else {
+            vec![]
+        };
+
+        Some(SubstitutionResult {
+            sense_idx_a: sim.sense_idx_a,
+            sense_idx_b: sim.sense_idx_b,
+            substitutions,
+            unpaired_only_a: unpaired_a,
+            unpaired_only_b: unpaired_b,
+            structural_similarity: sim.structural_similarity,
+        })
+    }
 
     /// Compute Jaccard similarity between the expanded atom sets of two nodes.
-    ///
-    /// # Examples
-    /// ```ignore
-    /// let score = graph.jaccard_atom_sets(node_a, node_b);
-    /// ```
     pub fn jaccard_atom_sets(&self, a: NodeId, b: NodeId) -> f32 {
         let atoms_a = self.expand(a);
         let atoms_b = self.expand(b);
@@ -243,10 +329,9 @@ impl RsvsGraph {
 }
 
 /// Jaccard similarity between two atom sets.
-/// |A ∩ B| / |A ∪ B|
 pub fn jaccard_sets(a: &[NodeId], b: &[NodeId]) -> f32 {
     if a.is_empty() && b.is_empty() {
-        return 0.0; // undefined → 0 by convention
+        return 0.0;
     }
     let intersection = a.iter().filter(|x| b.contains(x)).count();
     let union = a.len() + b.len() - intersection;
@@ -258,14 +343,48 @@ pub fn jaccard_sets(a: &[NodeId], b: &[NodeId]) -> f32 {
 }
 
 #[derive(Debug)]
-/// Detailed similarity breakdown between two nodes.
+/// Detailed similarity breakdown between two nodes (flat, v4 compat).
 pub struct SimilarityResult {
-    /// Node IDs shared between both nodes.
     pub shared: Vec<NodeId>,
-    /// Node IDs only in node A.
     pub only_a: Vec<NodeId>,
-    /// Node IDs only in node B.
     pub only_b: Vec<NodeId>,
-    /// Jaccard similarity coefficient.
     pub jaccard: f32,
+}
+
+/// Structural similarity result between two nodes at the sense level (v5.0).
+#[derive(Debug, Clone)]
+pub struct StructuralSimResult {
+    /// Index of the best-matching sense in node A.
+    pub sense_idx_a: usize,
+    /// Index of the best-matching sense in node B.
+    pub sense_idx_b: usize,
+    /// Compositions shared by both senses.
+    pub shared_compositions: Vec<CompositionRef>,
+    /// Compositions only in sense A.
+    pub only_a_compositions: Vec<CompositionRef>,
+    /// Compositions only in sense B.
+    pub only_b_compositions: Vec<CompositionRef>,
+    /// Structural similarity score = shared / union.
+    pub structural_similarity: f32,
+    /// Layer of sense A.
+    pub layer_a: u32,
+    /// Layer of sense B.
+    pub layer_b: u32,
+}
+
+/// Result of substitution analysis (v5.0).
+#[derive(Debug, Clone)]
+pub struct SubstitutionResult {
+    /// Index of the sense in node A.
+    pub sense_idx_a: usize,
+    /// Index of the sense in node B.
+    pub sense_idx_b: usize,
+    /// Paired substitutions: (from_composition, to_composition).
+    pub substitutions: Vec<(CompositionRef, CompositionRef)>,
+    /// Unpaired compositions only in A.
+    pub unpaired_only_a: Vec<CompositionRef>,
+    /// Unpaired compositions only in B.
+    pub unpaired_only_b: Vec<CompositionRef>,
+    /// Overall structural similarity.
+    pub structural_similarity: f32,
 }

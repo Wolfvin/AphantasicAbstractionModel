@@ -1,7 +1,8 @@
-//! PyO3 bindings — RSVS v4.2
+//! PyO3 bindings — RSVS v5.0 Compositional Architecture
 //!
 //! Exposes the Rsvs pipeline to Python with a clean, Pythonic API.
-//! v4.2: Unified node model, appraise/relate methods, PyNodeInfo.
+//! v5.0: Compositional architecture — CompositionRef, layer, grounding,
+//! structural_similarity, substitution_analysis.
 
 #![allow(missing_docs)]
 
@@ -16,7 +17,7 @@ use crate::pipeline::{PipelineConfig, Rsvs};
 use crate::sense::SenseConfig;
 
 // -----------------------------------------------------------------------
-// Python-visible data classes (v4.2)
+// Python-visible data classes (v5.0)
 // -----------------------------------------------------------------------
 
 /// Stats returned after ingesting a block of text.
@@ -29,6 +30,7 @@ pub struct PyIngestStats {
     pub sense_created: usize,
     pub confidence_updated: usize,
     pub frozen_batches: usize,
+    pub compositions_induced: usize,
 }
 
 #[pyclass(get_all)]
@@ -45,17 +47,18 @@ pub struct PyIngestMetaV1 {
     pub sense_created: usize,
     pub confidence_updated: usize,
     pub frozen_batches: usize,
+    pub compositions_induced: usize,
 }
 
 #[pymethods]
 impl PyIngestStats {
     fn __repr__(&self) -> String {
         format!(
-            "IngestStats(sentences={}, atoms_promoted={}, senses_created={}, updated={})",
+            "IngestStats(sentences={}, atoms_promoted={}, senses_created={}, compositions={})",
             self.sentences_processed,
             self.atoms_promoted,
             self.sense_created,
-            self.confidence_updated
+            self.compositions_induced
         )
     }
 }
@@ -67,6 +70,9 @@ pub struct PyQueryResult {
     pub sense_idx: usize,
     pub sense_n: usize,
     pub atoms: Vec<(String, f32)>,
+    pub layer: u32,
+    pub grounding_score: f32,
+    pub compositions: Vec<(String, u32)>,
 }
 
 #[pymethods]
@@ -79,10 +85,12 @@ impl PyQueryResult {
             .map(|(l, s)| format!("{}:{:.2}", l, s))
             .collect();
         format!(
-            "QueryResult(sense={}, N={}, atoms=[{}])",
+            "QueryResult(sense={}, N={}, layer={}, atoms=[{}], comps={})",
             self.sense_idx,
             self.sense_n,
-            top.join(", ")
+            self.layer,
+            top.join(", "),
+            self.compositions.len()
         )
     }
 
@@ -91,7 +99,7 @@ impl PyQueryResult {
     }
 }
 
-/// Similarity result between two concepts.
+/// Similarity result between two concepts (flat, v4 compat).
 #[pyclass(get_all)]
 #[derive(Clone, Debug)]
 pub struct PySimResult {
@@ -111,7 +119,85 @@ impl PySimResult {
     }
 }
 
-/// Info about one node (v4.2: replaces PyAtomInfo)
+/// Structural similarity result (v5.0).
+#[pyclass(get_all)]
+#[derive(Clone, Debug)]
+pub struct PyStructuralSimResult {
+    pub sense_idx_a: usize,
+    pub sense_idx_b: usize,
+    pub structural_similarity: f32,
+    pub shared_compositions: Vec<(u32, u32)>,
+    pub only_a_compositions: Vec<(u32, u32)>,
+    pub only_b_compositions: Vec<(u32, u32)>,
+    pub layer_a: u32,
+    pub layer_b: u32,
+}
+
+#[pymethods]
+impl PyStructuralSimResult {
+    fn __repr__(&self) -> String {
+        format!(
+            "StructuralSim(score={:.3}, shared={}, only_a={}, only_b={}, layers={}/{})",
+            self.structural_similarity,
+            self.shared_compositions.len(),
+            self.only_a_compositions.len(),
+            self.only_b_compositions.len(),
+            self.layer_a,
+            self.layer_b
+        )
+    }
+
+    /// Get labels for shared compositions.
+    fn shared_labels(&self, rsvs: &PyRsvs) -> Vec<(String, u32)> {
+        self.shared_compositions
+            .iter()
+            .filter_map(|(node_id, sense_id)| {
+                let label = rsvs.inner.graph.get_node(*node_id)?.label.clone();
+                Some((label, *sense_id))
+            })
+            .collect()
+    }
+}
+
+/// Substitution analysis result (v5.0).
+#[pyclass(get_all)]
+#[derive(Clone, Debug)]
+pub struct PySubstitutionResult {
+    pub sense_idx_a: usize,
+    pub sense_idx_b: usize,
+    pub structural_similarity: f32,
+    /// (from_node_id, from_sense_id, to_node_id, to_sense_id)
+    pub substitutions: Vec<(u32, u32, u32, u32)>,
+    pub unpaired_only_a: Vec<(u32, u32)>,
+    pub unpaired_only_b: Vec<(u32, u32)>,
+}
+
+#[pymethods]
+impl PySubstitutionResult {
+    fn __repr__(&self) -> String {
+        format!(
+            "SubstitutionResult(sim={:.3}, subs={}, unpaired_a={}, unpaired_b={})",
+            self.structural_similarity,
+            self.substitutions.len(),
+            self.unpaired_only_a.len(),
+            self.unpaired_only_b.len()
+        )
+    }
+
+    /// Get labels for substitutions.
+    fn substitution_labels(&self, rsvs: &PyRsvs) -> Vec<(String, u32, String, u32)> {
+        self.substitutions
+            .iter()
+            .filter_map(|(from_id, from_sense, to_id, to_sense)| {
+                let from_label = rsvs.inner.graph.get_node(*from_id)?.label.clone();
+                let to_label = rsvs.inner.graph.get_node(*to_id)?.label.clone();
+                Some((from_label, *from_sense, to_label, *to_sense))
+            })
+            .collect()
+    }
+}
+
+/// Info about one node (v5.0: compositional)
 #[pyclass(get_all)]
 #[derive(Clone, Debug)]
 pub struct PyNodeInfo {
@@ -125,6 +211,7 @@ pub struct PyNodeInfo {
     pub is_locked: bool,
     pub is_stable: bool,
     pub compression_state: String,
+    pub layer: u32,
     pub atoms: Vec<u32>,
     pub derived_from_node_ids: Vec<u32>,
     pub compression_reason: Option<String>,
@@ -134,13 +221,13 @@ pub struct PyNodeInfo {
 impl PyNodeInfo {
     fn __repr__(&self) -> String {
         format!(
-            "NodeInfo('{}', id={}, conf={:.3}, tier={}, status={}, seed={})",
-            self.label, self.id, self.confidence, self.tier, self.status, self.is_seed
+            "NodeInfo('{}', id={}, conf={:.3}, tier={}, layer={}, status={})",
+            self.label, self.id, self.confidence, self.tier, self.layer, self.status
         )
     }
 }
 
-/// Result of appraise() (v4.2)
+/// Result of appraise() (v5.0)
 #[pyclass(get_all)]
 #[derive(Clone, Debug)]
 pub struct PyAppraiseResult {
@@ -160,25 +247,27 @@ impl PyAppraiseResult {
     }
 }
 
-/// Result of relate() (v4.2)
+/// Result of relate() (v5.0)
 #[pyclass(get_all)]
 #[derive(Clone, Debug)]
 pub struct PyRelateResult {
     pub related_nodes: Vec<(u32, f32)>,
     pub related_edges: Vec<(u32, u32, f32)>,
+    pub structural_relations: Vec<(u32, f32)>,
 }
 
 #[pymethods]
 impl PyRelateResult {
     fn __repr__(&self) -> String {
         format!(
-            "RelateResult(nodes={}, edges={})",
+            "RelateResult(nodes={}, edges={}, structural={})",
             self.related_nodes.len(),
-            self.related_edges.len()
+            self.related_edges.len(),
+            self.structural_relations.len()
         )
     }
 
-    /// Get labels for related nodes
+    /// Get labels for related nodes.
     fn node_labels(&self, rsvs: &PyRsvs) -> Vec<(String, f32)> {
         self.related_nodes
             .iter()
@@ -188,9 +277,20 @@ impl PyRelateResult {
             })
             .collect()
     }
+
+    /// Get labels for structural relations (v5.0).
+    fn structural_labels(&self, rsvs: &PyRsvs) -> Vec<(String, f32)> {
+        self.structural_relations
+            .iter()
+            .filter_map(|(id, score)| {
+                let label = rsvs.inner.graph.get_node(*id)?.label.clone();
+                Some((label, *score))
+            })
+            .collect()
+    }
 }
 
-/// Info about one sense of an ID.
+/// Info about one sense of an ID (v5.0: compositional).
 #[pyclass(get_all)]
 #[derive(Clone, Debug)]
 pub struct PySenseInfo {
@@ -199,14 +299,22 @@ pub struct PySenseInfo {
     pub coherence: f32,
     pub status: String,
     pub core_atoms: Vec<String>,
+    pub layer: u32,
+    pub grounding_score: f32,
+    pub compositions: Vec<(String, u32)>,
 }
 
 #[pymethods]
 impl PySenseInfo {
     fn __repr__(&self) -> String {
         format!(
-            "SenseInfo(idx={}, N={}, coh={:.3}, core={:?})",
-            self.sense_idx, self.n_contexts, self.coherence, self.core_atoms
+            "SenseInfo(idx={}, N={}, coh={:.3}, layer={}, ground={:.3}, comps={})",
+            self.sense_idx,
+            self.n_contexts,
+            self.coherence,
+            self.layer,
+            self.grounding_score,
+            self.compositions.len()
         )
     }
 }
@@ -220,10 +328,10 @@ fn to_py_err(e: RsvsError) -> PyErr {
 }
 
 // -----------------------------------------------------------------------
-// PyRsvs — main Python class (v4.2)
+// PyRsvs — main Python class (v5.0)
 // -----------------------------------------------------------------------
 
-/// RSVS knowledge system (v4.2).
+/// RSVS knowledge system (v5.0 — Compositional Architecture).
 #[pyclass]
 pub struct PyRsvs {
     inner: Rsvs,
@@ -231,7 +339,7 @@ pub struct PyRsvs {
 
 #[pymethods]
 impl PyRsvs {
-    /// Create a new RSVS instance (v4.2).
+    /// Create a new RSVS instance (v5.0).
     #[new]
     #[pyo3(signature = (
         entity_promote_n=3,
@@ -272,6 +380,7 @@ impl PyRsvs {
             sense_created: s.sense_created,
             confidence_updated: s.confidence_updated,
             frozen_batches: s.frozen_batches,
+            compositions_induced: s.compositions_induced,
         })
     }
 
@@ -308,6 +417,7 @@ impl PyRsvs {
             sense_created: s.sense_created,
             confidence_updated: s.confidence_updated,
             frozen_batches: s.frozen_batches,
+            compositions_induced: s.compositions_induced,
         })
     }
 
@@ -318,10 +428,13 @@ impl PyRsvs {
             sense_idx: r.active_sense_idx,
             sense_n: r.active_sense_n,
             atoms: r.scored_atoms,
+            layer: r.layer,
+            grounding_score: r.grounding_score,
+            compositions: r.compositions,
         })
     }
 
-    /// Compute similarity between two concepts.
+    /// Compute flat similarity between two concepts (v4 compat).
     fn similarity(&self, a: &str, b: &str) -> Option<PySimResult> {
         let sim = self.inner.similarity(a, b)?;
         let node_label = |id: u32| -> String {
@@ -339,8 +452,64 @@ impl PyRsvs {
         })
     }
 
-    /// v4.2: Appraise text against the graph.
-    /// Returns agree/disagree percentages, verdict, and evidence.
+    /// v5.0: Compute structural similarity between two concepts.
+    ///
+    /// This compares concepts at the sense level — shared/differing compositions.
+    /// Example: raja and ratu share 2/3 compositions → score = 0.667.
+    fn structural_similarity(&self, a: &str, b: &str) -> Option<PyStructuralSimResult> {
+        let sim = self.inner.structural_similarity(a, b)?;
+        Some(PyStructuralSimResult {
+            sense_idx_a: sim.sense_idx_a,
+            sense_idx_b: sim.sense_idx_b,
+            structural_similarity: sim.structural_similarity,
+            shared_compositions: sim
+                .shared_compositions
+                .iter()
+                .map(|c| (c.node_id, c.sense_id))
+                .collect(),
+            only_a_compositions: sim
+                .only_a_compositions
+                .iter()
+                .map(|c| (c.node_id, c.sense_id))
+                .collect(),
+            only_b_compositions: sim
+                .only_b_compositions
+                .iter()
+                .map(|c| (c.node_id, c.sense_id))
+                .collect(),
+            layer_a: sim.layer_a,
+            layer_b: sim.layer_b,
+        })
+    }
+
+    /// v5.0: Analyze what substitution transforms one concept into another.
+    ///
+    /// Example: raja → ratu requires substituting (laki_laki, 0) → (perempuan, 0).
+    fn substitution_analysis(&self, a: &str, b: &str) -> Option<PySubstitutionResult> {
+        let sub = self.inner.substitution_analysis(a, b)?;
+        Some(PySubstitutionResult {
+            sense_idx_a: sub.sense_idx_a,
+            sense_idx_b: sub.sense_idx_b,
+            structural_similarity: sub.structural_similarity,
+            substitutions: sub
+                .substitutions
+                .iter()
+                .map(|(from, to)| (from.node_id, from.sense_id, to.node_id, to.sense_id))
+                .collect(),
+            unpaired_only_a: sub
+                .unpaired_only_a
+                .iter()
+                .map(|c| (c.node_id, c.sense_id))
+                .collect(),
+            unpaired_only_b: sub
+                .unpaired_only_b
+                .iter()
+                .map(|c| (c.node_id, c.sense_id))
+                .collect(),
+        })
+    }
+
+    /// Appraise text against the graph.
     fn appraise(&self, text: &str) -> PyAppraiseResult {
         let r = self.inner.appraise(text);
         PyAppraiseResult {
@@ -351,12 +520,13 @@ impl PyRsvs {
         }
     }
 
-    /// v4.2: Find related nodes and edges for a concept.
+    /// Find related nodes and edges for a concept.
     fn relate(&self, concept: &str) -> Option<PyRelateResult> {
         let r = self.inner.relate(concept)?;
         Some(PyRelateResult {
             related_nodes: r.related_nodes,
             related_edges: r.related_edges,
+            structural_relations: r.structural_relations,
         })
     }
 
@@ -386,10 +556,10 @@ impl PyRsvs {
     }
 
     // -------------------------------------------------------------------
-    // Inspection (v4.2)
+    // Inspection (v5.0)
     // -------------------------------------------------------------------
 
-    /// v4.2: Get info about a specific node by label.
+    /// Get info about a specific node by label.
     fn node_info(&self, label: &str) -> PyResult<PyNodeInfo> {
         let &id = self
             .inner
@@ -440,6 +610,7 @@ impl PyRsvs {
             is_locked: node.is_locked,
             is_stable,
             compression_state: compression_str.to_string(),
+            layer: node.semantic.layer,
             atoms: node.atoms.clone(),
             derived_from_node_ids: node.semantic.derived_from_node_ids.clone(),
             compression_reason: node.semantic.compression_reason.clone(),
@@ -451,7 +622,7 @@ impl PyRsvs {
         self.node_info(label)
     }
 
-    /// Get all senses for a concept.
+    /// Get all senses for a concept (v5.0: includes compositions).
     fn senses(&self, concept: &str) -> PyResult<Vec<PySenseInfo>> {
         let &id = self
             .inner
@@ -478,6 +649,15 @@ impl PyRsvs {
                     .filter_map(|&aid| Some(self.inner.graph.get_node(aid)?.label.clone()))
                     .collect();
 
+                let comp_labels: Vec<(String, u32)> = s
+                    .compositions
+                    .iter()
+                    .filter_map(|c| {
+                        let label = self.inner.graph.get_node(c.node_id)?.label.clone();
+                        Some((label, c.sense_id))
+                    })
+                    .collect();
+
                 PySenseInfo {
                     sense_idx: i,
                     n_contexts: s.context_count(),
@@ -488,12 +668,15 @@ impl PyRsvs {
                         "mature".into()
                     },
                     core_atoms: core_labels,
+                    layer: s.layer,
+                    grounding_score: s.grounding_score,
+                    compositions: comp_labels,
                 }
             })
             .collect())
     }
 
-    /// List all known nodes (excluding seed nodes if seed_only=False).
+    /// List all known nodes.
     #[pyo3(signature = (include_seeds=false))]
     fn nodes(&self, include_seeds: bool) -> Vec<String> {
         self.inner
@@ -511,13 +694,49 @@ impl PyRsvs {
             .collect()
     }
 
-    /// Create a composite node from explicit atom IDs.
-    #[pyo3(signature = (label, atom_ids, lang=None))]
-    fn compose(&mut self, label: &str, atom_ids: Vec<u32>, lang: Option<&str>) -> PyResult<u32> {
+    /// Create a compositional node from explicit composition references (v5.0).
+    ///
+    /// `compositions` is a list of (node_label, sense_id) pairs.
+    #[pyo3(signature = (label, compositions, lang=None))]
+    fn compose(
+        &mut self,
+        label: &str,
+        compositions: Vec<(String, u32)>,
+        lang: Option<&str>,
+    ) -> PyResult<u32> {
+        let comp_refs: Vec<crate::types::CompositionRef> = compositions
+            .iter()
+            .filter_map(|(node_label, sense_id)| {
+                let node_id = self.inner.token_to_id.get(node_label.as_str())?;
+                Some(crate::types::CompositionRef::new(*node_id, *sense_id))
+            })
+            .collect();
+
+        if comp_refs.len() != compositions.len() {
+            return Err(PyValueError::new_err(
+                "Some composition target nodes not found",
+            ));
+        }
+
         let id = self
             .inner
-            .compose(label, atom_ids, lang)
-            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+            .compose(label, comp_refs, lang)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        Ok(id)
+    }
+
+    /// Backward compat: compose from atom IDs (creates compositions with sense_id=0).
+    #[pyo3(signature = (label, atom_ids, lang=None))]
+    fn compose_from_ids(
+        &mut self,
+        label: &str,
+        atom_ids: Vec<u32>,
+        lang: Option<&str>,
+    ) -> PyResult<u32> {
+        let id = self
+            .inner
+            .compose_from_ids(label, atom_ids, lang)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
         Ok(id)
     }
 
@@ -592,6 +811,8 @@ fn _rsvs(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyIngestMetaV1>()?;
     m.add_class::<PyQueryResult>()?;
     m.add_class::<PySimResult>()?;
+    m.add_class::<PyStructuralSimResult>()?;
+    m.add_class::<PySubstitutionResult>()?;
     m.add_class::<PyNodeInfo>()?;
     m.add_class::<PyAppraiseResult>()?;
     m.add_class::<PyRelateResult>()?;

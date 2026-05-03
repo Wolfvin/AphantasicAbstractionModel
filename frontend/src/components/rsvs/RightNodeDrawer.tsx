@@ -6,15 +6,15 @@ import {
   X, Crosshair, Pin, GitCompare, Download, Brain,
   Link2, Activity, Eye, Sparkles, AlertTriangle,
   Shield, Layers, Globe, GitBranch, ArrowUpDown,
-  Atom, Hexagon,
+  Atom, Hexagon, Shuffle, BarChart3, ArrowLeftRight,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { useUIStore, useGraphStore, useModeResultStore } from '@/store/rsvsStore';
-import type { RSVSNode, Tier, PolicyMeta, LanguageLink } from '@/lib/types';
-import { getStatusColor, isCompositeNode, isAtomNode, getAtomCount } from '@/lib/nodeRendering';
+import type { RSVSNode, Tier, PolicyMeta, LanguageLink, StructuralSimilarityResult, SubstitutionAnalysisResult } from '@/lib/types';
+import { getStatusColor, isCompositeNode, isAtomNode, getAtomCount, computeNodeLayer, getLayerColor, getLayerLabel, buildCompositionChain } from '@/lib/nodeRendering';
 import AppraisePanel from '@/components/rsvs/AppraisePanel';
 import RelatePanel from '@/components/rsvs/RelatePanel';
 import ComposePanel from '@/components/rsvs/ComposePanel';
@@ -195,6 +195,211 @@ function DerivedFromSection({ nodeIds, onSelectNode }: { nodeIds: number[]; onSe
           );
         })}
       </div>
+    </div>
+  );
+}
+
+// ── v5.0: Layer Info Section ──
+function LayerInfoSection({ node }: { node: RSVSNode }) {
+  const layer = computeNodeLayer(node);
+  const layerColor = getLayerColor(layer);
+  const chain = buildCompositionChain(
+    node.label,
+    node.compositions,
+    node.derived_from_node_ids ?? node.semantic?.derived_from_node_ids,
+    useGraphStore.getState().nodes as Map<number, { label: string }>,
+  );
+
+  return (
+    <div className="mb-5">
+      <div className="flex items-center gap-2 mb-2">
+        <Layers className="w-3.5 h-3.5" style={{ color: layerColor }} />
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-[#94a3b8]">Compositional Layer</h3>
+      </div>
+      <div className="grid grid-cols-2 gap-2 mb-2">
+        <div className="bg-[#0d1520] rounded-lg p-2 text-center border border-[#1e293b]">
+          <div className="text-lg font-bold" style={{ color: layerColor }}>L{layer}</div>
+          <div className="text-[9px] uppercase tracking-wider text-[#64748b]">{layer === 0 ? 'Primitive' : 'Composed'}</div>
+        </div>
+        {node.grounding_score !== undefined && (
+          <div className="bg-[#0d1520] rounded-lg p-2 text-center border border-[#1e293b]">
+            <div className="text-lg font-bold text-[#80D8FF]">{(node.grounding_score * 100).toFixed(0)}%</div>
+            <div className="text-[9px] uppercase tracking-wider text-[#64748b]">Grounding</div>
+          </div>
+        )}
+      </div>
+      {/* Composition chain */}
+      {chain && (
+        <div className="bg-[#0d1520] rounded-lg p-3 border border-[#1e293b]">
+          <div className="text-[9px] uppercase tracking-wider text-[#64748b] mb-1.5">Composition Chain</div>
+          <div className="text-sm font-mono font-bold" style={{ color: layerColor }}>{chain}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── v5.0: Structural Similarity Section ──
+function StructuralSimilaritySection({ result, onSelectNode }: { result: StructuralSimilarityResult; onSelectNode: (id: number) => void }) {
+  return (
+    <div className="mb-5">
+      <div className="flex items-center gap-2 mb-3">
+        <GitCompare className="w-3.5 h-3.5 text-[#00BCD4]" />
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-[#94a3b8]">Structural Similarity</h3>
+      </div>
+
+      {/* Comparison header */}
+      <div className="flex items-center justify-center gap-3 mb-3">
+        <button
+          type="button"
+          className="px-3 py-1.5 rounded-md bg-[#42A5F510] border border-[#42A5F530] text-[#42A5F5] text-sm font-mono font-bold hover:bg-[#42A5F520] transition-colors"
+          onClick={() => onSelectNode(result.node_a.id)}
+        >
+          {result.node_a.label}
+        </button>
+        <ArrowLeftRight className="w-4 h-4 text-[#64748b]" />
+        <button
+          type="button"
+          className="px-3 py-1.5 rounded-md bg-[#42A5F510] border border-[#42A5F530] text-[#42A5F5] text-sm font-mono font-bold hover:bg-[#42A5F520] transition-colors"
+          onClick={() => onSelectNode(result.node_b.id)}
+        >
+          {result.node_b.label}
+        </button>
+      </div>
+
+      {/* Similarity score */}
+      <div className="bg-[#0d1520] rounded-lg p-3 text-center border border-[#1e293b] mb-3">
+        <div className="text-2xl font-bold text-[#00BCD4]">{(result.similarity_score * 100).toFixed(1)}%</div>
+        <div className="text-[9px] uppercase tracking-wider text-[#64748b]">Similarity Score</div>
+      </div>
+
+      {/* Shared compositions */}
+      {result.shared_compositions.length > 0 && (
+        <div className="mb-3">
+          <div className="text-[10px] uppercase tracking-wider text-[#69F0AE] mb-1.5 flex items-center gap-1.5">
+            <Link2 className="w-3 h-3" />
+            Shared Compositions ({result.shared_compositions.length})
+          </div>
+          <div className="space-y-1">
+            {result.shared_compositions.map((comp, i) => (
+              <div key={i} className="flex items-center gap-2 px-2 py-1.5 rounded-md bg-[#0d1520] border border-[#1e293b]">
+                <span className="text-xs text-[#e2e8f0] font-mono truncate flex-1">{comp.label}</span>
+                <div className="w-16 h-1.5 bg-[#0a0e18] rounded-full overflow-hidden shrink-0">
+                  <div
+                    className="h-full rounded-full bg-[#69F0AE]"
+                    style={{ width: `${comp.similarity * 100}%` }}
+                  />
+                </div>
+                <span className="text-[10px] text-[#69F0AE] font-mono shrink-0 w-8 text-right">
+                  {comp.similarity.toFixed(2)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Differing compositions */}
+      {result.differing_compositions.length > 0 && (
+        <div>
+          <div className="text-[10px] uppercase tracking-wider text-[#FFB74D] mb-1.5 flex items-center gap-1.5">
+            <Shuffle className="w-3 h-3" />
+            Differing Compositions ({result.differing_compositions.length})
+          </div>
+          <div className="space-y-1">
+            {result.differing_compositions.map((comp, i) => (
+              <div key={i} className="flex items-center gap-2 px-2 py-1.5 rounded-md bg-[#0d1520] border border-[#1e293b]">
+                <span className="text-xs text-[#e2e8f0] font-mono truncate flex-1">{comp.label}</span>
+                <Badge
+                  className="text-[9px] px-1 py-0 shrink-0"
+                  style={{
+                    backgroundColor: comp.present_in === 'a' ? '#42A5F515' : '#66BB6A15',
+                    color: comp.present_in === 'a' ? '#42A5F5' : '#66BB6A',
+                    borderColor: 'transparent',
+                  }}
+                >
+                  {comp.present_in === 'a' ? result.node_a.label : result.node_b.label}
+                </Badge>
+                <span className="text-[10px] text-[#FFB74D] font-mono shrink-0">
+                  {comp.weight.toFixed(2)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── v5.0: Substitution Analysis Section ──
+function SubstitutionAnalysisSection({ result, onSelectNode }: { result: SubstitutionAnalysisResult; onSelectNode: (id: number) => void }) {
+  return (
+    <div className="mb-5">
+      <div className="flex items-center gap-2 mb-3">
+        <Shuffle className="w-3.5 h-3.5 text-[#AB47BC]" />
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-[#94a3b8]">Substitution Analysis</h3>
+      </div>
+
+      {/* Comparison header */}
+      <div className="flex items-center justify-center gap-3 mb-3">
+        <button
+          type="button"
+          className="px-3 py-1.5 rounded-md bg-[#42A5F510] border border-[#42A5F530] text-[#42A5F5] text-sm font-mono font-bold hover:bg-[#42A5F520] transition-colors"
+          onClick={() => onSelectNode(result.node_a.id)}
+        >
+          {result.node_a.label}
+        </button>
+        <ArrowLeftRight className="w-4 h-4 text-[#64748b]" />
+        <button
+          type="button"
+          className="px-3 py-1.5 rounded-md bg-[#66BB6A10] border border-[#66BB6A30] text-[#66BB6A] text-sm font-mono font-bold hover:bg-[#66BB6A20] transition-colors"
+          onClick={() => onSelectNode(result.node_b.id)}
+        >
+          {result.node_b.label}
+        </button>
+      </div>
+
+      {/* Substitution pairs */}
+      {result.substitution_pairs.length > 0 ? (
+        <div className="space-y-2">
+          {result.substitution_pairs.map((pair, i) => (
+            <div key={i} className="bg-[#0d1520] rounded-lg p-3 border border-[#1e293b]">
+              <div className="flex items-center justify-center gap-2 mb-2">
+                <button
+                  type="button"
+                  className="px-2 py-1 rounded-md bg-[#42A5F510] border border-[#42A5F520] text-[#42A5F5] text-xs font-mono hover:bg-[#42A5F520] transition-colors"
+                  onClick={() => onSelectNode(pair.atom_a.id)}
+                >
+                  {pair.atom_a.label}
+                </button>
+                <ArrowLeftRight className="w-3 h-3 text-[#AB47BC]" />
+                <button
+                  type="button"
+                  className="px-2 py-1 rounded-md bg-[#66BB6A10] border border-[#66BB6A20] text-[#66BB6A] text-xs font-mono hover:bg-[#66BB6A20] transition-colors"
+                  onClick={() => onSelectNode(pair.atom_b.id)}
+                >
+                  {pair.atom_b.label}
+                </button>
+              </div>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-20 h-1.5 bg-[#0a0e18] rounded-full overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-[#AB47BC]"
+                      style={{ width: `${pair.substitution_score * 100}%` }}
+                    />
+                  </div>
+                  <span className="text-[10px] text-[#AB47BC] font-mono">{pair.substitution_score.toFixed(2)}</span>
+                </div>
+              </div>
+              <div className="text-[10px] text-[#94a3b8] mt-1.5 font-mono italic">{pair.semantic_shift}</div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="text-xs text-[#475569] italic">No substitution pairs found</p>
+      )}
     </div>
   );
 }
@@ -471,6 +676,19 @@ export default function RightNodeDrawer() {
                     ● Atom
                   </Badge>
                 )}
+                {/* v5.0: Layer badge */}
+                {node.layer !== undefined && (
+                  <Badge
+                    className="text-[10px]"
+                    style={{
+                      backgroundColor: `${getLayerColor(node.layer)}15`,
+                      color: getLayerColor(node.layer),
+                      borderColor: `${getLayerColor(node.layer)}40`,
+                    }}
+                  >
+                    L{node.layer} {node.layer === 0 ? 'Primitive' : 'Composed'}
+                  </Badge>
+                )}
                 {node.is_seed && (
                   <Badge className="text-[10px] bg-[#FFD74015] text-[#FFD740] border-[#FFD74040]">
                     ★ Seed
@@ -542,6 +760,12 @@ export default function RightNodeDrawer() {
               )}
 
               <Separator className="bg-[#1e293b] mb-5" />
+
+              {/* v5.0: Compositional Layer Info (always show for any node) */}
+              <>
+                <LayerInfoSection node={node} />
+                <Separator className="bg-[#1e293b] mb-5" />
+              </>
 
               {/* Composition Section (for composite nodes) */}
               {isComposite && (
@@ -636,7 +860,7 @@ export default function RightNodeDrawer() {
                 )}
               </div>
 
-              {/* Mode Result Panels (Appraise / Relate / Compose) */}
+              {/* Mode Result Panels (Appraise / Relate / Compose / Structural Similarity / Substitution) */}
               {modeResult && modeResult.type === 'appraise' && (
                 <>
                   <Separator className="bg-[#1e293b] mb-5" />
@@ -653,6 +877,18 @@ export default function RightNodeDrawer() {
                 <>
                   <Separator className="bg-[#1e293b] mb-5" />
                   <ComposePanel result={modeResult.data} />
+                </>
+              )}
+              {modeResult && modeResult.type === 'structural_similarity' && (
+                <>
+                  <Separator className="bg-[#1e293b] mb-5" />
+                  <StructuralSimilaritySection result={modeResult.data} onSelectNode={handleSelectNode} />
+                </>
+              )}
+              {modeResult && modeResult.type === 'substitution_analysis' && (
+                <>
+                  <Separator className="bg-[#1e293b] mb-5" />
+                  <SubstitutionAnalysisSection result={modeResult.data} onSelectNode={handleSelectNode} />
                 </>
               )}
 

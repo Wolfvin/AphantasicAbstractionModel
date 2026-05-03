@@ -1,10 +1,9 @@
-//! Snapshot and event helpers — RSVS v4.2
+//! Snapshot and event helpers — RSVS v5.0
 //!
-//! Contains `snapshot_v1()`, `consume_events_v1()`, `latest_seq_v1()`, `status()`,
-//! and event-related helpers.
+//! Contains `snapshot_v1()`, `consume_events_v1()`, `latest_seq_v1()`, `status()`.
 
 use super::Rsvs;
-use crate::events::{EventBatch, RuntimeEdge, RuntimeSnapshot};
+use crate::events::{EventBatch, RuntimeEdge, RuntimeNode, RuntimeSnapshot};
 use crate::types::{CompressionState, EdgeSource, NodeStatus, Tier};
 
 // -----------------------------------------------------------------------
@@ -39,10 +38,6 @@ impl Rsvs {
     }
 
     /// Consume events after a given sequence number.
-    ///
-    /// Returns up to `limit` events that have a sequence number greater than `after_seq`.
-    /// If `after_seq` is `None`, returns from the beginning.
-    /// Limit is clamped to [1, 5000].
     pub fn consume_events_v1(&self, after_seq: Option<u64>, limit: usize) -> EventBatch {
         let after = after_seq.unwrap_or(0);
         let lim = limit.clamp(1, 5000);
@@ -62,10 +57,10 @@ impl Rsvs {
         }
     }
 
-    /// v4.2 snapshot with unified node model.
+    /// v5.0 snapshot with compositional architecture.
     ///
     /// Produces a `RuntimeSnapshot` containing all nodes and edges in the graph,
-    /// with sense and autonomy metadata.
+    /// with sense, composition, layer, and grounding metadata.
     pub fn snapshot_v1(&self) -> RuntimeSnapshot {
         let nodes = self
             .graph
@@ -73,7 +68,9 @@ impl Rsvs {
             .values()
             .map(|n| {
                 let sense = self.senses.get(&n.id);
-                crate::events::RuntimeNode {
+                let primary_sense = sense.and_then(|s| s.senses.first());
+
+                RuntimeNode {
                     id: n.id,
                     label: n.label.clone(),
                     surface_label: n.surface_label.clone(),
@@ -99,9 +96,14 @@ impl Rsvs {
                         CompressionState::Compressed => "compressed",
                     }
                     .to_string(),
+                    layer: n.semantic.layer,
                     derived_from_node_ids: n.semantic.derived_from_node_ids.clone(),
                     sense_count: sense.map(|s| s.sense_count()).unwrap_or(0),
-                    coherence: sense.and_then(|s| s.senses.first().map(|x| x.coherence)),
+                    coherence: primary_sense.map(|x| x.coherence),
+                    grounding_score: primary_sense.map(|x| x.grounding_score),
+                    compositions: primary_sense
+                        .map(|x| x.compositions.clone())
+                        .unwrap_or_default(),
                 }
             })
             .collect::<Vec<_>>();

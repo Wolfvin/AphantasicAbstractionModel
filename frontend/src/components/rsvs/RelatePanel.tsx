@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import type { RelateResult, RelateNode, RelateEdge, Tier } from '@/lib/types';
+import type { RelateResult, RelateNode, RelateEdge, Tier, StructuralRelation } from '@/lib/types';
 import { useUIStore } from '@/store/rsvsStore';
 
 // ── Tier / Kind Styling ──
@@ -21,6 +21,26 @@ const TIER_COLORS: Record<Tier, string> = {
 };
 
 const KIND_STYLE = { color: '#69F0AE', label: 'Node' };
+
+// ── Structural Relation Row (v5.0) ──
+function StructuralRelationRow({ relation }: { relation: StructuralRelation }) {
+  const weightColor = relation.weight > 0.7 ? '#69F0AE' : relation.weight > 0.4 ? '#FFB74D' : '#64748b';
+  return (
+    <div className="flex items-center gap-2 px-2 py-1.5 text-xs">
+      <Zap className="w-3.5 h-3.5 shrink-0" style={{ color: weightColor }} />
+      <span className="text-[#94a3b8] font-mono truncate">{relation.source_label}</span>
+      <span className="text-[#64748b] shrink-0">—{relation.relation_type}→</span>
+      <span className="text-[#94a3b8] font-mono truncate">{relation.target_label}</span>
+      <div className="w-12 h-1.5 bg-[#0d1520] rounded-full overflow-hidden shrink-0 ml-auto">
+        <div
+          className="h-full rounded-full"
+          style={{ backgroundColor: weightColor, width: `${relation.weight * 100}%` }}
+        />
+      </div>
+      <span className="text-[10px] text-[#64748b] font-mono shrink-0 w-8 text-right">{relation.weight.toFixed(2)}</span>
+    </div>
+  );
+}
 
 // ── Related Node Row ──
 function RelatedNodeRow({ node, onSelectNode }: { node: RelateNode; onSelectNode: (id: number) => void }) {
@@ -189,6 +209,26 @@ export default function RelatePanel({ result, className }: RelatePanelProps) {
                     <div className="space-y-0.5">
                       {result.related_edges.map((edge) => (
                         <RelatedEdgeRow key={edge.edge_id} edge={edge} />
+                      ))}
+                    </div>
+                  </ScrollArea>
+                </div>
+              </>
+            )}
+
+            {/* v5.0: Structural Relations */}
+            {result.structural_relations && result.structural_relations.length > 0 && (
+              <>
+                <Separator className="bg-[#1e293b]" />
+                <div>
+                  <div className="text-[10px] uppercase tracking-wider text-[#AB47BC] mb-1.5 flex items-center gap-1.5">
+                    <Zap className="w-3 h-3" />
+                    Structural Relations ({result.structural_relations.length})
+                  </div>
+                  <ScrollArea className="max-h-40">
+                    <div className="space-y-0.5">
+                      {result.structural_relations.map((rel, i) => (
+                        <StructuralRelationRow key={i} relation={rel} />
                       ))}
                     </div>
                   </ScrollArea>

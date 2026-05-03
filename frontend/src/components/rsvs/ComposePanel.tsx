@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Hexagon, Atom, Plus, X, CheckCircle2, ChevronRight,
+  Hexagon, Atom, Plus, X, CheckCircle2, ChevronRight, Layers,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { useUIStore, useGraphStore } from '@/store/rsvsStore';
-import type { ComposeResult, RSVSNode, Tier } from '@/lib/types';
+import type { ComposeResult, RSVSNode, Tier, CompositionPair } from '@/lib/types';
 
 // ── Tier Colors ──
 const TIER_COLORS: Record<Tier, string> = {
@@ -69,11 +69,38 @@ export default function ComposePanel({ result, className }: ComposePanelProps) {
                 >
                   <span className="text-sm text-[#FF80AB] font-mono font-bold">{result.composite_node.label}</span>
                   <span className="text-[10px] text-[#64748b] font-mono ml-auto">#{result.composite_node.id}</span>
+                  {/* v5.0: Layer info */}
+                  {result.composite_node.layer !== undefined && (
+                    <Badge className="text-[9px] px-1 py-0 shrink-0 bg-[#66BB6A15] text-[#66BB6A] border-transparent">
+                      L{result.composite_node.layer}
+                    </Badge>
+                  )}
                   <ChevronRight className="w-3.5 h-3.5 text-[#475569]" />
                 </button>
               </div>
 
               <Separator className="bg-[#1e293b]" />
+
+              {/* v5.0: Compositions used (if available) */}
+              {result.compositions && result.compositions.length > 0 && (
+                <div>
+                  <div className="text-[10px] uppercase tracking-wider text-[#AB47BC] mb-1.5 flex items-center gap-1.5">
+                    <Layers className="w-3 h-3" />
+                    Compositions ({result.compositions.length})
+                  </div>
+                  <div className="space-y-1">
+                    {result.compositions.map((comp, i) => (
+                      <div
+                        key={i}
+                        className="flex items-center gap-2 px-2 py-1.5 rounded-md bg-[#0d1520] border border-[#1e293b]"
+                      >
+                        <span className="text-xs text-[#e2e8f0] font-mono truncate flex-1">{comp.label}</span>
+                        <span className="text-[10px] text-[#64748b] font-mono shrink-0">{comp.sense_id}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Atom nodes */}
               {result.atom_nodes.length > 0 && (

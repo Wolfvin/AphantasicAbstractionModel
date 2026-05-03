@@ -74,7 +74,7 @@ def _is_sense_centric_node(node: dict[str, Any]) -> bool:
 
 
 def _validate_semantic_node(node: dict[str, Any], node_ids: set[int]) -> None:
-    """Validate a single semantic node against the v4.2 schema contract."""
+    """Validate a single semantic node against the v5.0 schema contract."""
     kind = node.get("kind")
     if kind != "node":
         raise SchemaVersionMismatchError("deprecated_kind")
@@ -134,7 +134,7 @@ def _validate_semantic_node(node: dict[str, Any], node_ids: set[int]) -> None:
 
 
 def _validate_snapshot_contract(snapshot: dict[str, Any]) -> None:
-    """Validate a full snapshot against the v4.2 schema contract."""
+    """Validate a full snapshot against the v5.0 schema contract."""
     if snapshot.get("schema_version") != SCHEMA_VERSION:
         raise SchemaVersionMismatchError(
             f"expected={SCHEMA_VERSION}, got={snapshot.get('schema_version')}"

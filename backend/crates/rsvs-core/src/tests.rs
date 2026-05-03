@@ -121,12 +121,18 @@ mod sense_tests {
 
     #[test]
     fn fragile_sense_deleted_after_k_fragile() {
+        use crate::types::CompositionRef;
         let mut sm = SenseManager::new(SenseConfig {
             k_fragile: 3,
             ..config_low_threshold()
         });
         sm.ingest(vec![1, 2, 3]);
         sm.senses[0].inactivity = 3;
+        // v5.0: primitive senses (empty compositions) are always grounded,
+        // so they won't be purged. Add a composition and set grounding_score
+        // below threshold so the sense is considered ungrounded.
+        sm.senses[0].compositions = vec![CompositionRef::new(1, 0)];
+        sm.senses[0].grounding_score = 0.0;
         sm.purge_fragile();
         assert_eq!(sm.sense_count(), 0);
     }
@@ -890,6 +896,7 @@ mod graph_tests {
                 is_locked: false,
                 semantic: SemanticMeta {
                     compression_state: CompressionState::Raw,
+                    layer: 0,
                     derived_from_node_ids: vec![],
                     compression_reason: None,
                 },
@@ -937,6 +944,7 @@ mod graph_tests {
                 is_locked: false,
                 semantic: SemanticMeta {
                     compression_state: CompressionState::Compressed,
+                    layer: 0,
                     derived_from_node_ids: vec![a1],
                     compression_reason: Some("test".into()),
                 },
@@ -965,6 +973,7 @@ mod graph_tests {
             is_locked: false,
             semantic: SemanticMeta {
                 compression_state: CompressionState::Compressed,
+                layer: 0,
                 derived_from_node_ids: vec![5], // self-reference
                 compression_reason: None,
             },
@@ -1126,6 +1135,7 @@ mod v42_node_tests {
             is_locked: false,
             semantic: SemanticMeta {
                 compression_state: CompressionState::Raw,
+                layer: 0,
                 derived_from_node_ids: vec![],
                 compression_reason: None,
             },
@@ -1155,6 +1165,7 @@ mod v42_node_tests {
             is_locked: true,
             semantic: SemanticMeta {
                 compression_state: CompressionState::Raw,
+                layer: 0,
                 derived_from_node_ids: vec![],
                 compression_reason: None,
             },
@@ -1182,6 +1193,7 @@ mod v42_node_tests {
             is_locked: false,
             semantic: SemanticMeta {
                 compression_state: CompressionState::Compressed,
+                layer: 0,
                 derived_from_node_ids: vec![1, 2, 3],
                 compression_reason: Some("co-occurrence aggregation".to_string()),
             },
@@ -1501,7 +1513,7 @@ mod pipeline_tests {
     fn snapshot_v1_has_v42_schema() {
         let rsvs = make_rsvs();
         let snap = rsvs.snapshot_v1();
-        assert_eq!(snap.schema_version, "v4.2");
+        assert_eq!(snap.schema_version, "v5.0");
     }
 
     #[test]
@@ -1653,7 +1665,7 @@ mod compose_tests {
         let atom_ids: Vec<u32> = rsvs.token_to_id.values().copied().take(3).collect();
 
         if atom_ids.len() >= 3 {
-            let raja_id = rsvs.compose("raja", atom_ids.clone(), Some("id")).unwrap();
+            let raja_id = rsvs.compose_from_ids("raja", atom_ids.clone(), Some("id")).unwrap();
 
             // Verify it's a Compressed node
             let node = rsvs.graph.get_node(raja_id).unwrap();
@@ -1685,7 +1697,7 @@ mod compose_tests {
         if atoms.len() >= 3 {
             // Create composite "raja" from 3 atoms
             let raja_id = rsvs
-                .compose("raja", atoms.clone(), Some("id"))
+                .compose_from_ids("raja", atoms.clone(), Some("id"))
                 .unwrap();
 
             // Verify it's a Compressed node
@@ -1741,13 +1753,13 @@ mod compose_tests {
             // raja = atoms[0] + atoms[1] + atoms[2]
             let raja_atoms = vec![atoms[0], atoms[1], atoms[2]];
             let raja_id = rsvs
-                .compose("raja", raja_atoms.clone(), Some("id"))
+                .compose_from_ids("raja", raja_atoms.clone(), Some("id"))
                 .unwrap();
 
             // ratu = atoms[0] + atoms[3] + atoms[2]
             let ratu_atoms = vec![atoms[0], atoms[3], atoms[2]];
             let ratu_id = rsvs
-                .compose("ratu", ratu_atoms.clone(), Some("id"))
+                .compose_from_ids("ratu", ratu_atoms.clone(), Some("id"))
                 .unwrap();
 
             // Jaccard similarity: shared = atoms[0] + atoms[2] = 2, only_a = atoms[1], only_b = atoms[3]
@@ -1770,7 +1782,7 @@ mod compose_tests {
 
         if atoms.len() >= 3 {
             let comp_id = rsvs
-                .compose("composite_test", atoms.clone(), None)
+                .compose_from_ids("composite_test", atoms.clone(), None)
                 .unwrap();
 
             // Should have edges from each atom to the composite
@@ -1797,7 +1809,7 @@ mod compose_tests {
         let atoms: Vec<u32> = rsvs.token_to_id.values().copied().take(2).collect();
 
         if atoms.len() >= 2 {
-            rsvs.compose("komposisi", atoms.clone(), None).unwrap();
+            rsvs.compose_from_ids("komposisi", atoms.clone(), None).unwrap();
 
             // atom_sets should be synced
             let stored = rsvs.atom_sets.get("komposisi").unwrap();
@@ -1809,7 +1821,7 @@ mod compose_tests {
     fn test_compose_nonexistent_atom_returns_error() {
         let mut rsvs = make_rsvs();
         // Try to compose with a non-existent atom ID
-        let result = rsvs.compose("invalid_composite", vec![99999], None);
+        let result = rsvs.compose_from_ids("invalid_composite", vec![99999], None);
         assert!(
             matches!(result, Err(RsvsError::NodeNotFound { .. })),
             "Expected NodeNotFound error for non-existent atom"
@@ -1826,10 +1838,10 @@ mod compose_tests {
 
         if atoms1.len() >= 2 && atoms2.len() >= 3 {
             // First composition
-            let id1 = rsvs.compose("concept", atoms1.clone(), None).unwrap();
+            let id1 = rsvs.compose_from_ids("concept", atoms1.clone(), None).unwrap();
 
             // Second composition with same label should update existing node
-            let id2 = rsvs.compose("concept", atoms2.clone(), None).unwrap();
+            let id2 = rsvs.compose_from_ids("concept", atoms2.clone(), None).unwrap();
 
             // Should return same node ID
             assert_eq!(id1, id2);
@@ -1883,7 +1895,7 @@ mod compose_tests {
             .collect();
 
         if atoms.len() >= 3 {
-            let comp_id = rsvs.compose("avg_test", atoms.clone(), None).unwrap();
+            let comp_id = rsvs.compose_from_ids("avg_test", atoms.clone(), None).unwrap();
 
             // Calculate expected average confidence
             let avg: f32 = atoms
@@ -1910,7 +1922,7 @@ mod compose_tests {
         let atoms: Vec<u32> = rsvs.token_to_id.values().copied().take(2).collect();
 
         if atoms.len() >= 2 {
-            let comp_id = rsvs.compose("raja", atoms, Some("id")).unwrap();
+            let comp_id = rsvs.compose_from_ids("raja", atoms, Some("id")).unwrap();
             let node = rsvs.graph.get_node(comp_id).unwrap();
             assert_eq!(node.surface_label, "raja@id");
         }
@@ -1924,7 +1936,7 @@ mod compose_tests {
         let atoms: Vec<u32> = rsvs.token_to_id.values().copied().take(2).collect();
 
         if atoms.len() >= 2 {
-            let comp_id = rsvs.compose("king", atoms, None).unwrap();
+            let comp_id = rsvs.compose_from_ids("king", atoms, None).unwrap();
             let node = rsvs.graph.get_node(comp_id).unwrap();
             assert_eq!(node.surface_label, "king@en");
         }
@@ -1938,7 +1950,7 @@ mod compose_tests {
         let atoms: Vec<u32> = rsvs.token_to_id.values().copied().take(2).collect();
 
         if atoms.len() >= 2 {
-            let comp_id = rsvs.compose("auton_test", atoms, None).unwrap();
+            let comp_id = rsvs.compose_from_ids("auton_test", atoms, None).unwrap();
 
             // Should be registered in the autonomy engine
             let conf = rsvs.autonomy.confidence(comp_id);
@@ -1954,7 +1966,7 @@ mod compose_tests {
         let atoms: Vec<u32> = rsvs.token_to_id.values().copied().take(2).collect();
 
         if atoms.len() >= 2 {
-            let comp_id = rsvs.compose("sense_test", atoms, None).unwrap();
+            let comp_id = rsvs.compose_from_ids("sense_test", atoms, None).unwrap();
 
             // Should have a sense manager
             assert!(
@@ -1972,7 +1984,7 @@ mod compose_tests {
         let atoms: Vec<u32> = rsvs.token_to_id.values().copied().take(2).collect();
 
         if atoms.len() >= 2 {
-            rsvs.compose("lookup_test", atoms, None).unwrap();
+            rsvs.compose_from_ids("lookup_test", atoms, None).unwrap();
 
             // Should be findable via token_to_id
             assert!(

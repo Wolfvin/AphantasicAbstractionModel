@@ -1,30 +1,32 @@
-//! Runtime event stream + snapshot contracts for external subscribers (v4.2)
+//! Runtime event stream + snapshot contracts for external subscribers (v5.0)
+//!
+//! v5.0: Added layer tracking to RuntimeNode.
 
 use serde::{Deserialize, Serialize};
 
-use crate::types::NodeId;
+use crate::types::{CompositionRef, NodeId};
 
 /// API version string for event contracts.
 pub const API_VERSION: &str = "v1";
 /// Schema version string for event contracts.
-pub const SCHEMA_VERSION: &str = "v4.2";
+pub const SCHEMA_VERSION: &str = "v5.0";
 
-/// Runtime node info (v4.2: unified model).
+/// Runtime node info (v5.0: compositional with layer).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RuntimeNode {
     /// Unique integer node ID.
     pub id: NodeId,
     /// Canonical label string.
     pub label: String,
-    /// Surface form with language tag (e.g., "stone@en").
+    /// Surface form with language tag (e.g., "raja@id").
     pub surface_label: String,
-    /// Node kind — always "node" in v4.2.
+    /// Node kind — always "node" in v5.0.
     pub kind: String,
     /// Tier number (1, 2, or 3).
     pub tier: u8,
     /// Confidence score (0.0–1.0).
     pub confidence: f32,
-    /// Lifecycle status as string ("new", "candidate", "stable", "deprecated", "quarantine").
+    /// Lifecycle status as string.
     pub status: String,
     /// Whether this is a seed node.
     pub is_seed: bool,
@@ -32,15 +34,21 @@ pub struct RuntimeNode {
     pub is_locked: bool,
     /// Compression state ("raw" or "compressed").
     pub compression_state: String,
+    /// Compositional layer depth (0 = primitive/seed).
+    pub layer: u32,
     /// Node IDs this node was derived from.
     pub derived_from_node_ids: Vec<NodeId>,
     /// Number of senses for this node.
     pub sense_count: usize,
     /// Coherence of the primary sense (if any).
     pub coherence: Option<f32>,
+    /// Grounding score of the primary sense (if any).
+    pub grounding_score: Option<f32>,
+    /// Compositions of the primary sense (if compositional).
+    pub compositions: Vec<CompositionRef>,
 }
 
-/// Runtime edge info (v4.2).
+/// Runtime edge info (v5.0).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RuntimeEdge {
     /// Edge ID string (e.g., "1->2").
@@ -51,11 +59,11 @@ pub struct RuntimeEdge {
     pub target: NodeId,
     /// Edge weight (0.0–1.0).
     pub weight: f32,
-    /// Edge source type ("bootstrap" or "learned").
+    /// Edge source type ("bootstrap", "learned", or "composition").
     pub source_type: String,
 }
 
-/// Full graph snapshot for external consumers (v4.2).
+/// Full graph snapshot for external consumers (v5.0).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RuntimeSnapshot {
     /// API version string.

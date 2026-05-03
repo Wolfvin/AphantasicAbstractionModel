@@ -1,16 +1,17 @@
-//! Appraise and Relate modes — RSVS v4.2
+//! Appraise and Relate modes — RSVS v5.0
 //!
 //! Contains `appraise()` and `relate()` methods.
+//! v5.0: relate() now includes structural similarity from compositions.
 
 use super::Rsvs;
 use crate::types::NodeId;
 use rayon::prelude::*;
 
 // -----------------------------------------------------------------------
-// AppraiseResult — v4.2 appraise mode output
+// AppraiseResult — v5.0 appraise mode output
 // -----------------------------------------------------------------------
 
-/// v4.2 appraise mode output: agree/disagree percentages, verdict, and evidence.
+/// Appraise mode output: agree/disagree percentages, verdict, and evidence.
 #[derive(Debug, Clone)]
 pub struct AppraiseResult {
     /// Percentage of tokens found in the graph.
@@ -24,31 +25,22 @@ pub struct AppraiseResult {
 }
 
 // -----------------------------------------------------------------------
-// RelateResult — v4.2 relate mode output
+// RelateResult — v5.0 relate mode output
 // -----------------------------------------------------------------------
 
-/// v4.2 relate mode output: related nodes and edges by overlap scoring.
+/// Relate mode output: related nodes and edges by overlap scoring.
 #[derive(Debug, Clone)]
 pub struct RelateResult {
     /// Related nodes: (node_id, overlap_score) sorted by score descending.
     pub related_nodes: Vec<(NodeId, f32)>,
     /// Related edges: (from, to, weight) sorted by weight descending.
     pub related_edges: Vec<(NodeId, NodeId, f32)>,
+    /// Structural relationships found (v5.0): (node_id, structural_similarity).
+    pub structural_relations: Vec<(NodeId, f32)>,
 }
 
 impl Rsvs {
     /// Evaluate text against the graph.
-    ///
-    /// Returns agree/disagree percentages, a verdict ("consistent", "partial", or "novel"),
-    /// and per-token evidence with confidence scores.
-    ///
-    /// # Examples
-    /// ```ignore
-    /// let mut rsvs = Rsvs::new(PipelineConfig::default())?;
-    /// rsvs.ingest_text("Stone is hard and solid.")?;
-    /// let result = rsvs.appraise("Stone is hard");
-    /// println!("Verdict: {}", result.verdict);
-    /// ```
     pub fn appraise(&self, text: &str) -> AppraiseResult {
         let tokens = crate::attention::tokenize(text);
         if tokens.is_empty() {
@@ -84,7 +76,6 @@ impl Rsvs {
         }
         .to_string();
 
-        // Sort evidence by confidence descending
         evidence.sort_by(|a, b| b.1.total_cmp(&a.1));
 
         AppraiseResult {
@@ -95,19 +86,9 @@ impl Rsvs {
         }
     }
 
-    /// Find nodes and edges related to the given concept by overlap scoring.
+    /// Find nodes and edges related to the given concept.
     ///
-    /// Uses Jaccard similarity (parallelized with rayon) to rank related nodes,
-    /// and collects both outgoing and incoming edges involving the concept.
-    ///
-    /// # Examples
-    /// ```ignore
-    /// let mut rsvs = Rsvs::new(PipelineConfig::default())?;
-    /// rsvs.ingest_text("Stone is hard. Rock is heavy.")?;
-    /// if let Some(result) = rsvs.relate("stone") {
-    ///     println!("Found {} related nodes", result.related_nodes.len());
-    /// }
-    /// ```
+    /// v5.0: Also includes structural relations based on composition overlap.
     pub fn relate(&self, concept: &str) -> Option<RelateResult> {
         let concept_id = *self.token_to_id.get(concept)?;
 
@@ -130,15 +111,31 @@ impl Rsvs {
         related_nodes.sort_by(|a, b| b.1.total_cmp(&a.1));
         related_nodes.truncate(20);
 
+        // v5.0: Find structural relations based on composition overlap
+        let mut structural_relations: Vec<(NodeId, f32)> = Vec::new();
+        if let Some(sm_concept) = self.senses.get(&concept_id) {
+            for (&other_id, sm_other) in &self.senses {
+                if other_id == concept_id {
+                    continue;
+                }
+                let sim = self
+                    .graph
+                    .structural_similarity(concept_id, other_id, sm_concept, sm_other);
+                if sim.structural_similarity > 0.0 {
+                    structural_relations.push((other_id, sim.structural_similarity));
+                }
+            }
+            structural_relations.sort_by(|a, b| b.1.total_cmp(&a.1));
+            structural_relations.truncate(20);
+        }
+
         // Find related edges involving this concept
         let mut related_edges: Vec<(NodeId, NodeId, f32)> = Vec::new();
 
-        // Outgoing edges from concept
         for e in self.graph.edges_from(concept_id) {
             related_edges.push((e.from, e.to, e.weight));
         }
 
-        // Incoming edges to concept
         for (&from_id, edges) in &self.graph.edges {
             if from_id == concept_id {
                 continue;
@@ -150,7 +147,6 @@ impl Rsvs {
             }
         }
 
-        // Also add edges from top related nodes
         for &(node_id, _) in &related_nodes {
             for e in self.graph.edges_from(node_id) {
                 if !related_edges
@@ -168,6 +164,7 @@ impl Rsvs {
         Some(RelateResult {
             related_nodes,
             related_edges,
+            structural_relations,
         })
     }
 }

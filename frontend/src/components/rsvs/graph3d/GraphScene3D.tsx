@@ -9,7 +9,7 @@ import { useGraphStore, useUIStore } from '@/store/rsvsStore';
 import { GraphNode } from './GraphNode';
 import { GraphEdge } from './GraphEdge';
 import { useForceLayout } from './ForceGraph';
-import { isCompositeNode, isAtomNode } from '@/lib/nodeRendering';
+import { isCompositeNode, isAtomNode, computeNodeLayer, getLayerColor, getLayerLabel } from '@/lib/nodeRendering';
 
 // ── Scene Constants ──
 const BG_COLOR = '#0a0e1a';
@@ -301,6 +301,17 @@ function GraphHUD() {
             <div style={{ opacity: 0.5, fontSize: '11px', marginTop: '2px' }}>
               Confidence: {(selectedNode.confidence * 100).toFixed(1)}%
             </div>
+            {/* v5.0: Layer info */}
+            <div style={{ opacity: 0.6, fontSize: '11px', marginTop: '2px', color: getLayerColor(computeNodeLayer(selectedNode)) }}>
+              {getLayerLabel(computeNodeLayer(selectedNode))}
+              {selectedNode.grounding_score !== undefined && ` · Grounding: ${(selectedNode.grounding_score * 100).toFixed(1)}%`}
+            </div>
+            {/* v5.0: Composition chain */}
+            {selectedNode.compositions && selectedNode.compositions.length > 0 && (
+              <div style={{ opacity: 0.7, fontSize: '11px', marginTop: '4px', color: getLayerColor(computeNodeLayer(selectedNode)) }}>
+                {selectedNode.label} = {selectedNode.compositions.map(c => c.label).join(' + ')}
+              </div>
+            )}
           </div>
         )}
 

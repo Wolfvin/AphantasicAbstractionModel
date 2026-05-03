@@ -1,15 +1,16 @@
-//! Query pipeline — RSVS v4.2
+//! Query pipeline — RSVS v5.0 Compositional Architecture
 //!
-//! Contains `query()` and `similarity()` methods.
+//! Contains `query()`, `similarity()`, `structural_similarity()`, and
+//! `substitution_analysis()` methods.
 
 use super::Rsvs;
-use crate::types::NodeId;
+use crate::types::{NodeId, SenseId};
 
 // -----------------------------------------------------------------------
 // QueryResult — output of a context-aware query
 // -----------------------------------------------------------------------
 
-/// Output of a context-aware query.
+/// Output of a context-aware query (v5.0).
 #[derive(Debug, Clone)]
 pub struct QueryResult {
     /// Index of the active sense used for the query.
@@ -18,22 +19,16 @@ pub struct QueryResult {
     pub active_sense_n: usize,
     /// Scored atoms: (label, score) sorted by score descending.
     pub scored_atoms: Vec<(String, f32)>,
+    /// Layer of the active sense (v5.0).
+    pub layer: u32,
+    /// Grounding score of the active sense (v5.0).
+    pub grounding_score: f32,
+    /// Compositions of the active sense (v5.0).
+    pub compositions: Vec<(String, SenseId)>,
 }
 
 impl Rsvs {
     /// Context-aware lookup for a concept.
-    ///
-    /// Given a concept label and a query context string, finds the most relevant
-    /// sense and returns scored atoms from that sense's core.
-    ///
-    /// # Examples
-    /// ```ignore
-    /// let mut rsvs = Rsvs::new(PipelineConfig::default())?;
-    /// rsvs.ingest_text("Stone is hard and solid.")?;
-    /// if let Some(result) = rsvs.query("stone", "hard texture") {
-    ///     println!("Found {} scored atoms", result.scored_atoms.len());
-    /// }
-    /// ```
     pub fn query(&self, concept: &str, query_context: &str) -> Option<QueryResult> {
         let concept_id = *self.token_to_id.get(concept)?;
         let sense_mgr = self.senses.get(&concept_id)?;
@@ -61,9 +56,7 @@ impl Rsvs {
             .iter()
             .filter_map(|&atom_id| {
                 let label = self.graph.get_node(atom_id)?.label.clone();
-
                 let freq = sense.freq(atom_id);
-
                 let edge_score = self
                     .graph
                     .edges_from(atom_id)
@@ -71,39 +64,77 @@ impl Rsvs {
                     .filter(|e| query_atoms.contains(&e.to))
                     .map(|e| e.weight)
                     .fold(0.0f32, f32::max);
-
                 let score = if edge_score > 0.0 {
                     freq * edge_score
                 } else {
                     freq
                 };
-
                 Some((label, score))
             })
             .collect();
 
         scored.sort_by(|a, b| b.1.total_cmp(&a.1));
 
+        // Build composition labels (v5.0)
+        let compositions: Vec<(String, SenseId)> = sense
+            .compositions
+            .iter()
+            .filter_map(|comp| {
+                let label = self.graph.get_node(comp.node_id)?.label.clone();
+                Some((label, comp.sense_id))
+            })
+            .collect();
+
         Some(QueryResult {
             active_sense_idx,
             active_sense_n: sense.context_count(),
             scored_atoms: scored,
+            layer: sense.layer,
+            grounding_score: sense.grounding_score,
+            compositions,
         })
     }
 
-    /// Compute similarity between two concepts in the graph.
-    ///
-    /// Returns `None` if either concept is not found in the token map.
-    ///
-    /// # Examples
-    /// ```ignore
-    /// if let Some(result) = rsvs.similarity("stone", "rock") {
-    ///     println!("Jaccard: {:.3}", result.jaccard);
-    /// }
-    /// ```
+    /// Compute flat similarity between two concepts (v4 compat).
     pub fn similarity(&self, a: &str, b: &str) -> Option<crate::graph::SimilarityResult> {
         let id_a = *self.token_to_id.get(a)?;
         let id_b = *self.token_to_id.get(b)?;
         Some(self.graph.similarity(id_a, id_b))
+    }
+
+    /// Compute structural similarity between two concepts at the sense level (v5.0).
+    ///
+    /// This is the core of RSVS v5.0. Two concepts are structurally similar
+    /// if their senses share compositions. This captures WHY they're related,
+    /// not just THAT they're related.
+    ///
+    /// Example:
+    ///   raja and ratu share 2/3 compositions → structural_similarity = 0.667
+    pub fn structural_similarity(
+        &self,
+        a: &str,
+        b: &str,
+    ) -> Option<crate::graph::StructuralSimResult> {
+        let id_a = *self.token_to_id.get(a)?;
+        let id_b = *self.token_to_id.get(b)?;
+        let sm_a = self.senses.get(&id_a)?;
+        let sm_b = self.senses.get(&id_b)?;
+        Some(self.graph.structural_similarity(id_a, id_b, sm_a, sm_b))
+    }
+
+    /// Analyze what substitution transforms one concept into another (v5.0).
+    ///
+    /// Returns the composition substitutions needed.
+    /// Example: raja → ratu requires substituting (laki_laki, 0) → (perempuan, 0).
+    pub fn substitution_analysis(
+        &self,
+        a: &str,
+        b: &str,
+    ) -> Option<crate::graph::SubstitutionResult> {
+        let id_a = *self.token_to_id.get(a)?;
+        let id_b = *self.token_to_id.get(b)?;
+        let sm_a = self.senses.get(&id_a)?;
+        let sm_b = self.senses.get(&id_b)?;
+        self.graph.substitution_analysis(id_a, id_b, sm_a, sm_b)
     }
 }

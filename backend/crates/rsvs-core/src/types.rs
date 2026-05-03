@@ -1,17 +1,56 @@
-//! Core types for RSVS v4.2
+//! Core types for RSVS v5.0 — Compositional Architecture
 //!
-//! v4.2: Unified node model — no more Atom/Composite distinction.
-//! All entities are "nodes". Compression is expressed as metadata.
+//! v5.0: Every sense is formed by compositions — pairs of (ID, sense_id).
+//! Relationships between IDs are structural, derived from shared/differing
+//! compositions, not statistical co-occurrence alone.
+//!
+//! Key concepts:
+//! - `CompositionRef`: A reference to a specific sense of a specific node.
+//!   This is the fundamental unit of compositional meaning.
+//! - `SenseId`: Identifies a sense within a node.
+//! - `layer`: Compositional depth — 0 for primitives, N for nodes whose
+//!   compositions reach layer N-1.
 
 use serde::{Deserialize, Serialize};
 
-/// An node ID. u32 = 4 bytes vs ~50 bytes for a String.
+/// A node ID. u32 = 4 bytes vs ~50 bytes for a String.
 pub type NodeId = u32;
 
-/// A set of node IDs — used for similarity/attention (retained from v0.5).
+/// A sense identifier — unique within a node's sense list.
+/// Together with a NodeId, uniquely identifies any sense in the system.
+pub type SenseId = u32;
+
+/// A set of node IDs — used for similarity/attention.
 pub type AtomSet = Vec<NodeId>;
 
-/// Node status lifecycle (v4.2).
+/// A reference to a specific sense of a specific node.
+///
+/// This is the fundamental unit of compositional meaning in RSVS v5.0.
+/// When sense S of node X is composed from [(A, s1), (B, s2), (C, s3)],
+/// it means: "X in sense S means what A means in sense s1, AND what B
+/// means in sense s2, AND what C means in sense s3."
+///
+/// Example:
+///   raja.sense_1 = [(tahta_tertinggi, 0), (laki_laki, 0), (kerajaan, 0)]
+///   ratu.sense_1 = [(tahta_tertinggi, 0), (perempuan, 0), (kerajaan, 0)]
+///   They share 2/3 compositions → structural similarity = 0.667
+///   Substitution: (laki_laki, 0) → (perempuan, 0) transforms raja → ratu
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct CompositionRef {
+    /// The target node ID.
+    pub node_id: NodeId,
+    /// The target sense index within that node.
+    pub sense_id: SenseId,
+}
+
+impl CompositionRef {
+    /// Create a new composition reference.
+    pub fn new(node_id: NodeId, sense_id: SenseId) -> Self {
+        Self { node_id, sense_id }
+    }
+}
+
+/// Node status lifecycle.
 #[non_exhaustive]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub enum NodeStatus {
@@ -28,14 +67,15 @@ pub enum NodeStatus {
     Quarantine,
 }
 
-/// Compression state (v4.2: replaces Atom/Composite distinction).
+/// Compression state — indicates whether a node has compositional senses.
 #[non_exhaustive]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub enum CompressionState {
-    /// Node has not been aggregated from other nodes.
+    /// Node has no compositional senses — it is a primitive.
     #[default]
     Raw,
-    /// Node was created by aggregating other nodes.
+    /// Node has at least one compositional sense — its meaning is
+    /// derived from other senses.
     Compressed,
 }
 
@@ -74,12 +114,18 @@ pub struct LanguageLink {
     pub target_id: NodeId,
 }
 
-/// Semantic metadata for a node (v4.2).
+/// Semantic metadata for a node (v5.0 — compositional).
+///
+/// Key change from v4.2: `layer` tracks compositional depth.
+/// Layer 0 = primitive/seed, Layer N = at least one composition
+/// references a layer N-1 sense.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SemanticMeta {
-    /// Whether the node is raw or compressed.
+    /// Whether the node has compositional senses.
     pub compression_state: CompressionState,
-    /// Node IDs this node was derived from (empty for raw nodes).
+    /// Compositional layer depth (0 = primitive/seed).
+    pub layer: u32,
+    /// Node IDs this node was derived from (backward compat).
     pub derived_from_node_ids: Vec<NodeId>,
     /// Why the node was compressed (None for raw nodes).
     pub compression_reason: Option<String>,
@@ -89,13 +135,14 @@ impl Default for SemanticMeta {
     fn default() -> Self {
         Self {
             compression_state: CompressionState::Raw,
+            layer: 0,
             derived_from_node_ids: Vec::new(),
             compression_reason: None,
         }
     }
 }
 
-/// Policy metadata for a node (v4.2).
+/// Policy metadata for a node.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PolicyMeta {
     /// Version of the policy engine that created this metadata.
@@ -115,7 +162,7 @@ pub struct PolicyMeta {
 impl Default for PolicyMeta {
     fn default() -> Self {
         Self {
-            policy_version: "4.2".to_string(),
+            policy_version: "5.0".to_string(),
             governance_score: 0.0,
             candidate_evidence_pool: 0.0,
             status_flip_count: 0,
@@ -125,17 +172,21 @@ impl Default for PolicyMeta {
     }
 }
 
-/// A node in the RSVS graph (v4.2: unified model).
+/// A node in the RSVS graph (v5.0 — compositional).
+///
+/// A node represents an ID in the system. It can have multiple senses,
+/// each of which is defined by its compositions (references to other
+/// nodes' specific senses).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Node {
     /// Unique integer ID.
     pub id: NodeId,
-    /// Canonical label (e.g., "stone").
+    /// Canonical label (e.g., "raja").
     pub label: String,
-    /// Surface form with language tag (e.g., "stone@en").
+    /// Surface form with language tag (e.g., "raja@id").
     pub surface_label: String,
 
-    /// Node kind — always "node" in v4.2.
+    /// Node kind — always "node" in v5.0.
     pub kind: String,
     /// Autonomy tier.
     pub tier: Tier,
@@ -148,14 +199,14 @@ pub struct Node {
     /// Whether this node is locked from modification.
     pub is_locked: bool,
 
-    /// Semantic metadata (compression state, derivation).
+    /// Semantic metadata (compression state, layer, derivation).
     pub semantic: SemanticMeta,
     /// Policy metadata (governance, dedup).
     pub policy_meta: Option<PolicyMeta>,
     /// Cross-language links.
     pub language_links: Vec<LanguageLink>,
 
-    /// Atom set for similarity/attention (retained from v0.5).
+    /// Atom set for similarity/attention (retained for backward compat).
     pub atoms: AtomSet,
 
     /// Perceptual grounding fingerprint.

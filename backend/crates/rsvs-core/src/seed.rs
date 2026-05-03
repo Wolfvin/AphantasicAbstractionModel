@@ -79,6 +79,7 @@ pub fn bootstrap(
 
             semantic: SemanticMeta {
                 compression_state: CompressionState::Raw,
+                layer: 0, // Seeds are Layer 0 primitives
                 derived_from_node_ids: vec![],
                 compression_reason: None,
             },

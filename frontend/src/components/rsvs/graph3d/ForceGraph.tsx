@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import { useGraphStore } from '@/store/rsvsStore';
-import { computeNodeRenderProps, computeEdgeRenderProps, isCompositeNode, isAtomNode, getAtomCount } from '@/lib/nodeRendering';
+import { computeNodeRenderProps, computeEdgeRenderProps, isCompositeNode, isAtomNode, getAtomCount, computeNodeLayer, getLayerYOffset } from '@/lib/nodeRendering';
 
 // ── Simulation Constants ──
 const REPULSION_CONSTANT = 600;
@@ -18,6 +18,9 @@ const MAX_VELOCITY = 2.0;
 // Composition clustering: extra attraction between composites and their atoms
 const COMPOSITION_ATTRACTION_CONSTANT = 0.025;
 const COMPOSITION_IDEAL_DISTANCE = 4;
+
+// v5.0: Layer Y-force — gently pulls nodes toward their layer's Y-offset
+const LAYER_Y_GRAVITY = 0.008;
 
 interface VelocityMap {
   [nodeId: number]: { vx: number; vy: number; vz: number };
@@ -368,6 +371,17 @@ export function useForceLayout(): void {
         forces[node.id].fx -= pos.x * gravityStrength;
         forces[node.id].fy -= pos.y * gravityStrength;
         forces[node.id].fz -= pos.z * gravityStrength;
+      }
+
+      // ── v5.0: Layer Y-gravity ──
+      // Gently pull nodes toward their layer's Y-offset
+      // Layer 0 at bottom (y=0), higher layers stacked up
+      for (const node of nodeList) {
+        const layer = computeNodeLayer(node);
+        const targetY = getLayerYOffset(layer);
+        const pos = node.render?.position ?? { x: 0, y: 0, z: 0 };
+        const yOffset = targetY - pos.y;
+        forces[node.id].fy += yOffset * LAYER_Y_GRAVITY;
       }
 
       // Update velocities with damping and apply forces
