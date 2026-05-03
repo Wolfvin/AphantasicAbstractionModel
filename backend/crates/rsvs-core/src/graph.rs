@@ -1,15 +1,17 @@
-//! The RSVS graph — in-memory, DAG, integer-keyed.
+//! The RSVS graph — in-memory, DAG, integer-keyed (v4.2)
+//!
+//! v4.2: Unified node model. No more Atom/Composite distinction.
+//! expand() checks CompressionState to decide expansion strategy.
 
 use std::collections::HashMap;
-use crate::types::{NodeId, Node, NodeKind, Edge, AtomSet};
+use crate::types::{NodeId, Node, Edge, AtomSet, CompressionState};
 
 #[derive(Debug)]
 pub struct RsvsGraph {
     /// All nodes indexed by integer ID.
     pub nodes: HashMap<NodeId, Node>,
 
-    /// Adjacency list: atom → list of edges to composites.
-    /// Layer 2: P(q | a) edges.
+    /// Adjacency list: node → list of edges to other nodes.
     pub(crate) edges: HashMap<NodeId, Vec<Edge>>,
 
     /// Label → NodeId lookup (for input parsing only).
@@ -40,7 +42,7 @@ impl RsvsGraph {
     }
 
     // ---------------------------------------------------------------
-    // Node insertion
+    // Node insertion (v4.2)
     // ---------------------------------------------------------------
 
     /// Insert a node. Returns Err if circular reference detected.
@@ -50,38 +52,37 @@ impl RsvsGraph {
             node.id = self.alloc_id();
         }
 
-        // DAG constraint: no atom in a composite's definition can be
-        // the composite itself (direct cycle). Transitive cycles are
-        // prevented because atoms must already exist before a composite
-        // references them, and atoms cannot reference composites.
-        if node.kind == NodeKind::Composite {
-            if node.atoms.contains(&node.id) {
+        // v4.2 DAG constraint: no self-reference in derived_from_node_ids
+        if node.semantic.compression_state == CompressionState::Compressed {
+            if node.semantic.derived_from_node_ids.contains(&node.id) {
                 return Err(format!(
-                    "Circular reference: ID {} appears in its own definition",
+                    "Circular reference: ID {} appears in its own derived_from_node_ids",
                     node.id
                 ));
             }
-            // All referenced atoms must already exist
-            for &atom_id in &node.atoms {
-                if !self.nodes.contains_key(&atom_id) {
+            // All referenced derived nodes must already exist
+            for &derived_id in &node.semantic.derived_from_node_ids {
+                if !self.nodes.contains_key(&derived_id) {
                     return Err(format!(
-                        "Unknown atom ID {} referenced in composite {}",
-                        atom_id, node.id
+                        "Unknown node ID {} referenced in derived_from_node_ids of {}",
+                        derived_id, node.id
                     ));
                 }
             }
         }
 
         let id = node.id;
-        if let Some(label) = &node.label {
-            self.label_to_id.insert(label.clone(), id);
+        // Register label in both label and surface_label lookups
+        self.label_to_id.insert(node.label.clone(), id);
+        if node.surface_label != node.label {
+            self.label_to_id.insert(node.surface_label.clone(), id);
         }
         self.nodes.insert(id, node);
         Ok(id)
     }
 
     // ---------------------------------------------------------------
-    // Edge insertion (Layer 2: atom → composite weight)
+    // Edge insertion (v4.2: any node → any node)
     // ---------------------------------------------------------------
 
     pub fn insert_edge(&mut self, edge: Edge) -> Result<(), String> {
@@ -91,11 +92,6 @@ impl RsvsGraph {
         }
         if !self.nodes.contains_key(&edge.to) {
             return Err(format!("Edge target {} does not exist", edge.to));
-        }
-        // Source must be atom, target must be composite
-        let from_kind = &self.nodes[&edge.from].kind;
-        if *from_kind != NodeKind::Atom {
-            return Err(format!("Edge source {} must be an Atom", edge.from));
         }
         self.edges.entry(edge.from).or_default().push(edge);
         Ok(())
@@ -113,8 +109,8 @@ impl RsvsGraph {
         self.label_to_id.get(label).copied()
     }
 
-    pub fn edges_from(&self, atom_id: NodeId) -> &[Edge] {
-        self.edges.get(&atom_id).map(|v| v.as_slice()).unwrap_or(&[])
+    pub fn edges_from(&self, node_id: NodeId) -> &[Edge] {
+        self.edges.get(&node_id).map(|v| v.as_slice()).unwrap_or(&[])
     }
 
     pub fn node_count(&self) -> usize {
@@ -126,21 +122,35 @@ impl RsvsGraph {
     }
 
     // ---------------------------------------------------------------
-    // Similarity — Mode 1: without context
-    // expand(S) = union of all atoms in S's definition
-    // sim(A, B) = { shared, only_A, only_B }
+    // Expand (v4.2: based on CompressionState)
+    //
+    // If compressed: expand to derived_from_node_ids
+    // If raw: expand to atoms, or just [id] if atoms is empty
     // ---------------------------------------------------------------
 
     pub fn expand(&self, id: NodeId) -> AtomSet {
         match self.nodes.get(&id) {
             None => vec![],
-            Some(node) => match node.kind {
-                // Atoms expand to themselves
-                NodeKind::Atom => vec![id],
-                // Composites expand to their atom set
-                // (v0.1: single sense, so atoms IS the definition)
-                NodeKind::Composite => node.atoms.clone(),
-            },
+            Some(node) => {
+                match node.semantic.compression_state {
+                    CompressionState::Compressed => {
+                        // Compressed node expands to its derivation
+                        let mut expanded = node.semantic.derived_from_node_ids.clone();
+                        if expanded.is_empty() {
+                            expanded.push(id);
+                        }
+                        expanded
+                    }
+                    CompressionState::Raw => {
+                        // Raw node expands to its atom set, or self
+                        if node.atoms.is_empty() {
+                            vec![id]
+                        } else {
+                            node.atoms.clone()
+                        }
+                    }
+                }
+            }
         }
     }
 

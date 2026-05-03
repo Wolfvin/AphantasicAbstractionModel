@@ -1,9 +1,9 @@
-//! RSVS CLI — smoke test v0.5 (end-to-end pipeline)
+//! RSVS CLI — smoke test v4.2 (end-to-end pipeline)
 
-use rsvs::{Rsvs, PipelineConfig, AutonomyConfig, SenseConfig, Tier};
+use rsvs::{Rsvs, PipelineConfig, AutonomyConfig, SenseConfig, Tier, NodeStatus};
 
 fn main() {
-    println!("=== RSVS Core v0.5 — End-to-End Pipeline ===\n");
+    println!("=== RSVS Core v4.2 — End-to-End Pipeline ===\n");
 
     // ---------------------------------------------------------------
     // Init system
@@ -11,7 +11,7 @@ fn main() {
     let config = PipelineConfig {
         autonomy: AutonomyConfig {
             n_warm:                10,
-            threshold_global_delta: 2.0, // lenient for small corpus
+            threshold_global_delta: 2.0,
             ..AutonomyConfig::default()
         },
         sense: SenseConfig {
@@ -23,10 +23,17 @@ fn main() {
     };
 
     let mut rsvs = Rsvs::new(config);
-    println!("System initialized. Seed atoms: {}", rsvs.graph.node_count());
+    println!("System initialized. Seed nodes: {}", rsvs.graph.node_count());
+
+    // Verify v4.2 seed nodes
+    if let Some(&id) = rsvs.token_to_id.get("exists") {
+        let node = rsvs.graph.get_node(id).unwrap();
+        println!("  Seed 'exists': surface_label={}, is_seed={}, status={:?}",
+                 node.surface_label, node.is_seed, rsvs.autonomy.status(id).unwrap());
+    }
 
     // ---------------------------------------------------------------
-    // Ingest corpus — domain 1: geology / physical properties
+    // Ingest corpus — domain 1: geology
     // ---------------------------------------------------------------
     let corpus_geo = vec![
         "Stone is a hard solid mineral material.",
@@ -48,12 +55,12 @@ fn main() {
 
     println!("\n--- Ingesting geology corpus ({} sentences) ---", corpus_geo.len());
     let stats1 = rsvs.ingest_text(&corpus_geo.join(" "));
-    println!("  sentences: {}  atoms promoted: {}  senses created: {}  updated: {}",
+    println!("  sentences: {}  nodes promoted: {}  senses created: {}  updated: {}",
              stats1.sentences_processed, stats1.atoms_promoted,
              stats1.sense_created, stats1.confidence_updated);
 
     // ---------------------------------------------------------------
-    // Ingest corpus — domain 2: water / liquid
+    // Ingest corpus — domain 2: water
     // ---------------------------------------------------------------
     rsvs.config.current_domain = 2;
 
@@ -72,7 +79,7 @@ fn main() {
 
     println!("\n--- Ingesting water corpus ({} sentences) ---", corpus_water.len());
     let stats2 = rsvs.ingest_text(&corpus_water.join(" "));
-    println!("  sentences: {}  atoms promoted: {}  senses created: {}  updated: {}",
+    println!("  sentences: {}  nodes promoted: {}  senses created: {}  updated: {}",
              stats2.sentences_processed, stats2.atoms_promoted,
              stats2.sense_created, stats2.confidence_updated);
 
@@ -85,23 +92,57 @@ fn main() {
     println!("  total atoms:    {}", status.total_atoms);
     println!("  total contexts: {}", status.total_contexts);
     println!("  warmed up:      {}", status.warmed_up);
-    println!("  θ_assign:       {:.3}", status.theta_assign);
-    println!("  θ_merge:        {:.3}", status.theta_merge);
-    println!("  watchlist:      {}", status.watchlist_count);
 
     // ---------------------------------------------------------------
-    // Confidence snapshot for key atoms
+    // v4.2 Node info
     // ---------------------------------------------------------------
-    println!("\n--- Atom Confidence ---");
+    println!("\n--- Node Info (v4.2) ---");
     for token in &["stone", "hard", "solid", "water", "liquid", "heat", "pressure"] {
         if let Some(&id) = rsvs.token_to_id.get(*token) {
             let conf = rsvs.autonomy.confidence(id).unwrap_or(0.0);
             let tier = rsvs.autonomy.tier(id).cloned().unwrap_or(Tier::Tier3);
-            let n_senses = rsvs.senses.get(&id).map(|s| s.sense_count()).unwrap_or(0);
-            println!("  {:<10}: conf={:.3} tier={:?} senses={}",
-                     token, conf, tier, n_senses);
+            let node_status = rsvs.autonomy.status(id).cloned().unwrap_or(NodeStatus::New);
+            let node = rsvs.graph.get_node(id);
+            let surface = node.map(|n| n.surface_label.clone()).unwrap_or_default();
+            let is_seed = node.map(|n| n.is_seed).unwrap_or(false);
+            let compression = node.map(|n| format!("{:?}", n.semantic.compression_state)).unwrap_or_default();
+            println!("  {:<10}: conf={:.3} tier={:?} status={:?} surface={} seed={} compression={}",
+                     token, conf, tier, node_status, surface, is_seed, compression);
         }
     }
+
+    // ---------------------------------------------------------------
+    // v4.2: Appraise
+    // ---------------------------------------------------------------
+    println!("\n--- Appraise (v4.2) ---");
+    let appraise_result = rsvs.appraise("Stone is hard and solid like metal");
+    println!("  agree: {:.1}%  disagree: {:.1}%  verdict: {}",
+             appraise_result.agree_pct, appraise_result.disagree_pct, appraise_result.verdict);
+    println!("  evidence: {:?}", appraise_result.evidence.iter().take(5).collect::<Vec<_>>());
+
+    // ---------------------------------------------------------------
+    // v4.2: Relate
+    // ---------------------------------------------------------------
+    println!("\n--- Relate (v4.2) ---");
+    if let Some(relate_result) = rsvs.relate("stone") {
+        let node_labels: Vec<String> = relate_result.related_nodes.iter()
+            .take(5)
+            .filter_map(|(id, score)| {
+                let label = rsvs.graph.get_node(*id)?.label.clone();
+                Some(format!("{}({:.3})", label, score))
+            })
+            .collect();
+        println!("  related nodes: {:?}", node_labels);
+        println!("  related edges: {} edges found", relate_result.related_edges.len());
+    }
+
+    // ---------------------------------------------------------------
+    // Snapshot v4.2
+    // ---------------------------------------------------------------
+    println!("\n--- Snapshot v4.2 ---");
+    let snap = rsvs.snapshot_v1();
+    println!("  schema_version: {}", snap.schema_version);
+    println!("  nodes: {}  edges: {}", snap.nodes.len(), snap.edges.len());
 
     // ---------------------------------------------------------------
     // Similarity queries
@@ -110,38 +151,12 @@ fn main() {
     for (a, b) in [("stone", "hard"), ("stone", "water"), ("hard", "solid")] {
         if let Some(sim) = rsvs.similarity(a, b) {
             let shared: Vec<_> = sim.shared.iter()
-                .filter_map(|&id| rsvs.graph.get_node(id)?.label.clone())
+                .filter_map(|&id| Some(rsvs.graph.get_node(id)?.label.clone()))
                 .collect();
             println!("  sim({}, {}): jaccard={:.3} shared={:?}",
                      a, b, sim.jaccard, shared);
         }
     }
 
-    // ---------------------------------------------------------------
-    // Context-aware queries
-    // ---------------------------------------------------------------
-    println!("\n--- Context Queries ---");
-
-    let queries = vec![
-        ("stone", "hard rough surface texture"),
-        ("stone", "heat pressure formation geology"),
-        ("water", "liquid clear flow river"),
-        ("hard",  "solid stone metal material"),
-    ];
-
-    for (concept, context) in &queries {
-        if let Some(result) = rsvs.query(concept, context) {
-            let top: Vec<_> = result.scored_atoms.iter()
-                .take(4)
-                .map(|(l, s)| format!("{}({:.2})", l, s))
-                .collect();
-            println!("  query({:?}, {:?})", concept, context);
-            println!("    sense {} (N={}) → {:?}", result.active_sense_idx,
-                     result.active_sense_n, top);
-        } else {
-            println!("  query({:?}) → not found", concept);
-        }
-    }
-
-    println!("\n=== v0.5 smoke test passed ===");
+    println!("\n=== v4.2 smoke test passed ===");
 }

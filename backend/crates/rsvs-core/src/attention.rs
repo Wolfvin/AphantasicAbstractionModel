@@ -1,4 +1,4 @@
-//! RSVS Attention — v0.3
+//! RSVS Attention — v4.2
 //!
 //! Hard selection, bukan softmax.
 //! score(t, c) = α·NPMI(t,c) + β·Jaccard(A(t), A(c)) + γ·cooc(t,c)
@@ -7,6 +7,8 @@
 //!   text → sentences → tokens → co-occurrence stats
 //!   → score each pair → TopK selection
 //!   → atom set per token → feed to SenseManager
+//!
+//! v4.2: No NodeKind references. Uses unified node model.
 
 use std::collections::HashMap;
 use std::fs;
@@ -49,9 +51,6 @@ impl Default for AttentionConfig {
 
 impl AttentionConfig {
     /// Load attention config from a JSON file and override known keys.
-    ///
-    /// Supported keys:
-    /// alpha, beta, gamma, top_k, min_score, min_cooc
     pub fn from_json_file(path: &Path) -> Result<Self, String> {
         let content = fs::read_to_string(path)
             .map_err(|e| format!("failed reading attention config '{}': {}", path.display(), e))?;
@@ -106,7 +105,6 @@ impl CoocStats {
     }
 
     /// Ingest one sentence — update all counts.
-    /// Sentence is a list of tokens (already lowercased, stopwords filtered).
     pub fn ingest_sentence(&mut self, tokens: &[String]) {
         let mut uniq = Vec::<String>::new();
         for t in tokens {
@@ -138,7 +136,6 @@ impl CoocStats {
     }
 
     /// P(t, c) = count(t,c) / total_sentences
-    /// Using sentence-level co-occurrence probability
     pub fn p_pair(&self, t: &str, c: &str) -> f64 {
         let key = ordered_pair(t, c);
         let count = self.pair_count.get(&key).copied().unwrap_or(0);
@@ -146,7 +143,7 @@ impl CoocStats {
         count as f64 / self.total_sentences as f64
     }
 
-    /// cooc(t, c) = count(t,c) / count(t)  — conditional probability
+    /// cooc(t, c) = count(t,c) / count(t)
     pub fn cooc(&self, t: &str, c: &str) -> f32 {
         let pair_key = ordered_pair(t, c);
         let pair_c = self.pair_count.get(&pair_key).copied().unwrap_or(0);
@@ -156,7 +153,6 @@ impl CoocStats {
     }
 
     /// NPMI(t, c) = PMI / -log(P(t,c))
-    /// Range: [-1, 1]. Returns 0.0 if undefined.
     pub fn npmi(&self, t: &str, c: &str) -> f32 {
         let p_t  = self.p_token(t);
         let p_c  = self.p_token(c);
@@ -167,7 +163,7 @@ impl CoocStats {
         }
 
         let pmi  = (p_tc / (p_t * p_c)).ln();
-        let norm = -p_tc.ln(); // -log(P(t,c))
+        let norm = -p_tc.ln();
 
         if norm == 0.0 { return 0.0; }
 
@@ -210,12 +206,11 @@ impl RsvsAttention {
     }
 
     /// Score all (token, candidate) pairs in a sentence.
-    /// Returns for each token: its TopK selected candidates.
     pub fn select(
         &self,
         tokens: &[String],
         stats: &CoocStats,
-        atom_sets: &HashMap<String, Vec<NodeId>>, // token → atom IDs
+        atom_sets: &HashMap<String, Vec<NodeId>>,
     ) -> HashMap<String, Vec<ScoredCandidate>> {
         let mut result: HashMap<String, Vec<ScoredCandidate>> = HashMap::new();
 
@@ -225,7 +220,6 @@ impl RsvsAttention {
 
             for c in tokens {
                 if c == t { continue; }
-                // Filter pairs with insufficient co-occurrence data
                 if stats.pair_cooc_count(t, c) < self.config.min_cooc {
                     continue;
                 }
@@ -247,7 +241,6 @@ impl RsvsAttention {
                 }
             }
 
-            // Sort descending by score, keep TopK
             candidates.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap());
             candidates.truncate(self.config.top_k);
 
@@ -264,8 +257,7 @@ impl RsvsAttention {
 // Text pipeline
 // -----------------------------------------------------------------------
 
-/// Minimal English stopwords — tokens that should not become IDs.
-/// In production this would be more comprehensive.
+/// Minimal English stopwords
 const STOPWORDS: &[&str] = &[
     "a", "an", "the", "is", "are", "was", "were", "be", "been", "being",
     "have", "has", "had", "do", "does", "did", "will", "would", "could",
@@ -274,7 +266,7 @@ const STOPWORDS: &[&str] = &[
     "that", "this", "which", "who", "it", "its", "they", "their",
 ];
 
-/// Split text into sentences (simple period/exclamation/question split).
+/// Split text into sentences
 pub fn split_sentences(text: &str) -> Vec<String> {
     text.split(|c| c == '.' || c == '!' || c == '?')
         .map(|s| s.trim().to_string())
@@ -282,8 +274,7 @@ pub fn split_sentences(text: &str) -> Vec<String> {
         .collect()
 }
 
-/// Tokenize a sentence: lowercase, split on whitespace/punctuation,
-/// filter stopwords and short tokens.
+/// Tokenize a sentence
 pub fn tokenize(sentence: &str) -> Vec<String> {
     sentence
         .to_lowercase()
@@ -330,9 +321,7 @@ impl EntityDetector {
         }
     }
 
-    /// Return tokens that qualify for ID promotion:
-    ///   - appeared in N >= threshold distinct sentences
-    ///   - groundable to at least 1 seed atom
+    /// Return tokens that qualify for ID promotion.
     pub fn candidates(&self, n_threshold: usize) -> Vec<String> {
         self.sentence_count
             .iter()
@@ -346,19 +335,15 @@ impl EntityDetector {
 }
 
 // -----------------------------------------------------------------------
-// Grounding check — can token be related to any seed atom?
-// Very simple heuristic for v0.3: check substring / synonym match
+// Grounding check
 // -----------------------------------------------------------------------
 
 pub fn is_groundable_to_seeds(token: &str, seed_labels: &[&str]) -> bool {
-    // In production: lookup in WordNet / ConceptNet
-    // For v0.3: simple substring containment check
     for seed in seed_labels {
         if token.contains(seed) || seed.contains(token) {
             return true;
         }
     }
-    // Heuristic: physical/sensory words are often groundable
     const GROUNDABLE_HINTS: &[&str] = &[
         "hard", "soft", "hot", "cold", "rough", "smooth", "heavy", "light",
         "sharp", "round", "solid", "liquid", "fast", "slow", "large", "small",

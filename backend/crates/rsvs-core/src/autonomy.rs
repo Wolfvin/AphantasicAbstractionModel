@@ -1,9 +1,12 @@
-//! Autonomy engine for RSVS.
+//! Autonomy engine for RSVS v4.2
+//!
 //! Keeps confidence/tier/memory lifecycle deterministic and testable.
+//! v4.2: Adds NodeStatus lifecycle transitions, quarantine, hysteresis,
+//! seed immutability, and governance scoring.
 
 use std::collections::{HashMap, HashSet};
 
-use crate::types::{NodeId, Tier};
+use crate::types::{NodeId, Tier, NodeStatus};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MemoryClass {
@@ -16,10 +19,15 @@ pub struct AtomRecord {
     pub id: NodeId,
     pub confidence: f32,
     pub tier: Tier,
+    pub status: NodeStatus,
     pub memory: MemoryClass,
     pub domain_count: usize,
     pub cooccurring_mature: HashSet<NodeId>,
     pub observation_count: usize,
+    pub is_seed: bool,
+    pub status_flip_count: u32,
+    pub governance_score: f32,
+    pub candidate_evidence_pool: f32,
 }
 
 impl AtomRecord {
@@ -34,11 +42,24 @@ impl AtomRecord {
             id,
             confidence: confidence.clamp(0.0, 1.0),
             tier,
+            status: NodeStatus::New,
             memory,
             domain_count: 0,
             cooccurring_mature: HashSet::new(),
             observation_count: 0,
+            is_seed: false,
+            status_flip_count: 0,
+            governance_score: 0.0,
+            candidate_evidence_pool: 0.0,
         }
+    }
+
+    pub fn new_seed(id: NodeId, confidence: f32, tier: Tier) -> Self {
+        let mut rec = Self::new(id, confidence, tier);
+        rec.is_seed = true;
+        rec.status = NodeStatus::Stable;
+        rec.memory = MemoryClass::Stable;
+        rec
     }
 }
 
@@ -56,6 +77,11 @@ pub struct AutonomyConfig {
     pub k1: f32,
     pub k2: f32,
     pub max_drop_tolerance: f32,
+    // v4.2 hysteresis thresholds
+    pub promote_threshold: f32,  // promote at >= this (0.75)
+    pub demote_threshold: f32,   // demote at < this (0.60)
+    // v4.2 quarantine
+    pub quarantine_flip_threshold: u32,  // quarantine if flip_count >= this (3)
 }
 
 impl Default for AutonomyConfig {
@@ -73,6 +99,9 @@ impl Default for AutonomyConfig {
             k1: 0.50,
             k2: 0.50,
             max_drop_tolerance: 0.20,
+            promote_threshold: 0.75,
+            demote_threshold: 0.60,
+            quarantine_flip_threshold: 3,
         }
     }
 }
@@ -100,6 +129,13 @@ pub enum RemovalDecision {
 pub enum StabilityStatus {
     Stable,
     Frozen { delta: f32, threshold: f32 },
+}
+
+/// Result of a status transition attempt
+#[derive(Debug, Clone, PartialEq)]
+pub enum StatusTransitionResult {
+    Transitioned { from: NodeStatus, to: NodeStatus },
+    Blocked(&'static str),
 }
 
 pub struct AutonomyEngine {
@@ -142,6 +178,11 @@ impl AutonomyEngine {
         self.records.insert(id, AtomRecord::new(id, confidence, tier));
     }
 
+    /// Register a seed node — immutable, Tier1, Stable
+    pub fn register_seed(&mut self, id: NodeId, confidence: f32, tier: Tier) {
+        self.records.insert(id, AtomRecord::new_seed(id, confidence, tier));
+    }
+
     pub fn confidence(&self, id: NodeId) -> Option<f32> {
         self.records.get(&id).map(|r| r.confidence)
     }
@@ -150,8 +191,16 @@ impl AutonomyEngine {
         self.records.get(&id).map(|r| &r.tier)
     }
 
+    pub fn status(&self, id: NodeId) -> Option<&NodeStatus> {
+        self.records.get(&id).map(|r| &r.status)
+    }
+
     pub fn memory_class(&self, id: NodeId) -> Option<&MemoryClass> {
         self.records.get(&id).map(|r| &r.memory)
+    }
+
+    pub fn is_seed(&self, id: NodeId) -> bool {
+        self.records.get(&id).map(|r| r.is_seed).unwrap_or(false)
     }
 
     pub fn tick_context(&mut self) {
@@ -207,6 +256,118 @@ impl AutonomyEngine {
         (rec.confidence - proposed_confidence) <= self.config.max_drop_tolerance
     }
 
+    // ---------------------------------------------------------------
+    // v4.2: Governance score
+    // governance_score = 0.4*strength + 0.3*trust + 0.2*recency + 0.1*(1-contradiction_penalty)
+    // ---------------------------------------------------------------
+
+    /// Compute governance score from evidence components.
+    pub fn score_evidence(
+        &self,
+        strength: f32,
+        trust: f32,
+        recency: f32,
+        contradiction_penalty: f32,
+    ) -> f32 {
+        let score = 0.4 * strength
+                  + 0.3 * trust
+                  + 0.2 * recency
+                  + 0.1 * (1.0 - contradiction_penalty);
+        score.clamp(0.0, 1.0)
+    }
+
+    // ---------------------------------------------------------------
+    // v4.2: NodeStatus lifecycle transitions
+    // New → Candidate → Stable → Deprecated
+    // Quarantine escape: if flip_count >= threshold, quarantine
+    // Hysteresis: promote at >= 0.75, demote at < 0.60
+    // Seeds are immutable
+    // ---------------------------------------------------------------
+
+    /// Attempt a status transition for a node based on confidence.
+    /// Uses hysteresis: promote at >= promote_threshold, demote at < demote_threshold.
+    pub fn transition_status(&mut self, id: NodeId) -> StatusTransitionResult {
+        let Some(rec) = self.records.get_mut(&id) else {
+            return StatusTransitionResult::Blocked("unknown node");
+        };
+
+        // Seeds are immutable
+        if rec.is_seed {
+            return StatusTransitionResult::Blocked("seed node is immutable");
+        }
+
+        let old_status = rec.status.clone();
+        let confidence = rec.confidence;
+        let flip_count = rec.status_flip_count;
+
+        // Check quarantine condition first
+        if flip_count >= self.config.quarantine_flip_threshold
+            && old_status != NodeStatus::Quarantine
+        {
+            rec.status = NodeStatus::Quarantine;
+            rec.status_flip_count += 1;
+            return StatusTransitionResult::Transitioned {
+                from: old_status,
+                to: NodeStatus::Quarantine,
+            };
+        }
+
+        // Already quarantined — stays quarantined
+        if old_status == NodeStatus::Quarantine {
+            return StatusTransitionResult::Blocked("node is quarantined");
+        }
+
+        // Hysteresis transitions
+        let new_status = match old_status {
+            NodeStatus::New => {
+                if confidence >= self.config.promote_threshold {
+                    NodeStatus::Candidate
+                } else {
+                    NodeStatus::New
+                }
+            }
+            NodeStatus::Candidate => {
+                if confidence >= self.config.promote_threshold {
+                    NodeStatus::Stable
+                } else if confidence < self.config.demote_threshold {
+                    NodeStatus::New
+                } else {
+                    NodeStatus::Candidate
+                }
+            }
+            NodeStatus::Stable => {
+                if confidence < self.config.demote_threshold {
+                    NodeStatus::Deprecated
+                } else {
+                    NodeStatus::Stable
+                }
+            }
+            NodeStatus::Deprecated => {
+                if confidence >= self.config.promote_threshold {
+                    NodeStatus::Candidate
+                } else {
+                    NodeStatus::Deprecated
+                }
+            }
+            NodeStatus::Quarantine => NodeStatus::Quarantine,
+        };
+
+        if new_status != old_status {
+            rec.status = new_status.clone();
+            rec.status_flip_count += 1;
+            StatusTransitionResult::Transitioned {
+                from: old_status,
+                to: new_status,
+            }
+        } else {
+            StatusTransitionResult::Blocked("no transition needed")
+        }
+    }
+
+    // ---------------------------------------------------------------
+    // Confidence update (v4.2: with EMA, max delta, seed check)
+    // ---------------------------------------------------------------
+
     pub fn update_confidence(
         &mut self,
         id: NodeId,
@@ -216,12 +377,12 @@ impl AutonomyEngine {
         domain: usize,
     ) -> ConfidenceUpdateResult {
         let Some(rec_read) = self.records.get(&id) else {
-            return ConfidenceUpdateResult::Skipped("unknown atom");
+            return ConfidenceUpdateResult::Skipped("unknown node");
         };
 
-        // Seed atoms are immutable in this version.
-        if matches!(rec_read.tier, Tier::Tier1) && rec_read.confidence >= 0.99 {
-            return ConfidenceUpdateResult::Skipped("seed atom");
+        // Seed nodes are immutable
+        if rec_read.is_seed {
+            return ConfidenceUpdateResult::Skipped("seed node");
         }
 
         let evidence = (freq * coherence).clamp(0.0, 1.0);
@@ -234,7 +395,7 @@ impl AutonomyEngine {
         }
 
         let Some(rec) = self.records.get_mut(&id) else {
-            return ConfidenceUpdateResult::Skipped("unknown atom");
+            return ConfidenceUpdateResult::Skipped("unknown node");
         };
         rec.confidence = proposed;
         rec.observation_count += 1;
@@ -255,6 +416,9 @@ impl AutonomyEngine {
             };
         }
 
+        // v4.2: Attempt status transition after confidence update
+        let _ = self.transition_status(id);
+
         self.batch_delta += (proposed - old).abs();
         self.changelog.push(format!("update:{}:{:.4}->{:.4}", id, old, proposed));
 
@@ -268,7 +432,7 @@ impl AutonomyEngine {
     pub fn reclassify(&mut self, id: NodeId) -> Option<Tier> {
         let rec = self.records.get_mut(&id)?;
 
-        if matches!(rec.tier, Tier::Tier1) && rec.confidence >= 0.99 {
+        if rec.is_seed && rec.confidence >= 0.99 {
             return Some(Tier::Tier1);
         }
 
@@ -286,11 +450,11 @@ impl AutonomyEngine {
 
     pub fn should_remove(&mut self, id: NodeId, impact: usize) -> RemovalDecision {
         let Some(rec) = self.records.get(&id) else {
-            return RemovalDecision::Retain("unknown atom");
+            return RemovalDecision::Retain("unknown node");
         };
 
-        if matches!(rec.tier, Tier::Tier1) && rec.confidence >= 0.99 {
-            return RemovalDecision::Retain("seed atom");
+        if rec.is_seed {
+            return RemovalDecision::Retain("seed node");
         }
 
         if rec.confidence < self.config.tau_remove {

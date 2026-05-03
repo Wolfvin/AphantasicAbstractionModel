@@ -1,4 +1,6 @@
-//! RSVS Core — v0.5
+//! RSVS Core — v4.2
+//!
+//! v4.2: Unified node model, status lifecycle, policy engine in Rust
 //!
 //! v0.5: End-to-end pipeline (Rsvs struct)
 //!   text → CoocStats → EntityDetector → atom promotion
@@ -33,6 +35,8 @@ pub use attention::{
 pub use autonomy::{
     AutonomyConfig, AutonomyEngine, AtomRecord, MemoryClass,
     ConfidenceUpdateResult, RemovalDecision, StabilityStatus, WarmUpState,
+    StatusTransitionResult,
 };
-pub use pipeline::{Rsvs, PipelineConfig, IngestStats, QueryResult, PipelineStatus};
+pub use pipeline::{Rsvs, PipelineConfig, IngestStats, QueryResult, PipelineStatus,
+                   AppraiseResult, RelateResult};
 pub use events::{API_VERSION, SCHEMA_VERSION, RuntimeEvent, RuntimeSnapshot, EventBatch};

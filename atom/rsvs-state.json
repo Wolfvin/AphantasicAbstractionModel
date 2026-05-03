@@ -1,0 +1,4398 @@
+{
+  "version": "4.2",
+  "total_contexts": 167,
+  "token_to_id": {
+    "entity": 2,
+    "metal": 31,
+    "rough": 30,
+    "cause": 8,
+    "feedback": 24,
+    "space": 7,
+    "exists": 1,
+    "identity": 20,
+    "trust": 19,
+    "liquid": 34,
+    "heat": 32,
+    "signal": 11,
+    "relation": 3,
+    "meaning": 22,
+    "solid": 28,
+    "heavy": 29,
+    "language": 21,
+    "action": 23,
+    "attention": 14,
+    "change": 5,
+    "state": 4,
+    "risk": 18,
+    "effect": 9,
+    "stone": 27,
+    "rock": 33,
+    "value": 15,
+    "time": 6,
+    "memory": 13,
+    "pressure": 25,
+    "pattern": 12,
+    "hard": 26,
+    "context": 10,
+    "agent": 16,
+    "goal": 17,
+    "water": 35
+  },
+  "next_node_id": 36,
+  "nodes": [
+    {
+      "id": 27,
+      "label": "stone",
+      "surface_label": "stone@en",
+      "kind": "node",
+      "tier": 2,
+      "confidence": 0.5,
+      "status": "candidate",
+      "is_seed": false,
+      "is_locked": false,
+      "compression_state": "compressed",
+      "derived_from_node_ids": [
+        26,
+        25,
+        28
+      ],
+      "compression_reason": "co-occurrence aggregation",
+      "policy_meta": {
+        "policy_version": "4.2",
+        "governance_score": 0.0,
+        "candidate_evidence_pool": 0.0,
+        "status_flip_count": 0,
+        "seen_fingerprints": [],
+        "last_seen_at": null
+      },
+      "atoms": [
+        26,
+        25,
+        28
+      ]
+    },
+    {
+      "id": 29,
+      "label": "heavy",
+      "surface_label": "heavy@en",
+      "kind": "node",
+      "tier": 2,
+      "confidence": 0.5,
+      "status": "candidate",
+      "is_seed": false,
+      "is_locked": false,
+      "compression_state": "compressed",
+      "derived_from_node_ids": [
+        26,
+        27,
+        28
+      ],
+      "compression_reason": "co-occurrence aggregation",
+      "policy_meta": {
+        "policy_version": "4.2",
+        "governance_score": 0.0,
+        "candidate_evidence_pool": 0.0,
+        "status_flip_count": 0,
+        "seen_fingerprints": [],
+        "last_seen_at": null
+      },
+      "atoms": [
+        26,
+        27,
+        28
+      ]
+    },
+    {
+      "id": 25,
+      "label": "pressure",
+      "surface_label": "pressure@en",
+      "kind": "node",
+      "tier": 2,
+      "confidence": 0.5,
+      "status": "candidate",
+      "is_seed": false,
+      "is_locked": false,
+      "compression_state": "compressed",
+      "derived_from_node_ids": [
+        27,
+        26,
+        28,
+        6
+      ],
+      "compression_reason": "co-occurrence aggregation",
+      "policy_meta": {
+        "policy_version": "4.2",
+        "governance_score": 0.0,
+        "candidate_evidence_pool": 0.0,
+        "status_flip_count": 0,
+        "seen_fingerprints": [],
+        "last_seen_at": null
+      },
+      "atoms": [
+        27,
+        26,
+        28,
+        6
+      ]
+    },
+    {
+      "id": 1,
+      "label": "exists",
+      "surface_label": "exists@en",
+      "kind": "node",
+      "tier": 1,
+      "confidence": 1.0,
+      "status": "stable",
+      "is_seed": true,
+      "is_locked": true,
+      "compression_state": "raw",
+      "derived_from_node_ids": [],
+      "compression_reason": null,
+      "policy_meta": null,
+      "atoms": []
+    },
+    {
+      "id": 31,
+      "label": "metal",
+      "surface_label": "metal@en",
+      "kind": "node",
+      "tier": 2,
+      "confidence": 0.5,
+      "status": "candidate",
+      "is_seed": false,
+      "is_locked": false,
+      "compression_state": "compressed",
+      "derived_from_node_ids": [
+        28,
+        26,
+        27
+      ],
+      "compression_reason": "co-occurrence aggregation",
+      "policy_meta": {
+        "policy_version": "4.2",
+        "governance_score": 0.0,
+        "candidate_evidence_pool": 0.0,
+        "status_flip_count": 0,
+        "seen_fingerprints": [],
+        "last_seen_at": null
+      },
+      "atoms": [
+        28,
+        26,
+        27
+      ]
+    },
+    {
+      "id": 18,
+      "label": "risk",
+      "surface_label": "risk@en",
+      "kind": "node",
+      "tier": 1,
+      "confidence": 1.0,
+      "status": "stable",
+      "is_seed": true,
+      "is_locked": true,
+      "compression_state": "raw",
+      "derived_from_node_ids": [],
+      "compression_reason": null,
+      "policy_meta": null,
+      "atoms": []
+    },
+    {
+      "id": 16,
+      "label": "agent",
+      "surface_label": "agent@en",
+      "kind": "node",
+      "tier": 1,
+      "confidence": 1.0,
+      "status": "stable",
+      "is_seed": true,
+      "is_locked": true,
+      "compression_state": "raw",
+      "derived_from_node_ids": [],
+      "compression_reason": null,
+      "policy_meta": null,
+      "atoms": []
+    },
+    {
+      "id": 8,
+      "label": "cause",
+      "surface_label": "cause@en",
+      "kind": "node",
+      "tier": 1,
+      "confidence": 1.0,
+      "status": "stable",
+      "is_seed": true,
+      "is_locked": true,
+      "compression_state": "raw",
+      "derived_from_node_ids": [],
+      "compression_reason": null,
+      "policy_meta": null,
+      "atoms": []
+    },
+    {
+      "id": 10,
+      "label": "context",
+      "surface_label": "context@en",
+      "kind": "node",
+      "tier": 1,
+      "confidence": 1.0,
+      "status": "stable",
+      "is_seed": true,
+      "is_locked": true,
+      "compression_state": "raw",
+      "derived_from_node_ids": [],
+      "compression_reason": null,
+      "policy_meta": null,
+      "atoms": []
+    },
+    {
+      "id": 24,
+      "label": "feedback",
+      "surface_label": "feedback@en",
+      "kind": "node",
+      "tier": 1,
+      "confidence": 1.0,
+      "status": "stable",
+      "is_seed": true,
+      "is_locked": true,
+      "compression_state": "raw",
+      "derived_from_node_ids": [],
+      "compression_reason": null,
+      "policy_meta": null,
+      "atoms": []
+    },
+    {
+      "id": 14,
+      "label": "attention",
+      "surface_label": "attention@en",
+      "kind": "node",
+      "tier": 1,
+      "confidence": 1.0,
+      "status": "stable",
+      "is_seed": true,
+      "is_locked": true,
+      "compression_state": "raw",
+      "derived_from_node_ids": [],
+      "compression_reason": null,
+      "policy_meta": null,
+      "atoms": []
+    },
+    {
+      "id": 28,
+      "label": "solid",
+      "surface_label": "solid@en",
+      "kind": "node",
+      "tier": 2,
+      "confidence": 0.5,
+      "status": "candidate",
+      "is_seed": false,
+      "is_locked": false,
+      "compression_state": "compressed",
+      "derived_from_node_ids": [
+        26,
+        27,
+        25
+      ],
+      "compression_reason": "co-occurrence aggregation",
+      "policy_meta": {
+        "policy_version": "4.2",
+        "governance_score": 0.0,
+        "candidate_evidence_pool": 0.0,
+        "status_flip_count": 0,
+        "seen_fingerprints": [],
+        "last_seen_at": null
+      },
+      "atoms": [
+        26,
+        27,
+        25
+      ]
+    },
+    {
+      "id": 12,
+      "label": "pattern",
+      "surface_label": "pattern@en",
+      "kind": "node",
+      "tier": 1,
+      "confidence": 1.0,
+      "status": "stable",
+      "is_seed": true,
+      "is_locked": true,
+      "compression_state": "raw",
+      "derived_from_node_ids": [],
+      "compression_reason": null,
+      "policy_meta": null,
+      "atoms": []
+    },
+    {
+      "id": 15,
+      "label": "value",
+      "surface_label": "value@en",
+      "kind": "node",
+      "tier": 1,
+      "confidence": 1.0,
+      "status": "stable",
+      "is_seed": true,
+      "is_locked": true,
+      "compression_state": "raw",
+      "derived_from_node_ids": [],
+      "compression_reason": null,
+      "policy_meta": null,
+      "atoms": []
+    },
+    {
+      "id": 19,
+      "label": "trust",
+      "surface_label": "trust@en",
+      "kind": "node",
+      "tier": 1,
+      "confidence": 1.0,
+      "status": "stable",
+      "is_seed": true,
+      "is_locked": true,
+      "compression_state": "raw",
+      "derived_from_node_ids": [],
+      "compression_reason": null,
+      "policy_meta": null,
+      "atoms": []
+    },
+    {
+      "id": 21,
+      "label": "language",
+      "surface_label": "language@en",
+      "kind": "node",
+      "tier": 1,
+      "confidence": 1.0,
+      "status": "stable",
+      "is_seed": true,
+      "is_locked": true,
+      "compression_state": "raw",
+      "derived_from_node_ids": [],
+      "compression_reason": null,
+      "policy_meta": null,
+      "atoms": []
+    },
+    {
+      "id": 2,
+      "label": "entity",
+      "surface_label": "entity@en",
+      "kind": "node",
+      "tier": 1,
+      "confidence": 1.0,
+      "status": "stable",
+      "is_seed": true,
+      "is_locked": true,
+      "compression_state": "raw",
+      "derived_from_node_ids": [],
+      "compression_reason": null,
+      "policy_meta": null,
+      "atoms": []
+    },
+    {
+      "id": 33,
+      "label": "rock",
+      "surface_label": "rock@en",
+      "kind": "node",
+      "tier": 2,
+      "confidence": 0.5,
+      "status": "candidate",
+      "is_seed": false,
+      "is_locked": false,
+      "compression_state": "compressed",
+      "derived_from_node_ids": [
+        28,
+        29,
+        26
+      ],
+      "compression_reason": "co-occurrence aggregation",
+      "policy_meta": {
+        "policy_version": "4.2",
+        "governance_score": 0.0,
+        "candidate_evidence_pool": 0.0,
+        "status_flip_count": 0,
+        "seen_fingerprints": [],
+        "last_seen_at": null
+      },
+      "atoms": [
+        28,
+        29,
+        26
+      ]
+    },
+    {
+      "id": 11,
+      "label": "signal",
+      "surface_label": "signal@en",
+      "kind": "node",
+      "tier": 1,
+      "confidence": 1.0,
+      "status": "stable",
+      "is_seed": true,
+      "is_locked": true,
+      "compression_state": "raw",
+      "derived_from_node_ids": [],
+      "compression_reason": null,
+      "policy_meta": null,
+      "atoms": []
+    },
+    {
+      "id": 32,
+      "label": "heat",
+      "surface_label": "heat@en",
+      "kind": "node",
+      "tier": 2,
+      "confidence": 0.5,
+      "status": "candidate",
+      "is_seed": false,
+      "is_locked": false,
+      "compression_state": "compressed",
+      "derived_from_node_ids": [
+        25,
+        27,
+        6
+      ],
+      "compression_reason": "co-occurrence aggregation",
+      "policy_meta": {
+        "policy_version": "4.2",
+        "governance_score": 0.0,
+        "candidate_evidence_pool": 0.0,
+        "status_flip_count": 0,
+        "seen_fingerprints": [],
+        "last_seen_at": null
+      },
+      "atoms": [
+        25,
+        27,
+        6
+      ]
+    },
+    {
+      "id": 4,
+      "label": "state",
+      "surface_label": "state@en",
+      "kind": "node",
+      "tier": 1,
+      "confidence": 1.0,
+      "status": "stable",
+      "is_seed": true,
+      "is_locked": true,
+      "compression_state": "raw",
+      "derived_from_node_ids": [],
+      "compression_reason": null,
+      "policy_meta": null,
+      "atoms": []
+    },
+    {
+      "id": 35,
+      "label": "water",
+      "surface_label": "water@en",
+      "kind": "node",
+      "tier": 2,
+      "confidence": 0.5,
+      "status": "candidate",
+      "is_seed": false,
+      "is_locked": false,
+      "compression_state": "compressed",
+      "derived_from_node_ids": [
+        34,
+        28
+      ],
+      "compression_reason": "co-occurrence aggregation",
+      "policy_meta": {
+        "policy_version": "4.2",
+        "governance_score": 0.0,
+        "candidate_evidence_pool": 0.0,
+        "status_flip_count": 0,
+        "seen_fingerprints": [],
+        "last_seen_at": null
+      },
+      "atoms": [
+        34,
+        28
+      ]
+    },
+    {
+      "id": 34,
+      "label": "liquid",
+      "surface_label": "liquid@en",
+      "kind": "node",
+      "tier": 2,
+      "confidence": 0.5,
+      "status": "candidate",
+      "is_seed": false,
+      "is_locked": false,
+      "compression_state": "compressed",
+      "derived_from_node_ids": [
+        35
+      ],
+      "compression_reason": "co-occurrence aggregation",
+      "policy_meta": {
+        "policy_version": "4.2",
+        "governance_score": 0.0,
+        "candidate_evidence_pool": 0.0,
+        "status_flip_count": 0,
+        "seen_fingerprints": [],
+        "last_seen_at": null
+      },
+      "atoms": [
+        35
+      ]
+    },
+    {
+      "id": 30,
+      "label": "rough",
+      "surface_label": "rough@en",
+      "kind": "node",
+      "tier": 2,
+      "confidence": 0.5,
+      "status": "candidate",
+      "is_seed": false,
+      "is_locked": false,
+      "compression_state": "compressed",
+      "derived_from_node_ids": [
+        27,
+        26
+      ],
+      "compression_reason": "co-occurrence aggregation",
+      "policy_meta": {
+        "policy_version": "4.2",
+        "governance_score": 0.0,
+        "candidate_evidence_pool": 0.0,
+        "status_flip_count": 0,
+        "seen_fingerprints": [],
+        "last_seen_at": null
+      },
+      "atoms": [
+        27,
+        26
+      ]
+    },
+    {
+      "id": 22,
+      "label": "meaning",
+      "surface_label": "meaning@en",
+      "kind": "node",
+      "tier": 1,
+      "confidence": 1.0,
+      "status": "stable",
+      "is_seed": true,
+      "is_locked": true,
+      "compression_state": "raw",
+      "derived_from_node_ids": [],
+      "compression_reason": null,
+      "policy_meta": null,
+      "atoms": []
+    },
+    {
+      "id": 23,
+      "label": "action",
+      "surface_label": "action@en",
+      "kind": "node",
+      "tier": 1,
+      "confidence": 1.0,
+      "status": "stable",
+      "is_seed": true,
+      "is_locked": true,
+      "compression_state": "raw",
+      "derived_from_node_ids": [],
+      "compression_reason": null,
+      "policy_meta": null,
+      "atoms": []
+    },
+    {
+      "id": 9,
+      "label": "effect",
+      "surface_label": "effect@en",
+      "kind": "node",
+      "tier": 1,
+      "confidence": 1.0,
+      "status": "stable",
+      "is_seed": true,
+      "is_locked": true,
+      "compression_state": "raw",
+      "derived_from_node_ids": [],
+      "compression_reason": null,
+      "policy_meta": null,
+      "atoms": []
+    },
+    {
+      "id": 6,
+      "label": "time",
+      "surface_label": "time@en",
+      "kind": "node",
+      "tier": 1,
+      "confidence": 1.0,
+      "status": "stable",
+      "is_seed": true,
+      "is_locked": true,
+      "compression_state": "raw",
+      "derived_from_node_ids": [],
+      "compression_reason": null,
+      "policy_meta": null,
+      "atoms": []
+    },
+    {
+      "id": 17,
+      "label": "goal",
+      "surface_label": "goal@en",
+      "kind": "node",
+      "tier": 1,
+      "confidence": 1.0,
+      "status": "stable",
+      "is_seed": true,
+      "is_locked": true,
+      "compression_state": "raw",
+      "derived_from_node_ids": [],
+      "compression_reason": null,
+      "policy_meta": null,
+      "atoms": []
+    },
+    {
+      "id": 5,
+      "label": "change",
+      "surface_label": "change@en",
+      "kind": "node",
+      "tier": 1,
+      "confidence": 1.0,
+      "status": "stable",
+      "is_seed": true,
+      "is_locked": true,
+      "compression_state": "raw",
+      "derived_from_node_ids": [],
+      "compression_reason": null,
+      "policy_meta": null,
+      "atoms": []
+    },
+    {
+      "id": 20,
+      "label": "identity",
+      "surface_label": "identity@en",
+      "kind": "node",
+      "tier": 1,
+      "confidence": 1.0,
+      "status": "stable",
+      "is_seed": true,
+      "is_locked": true,
+      "compression_state": "raw",
+      "derived_from_node_ids": [],
+      "compression_reason": null,
+      "policy_meta": null,
+      "atoms": []
+    },
+    {
+      "id": 3,
+      "label": "relation",
+      "surface_label": "relation@en",
+      "kind": "node",
+      "tier": 1,
+      "confidence": 1.0,
+      "status": "stable",
+      "is_seed": true,
+      "is_locked": true,
+      "compression_state": "raw",
+      "derived_from_node_ids": [],
+      "compression_reason": null,
+      "policy_meta": null,
+      "atoms": []
+    },
+    {
+      "id": 26,
+      "label": "hard",
+      "surface_label": "hard@en",
+      "kind": "node",
+      "tier": 2,
+      "confidence": 0.5,
+      "status": "candidate",
+      "is_seed": false,
+      "is_locked": false,
+      "compression_state": "compressed",
+      "derived_from_node_ids": [
+        27,
+        28,
+        25
+      ],
+      "compression_reason": "co-occurrence aggregation",
+      "policy_meta": {
+        "policy_version": "4.2",
+        "governance_score": 0.0,
+        "candidate_evidence_pool": 0.0,
+        "status_flip_count": 0,
+        "seen_fingerprints": [],
+        "last_seen_at": null
+      },
+      "atoms": [
+        27,
+        28,
+        25
+      ]
+    },
+    {
+      "id": 7,
+      "label": "space",
+      "surface_label": "space@en",
+      "kind": "node",
+      "tier": 1,
+      "confidence": 1.0,
+      "status": "stable",
+      "is_seed": true,
+      "is_locked": true,
+      "compression_state": "raw",
+      "derived_from_node_ids": [],
+      "compression_reason": null,
+      "policy_meta": null,
+      "atoms": []
+    },
+    {
+      "id": 13,
+      "label": "memory",
+      "surface_label": "memory@en",
+      "kind": "node",
+      "tier": 1,
+      "confidence": 1.0,
+      "status": "stable",
+      "is_seed": true,
+      "is_locked": true,
+      "compression_state": "raw",
+      "derived_from_node_ids": [],
+      "compression_reason": null,
+      "policy_meta": null,
+      "atoms": []
+    }
+  ],
+  "edges": [
+    {
+      "from": 27,
+      "to": 25,
+      "weight": 0.75,
+      "source": "learned"
+    },
+    {
+      "from": 27,
+      "to": 26,
+      "weight": 0.6666667,
+      "source": "learned"
+    },
+    {
+      "from": 27,
+      "to": 28,
+      "weight": 0.4,
+      "source": "learned"
+    },
+    {
+      "from": 27,
+      "to": 29,
+      "weight": 0.5,
+      "source": "learned"
+    },
+    {
+      "from": 27,
+      "to": 30,
+      "weight": 1.0,
+      "source": "learned"
+    },
+    {
+      "from": 27,
+      "to": 31,
+      "weight": 0.5,
+      "source": "learned"
+    },
+    {
+      "from": 27,
+      "to": 32,
+      "weight": 1.0,
+      "source": "learned"
+    },
+    {
+      "from": 29,
+      "to": 33,
+      "weight": 1.0,
+      "source": "learned"
+    },
+    {
+      "from": 25,
+      "to": 26,
+      "weight": 0.22222222,
+      "source": "learned"
+    },
+    {
+      "from": 25,
+      "to": 27,
+      "weight": 0.375,
+      "source": "learned"
+    },
+    {
+      "from": 25,
+      "to": 28,
+      "weight": 0.2,
+      "source": "learned"
+    },
+    {
+      "from": 25,
+      "to": 32,
+      "weight": 1.0,
+      "source": "learned"
+    },
+    {
+      "from": 28,
+      "to": 25,
+      "weight": 0.25,
+      "source": "learned"
+    },
+    {
+      "from": 28,
+      "to": 26,
+      "weight": 0.5555556,
+      "source": "learned"
+    },
+    {
+      "from": 28,
+      "to": 27,
+      "weight": 0.25,
+      "source": "learned"
+    },
+    {
+      "from": 28,
+      "to": 29,
+      "weight": 0.5,
+      "source": "learned"
+    },
+    {
+      "from": 28,
+      "to": 31,
+      "weight": 1.0,
+      "source": "learned"
+    },
+    {
+      "from": 28,
+      "to": 33,
+      "weight": 1.0,
+      "source": "learned"
+    },
+    {
+      "from": 28,
+      "to": 35,
+      "weight": 0.2857143,
+      "source": "learned"
+    },
+    {
+      "from": 35,
+      "to": 34,
+      "weight": 1.0,
+      "source": "learned"
+    },
+    {
+      "from": 34,
+      "to": 35,
+      "weight": 0.42857143,
+      "source": "learned"
+    },
+    {
+      "from": 6,
+      "to": 25,
+      "weight": 0.25,
+      "source": "learned"
+    },
+    {
+      "from": 6,
+      "to": 32,
+      "weight": 1.0,
+      "source": "learned"
+    },
+    {
+      "from": 26,
+      "to": 25,
+      "weight": 0.5,
+      "source": "learned"
+    },
+    {
+      "from": 26,
+      "to": 27,
+      "weight": 0.75,
+      "source": "learned"
+    },
+    {
+      "from": 26,
+      "to": 28,
+      "weight": 1.0,
+      "source": "learned"
+    },
+    {
+      "from": 26,
+      "to": 29,
+      "weight": 1.0,
+      "source": "learned"
+    },
+    {
+      "from": 26,
+      "to": 30,
+      "weight": 1.0,
+      "source": "learned"
+    },
+    {
+      "from": 26,
+      "to": 31,
+      "weight": 1.0,
+      "source": "learned"
+    },
+    {
+      "from": 26,
+      "to": 33,
+      "weight": 1.0,
+      "source": "learned"
+    }
+  ],
+  "sense_managers": {
+    "23": {
+      "senses": [],
+      "next_sense_id": 0,
+      "global_context_count": 0
+    },
+    "22": {
+      "senses": [],
+      "next_sense_id": 0,
+      "global_context_count": 0
+    },
+    "28": {
+      "senses": [
+        {
+          "contexts": [
+            [
+              26,
+              27
+            ],
+            [
+              26
+            ],
+            [
+              26
+            ],
+            [
+              26,
+              27
+            ],
+            [
+              26
+            ],
+            [
+              26,
+              27
+            ],
+            [
+              26,
+              29
+            ],
+            [
+              26,
+              31
+            ],
+            [
+              26,
+              27,
+              31
+            ],
+            [
+              26,
+              25
+            ],
+            [
+              26,
+              27
+            ],
+            [
+              26,
+              33,
+              29
+            ],
+            [
+              26,
+              31
+            ],
+            [
+              26,
+              27,
+              31
+            ],
+            [
+              26,
+              25
+            ],
+            [
+              26,
+              27
+            ],
+            [
+              26,
+              33,
+              29
+            ],
+            [
+              26,
+              31
+            ],
+            [
+              26,
+              27,
+              31
+            ],
+            [
+              26,
+              25
+            ],
+            [
+              26,
+              27
+            ],
+            [
+              26,
+              33,
+              29
+            ],
+            [
+              26,
+              31
+            ],
+            [
+              26,
+              27,
+              31
+            ],
+            [
+              26,
+              25
+            ],
+            [
+              26,
+              27
+            ],
+            [
+              26,
+              33,
+              29
+            ],
+            [
+              26,
+              31
+            ],
+            [
+              26,
+              27,
+              31
+            ],
+            [
+              26,
+              25
+            ],
+            [
+              26,
+              27
+            ],
+            [
+              26,
+              33,
+              29
+            ],
+            [
+              26,
+              31
+            ],
+            [
+              26,
+              27,
+              31
+            ],
+            [
+              26,
+              25
+            ],
+            [
+              26,
+              27
+            ],
+            [
+              26,
+              33,
+              29
+            ],
+            [
+              26,
+              31
+            ],
+            [
+              26,
+              27,
+              31
+            ],
+            [
+              26,
+              25
+            ],
+            [
+              26,
+              27
+            ],
+            [
+              26,
+              33,
+              29
+            ],
+            [
+              26,
+              31
+            ],
+            [
+              26,
+              27,
+              31
+            ],
+            [
+              26,
+              25
+            ],
+            [
+              26,
+              27
+            ],
+            [
+              26,
+              33,
+              29
+            ],
+            [
+              26,
+              31
+            ],
+            [
+              26,
+              27,
+              31
+            ],
+            [
+              26,
+              25
+            ],
+            [
+              26,
+              27
+            ],
+            [
+              26,
+              33,
+              29
+            ],
+            [
+              26,
+              31
+            ],
+            [
+              26,
+              27,
+              31
+            ],
+            [
+              26,
+              25
+            ],
+            [
+              26,
+              27
+            ],
+            [
+              26,
+              33,
+              29
+            ],
+            [
+              26,
+              31
+            ],
+            [
+              26,
+              27,
+              31
+            ],
+            [
+              26,
+              25
+            ],
+            [
+              26,
+              27
+            ],
+            [
+              26,
+              33,
+              29
+            ],
+            [
+              26,
+              31
+            ],
+            [
+              26,
+              27,
+              31
+            ],
+            [
+              26,
+              25
+            ],
+            [
+              26,
+              27
+            ],
+            [
+              26,
+              33,
+              29
+            ],
+            [
+              26,
+              31
+            ],
+            [
+              26,
+              27,
+              31
+            ],
+            [
+              26,
+              25
+            ],
+            [
+              26,
+              27
+            ],
+            [
+              26,
+              33,
+              29
+            ],
+            [
+              26,
+              31
+            ],
+            [
+              26,
+              27,
+              31
+            ],
+            [
+              26,
+              25
+            ],
+            [
+              26,
+              27
+            ],
+            [
+              26,
+              33,
+              29
+            ],
+            [
+              26,
+              31
+            ],
+            [
+              26,
+              27,
+              31
+            ],
+            [
+              26,
+              25
+            ]
+          ],
+          "freq_counts": {
+            "27": 32,
+            "31": 30,
+            "29": 15,
+            "33": 14,
+            "25": 15,
+            "26": 80
+          },
+          "sum_sim": 1502.5000190734863,
+          "pair_count": 3160,
+          "coherence": 0.4754747,
+          "status": "mature",
+          "inactivity": 2
+        },
+        {
+          "contexts": [
+            [
+              35
+            ],
+            [
+              35
+            ]
+          ],
+          "freq_counts": {
+            "35": 2
+          },
+          "sum_sim": 1.0,
+          "pair_count": 1,
+          "coherence": 1.0,
+          "status": "mature",
+          "inactivity": 0
+        }
+      ],
+      "next_sense_id": 2,
+      "global_context_count": 82
+    },
+    "33": {
+      "senses": [
+        {
+          "contexts": [
+            [
+              26,
+              29,
+              28
+            ],
+            [
+              26,
+              29,
+              28
+            ],
+            [
+              26,
+              29,
+              28
+            ],
+            [
+              26,
+              29,
+              28
+            ],
+            [
+              26,
+              29,
+              28
+            ],
+            [
+              26,
+              29,
+              28
+            ],
+            [
+              26,
+              29,
+              28
+            ],
+            [
+              26,
+              29,
+              28
+            ],
+            [
+              26,
+              29,
+              28
+            ],
+            [
+              26,
+              29,
+              28
+            ],
+            [
+              26,
+              29,
+              28
+            ],
+            [
+              26,
+              29,
+              28
+            ],
+            [
+              26,
+              29,
+              28
+            ],
+            [
+              26,
+              29,
+              28
+            ]
+          ],
+          "freq_counts": {
+            "26": 14,
+            "29": 14,
+            "28": 14
+          },
+          "sum_sim": 91.0,
+          "pair_count": 91,
+          "coherence": 1.0,
+          "status": "mature",
+          "inactivity": 0
+        }
+      ],
+      "next_sense_id": 1,
+      "global_context_count": 14
+    },
+    "32": {
+      "senses": [
+        {
+          "contexts": [
+            [
+              27,
+              25,
+              6
+            ],
+            [
+              27,
+              25,
+              6
+            ],
+            [
+              27,
+              25,
+              6
+            ],
+            [
+              27,
+              25,
+              6
+            ],
+            [
+              27,
+              25,
+              6
+            ],
+            [
+              27,
+              25,
+              6
+            ],
+            [
+              27,
+              25,
+              6
+            ],
+            [
+              27,
+              25,
+              6
+            ],
+            [
+              27,
+              25,
+              6
+            ],
+            [
+              27,
+              25,
+              6
+            ],
+            [
+              27,
+              25,
+              6
+            ],
+            [
+              27,
+              25,
+              6
+            ],
+            [
+              27,
+              25,
+              6
+            ],
+            [
+              27,
+              25,
+              6
+            ]
+          ],
+          "freq_counts": {
+            "6": 14,
+            "25": 14,
+            "27": 14
+          },
+          "sum_sim": 91.0,
+          "pair_count": 91,
+          "coherence": 1.0,
+          "status": "mature",
+          "inactivity": 0
+        }
+      ],
+      "next_sense_id": 1,
+      "global_context_count": 14
+    },
+    "29": {
+      "senses": [
+        {
+          "contexts": [
+            [
+              26,
+              28
+            ],
+            [
+              26,
+              27
+            ],
+            [
+              26,
+              33,
+              28
+            ],
+            [
+              26,
+              27
+            ],
+            [
+              26,
+              33,
+              28
+            ],
+            [
+              26,
+              27
+            ],
+            [
+              26,
+              33,
+              28
+            ],
+            [
+              26,
+              27
+            ],
+            [
+              26,
+              33,
+              28
+            ],
+            [
+              26,
+              27
+            ],
+            [
+              26,
+              33,
+              28
+            ],
+            [
+              26,
+              27
+            ],
+            [
+              26,
+              33,
+              28
+            ],
+            [
+              26,
+              27
+            ],
+            [
+              26,
+              33,
+              28
+            ],
+            [
+              26,
+              27
+            ],
+            [
+              26,
+              33,
+              28
+            ],
+            [
+              26,
+              27
+            ],
+            [
+              26,
+              33,
+              28
+            ],
+            [
+              26,
+              27
+            ],
+            [
+              26,
+              33,
+              28
+            ],
+            [
+              26,
+              27
+            ],
+            [
+              26,
+              33,
+              28
+            ],
+            [
+              26,
+              27
+            ],
+            [
+              26,
+              33,
+              28
+            ],
+            [
+              26,
+              27
+            ],
+            [
+              26,
+              33,
+              28
+            ],
+            [
+              26,
+              27
+            ],
+            [
+              26,
+              33,
+              28
+            ],
+            [
+              26,
+              27
+            ]
+          ],
+          "freq_counts": {
+            "27": 15,
+            "28": 15,
+            "26": 30,
+            "33": 14
+          },
+          "sum_sim": 262.83333376049995,
+          "pair_count": 435,
+          "coherence": 0.60421455,
+          "status": "mature",
+          "inactivity": 0
+        }
+      ],
+      "next_sense_id": 1,
+      "global_context_count": 30
+    },
+    "11": {
+      "senses": [],
+      "next_sense_id": 0,
+      "global_context_count": 0
+    },
+    "20": {
+      "senses": [],
+      "next_sense_id": 0,
+      "global_context_count": 0
+    },
+    "6": {
+      "senses": [
+        {
+          "contexts": [
+            [
+              27,
+              25
+            ],
+            [
+              27,
+              25
+            ],
+            [
+              27,
+              32,
+              25
+            ],
+            [
+              27,
+              32,
+              25
+            ],
+            [
+              27,
+              32,
+              25
+            ],
+            [
+              27,
+              32,
+              25
+            ],
+            [
+              27,
+              32,
+              25
+            ],
+            [
+              27,
+              32,
+              25
+            ],
+            [
+              27,
+              32,
+              25
+            ],
+            [
+              27,
+              32,
+              25
+            ],
+            [
+              27,
+              32,
+              25
+            ],
+            [
+              27,
+              32,
+              25
+            ],
+            [
+              27,
+              32,
+              25
+            ],
+            [
+              27,
+              32,
+              25
+            ],
+            [
+              27,
+              32,
+              25
+            ],
+            [
+              27,
+              32,
+              25
+            ]
+          ],
+          "freq_counts": {
+            "27": 16,
+            "32": 14,
+            "25": 16
+          },
+          "sum_sim": 110.66666722297668,
+          "pair_count": 120,
+          "coherence": 0.92222226,
+          "status": "mature",
+          "inactivity": 0
+        }
+      ],
+      "next_sense_id": 1,
+      "global_context_count": 16
+    },
+    "5": {
+      "senses": [],
+      "next_sense_id": 0,
+      "global_context_count": 0
+    },
+    "10": {
+      "senses": [],
+      "next_sense_id": 0,
+      "global_context_count": 0
+    },
+    "14": {
+      "senses": [],
+      "next_sense_id": 0,
+      "global_context_count": 0
+    },
+    "9": {
+      "senses": [],
+      "next_sense_id": 0,
+      "global_context_count": 0
+    },
+    "34": {
+      "senses": [
+        {
+          "contexts": [
+            [
+              35
+            ],
+            [
+              35
+            ],
+            [
+              35
+            ]
+          ],
+          "freq_counts": {
+            "35": 3
+          },
+          "sum_sim": 3.0,
+          "pair_count": 3,
+          "coherence": 1.0,
+          "status": "mature",
+          "inactivity": 0
+        }
+      ],
+      "next_sense_id": 1,
+      "global_context_count": 3
+    },
+    "27": {
+      "senses": [
+        {
+          "contexts": [
+            [
+              26,
+              28
+            ],
+            [
+              26
+            ],
+            [
+              26
+            ],
+            [
+              26,
+              28
+            ],
+            [
+              26
+            ],
+            [
+              26,
+              28
+            ],
+            [
+              26,
+              30
+            ],
+            [
+              26,
+              30
+            ],
+            [
+              26,
+              28,
+              31
+            ],
+            [
+              26,
+              29
+            ],
+            [
+              26,
+              28
+            ],
+            [
+              26,
+              30
+            ],
+            [
+              26,
+              30
+            ],
+            [
+              26,
+              28,
+              31
+            ],
+            [
+              26,
+              29
+            ],
+            [
+              26,
+              28
+            ],
+            [
+              26,
+              30
+            ],
+            [
+              26,
+              30
+            ],
+            [
+              26,
+              28,
+              31
+            ],
+            [
+              26,
+              29
+            ],
+            [
+              26,
+              28
+            ],
+            [
+              26,
+              30
+            ],
+            [
+              26,
+              30
+            ],
+            [
+              26,
+              28,
+              31
+            ],
+            [
+              26,
+              29
+            ],
+            [
+              26,
+              28
+            ],
+            [
+              26,
+              30
+            ],
+            [
+              26,
+              30
+            ],
+            [
+              26,
+              28,
+              31
+            ],
+            [
+              26,
+              29
+            ],
+            [
+              26,
+              28
+            ],
+            [
+              26,
+              30
+            ],
+            [
+              26,
+              30
+            ],
+            [
+              26,
+              28,
+              31
+            ],
+            [
+              26,
+              29
+            ],
+            [
+              26,
+              28
+            ],
+            [
+              26,
+              30
+            ],
+            [
+              26,
+              30
+            ],
+            [
+              26,
+              28,
+              31
+            ],
+            [
+              26,
+              29
+            ],
+            [
+              26,
+              28
+            ],
+            [
+              26,
+              30
+            ],
+            [
+              26,
+              30
+            ],
+            [
+              26,
+              28,
+              31
+            ],
+            [
+              26,
+              29
+            ],
+            [
+              26,
+              28
+            ],
+            [
+              26,
+              30
+            ],
+            [
+              26,
+              30
+            ],
+            [
+              26,
+              28,
+              31
+            ],
+            [
+              26,
+              29
+            ],
+            [
+              26,
+              28
+            ],
+            [
+              26,
+              30
+            ],
+            [
+              26,
+              30
+            ],
+            [
+              26,
+              28,
+              31
+            ],
+            [
+              26,
+              29
+            ],
+            [
+              26,
+              28
+            ],
+            [
+              26,
+              30
+            ],
+            [
+              26,
+              30
+            ],
+            [
+              26,
+              28,
+              31
+            ],
+            [
+              26,
+              29
+            ],
+            [
+              26,
+              28
+            ],
+            [
+              26,
+              30
+            ],
+            [
+              26,
+              30
+            ],
+            [
+              26,
+              28,
+              31
+            ],
+            [
+              26,
+              29
+            ],
+            [
+              26,
+              28
+            ],
+            [
+              26,
+              30
+            ],
+            [
+              26,
+              30
+            ],
+            [
+              26,
+              28,
+              31
+            ],
+            [
+              26,
+              29
+            ],
+            [
+              26,
+              28
+            ],
+            [
+              26,
+              30
+            ],
+            [
+              26,
+              30
+            ],
+            [
+              26,
+              28,
+              31
+            ],
+            [
+              26,
+              29
+            ],
+            [
+              26,
+              28
+            ],
+            [
+              26,
+              30
+            ],
+            [
+              26,
+              30
+            ],
+            [
+              26,
+              28,
+              31
+            ],
+            [
+              26,
+              29
+            ]
+          ],
+          "freq_counts": {
+            "30": 30,
+            "28": 32,
+            "31": 15,
+            "29": 15,
+            "26": 80
+          },
+          "sum_sim": 1635.7500175833702,
+          "pair_count": 3160,
+          "coherence": 0.51764244,
+          "status": "mature",
+          "inactivity": 1
+        },
+        {
+          "contexts": [
+            [
+              25
+            ],
+            [
+              26,
+              25
+            ],
+            [
+              25,
+              6
+            ],
+            [
+              26,
+              25
+            ],
+            [
+              25,
+              32,
+              6
+            ],
+            [
+              26,
+              25
+            ],
+            [
+              25,
+              32,
+              6
+            ],
+            [
+              26,
+              25
+            ],
+            [
+              25,
+              32,
+              6
+            ],
+            [
+              26,
+              25
+            ],
+            [
+              25,
+              32,
+              6
+            ],
+            [
+              26,
+              25
+            ],
+            [
+              25,
+              32,
+              6
+            ],
+            [
+              26,
+              25
+            ],
+            [
+              25,
+              32,
+              6
+            ],
+            [
+              26,
+              25
+            ],
+            [
+              25,
+              32,
+              6
+            ],
+            [
+              26,
+              25
+            ],
+            [
+              25,
+              32,
+              6
+            ],
+            [
+              26,
+              25
+            ],
+            [
+              25,
+              32,
+              6
+            ],
+            [
+              26,
+              25
+            ],
+            [
+              25,
+              32,
+              6
+            ],
+            [
+              26,
+              25
+            ],
+            [
+              25,
+              32,
+              6
+            ],
+            [
+              26,
+              25
+            ],
+            [
+              25,
+              32,
+              6
+            ],
+            [
+              26,
+              25
+            ],
+            [
+              25,
+              32,
+              6
+            ],
+            [
+              26,
+              25
+            ],
+            [
+              25,
+              32,
+              6
+            ],
+            [
+              26,
+              25
+            ]
+          ],
+          "freq_counts": {
+            "6": 15,
+            "25": 32,
+            "32": 14,
+            "26": 16
+          },
+          "sum_sim": 294.83333390951157,
+          "pair_count": 496,
+          "coherence": 0.59442204,
+          "status": "mature",
+          "inactivity": 0
+        }
+      ],
+      "next_sense_id": 2,
+      "global_context_count": 112
+    },
+    "2": {
+      "senses": [],
+      "next_sense_id": 0,
+      "global_context_count": 0
+    },
+    "16": {
+      "senses": [],
+      "next_sense_id": 0,
+      "global_context_count": 0
+    },
+    "25": {
+      "senses": [
+        {
+          "contexts": [
+            [
+              27
+            ],
+            [
+              27,
+              6
+            ],
+            [
+              27,
+              32,
+              6
+            ],
+            [
+              27,
+              32,
+              6
+            ],
+            [
+              27,
+              32,
+              6
+            ],
+            [
+              27,
+              32,
+              6
+            ],
+            [
+              27,
+              32,
+              6
+            ],
+            [
+              27,
+              32,
+              6
+            ],
+            [
+              27,
+              32,
+              6
+            ],
+            [
+              27,
+              32,
+              6
+            ],
+            [
+              27,
+              32,
+              6
+            ],
+            [
+              27,
+              32,
+              6
+            ],
+            [
+              27,
+              32,
+              6
+            ],
+            [
+              27,
+              32,
+              6
+            ],
+            [
+              27,
+              32,
+              6
+            ],
+            [
+              27,
+              32,
+              6
+            ]
+          ],
+          "freq_counts": {
+            "6": 15,
+            "32": 14,
+            "27": 16
+          },
+          "sum_sim": 105.50000041723253,
+          "pair_count": 120,
+          "coherence": 0.87916666,
+          "status": "mature",
+          "inactivity": 2
+        },
+        {
+          "contexts": [
+            [
+              26
+            ],
+            [
+              27,
+              26
+            ],
+            [
+              26,
+              28
+            ],
+            [
+              27,
+              26
+            ],
+            [
+              26,
+              28
+            ],
+            [
+              27,
+              26
+            ],
+            [
+              26,
+              28
+            ],
+            [
+              27,
+              26
+            ],
+            [
+              26,
+              28
+            ],
+            [
+              27,
+              26
+            ],
+            [
+              26,
+              28
+            ],
+            [
+              27,
+              26
+            ],
+            [
+              26,
+              28
+            ],
+            [
+              27,
+              26
+            ],
+            [
+              26,
+              28
+            ],
+            [
+              27,
+              26
+            ],
+            [
+              26,
+              28
+            ],
+            [
+              27,
+              26
+            ],
+            [
+              26,
+              28
+            ],
+            [
+              27,
+              26
+            ],
+            [
+              26,
+              28
+            ],
+            [
+              27,
+              26
+            ],
+            [
+              26,
+              28
+            ],
+            [
+              27,
+              26
+            ],
+            [
+              26,
+              28
+            ],
+            [
+              27,
+              26
+            ],
+            [
+              26,
+              28
+            ],
+            [
+              27,
+              26
+            ],
+            [
+              26,
+              28
+            ],
+            [
+              27,
+              26
+            ],
+            [
+              26,
+              28
+            ],
+            [
+              27,
+              26
+            ]
+          ],
+          "freq_counts": {
+            "26": 32,
+            "27": 16,
+            "28": 15
+          },
+          "sum_sim": 320.5000023841858,
+          "pair_count": 496,
+          "coherence": 0.64616936,
+          "status": "mature",
+          "inactivity": 0
+        }
+      ],
+      "next_sense_id": 2,
+      "global_context_count": 48
+    },
+    "12": {
+      "senses": [],
+      "next_sense_id": 0,
+      "global_context_count": 0
+    },
+    "18": {
+      "senses": [],
+      "next_sense_id": 0,
+      "global_context_count": 0
+    },
+    "26": {
+      "senses": [
+        {
+          "contexts": [
+            [
+              27,
+              28
+            ],
+            [
+              28
+            ],
+            [
+              27
+            ],
+            [
+              27
+            ],
+            [
+              28
+            ],
+            [
+              27,
+              28
+            ],
+            [
+              28,
+              25
+            ],
+            [
+              27
+            ],
+            [
+              27,
+              25
+            ],
+            [
+              27,
+              28
+            ],
+            [
+              28,
+              29
+            ],
+            [
+              27,
+              30
+            ],
+            [
+              27,
+              30
+            ],
+            [
+              28,
+              31
+            ],
+            [
+              27,
+              28,
+              31
+            ],
+            [
+              28,
+              25
+            ],
+            [
+              27,
+              29
+            ],
+            [
+              27,
+              25
+            ],
+            [
+              27,
+              28
+            ],
+            [
+              28,
+              29,
+              33
+            ],
+            [
+              27,
+              30
+            ],
+            [
+              27,
+              30
+            ],
+            [
+              28,
+              31
+            ],
+            [
+              27,
+              28,
+              31
+            ],
+            [
+              28,
+              25
+            ],
+            [
+              27,
+              29
+            ],
+            [
+              27,
+              25
+            ],
+            [
+              27,
+              28
+            ],
+            [
+              28,
+              29,
+              33
+            ],
+            [
+              27,
+              30
+            ],
+            [
+              27,
+              30
+            ],
+            [
+              28,
+              31
+            ],
+            [
+              27,
+              28,
+              31
+            ],
+            [
+              28,
+              25
+            ],
+            [
+              27,
+              29
+            ],
+            [
+              27,
+              25
+            ],
+            [
+              27,
+              28
+            ],
+            [
+              28,
+              29,
+              33
+            ],
+            [
+              27,
+              30
+            ],
+            [
+              27,
+              30
+            ],
+            [
+              28,
+              31
+            ],
+            [
+              27,
+              28,
+              31
+            ],
+            [
+              28,
+              25
+            ],
+            [
+              27,
+              29
+            ],
+            [
+              27,
+              25
+            ],
+            [
+              27,
+              28
+            ],
+            [
+              28,
+              29,
+              33
+            ],
+            [
+              27,
+              30
+            ],
+            [
+              27,
+              30
+            ],
+            [
+              28,
+              31
+            ],
+            [
+              27,
+              28,
+              31
+            ],
+            [
+              28,
+              25
+            ],
+            [
+              27,
+              29
+            ],
+            [
+              27,
+              25
+            ],
+            [
+              27,
+              28
+            ],
+            [
+              28,
+              29,
+              33
+            ],
+            [
+              27,
+              30
+            ],
+            [
+              27,
+              30
+            ],
+            [
+              28,
+              31
+            ],
+            [
+              27,
+              28,
+              31
+            ],
+            [
+              28,
+              25
+            ],
+            [
+              27,
+              29
+            ],
+            [
+              27,
+              25
+            ],
+            [
+              27,
+              28
+            ],
+            [
+              28,
+              29,
+              33
+            ],
+            [
+              27,
+              30
+            ],
+            [
+              27,
+              30
+            ],
+            [
+              28,
+              31
+            ],
+            [
+              27,
+              28,
+              31
+            ],
+            [
+              28,
+              25
+            ],
+            [
+              27,
+              29
+            ],
+            [
+              27,
+              25
+            ],
+            [
+              27,
+              28
+            ],
+            [
+              28,
+              29,
+              33
+            ],
+            [
+              27,
+              30
+            ],
+            [
+              27,
+              30
+            ],
+            [
+              28,
+              31
+            ],
+            [
+              27,
+              28,
+              31
+            ],
+            [
+              28,
+              25
+            ],
+            [
+              27,
+              29
+            ],
+            [
+              27,
+              25
+            ],
+            [
+              27,
+              28
+            ],
+            [
+              28,
+              29,
+              33
+            ],
+            [
+              27,
+              30
+            ],
+            [
+              27,
+              30
+            ],
+            [
+              28,
+              31
+            ],
+            [
+              27,
+              28,
+              31
+            ],
+            [
+              28,
+              25
+            ],
+            [
+              27,
+              29
+            ],
+            [
+              27,
+              25
+            ],
+            [
+              27,
+              28
+            ],
+            [
+              28,
+              29,
+              33
+            ],
+            [
+              27,
+              30
+            ],
+            [
+              27,
+              30
+            ],
+            [
+              28,
+              31
+            ],
+            [
+              27,
+              28,
+              31
+            ],
+            [
+              28,
+              25
+            ],
+            [
+              27,
+              29
+            ],
+            [
+              27,
+              25
+            ],
+            [
+              27,
+              28
+            ],
+            [
+              28,
+              29,
+              33
+            ],
+            [
+              27,
+              30
+            ],
+            [
+              27,
+              30
+            ],
+            [
+              28,
+              31
+            ],
+            [
+              27,
+              28,
+              31
+            ],
+            [
+              28,
+              25
+            ],
+            [
+              27,
+              29
+            ],
+            [
+              27,
+              25
+            ],
+            [
+              27,
+              28
+            ],
+            [
+              28,
+              29,
+              33
+            ],
+            [
+              27,
+              30
+            ],
+            [
+              27,
+              30
+            ],
+            [
+              28,
+              31
+            ],
+            [
+              27,
+              28,
+              31
+            ],
+            [
+              28,
+              25
+            ],
+            [
+              27,
+              29
+            ],
+            [
+              27,
+              25
+            ],
+            [
+              27,
+              28
+            ],
+            [
+              28,
+              29,
+              33
+            ],
+            [
+              27,
+              30
+            ],
+            [
+              27,
+              30
+            ],
+            [
+              28,
+              31
+            ],
+            [
+              27,
+              28,
+              31
+            ],
+            [
+              28,
+              25
+            ],
+            [
+              27,
+              29
+            ],
+            [
+              27,
+              25
+            ],
+            [
+              27,
+              28
+            ],
+            [
+              28,
+              29,
+              33
+            ],
+            [
+              27,
+              30
+            ],
+            [
+              27,
+              30
+            ],
+            [
+              28,
+              31
+            ],
+            [
+              27,
+              28,
+              31
+            ],
+            [
+              28,
+              25
+            ],
+            [
+              27,
+              29
+            ],
+            [
+              27,
+              25
+            ],
+            [
+              27,
+              28
+            ],
+            [
+              28,
+              29,
+              33
+            ],
+            [
+              27,
+              30
+            ],
+            [
+              27,
+              30
+            ],
+            [
+              28,
+              31
+            ],
+            [
+              27,
+              28,
+              31
+            ],
+            [
+              28,
+              25
+            ],
+            [
+              27,
+              29
+            ],
+            [
+              27,
+              25
+            ]
+          ],
+          "freq_counts": {
+            "28": 80,
+            "31": 30,
+            "29": 30,
+            "30": 30,
+            "33": 14,
+            "27": 96,
+            "25": 32
+          },
+          "sum_sim": 3403.333377510309,
+          "pair_count": 10296,
+          "coherence": 0.3305491,
+          "status": "mature",
+          "inactivity": 0
+        }
+      ],
+      "next_sense_id": 1,
+      "global_context_count": 144
+    },
+    "7": {
+      "senses": [],
+      "next_sense_id": 0,
+      "global_context_count": 0
+    },
+    "13": {
+      "senses": [],
+      "next_sense_id": 0,
+      "global_context_count": 0
+    },
+    "21": {
+      "senses": [],
+      "next_sense_id": 0,
+      "global_context_count": 0
+    },
+    "1": {
+      "senses": [],
+      "next_sense_id": 0,
+      "global_context_count": 0
+    },
+    "24": {
+      "senses": [],
+      "next_sense_id": 0,
+      "global_context_count": 0
+    },
+    "31": {
+      "senses": [
+        {
+          "contexts": [
+            [
+              26,
+              28
+            ],
+            [
+              26,
+              28,
+              27
+            ],
+            [
+              26,
+              28
+            ],
+            [
+              26,
+              28,
+              27
+            ],
+            [
+              26,
+              28
+            ],
+            [
+              26,
+              28,
+              27
+            ],
+            [
+              26,
+              28
+            ],
+            [
+              26,
+              28,
+              27
+            ],
+            [
+              26,
+              28
+            ],
+            [
+              26,
+              28,
+              27
+            ],
+            [
+              26,
+              28
+            ],
+            [
+              26,
+              28,
+              27
+            ],
+            [
+              26,
+              28
+            ],
+            [
+              26,
+              28,
+              27
+            ],
+            [
+              26,
+              28
+            ],
+            [
+              26,
+              28,
+              27
+            ],
+            [
+              26,
+              28
+            ],
+            [
+              26,
+              28,
+              27
+            ],
+            [
+              26,
+              28
+            ],
+            [
+              26,
+              28,
+              27
+            ],
+            [
+              26,
+              28
+            ],
+            [
+              26,
+              28,
+              27
+            ],
+            [
+              26,
+              28
+            ],
+            [
+              26,
+              28,
+              27
+            ],
+            [
+              26,
+              28
+            ],
+            [
+              26,
+              28,
+              27
+            ],
+            [
+              26,
+              28
+            ],
+            [
+              26,
+              28,
+              27
+            ],
+            [
+              26,
+              28
+            ],
+            [
+              26,
+              28,
+              27
+            ]
+          ],
+          "freq_counts": {
+            "27": 15,
+            "26": 30,
+            "28": 30
+          },
+          "sum_sim": 360.00000447034836,
+          "pair_count": 435,
+          "coherence": 0.82758623,
+          "status": "mature",
+          "inactivity": 0
+        }
+      ],
+      "next_sense_id": 1,
+      "global_context_count": 30
+    },
+    "15": {
+      "senses": [],
+      "next_sense_id": 0,
+      "global_context_count": 0
+    },
+    "17": {
+      "senses": [],
+      "next_sense_id": 0,
+      "global_context_count": 0
+    },
+    "3": {
+      "senses": [],
+      "next_sense_id": 0,
+      "global_context_count": 0
+    },
+    "4": {
+      "senses": [],
+      "next_sense_id": 0,
+      "global_context_count": 0
+    },
+    "19": {
+      "senses": [],
+      "next_sense_id": 0,
+      "global_context_count": 0
+    },
+    "30": {
+      "senses": [
+        {
+          "contexts": [
+            [
+              26,
+              27
+            ],
+            [
+              27,
+              26
+            ],
+            [
+              26,
+              27
+            ],
+            [
+              27,
+              26
+            ],
+            [
+              26,
+              27
+            ],
+            [
+              27,
+              26
+            ],
+            [
+              26,
+              27
+            ],
+            [
+              27,
+              26
+            ],
+            [
+              26,
+              27
+            ],
+            [
+              27,
+              26
+            ],
+            [
+              26,
+              27
+            ],
+            [
+              27,
+              26
+            ],
+            [
+              26,
+              27
+            ],
+            [
+              27,
+              26
+            ],
+            [
+              26,
+              27
+            ],
+            [
+              27,
+              26
+            ],
+            [
+              26,
+              27
+            ],
+            [
+              27,
+              26
+            ],
+            [
+              26,
+              27
+            ],
+            [
+              27,
+              26
+            ],
+            [
+              26,
+              27
+            ],
+            [
+              27,
+              26
+            ],
+            [
+              26,
+              27
+            ],
+            [
+              27,
+              26
+            ],
+            [
+              26,
+              27
+            ],
+            [
+              27,
+              26
+            ],
+            [
+              26,
+              27
+            ],
+            [
+              27,
+              26
+            ],
+            [
+              26,
+              27
+            ],
+            [
+              27,
+              26
+            ]
+          ],
+          "freq_counts": {
+            "26": 30,
+            "27": 30
+          },
+          "sum_sim": 435.0,
+          "pair_count": 435,
+          "coherence": 1.0,
+          "status": "mature",
+          "inactivity": 0
+        }
+      ],
+      "next_sense_id": 1,
+      "global_context_count": 30
+    },
+    "8": {
+      "senses": [],
+      "next_sense_id": 0,
+      "global_context_count": 0
+    },
+    "35": {
+      "senses": [
+        {
+          "contexts": [
+            [
+              34
+            ],
+            [
+              34
+            ],
+            [
+              34
+            ]
+          ],
+          "freq_counts": {
+            "34": 3
+          },
+          "sum_sim": 3.0,
+          "pair_count": 3,
+          "coherence": 1.0,
+          "status": "mature",
+          "inactivity": 0
+        },
+        {
+          "contexts": [
+            [
+              28
+            ],
+            [
+              28
+            ]
+          ],
+          "freq_counts": {
+            "28": 2
+          },
+          "sum_sim": 1.0,
+          "pair_count": 1,
+          "coherence": 1.0,
+          "status": "mature",
+          "inactivity": 1
+        }
+      ],
+      "next_sense_id": 2,
+      "global_context_count": 5
+    }
+  },
+  "atom_records": [
+    {
+      "id": 11,
+      "confidence": 1.0,
+      "tier": 1,
+      "status": "stable",
+      "memory": "stable",
+      "domain_count": 0,
+      "cooccurring_mature": [],
+      "observation_count": 0,
+      "is_seed": true,
+      "status_flip_count": 0,
+      "governance_score": 0.0,
+      "candidate_evidence_pool": 0.0
+    },
+    {
+      "id": 21,
+      "confidence": 1.0,
+      "tier": 1,
+      "status": "stable",
+      "memory": "stable",
+      "domain_count": 0,
+      "cooccurring_mature": [],
+      "observation_count": 0,
+      "is_seed": true,
+      "status_flip_count": 0,
+      "governance_score": 0.0,
+      "candidate_evidence_pool": 0.0
+    },
+    {
+      "id": 22,
+      "confidence": 1.0,
+      "tier": 1,
+      "status": "stable",
+      "memory": "stable",
+      "domain_count": 0,
+      "cooccurring_mature": [],
+      "observation_count": 0,
+      "is_seed": true,
+      "status_flip_count": 0,
+      "governance_score": 0.0,
+      "candidate_evidence_pool": 0.0
+    },
+    {
+      "id": 4,
+      "confidence": 1.0,
+      "tier": 1,
+      "status": "stable",
+      "memory": "stable",
+      "domain_count": 0,
+      "cooccurring_mature": [],
+      "observation_count": 0,
+      "is_seed": true,
+      "status_flip_count": 0,
+      "governance_score": 0.0,
+      "candidate_evidence_pool": 0.0
+    },
+    {
+      "id": 2,
+      "confidence": 1.0,
+      "tier": 1,
+      "status": "stable",
+      "memory": "stable",
+      "domain_count": 0,
+      "cooccurring_mature": [],
+      "observation_count": 0,
+      "is_seed": true,
+      "status_flip_count": 0,
+      "governance_score": 0.0,
+      "candidate_evidence_pool": 0.0
+    },
+    {
+      "id": 6,
+      "confidence": 1.0,
+      "tier": 1,
+      "status": "stable",
+      "memory": "stable",
+      "domain_count": 0,
+      "cooccurring_mature": [],
+      "observation_count": 0,
+      "is_seed": true,
+      "status_flip_count": 0,
+      "governance_score": 0.0,
+      "candidate_evidence_pool": 0.0
+    },
+    {
+      "id": 8,
+      "confidence": 1.0,
+      "tier": 1,
+      "status": "stable",
+      "memory": "stable",
+      "domain_count": 0,
+      "cooccurring_mature": [],
+      "observation_count": 0,
+      "is_seed": true,
+      "status_flip_count": 0,
+      "governance_score": 0.0,
+      "candidate_evidence_pool": 0.0
+    },
+    {
+      "id": 20,
+      "confidence": 1.0,
+      "tier": 1,
+      "status": "stable",
+      "memory": "stable",
+      "domain_count": 0,
+      "cooccurring_mature": [],
+      "observation_count": 0,
+      "is_seed": true,
+      "status_flip_count": 0,
+      "governance_score": 0.0,
+      "candidate_evidence_pool": 0.0
+    },
+    {
+      "id": 14,
+      "confidence": 1.0,
+      "tier": 1,
+      "status": "stable",
+      "memory": "stable",
+      "domain_count": 0,
+      "cooccurring_mature": [],
+      "observation_count": 0,
+      "is_seed": true,
+      "status_flip_count": 0,
+      "governance_score": 0.0,
+      "candidate_evidence_pool": 0.0
+    },
+    {
+      "id": 10,
+      "confidence": 1.0,
+      "tier": 1,
+      "status": "stable",
+      "memory": "stable",
+      "domain_count": 0,
+      "cooccurring_mature": [],
+      "observation_count": 0,
+      "is_seed": true,
+      "status_flip_count": 0,
+      "governance_score": 0.0,
+      "candidate_evidence_pool": 0.0
+    },
+    {
+      "id": 18,
+      "confidence": 1.0,
+      "tier": 1,
+      "status": "stable",
+      "memory": "stable",
+      "domain_count": 0,
+      "cooccurring_mature": [],
+      "observation_count": 0,
+      "is_seed": true,
+      "status_flip_count": 0,
+      "governance_score": 0.0,
+      "candidate_evidence_pool": 0.0
+    },
+    {
+      "id": 29,
+      "confidence": 0.58604616,
+      "tier": 2,
+      "status": "new",
+      "memory": "working",
+      "domain_count": 1,
+      "cooccurring_mature": [
+        33,
+        27,
+        28,
+        26
+      ],
+      "observation_count": 30,
+      "is_seed": false,
+      "status_flip_count": 0,
+      "governance_score": 0.0,
+      "candidate_evidence_pool": 0.0
+    },
+    {
+      "id": 23,
+      "confidence": 1.0,
+      "tier": 1,
+      "status": "stable",
+      "memory": "stable",
+      "domain_count": 0,
+      "cooccurring_mature": [],
+      "observation_count": 0,
+      "is_seed": true,
+      "status_flip_count": 0,
+      "governance_score": 0.0,
+      "candidate_evidence_pool": 0.0
+    },
+    {
+      "id": 16,
+      "confidence": 1.0,
+      "tier": 1,
+      "status": "stable",
+      "memory": "stable",
+      "domain_count": 0,
+      "cooccurring_mature": [],
+      "observation_count": 0,
+      "is_seed": true,
+      "status_flip_count": 0,
+      "governance_score": 0.0,
+      "candidate_evidence_pool": 0.0
+    },
+    {
+      "id": 17,
+      "confidence": 1.0,
+      "tier": 1,
+      "status": "stable",
+      "memory": "stable",
+      "domain_count": 0,
+      "cooccurring_mature": [],
+      "observation_count": 0,
+      "is_seed": true,
+      "status_flip_count": 0,
+      "governance_score": 0.0,
+      "candidate_evidence_pool": 0.0
+    },
+    {
+      "id": 3,
+      "confidence": 1.0,
+      "tier": 1,
+      "status": "stable",
+      "memory": "stable",
+      "domain_count": 0,
+      "cooccurring_mature": [],
+      "observation_count": 0,
+      "is_seed": true,
+      "status_flip_count": 0,
+      "governance_score": 0.0,
+      "candidate_evidence_pool": 0.0
+    },
+    {
+      "id": 33,
+      "confidence": 0.87290674,
+      "tier": 1,
+      "status": "stable",
+      "memory": "stable",
+      "domain_count": 1,
+      "cooccurring_mature": [
+        29,
+        26,
+        28
+      ],
+      "observation_count": 14,
+      "is_seed": false,
+      "status_flip_count": 2,
+      "governance_score": 0.0,
+      "candidate_evidence_pool": 0.0
+    },
+    {
+      "id": 19,
+      "confidence": 1.0,
+      "tier": 1,
+      "status": "stable",
+      "memory": "stable",
+      "domain_count": 0,
+      "cooccurring_mature": [],
+      "observation_count": 0,
+      "is_seed": true,
+      "status_flip_count": 0,
+      "governance_score": 0.0,
+      "candidate_evidence_pool": 0.0
+    },
+    {
+      "id": 32,
+      "confidence": 0.87290674,
+      "tier": 1,
+      "status": "stable",
+      "memory": "stable",
+      "domain_count": 1,
+      "cooccurring_mature": [
+        27,
+        6,
+        25
+      ],
+      "observation_count": 14,
+      "is_seed": false,
+      "status_flip_count": 2,
+      "governance_score": 0.0,
+      "candidate_evidence_pool": 0.0
+    },
+    {
+      "id": 34,
+      "confidence": 0.595,
+      "tier": 2,
+      "status": "new",
+      "memory": "working",
+      "domain_count": 1,
+      "cooccurring_mature": [
+        35
+      ],
+      "observation_count": 3,
+      "is_seed": false,
+      "status_flip_count": 0,
+      "governance_score": 0.0,
+      "candidate_evidence_pool": 0.0
+    },
+    {
+      "id": 5,
+      "confidence": 1.0,
+      "tier": 1,
+      "status": "stable",
+      "memory": "stable",
+      "domain_count": 0,
+      "cooccurring_mature": [],
+      "observation_count": 0,
+      "is_seed": true,
+      "status_flip_count": 0,
+      "governance_score": 0.0,
+      "candidate_evidence_pool": 0.0
+    },
+    {
+      "id": 27,
+      "confidence": 0.51813465,
+      "tier": 2,
+      "status": "new",
+      "memory": "working",
+      "domain_count": 1,
+      "cooccurring_mature": [
+        31,
+        30,
+        29,
+        32,
+        25,
+        28,
+        26,
+        6
+      ],
+      "observation_count": 112,
+      "is_seed": false,
+      "status_flip_count": 0,
+      "governance_score": 0.0,
+      "candidate_evidence_pool": 0.0
+    },
+    {
+      "id": 15,
+      "confidence": 1.0,
+      "tier": 1,
+      "status": "stable",
+      "memory": "stable",
+      "domain_count": 0,
+      "cooccurring_mature": [],
+      "observation_count": 0,
+      "is_seed": true,
+      "status_flip_count": 0,
+      "governance_score": 0.0,
+      "candidate_evidence_pool": 0.0
+    },
+    {
+      "id": 26,
+      "confidence": 0.33071956,
+      "tier": 3,
+      "status": "new",
+      "memory": "working",
+      "domain_count": 1,
+      "cooccurring_mature": [
+        27,
+        33,
+        31,
+        29,
+        25,
+        28,
+        30
+      ],
+      "observation_count": 144,
+      "is_seed": false,
+      "status_flip_count": 0,
+      "governance_score": 0.0,
+      "candidate_evidence_pool": 0.0
+    },
+    {
+      "id": 30,
+      "confidence": 0.97644943,
+      "tier": 1,
+      "status": "stable",
+      "memory": "stable",
+      "domain_count": 1,
+      "cooccurring_mature": [
+        27,
+        26
+      ],
+      "observation_count": 30,
+      "is_seed": false,
+      "status_flip_count": 2,
+      "governance_score": 0.0,
+      "candidate_evidence_pool": 0.0
+    },
+    {
+      "id": 1,
+      "confidence": 1.0,
+      "tier": 1,
+      "status": "stable",
+      "memory": "stable",
+      "domain_count": 0,
+      "cooccurring_mature": [],
+      "observation_count": 0,
+      "is_seed": true,
+      "status_flip_count": 0,
+      "governance_score": 0.0,
+      "candidate_evidence_pool": 0.0
+    },
+    {
+      "id": 28,
+      "confidence": 0.47509772,
+      "tier": 3,
+      "status": "new",
+      "memory": "working",
+      "domain_count": 1,
+      "cooccurring_mature": [
+        25,
+        26,
+        35,
+        31,
+        29,
+        27,
+        33
+      ],
+      "observation_count": 82,
+      "is_seed": false,
+      "status_flip_count": 0,
+      "governance_score": 0.0,
+      "candidate_evidence_pool": 0.0
+    },
+    {
+      "id": 24,
+      "confidence": 1.0,
+      "tier": 1,
+      "status": "stable",
+      "memory": "stable",
+      "domain_count": 0,
+      "cooccurring_mature": [],
+      "observation_count": 0,
+      "is_seed": true,
+      "status_flip_count": 0,
+      "governance_score": 0.0,
+      "candidate_evidence_pool": 0.0
+    },
+    {
+      "id": 25,
+      "confidence": 0.8446377,
+      "tier": 2,
+      "status": "stable",
+      "memory": "working",
+      "domain_count": 1,
+      "cooccurring_mature": [
+        6,
+        27,
+        28,
+        32,
+        26
+      ],
+      "observation_count": 48,
+      "is_seed": false,
+      "status_flip_count": 2,
+      "governance_score": 0.0,
+      "candidate_evidence_pool": 0.0
+    },
+    {
+      "id": 7,
+      "confidence": 1.0,
+      "tier": 1,
+      "status": "stable",
+      "memory": "stable",
+      "domain_count": 0,
+      "cooccurring_mature": [],
+      "observation_count": 0,
+      "is_seed": true,
+      "status_flip_count": 0,
+      "governance_score": 0.0,
+      "candidate_evidence_pool": 0.0
+    },
+    {
+      "id": 12,
+      "confidence": 1.0,
+      "tier": 1,
+      "status": "stable",
+      "memory": "stable",
+      "domain_count": 0,
+      "cooccurring_mature": [],
+      "observation_count": 0,
+      "is_seed": true,
+      "status_flip_count": 0,
+      "governance_score": 0.0,
+      "candidate_evidence_pool": 0.0
+    },
+    {
+      "id": 9,
+      "confidence": 1.0,
+      "tier": 1,
+      "status": "stable",
+      "memory": "stable",
+      "domain_count": 0,
+      "cooccurring_mature": [],
+      "observation_count": 0,
+      "is_seed": true,
+      "status_flip_count": 0,
+      "governance_score": 0.0,
+      "candidate_evidence_pool": 0.0
+    },
+    {
+      "id": 13,
+      "confidence": 1.0,
+      "tier": 1,
+      "status": "stable",
+      "memory": "stable",
+      "domain_count": 0,
+      "cooccurring_mature": [],
+      "observation_count": 0,
+      "is_seed": true,
+      "status_flip_count": 0,
+      "governance_score": 0.0,
+      "candidate_evidence_pool": 0.0
+    },
+    {
+      "id": 35,
+      "confidence": 0.67195004,
+      "tier": 2,
+      "status": "new",
+      "memory": "working",
+      "domain_count": 1,
+      "cooccurring_mature": [
+        34,
+        28
+      ],
+      "observation_count": 5,
+      "is_seed": false,
+      "status_flip_count": 0,
+      "governance_score": 0.0,
+      "candidate_evidence_pool": 0.0
+    },
+    {
+      "id": 31,
+      "confidence": 0.8079725,
+      "tier": 2,
+      "status": "stable",
+      "memory": "working",
+      "domain_count": 1,
+      "cooccurring_mature": [
+        26,
+        28,
+        27
+      ],
+      "observation_count": 30,
+      "is_seed": false,
+      "status_flip_count": 2,
+      "governance_score": 0.0,
+      "candidate_evidence_pool": 0.0
+    }
+  ],
+  "cooc_stats": {
+    "token_count": {
+      "resists": 16,
+      "erosion": 16,
+      "ice": 2,
+      "both": 16,
+      "stone": 113,
+      "time": 16,
+      "clouds": 1,
+      "becomes": 1,
+      "pressure": 49,
+      "heavy": 32,
+      "flow": 1,
+      "hard": 144,
+      "heat": 16,
+      "liquid": 3,
+      "rain": 1,
+      "formed": 16,
+      "falling": 1,
+      "many": 1,
+      "flows": 1,
+      "solid": 82,
+      "clear": 1,
+      "resist": 16,
+      "material": 32,
+      "mineral": 16,
+      "rough": 32,
+      "over": 16,
+      "water": 7,
+      "when": 1,
+      "texture": 16,
+      "granite": 16,
+      "materials": 33,
+      "frozen": 1,
+      "because": 1,
+      "substance": 16,
+      "transparent": 1,
+      "rock": 16,
+      "metal": 32,
+      "cold": 1,
+      "dissolves": 1
+    },
+    "pair_count": {
+      "many|materials": 1,
+      "falling|water": 1,
+      "water|when": 1,
+      "hard|heavy": 32,
+      "dissolves|many": 1,
+      "hard|stone": 96,
+      "formed|over": 16,
+      "hard|material": 32,
+      "resists|stone": 16,
+      "hard|pressure": 32,
+      "rain|water": 1,
+      "formed|pressure": 16,
+      "flows|water": 1,
+      "hard|materials": 32,
+      "falling|rain": 1,
+      "mineral|stone": 16,
+      "hard|resists": 16,
+      "stone|time": 16,
+      "granite|stone": 16,
+      "because|flows": 1,
+      "hard|substance": 16,
+      "clouds|falling": 1,
+      "formed|stone": 16,
+      "both|stone": 16,
+      "transparent|water": 1,
+      "clouds|water": 1,
+      "flow|pressure": 1,
+      "stone|water": 1,
+      "solid|stone": 32,
+      "clear|water": 1,
+      "pressure|water": 1,
+      "clear|transparent": 1,
+      "pressure|stone": 33,
+      "flow|water": 1,
+      "material|mineral": 16,
+      "resist|solid": 16,
+      "hard|rough": 32,
+      "ice|when": 1,
+      "heavy|solid": 16,
+      "heat|pressure": 16,
+      "frozen|water": 1,
+      "dissolves|water": 1,
+      "cold|liquid": 1,
+      "material|stone": 16,
+      "liquid|water": 3,
+      "becomes|ice": 1,
+      "hard|mineral": 16,
+      "hard|rock": 16,
+      "material|metal": 16,
+      "rough|texture": 16,
+      "over|pressure": 16,
+      "materials|pressure": 16,
+      "solid|water": 2,
+      "rock|substance": 16,
+      "formed|time": 16,
+      "clear|liquid": 1,
+      "ice|liquid": 1,
+      "materials|stone": 16,
+      "materials|metal": 16,
+      "materials|water": 1,
+      "heat|over": 16,
+      "both|solid": 16,
+      "hard|resist": 16,
+      "heat|stone": 16,
+      "pressure|time": 16,
+      "becomes|cold": 1,
+      "both|metal": 16,
+      "many|water": 1,
+      "ice|water": 2,
+      "many|solid": 1,
+      "dissolves|materials": 1,
+      "cold|water": 1,
+      "flows|liquid": 1,
+      "heavy|stone": 16,
+      "metal|stone": 16,
+      "erosion|hard": 16,
+      "dissolves|solid": 1,
+      "rock|solid": 16,
+      "liquid|when": 1,
+      "both|materials": 16,
+      "becomes|liquid": 1,
+      "frozen|solid": 1,
+      "both|hard": 16,
+      "over|time": 16,
+      "becomes|water": 1,
+      "becomes|when": 1,
+      "hard|metal": 32,
+      "stone|texture": 16,
+      "heat|time": 16,
+      "metal|solid": 32,
+      "pressure|resists": 16,
+      "hard|texture": 16,
+      "flow|stone": 1,
+      "rough|stone": 32,
+      "hard|solid": 80,
+      "heavy|rock": 16,
+      "erosion|resists": 16,
+      "because|liquid": 1,
+      "material|solid": 32,
+      "erosion|stone": 16,
+      "ice|solid": 1,
+      "mineral|solid": 16,
+      "pressure|solid": 16,
+      "materials|solid": 33,
+      "granite|rough": 16,
+      "materials|resist": 16,
+      "over|stone": 16,
+      "cold|ice": 1,
+      "clouds|rain": 1,
+      "cold|when": 1,
+      "granite|hard": 16,
+      "erosion|pressure": 16,
+      "liquid|transparent": 1,
+      "heavy|substance": 16,
+      "pressure|resist": 16,
+      "frozen|ice": 1,
+      "because|water": 1,
+      "solid|substance": 16,
+      "formed|heat": 16
+    },
+    "total_tokens": 783,
+    "total_sentences": 167
+  },
+  "entity_detector": {
+    "sentence_count": {
+      "materials": 33,
+      "rock": 16,
+      "time": 16,
+      "clear": 1,
+      "flow": 1,
+      "dissolves": 1,
+      "clouds": 1,
+      "rain": 1,
+      "stone": 113,
+      "formed": 16,
+      "heat": 16,
+      "transparent": 1,
+      "many": 1,
+      "resist": 16,
+      "heavy": 32,
+      "cold": 1,
+      "material": 32,
+      "liquid": 3,
+      "metal": 32,
+      "solid": 82,
+      "water": 7,
+      "falling": 1,
+      "frozen": 1,
+      "when": 1,
+      "flows": 1,
+      "both": 16,
+      "because": 1,
+      "ice": 2,
+      "hard": 144,
+      "granite": 16,
+      "erosion": 16,
+      "resists": 16,
+      "becomes": 1,
+      "over": 16,
+      "mineral": 16,
+      "pressure": 49,
+      "substance": 16,
+      "rough": 32,
+      "texture": 16
+    },
+    "groundable": {
+      "because": true,
+      "heavy": true,
+      "metal": true,
+      "solid": true,
+      "stone": true,
+      "liquid": true,
+      "cold": true,
+      "water": true,
+      "rock": true,
+      "heat": true,
+      "hard": true,
+      "time": true,
+      "pressure": true,
+      "rough": true
+    }
+  },
+  "entity_promote_n": 3,
+  "theta_assign": 0.12,
+  "n_warm": 20,
+  "eta": 0.1,
+  "current_domain": 1
+}

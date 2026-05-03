@@ -1,42 +1,50 @@
-//! Seed graph bootstrap.
+//! Seed graph bootstrap (v4.2)
 //!
-//! Loads the 24 Layer-0 and Layer-1 atoms into the graph at startup.
-//! These atoms have confidence=1.0, Tier=1, and cannot be removed.
-//! All atoms above Layer 1 (hard, round, hot, etc.) emerge from data.
+//! Loads the 24 seed atoms into the graph at startup.
+//! These nodes have confidence=1.0, Tier=Tier1, status=Stable,
+//! is_seed=true, is_locked=true, and cannot be removed.
+//! All nodes above the seed layer emerge from data.
 
-use crate::types::{Node, NodeId, NodeKind, Tier};
+use std::collections::HashMap;
+use crate::types::{Node, NodeId, NodeStatus, Tier, CompressionState, SemanticMeta};
 use crate::graph::RsvsGraph;
 
-/// Seed atom definitions: (label, layer)
-const SEED_ATOMS: &[(&str, u8)] = &[
-    // Layer 0 — Absolute Primitives (cannot be extended without Wolfvin)
-    ("exists", 0), ("not", 0), ("one", 0), ("other", 0), ("if", 0),
-    ("this", 0),   ("that", 0), ("i", 0),
-    ("good", 0),   ("bad", 0),
-
-    // Layer 1 — Grounded Primitives (extendable with concrete use case)
-    ("see", 1),    ("hear", 1),   ("feel", 1),
-    ("know", 1),   ("think", 1),  ("want", 1),
-    ("do", 1),     ("can", 1),
-    ("happen", 1),
-    ("before", 1), ("after", 1),
-    // Layer 1 extension for v4.1 baseline
-    ("where", 1), ("when", 1), ("because", 1),
+/// Seed node definitions: label only (v4.2 — all seeds are equal, no layer distinction)
+const SEED_ATOMS: &[&str] = &[
+    "exists", "entity", "relation", "state", "change", "time",
+    "space", "cause", "effect", "context",
+    "signal", "pattern", "memory", "attention", "value",
+    "agent", "goal", "risk", "trust", "identity",
+    "language", "meaning", "action", "feedback",
 ];
 
-/// Bootstrap the graph with all 24 seed atoms.
+/// Bootstrap the graph with all 24 seed nodes (v4.2 format).
 /// Returns a map of label → NodeId for external reference.
-pub fn bootstrap(graph: &mut RsvsGraph) -> std::collections::HashMap<String, NodeId> {
-    let mut label_map = std::collections::HashMap::new();
+pub fn bootstrap(graph: &mut RsvsGraph) -> HashMap<String, NodeId> {
+    let mut label_map = HashMap::new();
 
-    for (label, _layer) in SEED_ATOMS {
+    for label in SEED_ATOMS {
         let node = Node {
             id: 0, // will be assigned by insert_node
-            kind: NodeKind::Atom,
-            atoms: vec![],
-            confidence: 1.0,
+            label: label.to_string(),
+            surface_label: format!("{}@en", label),
+
+            kind: "node".to_string(),
             tier: Tier::Tier1,
-            label: Some(label.to_string()),
+            confidence: 1.0,
+            status: NodeStatus::Stable,
+            is_seed: true,
+            is_locked: true,
+
+            semantic: SemanticMeta {
+                compression_state: CompressionState::Raw,
+                derived_from_node_ids: vec![],
+                compression_reason: None,
+            },
+            policy_meta: None,
+            language_links: vec![],
+
+            atoms: vec![],
             fingerprint: None,
         };
 
@@ -45,15 +53,14 @@ pub fn bootstrap(graph: &mut RsvsGraph) -> std::collections::HashMap<String, Nod
                 label_map.insert(label.to_string(), id);
             }
             Err(e) => {
-                // Should never happen for atoms — panic is appropriate here
-                panic!("Failed to seed atom '{}': {}", label, e);
+                panic!("Failed to seed node '{}': {}", label, e);
             }
         }
     }
 
     assert_eq!(
         label_map.len(), SEED_ATOMS.len(),
-        "Seed atom count mismatch — expected {}", SEED_ATOMS.len()
+        "Seed node count mismatch — expected {}", SEED_ATOMS.len()
     );
 
     label_map
@@ -67,37 +74,62 @@ mod tests {
     fn seed_count_is_correct() {
         let mut graph = RsvsGraph::new();
         let map = bootstrap(&mut graph);
-        assert_eq!(map.len(), 24); // 10 Layer0 + 14 Layer1
+        assert_eq!(map.len(), 24);
         assert_eq!(graph.node_count(), 24);
     }
 
     #[test]
-    fn all_seed_atoms_are_tier1() {
+    fn all_seed_nodes_are_tier1_and_stable() {
         let mut graph = RsvsGraph::new();
         let map = bootstrap(&mut graph);
         for id in map.values() {
             let node = graph.get_node(*id).unwrap();
             assert_eq!(node.tier, Tier::Tier1);
             assert_eq!(node.confidence, 1.0);
+            assert_eq!(node.status, NodeStatus::Stable);
+            assert!(node.is_seed);
+            assert!(node.is_locked);
         }
     }
 
     #[test]
-    fn seed_atoms_have_correct_labels() {
+    fn seed_nodes_have_surface_label_format() {
+        let mut graph = RsvsGraph::new();
+        let map = bootstrap(&mut graph);
+        for id in map.values() {
+            let node = graph.get_node(*id).unwrap();
+            assert!(node.surface_label.ends_with("@en"),
+                "surface_label '{}' should end with @en", node.surface_label);
+        }
+    }
+
+    #[test]
+    fn seed_nodes_have_correct_labels() {
         let mut graph = RsvsGraph::new();
         let map = bootstrap(&mut graph);
         assert!(map.contains_key("exists"));
-        assert!(map.contains_key("feel"));
-        assert!(map.contains_key("before"));
-        assert!(map.contains_key("after"));
+        assert!(map.contains_key("entity"));
+        assert!(map.contains_key("relation"));
+        assert!(map.contains_key("feedback"));
+    }
+
+    #[test]
+    fn seed_nodes_are_raw_compression() {
+        let mut graph = RsvsGraph::new();
+        let map = bootstrap(&mut graph);
+        for id in map.values() {
+            let node = graph.get_node(*id).unwrap();
+            assert_eq!(node.semantic.compression_state, CompressionState::Raw);
+            assert!(node.semantic.derived_from_node_ids.is_empty());
+        }
     }
 }
 
 /// Public list of seed atom labels — used by pipeline for grounding checks.
 pub const SEED_LABEL_LIST: &[&str] = &[
-    "exists", "not", "one", "other", "if",
-    "this", "that", "i", "good", "bad",
-    "see", "hear", "feel", "know", "think",
-    "want", "do", "can", "happen", "before", "after",
-    "where", "when", "because",
+    "exists", "entity", "relation", "state", "change", "time",
+    "space", "cause", "effect", "context",
+    "signal", "pattern", "memory", "attention", "value",
+    "agent", "goal", "risk", "trust", "identity",
+    "language", "meaning", "action", "feedback",
 ];

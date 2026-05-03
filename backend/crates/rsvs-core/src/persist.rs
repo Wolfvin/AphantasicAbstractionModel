@@ -1,22 +1,10 @@
-//! Persistence — RSVS v0.7
+//! Persistence — RSVS v4.2
 //!
 //! Serialize/deserialize the full RSVS state to/from disk.
-//! Format: JSON (human-readable, debuggable) with optional
-//! binary fallback via MessagePack-compatible layout.
+//! Format: JSON (human-readable, debuggable).
 //!
-//! What gets saved:
-//!   - All graph nodes (id, kind, atoms, confidence, tier, label)
-//!   - All graph edges (from, to, weight, source)
-//!   - All sense managers (per-ID: contexts, freq_map, coherence stats)
-//!   - All autonomy records (confidence, tier, memory, domain_count, etc.)
-//!   - CoocStats (token_count, pair_count, totals)
-//!   - EntityDetector (sentence_count, groundable)
-//!   - Pipeline config
-//!   - total_contexts, token_to_id
-//!
-//! What does NOT get saved (re-derived on load):
-//!   - atom_sets (re-derived from token_to_id + graph)
-//!   - Adaptive threshold history (starts fresh, fallback used)
+//! v4.2: Updated for unified node model, NodeStatus, CompressionState,
+//! SemanticMeta, PolicyMeta. No more NodeKind.
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -25,25 +13,44 @@ use std::fs::File;
 
 use serde::{Serialize, Deserialize};
 
-use crate::types::{NodeId, NodeKind, Tier};
+use crate::types::{NodeId, Node, Edge, EdgeSource, Tier, NodeStatus,
+                   CompressionState, SemanticMeta, PolicyMeta};
 use crate::graph::RsvsGraph;
 use crate::sense::{SenseManager, SenseConfig, Sense, SenseStatus};
-use crate::autonomy::{AutonomyEngine, AutonomyConfig, MemoryClass};
+use crate::autonomy::{AutonomyEngine, AutonomyConfig, AtomRecord, MemoryClass};
 use crate::attention::CoocStats;
 use crate::pipeline::{Rsvs, PipelineConfig};
 
 // -----------------------------------------------------------------------
-// Serializable mirror types (serde-friendly)
+// Serializable mirror types (v4.2 serde-friendly)
 // -----------------------------------------------------------------------
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SavedNode {
-    pub id:         u32,
-    pub kind:       String,    // "atom" | "composite"
-    pub atoms:      Vec<u32>,
-    pub confidence: f32,
-    pub tier:       u8,        // 1/2/3
-    pub label:      Option<String>,
+    pub id:                   u32,
+    pub label:                String,
+    pub surface_label:        String,
+    pub kind:                 String,      // Always "node" in v4.2
+    pub tier:                 u8,
+    pub confidence:           f32,
+    pub status:               String,      // NodeStatus as string
+    pub is_seed:              bool,
+    pub is_locked:            bool,
+    pub compression_state:    String,      // "raw" | "compressed"
+    pub derived_from_node_ids: Vec<u32>,
+    pub compression_reason:   Option<String>,
+    pub policy_meta:          Option<SavedPolicyMeta>,
+    pub atoms:                Vec<u32>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct SavedPolicyMeta {
+    pub policy_version:        String,
+    pub governance_score:      f32,
+    pub candidate_evidence_pool: f32,
+    pub status_flip_count:     u32,
+    pub seen_fingerprints:     Vec<String>,
+    pub last_seen_at:          Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -77,10 +84,15 @@ pub struct SavedAtomRecord {
     pub id:                  u32,
     pub confidence:          f32,
     pub tier:                u8,
-    pub memory:              String, // "stable" | "working"
+    pub status:              String,  // NodeStatus as string
+    pub memory:              String,  // "stable" | "working"
     pub domain_count:        usize,
     pub cooccurring_mature:  Vec<u32>,
     pub observation_count:   usize,
+    pub is_seed:             bool,
+    pub status_flip_count:   u32,
+    pub governance_score:    f32,
+    pub candidate_evidence_pool: f32,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -97,7 +109,7 @@ pub struct SavedEntityDetector {
     pub groundable:     HashMap<String, bool>,
 }
 
-/// Top-level snapshot of the entire RSVS state.
+/// Top-level snapshot of the entire RSVS state (v4.2).
 #[derive(Serialize, Deserialize, Debug)]
 pub struct RsvsSnapshot {
     pub version:        String,
@@ -106,11 +118,10 @@ pub struct RsvsSnapshot {
     pub next_node_id:   u32,
     pub nodes:          Vec<SavedNode>,
     pub edges:          Vec<SavedEdge>,
-    pub sense_managers: HashMap<u32, SavedSenseManager>, // node_id → manager
+    pub sense_managers: HashMap<u32, SavedSenseManager>,
     pub atom_records:   Vec<SavedAtomRecord>,
     pub cooc_stats:     SavedCoocStats,
     pub entity_detector: SavedEntityDetector,
-    // Config snapshots (for reference — not re-applied on load by default)
     pub entity_promote_n: usize,
     pub theta_assign:     f32,
     pub n_warm:           usize,
@@ -128,14 +139,41 @@ fn tier_to_u8(t: &Tier) -> u8 {
 fn u8_to_tier(n: u8) -> Tier {
     match n { 1 => Tier::Tier1, 2 => Tier::Tier2, _ => Tier::Tier3 }
 }
-fn kind_to_str(k: &NodeKind) -> &'static str {
-    match k { NodeKind::Atom => "atom", NodeKind::Composite => "composite" }
-}
-fn str_to_kind(s: &str) -> NodeKind {
-    if s == "composite" { NodeKind::Composite } else { NodeKind::Atom }
+
+fn status_to_str(s: &NodeStatus) -> &'static str {
+    match s {
+        NodeStatus::New => "new",
+        NodeStatus::Candidate => "candidate",
+        NodeStatus::Stable => "stable",
+        NodeStatus::Deprecated => "deprecated",
+        NodeStatus::Quarantine => "quarantine",
+    }
 }
 
-// Pair key: always "min|max" for deterministic order
+fn str_to_status(s: &str) -> NodeStatus {
+    match s {
+        "candidate" => NodeStatus::Candidate,
+        "stable" => NodeStatus::Stable,
+        "deprecated" => NodeStatus::Deprecated,
+        "quarantine" => NodeStatus::Quarantine,
+        _ => NodeStatus::New,
+    }
+}
+
+fn compression_to_str(c: &CompressionState) -> &'static str {
+    match c {
+        CompressionState::Raw => "raw",
+        CompressionState::Compressed => "compressed",
+    }
+}
+
+fn str_to_compression(s: &str) -> CompressionState {
+    match s {
+        "compressed" => CompressionState::Compressed,
+        _ => CompressionState::Raw,
+    }
+}
+
 fn pair_key(a: &str, b: &str) -> String {
     if a <= b { format!("{}|{}", a, b) } else { format!("{}|{}", b, a) }
 }
@@ -144,7 +182,6 @@ fn pair_key(a: &str, b: &str) -> String {
 // Save
 // -----------------------------------------------------------------------
 
-/// Serialize the full Rsvs state to a JSON file.
 pub fn save(rsvs: &Rsvs, path: &Path) -> io::Result<()> {
     let snapshot = to_snapshot(rsvs);
     let file = File::create(path)?;
@@ -155,20 +192,35 @@ pub fn save(rsvs: &Rsvs, path: &Path) -> io::Result<()> {
 }
 
 pub fn to_snapshot(rsvs: &Rsvs) -> RsvsSnapshot {
-    // --- Nodes ---
+    // --- Nodes (v4.2) ---
     let nodes: Vec<SavedNode> = rsvs.graph.nodes.values().map(|n| SavedNode {
-        id:         n.id,
-        kind:       kind_to_str(&n.kind).to_string(),
-        atoms:      n.atoms.clone(),
-        confidence: n.confidence,
-        tier:       tier_to_u8(&n.tier),
-        label:      n.label.clone(),
+        id:                    n.id,
+        label:                 n.label.clone(),
+        surface_label:         n.surface_label.clone(),
+        kind:                  n.kind.clone(),
+        tier:                  tier_to_u8(&n.tier),
+        confidence:            n.confidence,
+        status:                status_to_str(&n.status).to_string(),
+        is_seed:               n.is_seed,
+        is_locked:             n.is_locked,
+        compression_state:     compression_to_str(&n.semantic.compression_state).to_string(),
+        derived_from_node_ids: n.semantic.derived_from_node_ids.clone(),
+        compression_reason:    n.semantic.compression_reason.clone(),
+        policy_meta:           n.policy_meta.as_ref().map(|pm| SavedPolicyMeta {
+            policy_version:         pm.policy_version.clone(),
+            governance_score:       pm.governance_score,
+            candidate_evidence_pool: pm.candidate_evidence_pool,
+            status_flip_count:      pm.status_flip_count,
+            seen_fingerprints:      pm.seen_fingerprints.clone(),
+            last_seen_at:           pm.last_seen_at.clone(),
+        }),
+        atoms:                 n.atoms.clone(),
     }).collect();
 
     // --- Edges ---
     let mut edges: Vec<SavedEdge> = Vec::new();
-    for atom_id in rsvs.graph.nodes.keys() {
-        for e in rsvs.graph.edges_from(*atom_id) {
+    for node_id in rsvs.graph.nodes.keys() {
+        for e in rsvs.graph.edges_from(*node_id) {
             edges.push(SavedEdge {
                 from:   e.from,
                 to:     e.to,
@@ -199,17 +251,22 @@ pub fn to_snapshot(rsvs: &Rsvs) -> RsvsSnapshot {
         });
     }
 
-    // --- Atom records ---
+    // --- Atom records (v4.2) ---
     let atom_records: Vec<SavedAtomRecord> = rsvs.autonomy.records.values()
         .map(|r| SavedAtomRecord {
-            id:                 r.id,
-            confidence:         r.confidence,
-            tier:               tier_to_u8(&r.tier),
-            memory:             if r.memory == MemoryClass::Stable { "stable".into() }
-                                else { "working".into() },
-            domain_count:       r.domain_count,
-            cooccurring_mature: r.cooccurring_mature.iter().copied().collect(),
-            observation_count:  r.observation_count,
+            id:                     r.id,
+            confidence:             r.confidence,
+            tier:                   tier_to_u8(&r.tier),
+            status:                 status_to_str(&r.status).to_string(),
+            memory:                 if r.memory == MemoryClass::Stable { "stable".into() }
+                                    else { "working".into() },
+            domain_count:           r.domain_count,
+            cooccurring_mature:     r.cooccurring_mature.iter().copied().collect(),
+            observation_count:      r.observation_count,
+            is_seed:                r.is_seed,
+            status_flip_count:      r.status_flip_count,
+            governance_score:       r.governance_score,
+            candidate_evidence_pool: r.candidate_evidence_pool,
         })
         .collect();
 
@@ -226,14 +283,13 @@ pub fn to_snapshot(rsvs: &Rsvs) -> RsvsSnapshot {
         total_sentences: rsvs.stats_db.total_sentences,
     };
 
-    // --- EntityDetector ---
     let entity_detector = SavedEntityDetector {
         sentence_count: rsvs.entities.sentence_count.clone(),
         groundable:     rsvs.entities.groundable.clone(),
     };
 
     RsvsSnapshot {
-        version:          "0.7".to_string(),
+        version:          "4.2".to_string(),
         total_contexts:   rsvs.total_contexts,
         token_to_id:      rsvs.token_to_id.clone(),
         next_node_id:     rsvs.graph.next_id,
@@ -255,7 +311,6 @@ pub fn to_snapshot(rsvs: &Rsvs) -> RsvsSnapshot {
 // Load
 // -----------------------------------------------------------------------
 
-/// Deserialize RSVS state from a JSON file.
 pub fn load(path: &Path) -> io::Result<Rsvs> {
     let file = File::open(path)?;
     let reader = BufReader::new(file);
@@ -265,9 +320,6 @@ pub fn load(path: &Path) -> io::Result<Rsvs> {
 }
 
 pub fn from_snapshot(snap: RsvsSnapshot) -> Rsvs {
-    use crate::types::{Node, Edge, EdgeSource};
-    use crate::autonomy::AtomRecord;
-
     // Rebuild config from snapshot
     let config = PipelineConfig {
         entity_promote_n: snap.entity_promote_n,
@@ -285,24 +337,40 @@ pub fn from_snapshot(snap: RsvsSnapshot) -> Rsvs {
         ..PipelineConfig::default()
     };
 
-    // --- Rebuild graph ---
+    // --- Rebuild graph (v4.2) ---
     let mut graph = RsvsGraph::new();
     graph.next_id = snap.next_node_id;
 
     for sn in &snap.nodes {
         let node = Node {
-            id:          sn.id,
-            kind:        str_to_kind(&sn.kind),
-            atoms:       sn.atoms.clone(),
-            confidence:  sn.confidence,
-            tier:        u8_to_tier(sn.tier),
-            label:       sn.label.clone(),
-            fingerprint: None,
+            id:           sn.id,
+            label:        sn.label.clone(),
+            surface_label: sn.surface_label.clone(),
+            kind:         sn.kind.clone(),
+            tier:         u8_to_tier(sn.tier),
+            confidence:   sn.confidence,
+            status:       str_to_status(&sn.status),
+            is_seed:      sn.is_seed,
+            is_locked:    sn.is_locked,
+            semantic: SemanticMeta {
+                compression_state:     str_to_compression(&sn.compression_state),
+                derived_from_node_ids: sn.derived_from_node_ids.clone(),
+                compression_reason:    sn.compression_reason.clone(),
+            },
+            policy_meta: sn.policy_meta.as_ref().map(|pm| PolicyMeta {
+                policy_version:         pm.policy_version.clone(),
+                governance_score:       pm.governance_score,
+                candidate_evidence_pool: pm.candidate_evidence_pool,
+                status_flip_count:      pm.status_flip_count,
+                seen_fingerprints:      pm.seen_fingerprints.clone(),
+                last_seen_at:           pm.last_seen_at.clone(),
+            }),
+            language_links: vec![],
+            atoms:          sn.atoms.clone(),
+            fingerprint:    None,
         };
-        // Insert directly into map (bypass DAG checks — we trust the snapshot)
-        if let Some(label) = &node.label {
-            graph.label_to_id.insert(label.clone(), node.id);
-        }
+        graph.label_to_id.insert(node.label.clone(), node.id);
+        graph.label_to_id.insert(node.surface_label.clone(), node.id);
         graph.nodes.insert(node.id, node);
     }
 
@@ -326,7 +394,7 @@ pub fn from_snapshot(snap: RsvsSnapshot) -> Rsvs {
         sm.global_context_count = ssm.global_context_count;
 
         for (i, ss) in ssm.senses.into_iter().enumerate() {
-            let mut sense = Sense::new(i, vec![]); // placeholder
+            let mut sense = Sense::new(i, vec![]);
             sense.contexts    = ss.contexts;
             sense.freq_counts = ss.freq_counts;
             sense.sum_sim     = ss.sum_sim;
@@ -343,15 +411,13 @@ pub fn from_snapshot(snap: RsvsSnapshot) -> Rsvs {
         senses.insert(node_id, sm);
     }
 
-    // Ensure every node has a SenseManager
     for &id in graph.nodes.keys() {
         senses.entry(id).or_insert_with(|| SenseManager::new(config.sense.clone()));
     }
 
-    // --- Rebuild autonomy engine ---
+    // --- Rebuild autonomy engine (v4.2) ---
     let mut autonomy = AutonomyEngine::new(config.autonomy.clone());
 
-    // Restore warm-up state: if contexts > n_warm, mark complete
     if snap.total_contexts >= snap.n_warm {
         for _ in 0..snap.n_warm {
             autonomy.tick_context();
@@ -360,14 +426,19 @@ pub fn from_snapshot(snap: RsvsSnapshot) -> Rsvs {
 
     for sar in snap.atom_records {
         let mut record = AtomRecord::new(sar.id, sar.confidence, u8_to_tier(sar.tier));
+        record.status = str_to_status(&sar.status);
         record.memory = if sar.memory == "stable" {
             MemoryClass::Stable
         } else {
             MemoryClass::Working
         };
-        record.domain_count       = sar.domain_count;
-        record.observation_count  = sar.observation_count;
-        record.cooccurring_mature = sar.cooccurring_mature.into_iter().collect();
+        record.domain_count           = sar.domain_count;
+        record.observation_count      = sar.observation_count;
+        record.cooccurring_mature     = sar.cooccurring_mature.into_iter().collect();
+        record.is_seed                = sar.is_seed;
+        record.status_flip_count      = sar.status_flip_count;
+        record.governance_score       = sar.governance_score;
+        record.candidate_evidence_pool = sar.candidate_evidence_pool;
         autonomy.records.insert(sar.id, record);
     }
 

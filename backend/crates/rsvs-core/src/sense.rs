@@ -1,4 +1,4 @@
-//! Multi-sense framework for RSVS v0.2.
+//! Multi-sense framework for RSVS v4.2.
 //!
 //! Each ID can have multiple senses — clusters of context sets.
 //! Senses form automatically from data, never hardcoded.
@@ -8,6 +8,9 @@
 //!   - Coherence is computed over context sets, not over atoms
 //!   - Incremental coherence update: O(n) per new context
 //!   - FRAGILE sense (N=1) can be deleted if no assignment in K_fragile contexts
+//!
+//! v4.2: Updated to use new Node type. No NodeKind references.
+//! Sense.coherence still works the same.
 
 use crate::types::{NodeId, AtomSet};
 use crate::graph::jaccard_sets;
@@ -137,7 +140,6 @@ impl Sense {
     /// Updates freq_map and coherence incrementally — O(n).
     pub fn assign(&mut self, context: AtomSet) {
         // Incremental coherence update
-        // add_sum = Σ Jaccard(context, C_i) for all existing C_i
         let add_sum: f64 = self.contexts.iter()
             .map(|c| jaccard_sets(&context, c) as f64)
             .sum();
@@ -196,7 +198,7 @@ pub struct SenseManager {
     pub senses: Vec<Sense>,
     pub config: SenseConfig,
     pub(crate) next_sense_id: usize,
-    /// Global context counter (for stopword frequency — placeholder v0.2)
+    /// Global context counter (for stopword frequency — placeholder)
     pub global_context_count: usize,
 }
 
@@ -240,9 +242,6 @@ impl SenseManager {
 
         let candidates: Vec<usize> = self.senses.iter().enumerate()
             .filter(|(_, s)| {
-                // For young senses (N=1), use tau instead of tau_high —
-                // tau_high is meaningless when there's only one context
-                // (all atoms are freq=1.0 but the set might be narrow)
                 let prune_tau = if s.context_count() == 1 { tau } else { tau_high };
                 let core_for_prune = s.core(prune_tau);
                 let overlap = core_for_prune.iter()
@@ -295,7 +294,6 @@ impl SenseManager {
     // -------------------------------------------------------------------
 
     /// Given a query context, return the index of the most relevant sense.
-    /// Uses Jaccard(context, core(sense_i)) — the "lazy lookup" from spec.
     pub fn lazy_lookup(&self, context: &AtomSet) -> Option<usize> {
         if self.senses.is_empty() {
             return None;
@@ -316,7 +314,6 @@ impl SenseManager {
     // -------------------------------------------------------------------
 
     /// Check all mature sense pairs and merge if MergeScore >= theta_merge.
-    /// Returns list of (kept_idx, removed_idx) pairs that were merged.
     pub fn check_merge(&mut self) -> Vec<(usize, usize)> {
         let mut merged_pairs = Vec::new();
         let n = self.senses.len();
@@ -326,13 +323,11 @@ impl SenseManager {
         let theta_merge = self.config.theta_merge;
         let n_min       = self.config.n_min_mature;
 
-        // Find first merge candidate (simplistic: one merge per call)
         let mut to_merge: Option<(usize, usize)> = None;
         'outer: for i in 0..n {
             for j in (i+1)..n {
                 let si = &self.senses[i];
                 let sj = &self.senses[j];
-                // Both must be mature
                 if si.status != SenseStatus::Mature { continue; }
                 if sj.status != SenseStatus::Mature { continue; }
                 if si.context_count() < n_min       { continue; }
@@ -357,10 +352,7 @@ impl SenseManager {
     }
 
     /// Merge sense j into sense i. Removes sense j.
-    /// State pooling — no reset, history preserved.
     fn merge_senses(&mut self, keep: usize, remove: usize) {
-        // Compute cross-similarities for coherence update
-        // O(|S1| × |S2|) — acknowledged as heavy in spec
         let contexts_remove = self.senses[remove].contexts.clone();
         let sum_cross: f64 = self.senses[keep].contexts.iter()
             .flat_map(|ci| contexts_remove.iter().map(move |cj| {
