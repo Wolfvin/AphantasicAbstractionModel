@@ -1,14 +1,14 @@
-//! Appraise and Relate modes — RSVS v5.0
+//! Appraise and Relate modes — RSVS v6.0
 //!
 //! Contains `appraise()` and `relate()` methods.
-//! v5.0: relate() now includes structural similarity from compositions.
+//! v6.0: relate() now includes structural similarity from compositions.
 
 use super::Rsvs;
 use crate::types::NodeId;
 use rayon::prelude::*;
 
 // -----------------------------------------------------------------------
-// AppraiseResult — v5.0 appraise mode output
+// AppraiseResult — v6.0 appraise mode output
 // -----------------------------------------------------------------------
 
 /// Appraise mode output: agree/disagree percentages, verdict, and evidence.
@@ -25,7 +25,7 @@ pub struct AppraiseResult {
 }
 
 // -----------------------------------------------------------------------
-// RelateResult — v5.0 relate mode output
+// RelateResult — v6.0 relate mode output
 // -----------------------------------------------------------------------
 
 /// Relate mode output: related nodes and edges by overlap scoring.
@@ -35,7 +35,7 @@ pub struct RelateResult {
     pub related_nodes: Vec<(NodeId, f32)>,
     /// Related edges: (from, to, weight) sorted by weight descending.
     pub related_edges: Vec<(NodeId, NodeId, f32)>,
-    /// Structural relationships found (v5.0): (node_id, structural_similarity).
+    /// Structural relationships found (v6.0): (node_id, structural_similarity).
     pub structural_relations: Vec<(NodeId, f32)>,
 }
 
@@ -88,7 +88,7 @@ impl Rsvs {
 
     /// Find nodes and edges related to the given concept.
     ///
-    /// v5.0: Also includes structural relations based on composition overlap.
+    /// v6.0: Also includes structural relations based on composition overlap.
     pub fn relate(&self, concept: &str) -> Option<RelateResult> {
         let concept_id = *self.token_to_id.get(concept)?;
 
@@ -111,7 +111,7 @@ impl Rsvs {
         related_nodes.sort_by(|a, b| b.1.total_cmp(&a.1));
         related_nodes.truncate(20);
 
-        // v5.0: Find structural relations based on composition overlap
+        // v6.0: Find structural relations based on composition overlap
         let mut structural_relations: Vec<(NodeId, f32)> = Vec::new();
         if let Some(sm_concept) = self.senses.get(&concept_id) {
             for (&other_id, sm_other) in &self.senses {

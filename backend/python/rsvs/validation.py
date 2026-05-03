@@ -29,7 +29,7 @@ __all__ = [
 
 VALID_VIEWS = {"compact", "detail"}
 VALID_STATUSES = {"new", "candidate", "stable", "deprecated", "quarantine"}
-VALID_LANG_CODES = {"id", "en", "zh", "fr", "python", "javascript"}
+VALID_LANG_CODES = {"id", "id-ID", "jv", "su", "en", "zh", "fr", "python", "javascript"}
 
 
 # ---------------------------------------------------------------------------

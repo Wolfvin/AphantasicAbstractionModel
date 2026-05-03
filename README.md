@@ -1,227 +1,368 @@
 <div align="center">
 
-# ⚡ RSVS
+# RSVS
 
 ### Relational Symbolic Vocabulary System
 
-**A cognitive symbolic engine with hard attention, multi-sense disambiguation, and autonomous tiered memory lifecycle.**
+**Meaning is compositional — every sense is formed by other senses.**
 
-[![CI](https://img.shields.io/github/actions/workflow/status/Wolfvin/SymbolicPuzzle3D/ci.yml?branch=main&style=flat-square&logo=github)](https://github.com/Wolfvin/SymbolicPuzzle3D/actions)
-[![Security](https://img.shields.io/github/actions/workflow/status/Wolfvin/SymbolicPuzzle3D/security.yml?branch=main&style=flat-square&label=security&logo=github)](https://github.com/Wolfvin/SymbolicPuzzle3D/actions)
 [![Rust](https://img.shields.io/badge/Rust-1.75+-orange?style=flat-square&logo=rust)](https://www.rust-lang.org/)
 [![Python](https://img.shields.io/badge/Python-3.12+-blue?style=flat-square&logo=python)](https://python.org)
-[![crates.io](https://img.shields.io/crates/v/rsvs-core?style=flat-square&logo=rust)](https://crates.io/crates/rsvs-core)
-[![PyPI](https://img.shields.io/pypi/v/rsvs?style=flat-square&logo=pypi)](https://pypi.org/project/rsvs/)
-[![Codecov](https://img.shields.io/codecov/c/github/Wolfvin/SymbolicPuzzle3D?style=flat-square&logo=codecov)](https://codecov.io/gh/Wolfvin/SymbolicPuzzle3D)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-3178C6?style=flat-square&logo=typescript)](https://www.typescriptlang.org/)
 [![License](https://img.shields.io/badge/License-MIT%2FApache--2.0-green?style=flat-square)](LICENSE)
-[![Schema](https://img.shields.io/badge/Schema-v4.2-purple?style=flat-square)]()
+[![Schema](https://img.shields.io/badge/Schema-v5.0-purple?style=flat-square)]()
 
-[Getting Started](#-quick-start) · [Why RSVS?](#-why-rsvs) · [Architecture](#-architecture) · [API Reference](docs/API.md) · [Contributing](CONTRIBUTING.md)
+[Quick Start](#-quick-start) · [Key Insight](#-the-key-insight) · [Architecture](#-architecture-at-a-glance) · [Features](#-core-features) · [API](#-api-reference) · [Contributing](CONTRIBUTING.md)
 
 </div>
 
 ---
 
-![RSVS 3D Knowledge Graph](docs/images/demo.png)
+## What is RSVS?
+
+RSVS is a compositional symbolic meaning engine that builds structured knowledge graphs from raw text. Its core innovation is that **every sense of every word is defined by compositions** — references to specific senses of other words. This makes meaning fully traceable: you can follow the chain from any concept down to its constituent parts, explain precisely why two concepts are related, and identify the exact substitution that transforms one into another.
+
+Unlike traditional embeddings that tell you "raja and ratu have cosine similarity 0.87," RSVS tells you they share two compositions (tahta_tertinggi, kerajaan) and differ in exactly one (laki_laki vs. perempuan). RSVS is not a replacement for Transformers — it's an interpretation layer on top of them, transforming opaque vector representations into symbolically referenceable ones.
 
 ---
 
-## 💡 Why RSVS?
+## The Key Insight
 
-Traditional knowledge graphs use **softmax attention** — dense, opaque, and non-deterministic. RSVS takes a fundamentally different approach:
+**raja and ratu are related because they share compositions, not just co-occurrence statistics.**
 
-| Problem | Traditional | RSVS |
-|---------|-------------|------|
-| **Attention** | Softmax → dense, all tokens get weight | Hard selection → sparse, top-k survive |
-| **Interpretability** | Opaque weight matrices | Explicit NPMI + Jaccard + Co-occurrence decomposition |
-| **Determinism** | Varies with temperature | Same input → same output, always |
-| **Lifecycle** | Manual curation or passive decay | Autonomous: EMA confidence, hysteresis, quarantine |
-| **Disambiguation** | Context vectors | Dynamic sense clusters with incremental O(n) coherence |
-| **Governance** | Ad-hoc rules | Single-owner policy engine with evidence scoring and dedup |
+```python
+from rsvs import Rsvs
 
-**RSVS is for developers and researchers who need:**
-- 🔬 **Interpretable** knowledge extraction — every score decomposes into named components
-- 🧬 **Autonomous** lifecycle management — nodes promote, demote, and quarantine themselves
-- ⚡ **High-performance** computation — Rust core handles millions of nodes with zero-cost abstractions
-- 🌐 **Real-time** 3D visualization — explore your knowledge graph interactively
+r = Rsvs()
 
----
+# Ingest some text
+r.ingest("Raja adalah pemimpin kerajaan laki-laki. "
+         "Ratu adalah pemimpin kerajaan perempuan. "
+         "Tahta tertinggi ada di kerajaan.")
 
-## ✨ Key Features
+# Define compositional meanings
+r.compose("raja", [("tahta_tertinggi", 0), ("laki_laki", 0), ("kerajaan", 0)], "id")
+r.compose("ratu", [("tahta_tertinggi", 0), ("perempuan", 0), ("kerajaan", 0)], "id")
 
-- 🧠 **Hard Attention** — `score = α·NPMI + β·Jaccard + γ·cooc` — sparse, deterministic, interpretable
-- 🌱 **24 Seed Atoms** — Axiomatic foundation that cannot be deleted or decay (exists, entity, relation, ...)
-- 🔀 **Multi-Sense Disambiguation** — Dynamic sense clusters with incremental O(n) coherence
-- 🛡️ **Autonomy Engine** — EMA confidence with hysteresis (promote ≥ 0.75, demote < 0.60), quarantine, rollback
-- ⚖️ **Policy Engine** — Single-owner governance, source trust weighting, dedup gate, evidence scoring
-- 🏗️ **Rust Core + Python Bridge** — Compute-heavy ops in Rust, HTTP/API in Python via PyO3
-- 🎯 **Three Modes** — `ingest` (learn), `appraise` (evaluate), `relate` (discover)
-- 🌐 **3D Knowledge Graph** — Interactive React Three Fiber visualization with force-directed layout
+# Structural similarity — WHY they're related
+sim = r.structural_similarity("raja", "ratu")
+print(f"Similarity: {sim.structural_similarity:.3f}")   # 0.667
+print(f"Shared: {sim.shared_labels(r)}")                # [(tahta_tertinggi, 0), (kerajaan, 0)]
 
----
-
-## 🏗️ Architecture
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                      Frontend (Next.js)                      │
-│            React Three Fiber · Zustand · shadcn/ui           │
-│                                                               │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌────────────┐   │
-│  │ ForceGraph│  │ Appraise │  │  Relate  │  │ Timeline   │   │
-│  │  (3D)    │  │  Panel   │  │  Panel   │  │  + HUD     │   │
-│  └──────────┘  └──────────┘  └──────────┘  └────────────┘   │
-└──────────────────────────┬──────────────────────────────────┘
-                           │ HTTP (POST /run, GET /latest)
-┌──────────────────────────▼──────────────────────────────────┐
-│                Python Bridge (HTTP Server)                    │
-│                                                               │
-│  ┌────────────┐ ┌────────────┐ ┌───────────┐ ┌──────────┐  │
-│  │ fastapi_   │ │  modes.py  │ │validation │ │conversion│  │
-│  │ server.py  │ │ (dispatch) │ │   .py     │ │  .py     │  │
-│  └────────────┘ └─────┬──────┘ └───────────┘ └──────────┘  │
-│                       │         ┌───────────┐ ┌──────────┐  │
-│                       │         │ artifacts │ │ rsvs_    │  │
-│                       │         │   .py     │ │ core.py  │  │
-│                       │         └───────────┘ └─────┬────┘  │
-└───────────────────────┼─────────────────────────────┼───────┘
-                        │                             │ PyO3
-┌───────────────────────┼─────────────────────────────▼───────┐
-│                       │         Rust Core (rsvs-core)        │
-│                                                               │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌────────────────┐  │
-│  │ pipeline │ │attention │ │ autonomy │ │    sense.rs    │  │
-│  │   .rs    │ │   .rs    │ │   .rs    │ │ (multi-sense)  │  │
-│  └──────────┘ └──────────┘ └──────────┘ └────────────────┘  │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌────────────────┐  │
-│  │  graph   │ │  seed.rs │ │ persist  │ │   events.rs    │  │
-│  │   .rs    │ │ (24 atoms)│ │   .rs    │ │ (stream)       │  │
-│  └──────────┘ └──────────┘ └──────────┘ └────────────────┘  │
-└──────────────────────────────────────────────────────────────┘
+# Substitution analysis — WHAT transforms one into the other
+sub = r.substitution_analysis("raja", "ratu")
+print(f"Substitution: {sub.substitution_labels(r)}")    # [(laki_laki, 0, perempuan, 0)]
 ```
 
-> 📖 For the full technical reference, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+One swap: `laki_laki` → `perempuan`. That's the entire semantic difference between king and queen, expressed as a precise structural transformation.
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
-### Prerequisites
-
-- **Rust** 1.75+ ([install](https://rustup.rs/))
-- **Python** 3.12+ ([install](https://python.org))
-- **Node.js** 18+ ([install](https://nodejs.org/))
-- **maturin** (`pip install maturin`)
-
-### Rust Core Only (no Python, no frontend)
+### Docker (Recommended)
 
 ```bash
-cd backend
-cargo run --bin rsvs-smoke    # Runs 114 unit tests + smoke pipeline
+docker compose up
 ```
 
-### Full Stack
+Frontend at `http://localhost:3000`, API at `http://localhost:8000`.
+
+### From Source
+
+**Prerequisites:** Rust 1.75+, Python 3.12+, Node.js 18+, maturin
 
 ```bash
-# 1. Clone
+# Clone
 git clone https://github.com/Wolfvin/SymbolicPuzzle3D.git
 cd SymbolicPuzzle3D
 
-# 2. Build Rust core + Python bindings
+# Build Rust core + Python bindings
 cd backend/python
 pip install maturin
-maturin develop              # ← Compiles Rust core, installs Python wheel
+maturin develop
 
-# 3. Start FastAPI bridge server
+# Start API server
 python -m rsvs.fastapi_server
 
-# 4. Start frontend (new terminal)
-cd frontend
-npm install
-npm run dev
+# Start frontend (new terminal)
+cd ../../frontend
+npm install && npm run dev
 ```
 
-The frontend opens at `http://localhost:3000`, the bridge at `http://localhost:8000`.
+### Rust Only (No Python)
 
-> ⚠️ **Don't skip `maturin develop`!** This step compiles the Rust core and creates the Python bindings. Without it, the bridge server will start but report `rust_core_available: false`.
+```bash
+cd backend
+cargo run --bin rsvs-smoke    # 114+ unit tests + smoke pipeline
+```
+
+### pip install
+
+```bash
+pip install rsvs
+```
 
 ---
 
-## 📖 Core Concepts
-
-### Hard Attention
-
-RSVS uses **hard selection** instead of softmax attention:
+## Architecture at a Glance
 
 ```
-score(t, c) = α · NPMI(t, c) + β · Jaccard(A(t), A(c)) + γ · cooc(t, c)
+┌───────────────────────────────────────────────────────────────┐
+│                     Frontend (Next.js 16)                      │
+│          React Three Fiber · Zustand · shadcn/ui               │
+│                                                                 │
+│   ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌─────────────┐  │
+│   │  3D Force │  │ Compose  │  │ Appraise │  │  Timeline   │  │
+│   │  Graph   │  │  Panel   │  │  Panel   │  │  + HUD      │  │
+│   └──────────┘  └──────────┘  └──────────┘  └─────────────┘  │
+└─────────────────────────┬─────────────────────────────────────┘
+                          │ HTTP (POST /run, GET /latest)
+┌─────────────────────────▼─────────────────────────────────────┐
+│               Python Bridge (FastAPI + PyO3)                    │
+│                                                                 │
+│   ┌────────────┐  ┌───────────┐  ┌──────────┐  ┌──────────┐  │
+│   │  fastapi_  │  │  modes.py │  │validation│  │conversion│  │
+│   │  server.py │  │ (dispatch)│  │  .py     │  │  .py     │  │
+│   └────────────┘  └─────┬─────┘  └──────────┘  └──────────┘  │
+│                         │                                       │
+│              ┌──────────▼──────────┐                            │
+│              │   rsvs_core.py      │                            │
+│              │ (Rust core wrapper) │                            │
+│              └──────────┬──────────┘                            │
+└─────────────────────────┼──────────────────────────────────────┘
+                          │ PyO3 FFI
+┌─────────────────────────▼──────────────────────────────────────┐
+│                    Rust Core (rsvs-core)                         │
+│                                                                 │
+│   ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────────┐  │
+│   │ pipeline │  │attention │  │ autonomy │  │   sense.rs   │  │
+│   │ compose  │  │  .rs     │  │  .rs     │  │ (composit-   │  │
+│   │ query    │  │ NPMI +   │  │ EMA +    │  │  ional v5.0) │  │
+│   │ ingest   │  │ Jaccard  │  │ hysteresis│  │              │  │
+│   └──────────┘  └──────────┘  └──────────┘  └──────────────┘  │
+│   ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────────┐  │
+│   │ graph.rs │  │ seed.rs  │  │ persist  │  │  events.rs   │  │
+│   │structural│  │(24 atoms)│  │  .rs     │  │ (stream)     │  │
+│   │sim + sub │  │          │  │          │  │              │  │
+│   └──────────┘  └──────────┘  └──────────┘  └──────────────┘  │
+└─────────────────────────────────────────────────────────────────┘
 ```
-
-| Component | Role | Default Weight |
-|-----------|------|---------------|
-| NPMI | Normalized Pointwise Mutual Information | α = 0.4 |
-| Jaccard | Atom set overlap similarity | β = 0.4 |
-| Co-occurrence | Conditional frequency | γ = 0.2 |
-
-Result: **sparse, interpretable, deterministic** attention scores. No softmax, no temperature, no randomness.
-
-### Seed Atom Bootstrap
-
-24 primitive atoms form an axiomatic foundation:
-
-| Layer | Atoms |
-|-------|-------|
-| Existential | `exists`, `entity`, `relation`, `state`, `change` |
-| Spatiotemporal | `time`, `space`, `cause`, `effect`, `context` |
-| Cognitive | `signal`, `pattern`, `memory`, `attention`, `value` |
-| Agentic | `agent`, `goal`, `risk`, `trust`, `identity` |
-| Linguistic | `language`, `meaning`, `action`, `feedback` |
-
-These nodes have confidence=1.0, Tier=Tier1, status=Stable, and are **immutable**.
-
-### Node Lifecycle
-
-```
-New ──→ Candidate ──→ Stable ──→ Deprecated
-              ↕           ↕          ↕
-         Quarantine ←─────┘──────────┘
-```
-
-Hysteresis prevents flip-flopping:
-- **Promote** at confidence ≥ 0.75
-- **Demote** at confidence < 0.60
-- **Quarantine** after 3+ status flips (circuit-breaker pattern)
-
-### Multi-Sense Disambiguation
-
-Each node can have multiple sense clusters:
-
-```
-"bank" → Sense 0: financial institution [coherence: 0.85, status: mature]
-       → Sense 1: river edge [coherence: 0.72, status: fragile]
-```
-
-Senses form from data — never hardcoded. Fragile senses (N=1) are pruned after inactivity. Mature senses merge when Jaccard similarity exceeds θ_merge.
 
 ---
 
-## 🔧 API Reference
+## Core Features
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/run` | POST | General mode dispatch (`ingest`, `appraise`, `relate`) |
-| `/ingest` | POST | Text ingestion (shorthand for `/run` with `mode=ingest`) |
-| `/latest` | GET | Retrieve latest snapshot/artifacts |
-| `/health` | GET | Health check with Rust core availability |
-| `/status` | GET | Runtime statistics from the Rust core |
+### Compositional Meaning
 
-> 📖 For complete API documentation with request/response schemas and examples, see [docs/API.md](docs/API.md)
+Every sense is defined by compositions — references to specific senses of other nodes. This is the structural definition of meaning: not a statistical artifact, but a precise specification of what a sense means in terms of other senses.
+
+```rust
+// Rust: Compose "raja" from explicit references
+let compositions = vec![
+    CompositionRef::new(tahta_tertinggi_id, 0),
+    CompositionRef::new(laki_laki_id, 0),
+    CompositionRef::new(kerajaan_id, 0),
+];
+rsvs.compose("raja", compositions, Some("id"))?;
+```
+
+```python
+# Python: Same operation via PyO3
+node_id = r.compose("raja", [
+    ("tahta_tertinggi", 0),
+    ("laki_laki", 0),
+    ("kerajaan", 0)
+], "id")
+```
+
+### Structural Similarity
+
+Compare concepts by shared/differing compositions, not just co-occurrence statistics. Structural similarity produces an explicit decomposition: what they share, what differs, and the overall score.
+
+```python
+sim = r.structural_similarity("raja", "ratu")
+# StructuralSimResult:
+#   structural_similarity: 0.667
+#   shared_compositions: [(tahta_tertinggi, 0), (kerajaan, 0)]
+#   only_a_compositions: [(laki_laki, 0)]
+#   only_b_compositions: [(perempuan, 0)]
+#   layer_a: 2, layer_b: 2
+```
+
+### Substitution Analysis
+
+Find the precise swap that transforms one concept into another. This goes beyond saying "they're similar" — it tells you exactly what needs to change.
+
+```python
+sub = r.substitution_analysis("raja", "ratu")
+# SubstitutionResult:
+#   structural_similarity: 0.667
+#   substitutions: [(laki_laki, 0) → (perempuan, 0)]
+#   unpaired_only_a: []
+#   unpaired_only_b: []
+
+# Get human-readable labels
+labels = sub.substitution_labels(r)
+# [("laki_laki", 0, "perempuan", 0)]
+```
+
+### Sense Induction
+
+When text is ingested, RSVS doesn't just record co-occurrences — it induces compositional senses. For each token in context, the system identifies which senses of other tokens are active and uses them as the compositions of a new sense. This is the mechanism that creates structured meaning from raw text.
+
+```python
+stats = r.ingest("Raja adalah pemimpin kerajaan.")
+# IngestStats(sentences=1, atoms_promoted=3, senses_created=3, compositions=6)
+
+# Check induced senses
+senses = r.senses("raja")
+for s in senses:
+    print(f"Sense {s.sense_idx}: layer={s.layer}, "
+          f"grounding={s.grounding_score:.2f}, "
+          f"compositions={s.compositions}")
+```
+
+### Composition Grounding
+
+After a sense is formed, RSVS verifies its compositions against future evidence. Confirming contexts boost the grounding score; contradicting contexts penalize it. Compositions that are consistently contradicted become candidates for revision. The asymmetric penalty (0.10) vs. boost (0.05) ensures that poor compositions are caught quickly.
+
+```python
+# Grounding is updated automatically during ingestion
+stats = r.ingest(more_text)
+
+# Check grounding status
+senses = r.senses("raja")
+for s in senses:
+    verdict = ("WellGrounded" if s.grounding_score >= 0.60
+               else "NeedsReview" if s.grounding_score >= 0.20
+               else "NeedsRevision")
+    print(f"Sense {s.sense_idx}: grounding={s.grounding_score:.2f} ({verdict})")
+```
+
+### Transformer Bridge
+
+RSVS is an interpretation layer on top of Transformer architecture. It doesn't replace Transformers — it adds symbolic traceability. Transformers provide the statistical signal; RSVS provides the structural explanation. You can use RSVS alongside any Transformer model.
+
+| Transformer Concept | RSVS Equivalent |
+|---------------------|-----------------|
+| Attention weight | Hard-attention score (NPMI + Jaccard + Cooc) |
+| Dense vectors | Sparse composition references |
+| Multi-head attention | Multiple senses per node |
+| Cosine similarity | Structural similarity (shared/differing compositions) |
+| "They're similar" | "They share X, differ in Y, swap Z transforms A→B" |
+
+### 3D Visualization
+
+Explore your knowledge graph interactively with React Three Fiber. Nodes are rendered as spheres (size by tier, color by status), edges as lines (thickness by weight). Force-directed layout with tier-weighted repulsion keeps the graph readable.
+
+```bash
+cd frontend && npm run dev
+```
 
 ---
 
-## ⚡ Performance
+## Example Usage
 
-Benchmarks run on an Apple M2 Pro with criterion:
+### Complete Working Example
+
+```python
+from rsvs import Rsvs
+
+# 1. Create RSVS instance (bootstraps 24 seed atoms)
+r = Rsvs(entity_promote_n=3, theta_assign=0.12, n_warm=20, eta=0.1)
+
+# 2. Ingest text — builds co-occurrence stats, promotes entities, induces senses
+r.ingest(
+    "Raja adalah pemimpin tertinggi kerajaan. "
+    "Raja adalah seorang laki-laki. "
+    "Ratu adalah pemimpin perempuan kerajaan. "
+    "Ratu duduk di tahta tertinggi. "
+    "Kerajaan dipimpin oleh raja atau ratu. "
+    "Tahta tertinggi simbol kekuasaan kerajaan."
+)
+
+# 3. Define compositional meanings explicitly
+r.compose("raja", [
+    ("tahta_tertinggi", 0),
+    ("laki_laki", 0),
+    ("kerajaan", 0)
+], "id")
+
+r.compose("ratu", [
+    ("tahta_tertinggi", 0),
+    ("perempuan", 0),
+    ("kerajaan", 0)
+], "id")
+
+# 4. Query a concept in context
+result = r.query("raja", "pemimpin kerajaan laki-laki")
+print(f"Active sense: {result.sense_idx}")
+print(f"Layer: {result.layer}")
+print(f"Compositions: {result.compositions}")
+
+# 5. Compute structural similarity
+sim = r.structural_similarity("raja", "ratu")
+print(f"\nStructural similarity: {sim.structural_similarity:.3f}")
+print(f"Shared compositions: {sim.shared_labels(r)}")
+print(f"Only in raja: {sim.only_a_compositions}")
+print(f"Only in ratu: {sim.only_b_compositions}")
+
+# 6. Substitution analysis — the precise swap
+sub = r.substitution_analysis("raja", "ratu")
+print(f"\nSubstitution: {sub.substitution_labels(r)}")
+print(f"This single swap transforms 'king' into 'queen'.")
+
+# 7. Appraise text against the graph
+appraisal = r.appraise("Raja dan ratu memimpin kerajaan")
+print(f"\nAppraisal: {appraisal.verdict} ({appraisal.agree_pct:.0f}% agree)")
+
+# 8. Find related concepts
+relations = r.relate("raja")
+print(f"\nRelated nodes: {relations.node_labels(r)[:5]}")
+
+# 9. Inspect node details
+info = r.node_info("raja")
+print(f"\nNode: {info.label}, Layer: {info.layer}, "
+      f"Confidence: {info.confidence:.2f}, Status: {info.status}")
+
+# 10. Persist state
+r.save("my_knowledge_graph.json")
+```
+
+### cURL Examples
+
+```bash
+# Ingest text
+curl -X POST http://localhost:8000/ingest \
+  -H "Content-Type: application/json" \
+  -d '{"text": "Raja adalah pemimpin kerajaan."}'
+
+# Compose a node
+curl -X POST http://localhost:8000/compose \
+  -H "Content-Type: application/json" \
+  -d '{
+    "label": "raja",
+    "compositions": [
+      {"label": "tahta_tertinggi", "sense_id": 0},
+      {"label": "laki_laki", "sense_id": 0},
+      {"label": "kerajaan", "sense_id": 0}
+    ],
+    "lang": "id"
+  }'
+
+# Structural similarity
+curl "http://localhost:8000/structural-similarity?a=raja&b=ratu"
+
+# Substitution analysis
+curl "http://localhost:8000/substitution-analysis?a=raja&b=ratu"
+```
+
+---
+
+## Performance
+
+Benchmarks on Apple M2 Pro with Criterion.rs:
 
 | Benchmark | Time | Notes |
 |-----------|------|-------|
@@ -229,7 +370,9 @@ Benchmarks run on an Apple M2 Pro with criterion:
 | `npmi_lookup` | ~50 ns | Single NPMI table lookup |
 | `cooc_ingest_sentence_20_tokens` | ~5 µs | Co-occurrence stats for 20-token sentence |
 | `sense_ingest_10_atoms` | ~15 µs | Sense assignment for 10-atom context |
-| `pipeline_ingest_text` | ~800 µs | Full pipeline: tokenize → attention → sense → autonomy → persist |
+| `pipeline_ingest_text` | ~800 µs | Full pipeline: tokenize → attention → sense → autonomy |
+| `structural_similarity` | ~5 µs | Compare two nodes' compositions |
+| `substitution_analysis` | ~8 µs | Find substitutions between two nodes |
 
 Run benchmarks yourself:
 
@@ -237,14 +380,52 @@ Run benchmarks yourself:
 cd backend && cargo bench
 ```
 
-Results are generated in `target/criterion/` with HTML reports.
+### Complexity at a Glance
+
+| Operation | Complexity | Parallelism |
+|-----------|-----------|-------------|
+| Ingest (per token) | O(S × K) | Sentence-level via rayon |
+| Structural similarity | O(S_a × S_b × C) | — |
+| Substitution analysis | O(S_a × S_b × C) | — |
+| Relate | O(N × \|A\|) | Full rayon parallelism |
+| Query | O(S × K) | — |
+
+Where S = senses, K = core atoms, C = compositions, N = total nodes, A = atom set size.
 
 ---
 
-## 🧪 Testing
+## Roadmap
+
+### v6.0 — Distributed Cognition
+- [ ] Distributed Rust core with Raft consensus for multi-node deployments
+- [ ] Plugin system for custom attention scorers and policy rules
+- [ ] Streaming events via WebSocket/SSE for real-time UI updates
+- [ ] Multi-domain knowledge graphs with cross-domain edges
+- [ ] Graph embeddings for approximate nearest-neighbor search
+
+### v7.0 — Language & Reasoning
+- [ ] LLM integration for guided knowledge extraction
+- [ ] Cross-lingual composition alignment (raja@id ↔ king@en ↔ roi@fr)
+- [ ] Export to RDF/OWL for interoperability with semantic web
+- [ ] Analogical reasoning via composition pattern matching
+- [ ] Composition-driven text generation (controlled by structural constraints)
+
+---
+
+## Contributing
+
+We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for:
+
+- Development environment setup
+- Code style guidelines (Rust, Python, TypeScript)
+- Commit message convention (Conventional Commits)
+- PR process and testing requirements
+- How to add new modes and extend the Rust core
+
+### Development Setup
 
 ```bash
-# Rust unit tests (114 tests)
+# Rust unit tests (114+ tests)
 cd backend && cargo test --lib
 
 # Rust benchmarks
@@ -255,73 +436,27 @@ cd backend/python && pytest tests/ -v
 
 # Full pipeline smoke test
 cd backend && cargo run --bin rsvs-smoke
+
+# Frontend tests
+cd frontend && npm test
 ```
 
 ---
 
-## 📁 Project Structure
-
-```
-SymbolicPuzzle3D/
-├── backend/
-│   ├── crates/rsvs-core/src/     # Rust core engine
-│   │   ├── types.rs              # Unified node model (v4.2)
-│   │   ├── graph.rs              # DAG storage + similarity
-│   │   ├── seed.rs               # 24-atom bootstrap
-│   │   ├── attention.rs          # Hard attention scoring
-│   │   ├── sense.rs              # Multi-sense framework
-│   │   ├── autonomy.rs           # Confidence/tier lifecycle
-│   │   ├── pipeline.rs           # End-to-end orchestration
-│   │   ├── persist.rs            # State serialization
-│   │   ├── events.rs             # Event stream contracts
-│   │   └── bindings.rs           # PyO3 Python bindings
-│   └── python/rsvs/              # Python bridge
-│       ├── fastapi_server.py     # FastAPI HTTP server (async, OpenAPI)
-│       ├── config.py             # Configuration
-│       ├── validation.py         # Schema validation
-│       ├── conversion.py         # Format conversion
-│       ├── artifacts.py          # File persistence
-│       ├── rsvs_core.py          # Rust core wrapper
-│       └── modes.py              # Mode implementations
-├── frontend/                     # Next.js 3D graph UI
-├── cli/                          # Agent CLI
-├── docs/                         # Architecture & API docs
-├── .github/                      # CI/CD + issue templates
-├── CHANGELOG.md                  # Version history
-├── CONTRIBUTING.md               # Contribution guide
-└── LICENSE                       # MIT OR Apache-2.0
-```
-
----
-
-## 🗺️ Roadmap
-
-- [ ] **v4.3** — Streaming events via WebSocket/SSE for real-time UI updates
-- [x] ~~**v4.3** — FastAPI migration (OpenAPI docs, async handlers)~~ ✅ Done!
-- [ ] **v4.4** — Multi-domain knowledge graphs with cross-domain edges
-- [ ] **v4.4** — Graph embeddings for approximate nearest-neighbor search
-- [ ] **v5.0** — Distributed Rust core with Raft consensus
-- [ ] **v5.0** — Plugin system for custom attention scorers and policy rules
-- [ ] **Future** — LLM integration for guided knowledge extraction
-- [ ] **Future** — Export to RDF/OWL for interoperability with semantic web
-
----
-
-## 🤝 Contributing
-
-We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for:
-
-- Development environment setup
-- Code style guidelines (Rust, Python, TypeScript)
-- Commit message convention (Conventional Commits)
-- PR process and testing requirements
-- How to add new modes and extend the Rust core
-
----
-
-## 📄 License
+## License
 
 Dual-licensed under [MIT](LICENSE) OR [Apache-2.0](LICENSE). You may choose either license.
+
+---
+
+## Acknowledgments
+
+RSVS was inspired by research in compositional semantics, symbolic AI, and the desire to make neural representations interpretable. Special thanks to:
+
+- The Rust community for zero-cost abstractions that make compositional graph operations fast
+- The PyO3 project for seamless Rust-Python interop
+- The React Three Fiber team for making 3D visualization accessible
+- The Indonesian language community for providing rich compositional examples (raja/ratu, tahta/kerajaan)
 
 ---
 
@@ -329,6 +464,7 @@ Dual-licensed under [MIT](LICENSE) OR [Apache-2.0](LICENSE). You may choose eith
 
 **[Report a Bug](https://github.com/Wolfvin/SymbolicPuzzle3D/issues/new?template=bug_report.md)** ·
 **[Request a Feature](https://github.com/Wolfvin/SymbolicPuzzle3D/issues/new?template=feature_request.md)** ·
-**[Read the Docs](docs/ARCHITECTURE.md)**
+**[Read the Architecture](ARCHITECTURE.md)** ·
+**[Read the API Docs](docs/API.md)**
 
 </div>

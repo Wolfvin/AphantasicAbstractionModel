@@ -1,8 +1,8 @@
-//! Ingest pipeline — RSVS v5.0 Compositional Architecture
+//! Ingest pipeline — RSVS v6.0 Compositional Architecture
 //!
 //! Contains `ingest_text()`, `update_node_atoms()`, and all ingest-related helpers.
 //!
-//! v5.0: When a new sense is induced from text, the system identifies which
+//! v6.0: When a new sense is induced from text, the system identifies which
 //! (ID, sense) pairs are active in the context and uses them as the
 //! compositions of the new sense. This is the INDUCTION mechanism.
 
@@ -37,7 +37,7 @@ pub struct IngestStats {
     pub watchlist_additions: usize,
     /// Number of frozen batches (rollback triggered).
     pub frozen_batches: usize,
-    /// Number of compositions induced (v5.0).
+    /// Number of compositions induced (v6.0).
     pub compositions_induced: usize,
 }
 
@@ -48,7 +48,7 @@ impl Rsvs {
     /// node promotion → attention scoring → sense induction (with compositions) →
     /// confidence update → stability check.
     ///
-    /// v5.0: When new senses are created, their compositions are induced from
+    /// v6.0: When new senses are created, their compositions are induced from
     /// the active senses of context tokens. This is the INDUCTION mechanism
     /// (Problem 1 from the architecture spec).
     pub fn ingest_text(&mut self, text: &str) -> Result<IngestStats, RsvsError> {
@@ -119,7 +119,7 @@ impl Rsvs {
                     compression_reason: None,
                 },
                 policy_meta: Some(PolicyMeta {
-                    policy_version: "5.0".to_string(),
+                    policy_version: "6.0".to_string(),
                     governance_score: 0.0,
                     candidate_evidence_pool: 0.0,
                     status_flip_count: 0,
@@ -200,7 +200,7 @@ impl Rsvs {
                     continue;
                 }
 
-                // --- v5.0: Build active senses for composition induction ---
+                // --- v6.0: Build active senses for composition induction ---
                 let active_senses: Vec<(NodeId, crate::types::SenseId)> = context
                     .iter()
                     .filter_map(|&ctx_id| {

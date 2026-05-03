@@ -1,8 +1,8 @@
-//! PyO3 bindings — RSVS v5.0 Compositional Architecture
+//! PyO3 bindings — RSVS v6.0 Compositional Architecture
 //!
 //! Exposes the Rsvs pipeline to Python with a clean, Pythonic API.
-//! v5.0: Compositional architecture — CompositionRef, layer, grounding,
-//! structural_similarity, substitution_analysis.
+//! v6.0: Compositional architecture — CompositionRef, layer, grounding evidence,
+//! structural_similarity, substitution_analysis, TransformerBridge.
 
 #![allow(missing_docs)]
 
@@ -14,10 +14,11 @@ use std::collections::HashMap;
 
 use crate::autonomy::AutonomyConfig;
 use crate::pipeline::{PipelineConfig, Rsvs};
-use crate::sense::SenseConfig;
+use crate::sense::{GroundingEvidence, SenseConfig, SenseInductionConfig};
+use crate::transformer_bridge::TransformerBridgeConfig;
 
 // -----------------------------------------------------------------------
-// Python-visible data classes (v5.0)
+// Python-visible data classes (v6.0)
 // -----------------------------------------------------------------------
 
 /// Stats returned after ingesting a block of text.
@@ -119,7 +120,7 @@ impl PySimResult {
     }
 }
 
-/// Structural similarity result (v5.0).
+/// Structural similarity result (v6.0).
 #[pyclass(get_all)]
 #[derive(Clone, Debug)]
 pub struct PyStructuralSimResult {
@@ -159,7 +160,7 @@ impl PyStructuralSimResult {
     }
 }
 
-/// Substitution analysis result (v5.0).
+/// Substitution analysis result (v6.0).
 #[pyclass(get_all)]
 #[derive(Clone, Debug)]
 pub struct PySubstitutionResult {
@@ -197,7 +198,7 @@ impl PySubstitutionResult {
     }
 }
 
-/// Info about one node (v5.0: compositional)
+/// Info about one node (v6.0: compositional)
 #[pyclass(get_all)]
 #[derive(Clone, Debug)]
 pub struct PyNodeInfo {
@@ -227,7 +228,7 @@ impl PyNodeInfo {
     }
 }
 
-/// Result of appraise() (v5.0)
+/// Result of appraise() (v6.0)
 #[pyclass(get_all)]
 #[derive(Clone, Debug)]
 pub struct PyAppraiseResult {
@@ -247,7 +248,7 @@ impl PyAppraiseResult {
     }
 }
 
-/// Result of relate() (v5.0)
+/// Result of relate() (v6.0)
 #[pyclass(get_all)]
 #[derive(Clone, Debug)]
 pub struct PyRelateResult {
@@ -278,7 +279,7 @@ impl PyRelateResult {
             .collect()
     }
 
-    /// Get labels for structural relations (v5.0).
+    /// Get labels for structural relations (v6.0).
     fn structural_labels(&self, rsvs: &PyRsvs) -> Vec<(String, f32)> {
         self.structural_relations
             .iter()
@@ -290,7 +291,87 @@ impl PyRelateResult {
     }
 }
 
-/// Info about one sense of an ID (v5.0: compositional).
+/// Grounding evidence for a sense (v6.0).
+///
+/// Tracks the full evidence trail for composition verification,
+/// replacing the simple grounding_score from v5.0.
+#[pyclass(get_all)]
+#[derive(Clone, Debug)]
+pub struct PyGroundingEvidence {
+    /// Contexts that confirmed the compositions.
+    pub confirming_contexts: usize,
+    /// Contexts that contradicted the compositions.
+    pub contradicting_contexts: usize,
+    /// Description of the last contradiction.
+    pub last_contradiction: Option<String>,
+    /// How many times compositions have been revised.
+    pub revision_count: usize,
+}
+
+#[pymethods]
+impl PyGroundingEvidence {
+    fn __repr__(&self) -> String {
+        format!(
+            "GroundingEvidence(confirming={}, contradicting={}, revisions={})",
+            self.confirming_contexts, self.contradicting_contexts, self.revision_count
+        )
+    }
+
+    /// Compute the grounding score from the confirming/contradicting ratio.
+    fn score(&self) -> f32 {
+        let total = self.confirming_contexts + self.contradicting_contexts;
+        if total == 0 {
+            0.5
+        } else {
+            self.confirming_contexts as f32 / total as f32
+        }
+    }
+}
+
+impl From<&GroundingEvidence> for PyGroundingEvidence {
+    fn from(ge: &GroundingEvidence) -> Self {
+        PyGroundingEvidence {
+            confirming_contexts: ge.confirming_contexts,
+            contradicting_contexts: ge.contradicting_contexts,
+            last_contradiction: ge.last_contradiction.clone(),
+            revision_count: ge.revision_count,
+        }
+    }
+}
+
+/// Configuration for the Transformer Bridge (v6.0).
+#[pyclass(get_all)]
+#[derive(Clone, Debug)]
+pub struct PyTransformerBridgeConfig {
+    /// Similarity threshold for considering two vectors "related".
+    pub similarity_threshold: f32,
+    /// Maximum compositions per induced sense from Transformer output.
+    pub max_compositions: usize,
+    /// Whether to use Transformer attention weights for composition weighting.
+    pub use_attention_weights: bool,
+}
+
+#[pymethods]
+impl PyTransformerBridgeConfig {
+    fn __repr__(&self) -> String {
+        format!(
+            "TransformerBridgeConfig(threshold={:.2}, max_comps={}, attention={})",
+            self.similarity_threshold, self.max_compositions, self.use_attention_weights
+        )
+    }
+}
+
+impl From<&TransformerBridgeConfig> for PyTransformerBridgeConfig {
+    fn from(cfg: &TransformerBridgeConfig) -> Self {
+        PyTransformerBridgeConfig {
+            similarity_threshold: cfg.similarity_threshold,
+            max_compositions: cfg.max_compositions,
+            use_attention_weights: cfg.use_attention_weights,
+        }
+    }
+}
+
+/// Info about one sense of an ID (v6.0: compositional with grounding evidence).
 #[pyclass(get_all)]
 #[derive(Clone, Debug)]
 pub struct PySenseInfo {
@@ -301,6 +382,7 @@ pub struct PySenseInfo {
     pub core_atoms: Vec<String>,
     pub layer: u32,
     pub grounding_score: f32,
+    pub grounding_evidence: PyGroundingEvidence,
     pub compositions: Vec<(String, u32)>,
 }
 
@@ -328,10 +410,10 @@ fn to_py_err(e: RsvsError) -> PyErr {
 }
 
 // -----------------------------------------------------------------------
-// PyRsvs — main Python class (v5.0)
+// PyRsvs — main Python class (v6.0)
 // -----------------------------------------------------------------------
 
-/// RSVS knowledge system (v5.0 — Compositional Architecture).
+/// RSVS knowledge system (v6.0 — Compositional Architecture).
 #[pyclass]
 pub struct PyRsvs {
     inner: Rsvs,
@@ -339,7 +421,7 @@ pub struct PyRsvs {
 
 #[pymethods]
 impl PyRsvs {
-    /// Create a new RSVS instance (v5.0).
+    /// Create a new RSVS instance (v6.0).
     #[new]
     #[pyo3(signature = (
         entity_promote_n=3,
@@ -452,7 +534,7 @@ impl PyRsvs {
         })
     }
 
-    /// v5.0: Compute structural similarity between two concepts.
+    /// v6.0: Compute structural similarity between two concepts.
     ///
     /// This compares concepts at the sense level — shared/differing compositions.
     /// Example: raja and ratu share 2/3 compositions → score = 0.667.
@@ -482,7 +564,7 @@ impl PyRsvs {
         })
     }
 
-    /// v5.0: Analyze what substitution transforms one concept into another.
+    /// v6.0: Analyze what substitution transforms one concept into another.
     ///
     /// Example: raja → ratu requires substituting (laki_laki, 0) → (perempuan, 0).
     fn substitution_analysis(&self, a: &str, b: &str) -> Option<PySubstitutionResult> {
@@ -556,7 +638,7 @@ impl PyRsvs {
     }
 
     // -------------------------------------------------------------------
-    // Inspection (v5.0)
+    // Inspection (v6.0)
     // -------------------------------------------------------------------
 
     /// Get info about a specific node by label.
@@ -622,7 +704,7 @@ impl PyRsvs {
         self.node_info(label)
     }
 
-    /// Get all senses for a concept (v5.0: includes compositions).
+    /// Get all senses for a concept (v6.0: includes grounding evidence).
     fn senses(&self, concept: &str) -> PyResult<Vec<PySenseInfo>> {
         let &id = self
             .inner
@@ -669,7 +751,8 @@ impl PyRsvs {
                     },
                     core_atoms: core_labels,
                     layer: s.layer,
-                    grounding_score: s.grounding_score,
+                    grounding_score: s.grounding.score(),
+                    grounding_evidence: PyGroundingEvidence::from(&s.grounding),
                     compositions: comp_labels,
                 }
             })
@@ -694,7 +777,7 @@ impl PyRsvs {
             .collect()
     }
 
-    /// Create a compositional node from explicit composition references (v5.0).
+    /// Create a compositional node from explicit composition references (v6.0).
     ///
     /// `compositions` is a list of (node_label, sense_id) pairs.
     #[pyo3(signature = (label, compositions, lang=None))]
@@ -817,5 +900,7 @@ fn _rsvs(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyAppraiseResult>()?;
     m.add_class::<PyRelateResult>()?;
     m.add_class::<PySenseInfo>()?;
+    m.add_class::<PyGroundingEvidence>()?;
+    m.add_class::<PyTransformerBridgeConfig>()?;
     Ok(())
 }

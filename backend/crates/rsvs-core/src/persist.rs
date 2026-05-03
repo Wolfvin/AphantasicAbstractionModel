@@ -1,10 +1,10 @@
-//! Persistence — RSVS v5.0 Compositional Architecture
+//! Persistence — RSVS v6.0 Compositional Architecture
 //!
 //! Serialize/deserialize the full RSVS state to/from disk.
 //! Format: JSON (human-readable, debuggable).
 //!
-//! v5.0: Updated for compositional architecture — layer, compositions,
-//! grounding_score in senses.
+//! v6.0: Updated for compositional architecture — layer, compositions,
+//! GroundingEvidence in senses, TransformerBridgeConfig support.
 
 use std::collections::HashMap;
 use std::fs::File;
@@ -18,14 +18,15 @@ use crate::autonomy::{AtomRecord, AutonomyConfig, AutonomyEngine, MemoryClass};
 use crate::error::RsvsError;
 use crate::graph::RsvsGraph;
 use crate::pipeline::{PipelineConfig, Rsvs};
-use crate::sense::{Sense, SenseConfig, SenseManager, SenseStatus};
+use crate::sense::{GroundingEvidence, Sense, SenseConfig, SenseManager, SenseStatus};
+use crate::transformer_bridge::TransformerBridgeConfig;
 use crate::types::{
     CompositionRef, CompressionState, Edge, EdgeSource, Node, NodeId, NodeStatus, PolicyMeta,
     SemanticMeta, Tier,
 };
 
 // -----------------------------------------------------------------------
-// Serializable mirror types (v5.0 serde-friendly)
+// Serializable mirror types (v6.0 serde-friendly)
 // -----------------------------------------------------------------------
 
 /// Serializable mirror of a `Node` for JSON persistence.
@@ -75,7 +76,73 @@ pub struct SavedCompositionRef {
     pub sense_id: u32,
 }
 
-/// Serializable mirror of a `Sense` for JSON persistence (v5.0).
+/// Serializable mirror of `GroundingEvidence` for JSON persistence (v6.0).
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct SavedGroundingEvidence {
+    /// Contexts that confirmed the compositions.
+    pub confirming_contexts: usize,
+    /// Contexts that contradicted the compositions.
+    pub contradicting_contexts: usize,
+    /// Description of the last contradiction.
+    pub last_contradiction: Option<String>,
+    /// How many times compositions have been revised.
+    pub revision_count: usize,
+}
+
+impl From<&GroundingEvidence> for SavedGroundingEvidence {
+    fn from(ge: &GroundingEvidence) -> Self {
+        SavedGroundingEvidence {
+            confirming_contexts: ge.confirming_contexts,
+            contradicting_contexts: ge.contradicting_contexts,
+            last_contradiction: ge.last_contradiction.clone(),
+            revision_count: ge.revision_count,
+        }
+    }
+}
+
+impl From<&SavedGroundingEvidence> for GroundingEvidence {
+    fn from(sge: &SavedGroundingEvidence) -> Self {
+        GroundingEvidence {
+            confirming_contexts: sge.confirming_contexts,
+            contradicting_contexts: sge.contradicting_contexts,
+            last_contradiction: sge.last_contradiction.clone(),
+            revision_count: sge.revision_count,
+        }
+    }
+}
+
+/// Serializable mirror of `TransformerBridgeConfig` for JSON persistence (v6.0).
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct SavedTransformerBridgeConfig {
+    /// Similarity threshold for considering two vectors "related".
+    pub similarity_threshold: f32,
+    /// Maximum compositions per induced sense from Transformer output.
+    pub max_compositions: usize,
+    /// Whether to use Transformer attention weights for composition weighting.
+    pub use_attention_weights: bool,
+}
+
+impl From<&TransformerBridgeConfig> for SavedTransformerBridgeConfig {
+    fn from(cfg: &TransformerBridgeConfig) -> Self {
+        SavedTransformerBridgeConfig {
+            similarity_threshold: cfg.similarity_threshold,
+            max_compositions: cfg.max_compositions,
+            use_attention_weights: cfg.use_attention_weights,
+        }
+    }
+}
+
+impl From<&SavedTransformerBridgeConfig> for TransformerBridgeConfig {
+    fn from(scfg: &SavedTransformerBridgeConfig) -> Self {
+        TransformerBridgeConfig {
+            similarity_threshold: scfg.similarity_threshold,
+            max_compositions: scfg.max_compositions,
+            use_attention_weights: scfg.use_attention_weights,
+        }
+    }
+}
+
+/// Serializable mirror of a `Sense` for JSON persistence (v6.0).
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SavedSense {
     pub compositions: Vec<SavedCompositionRef>,
@@ -87,7 +154,7 @@ pub struct SavedSense {
     pub coherence: f32,
     pub status: String,
     pub inactivity: usize,
-    pub grounding_score: f32,
+    pub grounding: SavedGroundingEvidence,
 }
 
 /// Serializable mirror of a `SenseManager` for JSON persistence.
@@ -131,7 +198,7 @@ pub struct SavedEntityDetector {
     pub groundable: HashMap<String, bool>,
 }
 
-/// Top-level snapshot of the entire RSVS state (v5.0).
+/// Top-level snapshot of the entire RSVS state (v6.0).
 #[derive(Serialize, Deserialize, Debug)]
 pub struct RsvsSnapshot {
     pub version: String,
@@ -296,7 +363,7 @@ pub fn to_snapshot(rsvs: &Rsvs) -> RsvsSnapshot {
                     "mature".into()
                 },
                 inactivity: s.inactivity,
-                grounding_score: s.grounding_score,
+                grounding: SavedGroundingEvidence::from(&s.grounding),
             })
             .collect();
 
@@ -354,7 +421,7 @@ pub fn to_snapshot(rsvs: &Rsvs) -> RsvsSnapshot {
     };
 
     RsvsSnapshot {
-        version: "5.0".to_string(),
+        version: "6.0".to_string(),
         total_contexts: rsvs.total_contexts,
         token_to_id: rsvs.token_to_id.clone(),
         next_node_id: rsvs.graph.next_id,
@@ -459,7 +526,7 @@ pub fn from_snapshot(snap: RsvsSnapshot) -> Rsvs {
         });
     }
 
-    // --- Rebuild sense managers (v5.0) ---
+    // --- Rebuild sense managers (v6.0) ---
     let mut senses: HashMap<NodeId, SenseManager> = HashMap::new();
     for (node_id, ssm) in snap.sense_managers {
         let mut sm = SenseManager::new(config.sense.clone());
@@ -491,7 +558,7 @@ pub fn from_snapshot(snap: RsvsSnapshot) -> Rsvs {
                 SenseStatus::Fragile
             };
             sense.inactivity = ss.inactivity;
-            sense.grounding_score = ss.grounding_score;
+            sense.grounding = GroundingEvidence::from(&ss.grounding);
             sm.senses.push(sense);
         }
         senses.insert(node_id, sm);

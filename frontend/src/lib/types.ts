@@ -24,9 +24,10 @@ export interface NodeSense {
   count: number;
   active_index: number | null;
   coherence: number | null;
-  // v5.0 compositional fields
+  // v6.0 compositional fields
   layer?: number;
   grounding_score?: number;
+  grounding_evidence?: GroundingEvidence;
   compositions?: CompositionPair[];
 }
 
@@ -47,7 +48,7 @@ export interface CompositionComposite {
   weight: number;
 }
 
-// v5.0: Composition pair — [label, sense_id] used in compose API
+// v6.0: Composition pair — [label, sense_id] used in compose API
 export interface CompositionPair {
   label: string;
   sense_id: string;
@@ -72,6 +73,25 @@ export interface NodeProvenance {
 }
 
 export type CompressionState = 'raw' | 'compressed' | 'composed';
+
+// v6.0: Grounding evidence for a sense
+export type GroundingVerdict = 'well_grounded' | 'needs_review' | 'needs_revision';
+
+export interface GroundingEvidence {
+  confirming_contexts: number;
+  contradicting_contexts: number;
+  last_contradiction: string | null;
+  revision_count: number;
+  score: number;
+  verdict: GroundingVerdict;
+}
+
+// v6.0: Transformer Bridge configuration
+export interface TransformerBridgeConfig {
+  similarity_threshold: number;
+  max_compositions: number;
+  use_attention_weights: boolean;
+}
 
 export interface PolicyMeta {
   governance_score: number;
@@ -113,9 +133,10 @@ export interface RSVSNode {
   // Composition visualization fields
   atoms?: number[];
   compression_reason?: string;
-  // v5.0 compositional architecture fields
+  // v6.0 compositional architecture fields
   layer?: number; // 0=primitive, N=compositional
   grounding_score?: number;
+  grounding_evidence?: GroundingEvidence;
   compositions?: CompositionPair[]; // list of [label, sense_id] pairs
 }
 
@@ -194,7 +215,7 @@ export interface ChatMessage {
   content: string;
   timestamp: string;
   correlation_id?: string;
-  mode?: 'ingest' | 'appraise' | 'relate' | 'compose';
+  mode?: 'ingest' | 'appraise' | 'relate' | 'compose' | 'grounding_info';
 }
 
 export interface TimelineEvent {
@@ -243,9 +264,23 @@ export type ModeResult =
   | { type: 'compose'; data: ComposeResult }
   | { type: 'structural_similarity'; data: StructuralSimilarityResult }
   | { type: 'substitution_analysis'; data: SubstitutionAnalysisResult }
+  | { type: 'grounding_info'; data: GroundingInfoResult }
   | null;
 
-// ── v5.0: Structural Similarity ──
+// ── v6.0: Grounding Info Result ──
+
+export interface GroundingInfoResult {
+  label: string;
+  sense_id: number;
+  grounding_evidence: GroundingEvidence;
+  composition_details: Array<{
+    label: string;
+    sense_id: number;
+    confirmed: boolean;
+  }>;
+}
+
+// ── v6.0: Structural Similarity ──
 
 export interface SharedComposition {
   label: string;
@@ -269,7 +304,7 @@ export interface StructuralSimilarityResult {
   differing_compositions: DifferingComposition[];
 }
 
-// ── v5.0: Substitution Analysis ──
+// ── v6.0: Substitution Analysis ──
 
 export interface SubstitutionPair {
   atom_a: { label: string; id: number };
@@ -336,9 +371,10 @@ export interface RelateNode {
   score: number;
   tier: Tier;
   kind: NodeKind;
-  // v5.0 fields
+  // v6.0 fields
   layer?: number;
   grounding_score?: number;
+  grounding_evidence?: GroundingEvidence;
   compositions?: CompositionPair[];
 }
 
@@ -362,6 +398,6 @@ export interface RelateResult {
   query_terms: string[];
   related_nodes: RelateNode[];
   related_edges: RelateEdge[];
-  // v5.0 field
+  // v6.0 field
   structural_relations?: StructuralRelation[];
 }

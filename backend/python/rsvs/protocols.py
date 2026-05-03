@@ -1,4 +1,4 @@
-"""RSVS Protocol definitions for type-safe Rust core access (v5.0)."""
+"""RSVS Protocol definitions for type-safe Rust core access (v6.0)."""
 from __future__ import annotations
 
 from typing import Any, Protocol, runtime_checkable
@@ -11,8 +11,9 @@ class RsvsCoreProtocol(Protocol):
     This enables type-safe access to the PyO3-wrapped Rust Rsvs class
     without requiring the actual class to be imported at type-check time.
 
-    Updated for RSVS v5.0 compositional architecture:
-    - New: structural_similarity, substitution_analysis, compose (with compositions), compose_from_ids
+    Updated for RSVS v6.0:
+    - New: grounding_info, revise_sense
+    - v5.0: structural_similarity, substitution_analysis, compose (with compositions), compose_from_ids
     - Updated: ingest, query, senses, node_info, relate now return richer result objects
     """
 
@@ -95,6 +96,38 @@ class RsvsCoreProtocol(Protocol):
 
         Returns:
             The node ID of the newly created composite node.
+        """
+        ...
+
+    # --- v6.0: Grounding and sense revision ---
+    def grounding_info(self, label: str, sense_id: int) -> Any:
+        """Get detailed grounding evidence for a specific sense.
+
+        Args:
+            label: The atom label to inspect.
+            sense_id: The sense ID within the atom to get grounding evidence for.
+
+        Returns:
+            A grounding info object containing evidence traces, source references,
+            confidence breakdown, and composition grounding status for the sense.
+        """
+        ...
+
+    def revise_sense(self, label: str, sense_id: int) -> bool:
+        """Trigger composition revision for an ungrounded sense.
+
+        This requests the Rust core to re-evaluate and potentially revise
+        the compositions of a sense that has been flagged as ungrounded
+        (low grounding_score). The revision may adjust compositions,
+        re-assign tier, or merge with another sense.
+
+        Args:
+            label: The atom label whose sense to revise.
+            sense_id: The sense ID within the atom to revise.
+
+        Returns:
+            True if a revision was successfully triggered, False if the
+            sense was already grounded or could not be revised.
         """
         ...
 

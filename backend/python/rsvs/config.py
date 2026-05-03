@@ -14,13 +14,13 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 
 API_VERSION = "v1"
-SCHEMA_VERSION = "v5.0"
+SCHEMA_VERSION = "v6.0"
 
 # ---------------------------------------------------------------------------
 # Mode / domain constants
 # ---------------------------------------------------------------------------
 
-VALID_MODES = {"ingest", "appraise", "relate", "compose", "structural_similarity", "substitution_analysis"}
+VALID_MODES = {"ingest", "appraise", "relate", "compose", "structural_similarity", "substitution_analysis", "grounding_info"}
 
 SOURCE_TRUST = {
     "trusted_seed": 1.0,

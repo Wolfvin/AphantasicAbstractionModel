@@ -1,7 +1,7 @@
-//! Autonomy engine for RSVS v4.2
+//! Autonomy engine for RSVS v6.0
 //!
 //! Keeps confidence/tier/memory lifecycle deterministic and testable.
-//! v4.2: Adds NodeStatus lifecycle transitions, quarantine, hysteresis,
+//! v6.0: Adds NodeStatus lifecycle transitions, quarantine, hysteresis,
 //! seed immutability, and governance scoring.
 
 use std::collections::{HashMap, HashSet};
@@ -343,7 +343,7 @@ impl AutonomyEngine {
     }
 
     // ---------------------------------------------------------------
-    // v4.2: Governance score
+    // v6.0: Governance score
     // governance_score = 0.4*strength + 0.3*trust + 0.2*recency + 0.1*(1-contradiction_penalty)
     // ---------------------------------------------------------------
 
@@ -361,7 +361,7 @@ impl AutonomyEngine {
     }
 
     // ---------------------------------------------------------------
-    // v4.2: NodeStatus lifecycle transitions
+    // v6.0: NodeStatus lifecycle transitions
     // New → Candidate → Stable → Deprecated
     // Quarantine escape: if flip_count >= threshold, quarantine
     // Hysteresis: promote at >= 0.75, demote at < 0.60
@@ -449,7 +449,7 @@ impl AutonomyEngine {
     }
 
     // ---------------------------------------------------------------
-    // Confidence update (v4.2: with EMA, max delta, seed check)
+    // Confidence update (v6.0: with EMA, max delta, seed check)
     // ---------------------------------------------------------------
 
     /// Update a node's confidence using EMA with evidence.
@@ -510,7 +510,7 @@ impl AutonomyEngine {
             };
         }
 
-        // v4.2: Attempt status transition after confidence update
+        // v6.0: Attempt status transition after confidence update
         let _ = self.transition_status(id);
 
         self.batch_delta += (proposed - old).abs();

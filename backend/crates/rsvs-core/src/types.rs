@@ -1,6 +1,6 @@
-//! Core types for RSVS v5.0 — Compositional Architecture
+//! Core types for RSVS v6.0 — Compositional Architecture
 //!
-//! v5.0: Every sense is formed by compositions — pairs of (ID, sense_id).
+//! v6.0: Every sense is formed by compositions — pairs of (ID, sense_id).
 //! Relationships between IDs are structural, derived from shared/differing
 //! compositions, not statistical co-occurrence alone.
 //!
@@ -25,7 +25,7 @@ pub type AtomSet = Vec<NodeId>;
 
 /// A reference to a specific sense of a specific node.
 ///
-/// This is the fundamental unit of compositional meaning in RSVS v5.0.
+/// This is the fundamental unit of compositional meaning in RSVS v6.0.
 /// When sense S of node X is composed from [(A, s1), (B, s2), (C, s3)],
 /// it means: "X in sense S means what A means in sense s1, AND what B
 /// means in sense s2, AND what C means in sense s3."
@@ -35,7 +35,7 @@ pub type AtomSet = Vec<NodeId>;
 ///   ratu.sense_1 = [(tahta_tertinggi, 0), (perempuan, 0), (kerajaan, 0)]
 ///   They share 2/3 compositions → structural similarity = 0.667
 ///   Substitution: (laki_laki, 0) → (perempuan, 0) transforms raja → ratu
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
 pub struct CompositionRef {
     /// The target node ID.
     pub node_id: NodeId,
@@ -114,9 +114,9 @@ pub struct LanguageLink {
     pub target_id: NodeId,
 }
 
-/// Semantic metadata for a node (v5.0 — compositional).
+/// Semantic metadata for a node (v6.0 — compositional).
 ///
-/// Key change from v4.2: `layer` tracks compositional depth.
+/// Key change from earlier versions: `layer` tracks compositional depth.
 /// Layer 0 = primitive/seed, Layer N = at least one composition
 /// references a layer N-1 sense.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -162,7 +162,7 @@ pub struct PolicyMeta {
 impl Default for PolicyMeta {
     fn default() -> Self {
         Self {
-            policy_version: "5.0".to_string(),
+            policy_version: "6.0".to_string(),
             governance_score: 0.0,
             candidate_evidence_pool: 0.0,
             status_flip_count: 0,
@@ -172,7 +172,7 @@ impl Default for PolicyMeta {
     }
 }
 
-/// A node in the RSVS graph (v5.0 — compositional).
+/// A node in the RSVS graph (v6.0 — compositional).
 ///
 /// A node represents an ID in the system. It can have multiple senses,
 /// each of which is defined by its compositions (references to other
@@ -186,7 +186,7 @@ pub struct Node {
     /// Surface form with language tag (e.g., "raja@id").
     pub surface_label: String,
 
-    /// Node kind — always "node" in v5.0.
+    /// Node kind — always "node" in v6.0.
     pub kind: String,
     /// Autonomy tier.
     pub tier: Tier,

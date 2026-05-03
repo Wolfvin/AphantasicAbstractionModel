@@ -1,10 +1,10 @@
-//! End-to-end pipeline — RSVS v5.0 Compositional Architecture
+//! End-to-end pipeline — RSVS v6.0 Compositional Architecture
 //!
 //! Wires all modules together:
 //!   text → CoocStats → EntityDetector → node promotion
 //!   → SenseManager ingest (with composition induction) → AutonomyEngine update → graph query
 //!
-//! v5.0: Compositional architecture — every sense is formed by compositions.
+//! v6.0: Compositional architecture — every sense is formed by compositions.
 //!   - ingest mode: induce senses with compositions from active context
 //!   - compose mode: create compositional nodes with explicit (ID, sense) references
 //!   - structural_similarity: compare nodes by shared/differing compositions
@@ -88,10 +88,10 @@ impl Default for PipelineConfig {
 }
 
 // -----------------------------------------------------------------------
-// Rsvs — the main system struct (v5.0)
+// Rsvs — the main system struct (v6.0)
 // -----------------------------------------------------------------------
 
-/// The main RSVS system struct (v5.0 — Compositional).
+/// The main RSVS system struct (v6.0 — Compositional).
 ///
 /// Holds the knowledge graph, sense managers (with compositions),
 /// autonomy engine, co-occurrence statistics, entity detector, and

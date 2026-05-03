@@ -1,4 +1,4 @@
-//! RSVS Attention — v4.2
+//! RSVS Attention — v6.0
 //!
 //! Hard selection, bukan softmax.
 //! score(t, c) = α·NPMI(t,c) + β·Jaccard(A(t), A(c)) + γ·cooc(t,c)
@@ -8,7 +8,7 @@
 //!   → score each pair → TopK selection
 //!   → atom set per token → feed to SenseManager
 //!
-//! v4.2: No NodeKind references. Uses unified node model.
+//! v6.0: No NodeKind references. Uses unified node model.
 
 use crate::error::RsvsError;
 use crate::graph::jaccard_sets;

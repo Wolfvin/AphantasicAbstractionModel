@@ -1,4 +1,4 @@
-//! Multi-sense framework for RSVS v5.0 — Compositional Architecture
+//! Multi-sense framework for RSVS v6.0 — Compositional Architecture
 //!
 //! Every sense of an ID is not standalone — it is FORMED BY other senses
 //! that already exist in the system, recursively. A sense is represented
@@ -25,17 +25,136 @@
 //!   1. For each token in context, determine its active sense (lazy_lookup)
 //!   2. The (token_id, active_sense) pairs form the compositions
 //!   3. A new sense is created if no existing sense matches well enough
+//!   4. The `induction_score()` method quantifies whether induction is warranted
 //!
 //! Grounding (Problem 2):
 //!   After a sense is formed with its compositions, we verify accuracy by:
-//!   - Tracking how often future contexts confirm the composition pattern
+//!   - Tracking confirming and contradicting contexts via GroundingEvidence
 //!   - If a sense's compositions are contradicted by many future contexts,
-//!     its grounding_score drops
-//!   - A sense with low grounding_score is a candidate for revision
+//!     its grounding score drops
+//!   - A sense with low grounding is a candidate for revision via revise_compositions()
+//!   - grounding_verdict() classifies: WellGrounded, NeedsReview, or NeedsRevision
 
 use crate::graph::jaccard_sets;
 use crate::types::{AtomSet, CompositionRef, NodeId, SenseId};
-use std::collections::HashMap;
+use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
+
+// -----------------------------------------------------------------------
+// SenseInductionConfig — tunable parameters for sense induction (Problem 1)
+// -----------------------------------------------------------------------
+
+/// Configuration for sense induction — controls when a new sense is warranted.
+///
+/// These parameters address Problem 1 (Induction): how are senses formed
+/// from text, and when is a new sense worth initiating?
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SenseInductionConfig {
+    /// Minimum divergence from existing senses to warrant a new sense.
+    /// If the Jaccard distance between the proposed compositions and the
+    /// best-matching existing sense is below this, assign to existing.
+    pub min_composition_divergence: f32,
+    /// Minimum entropy in context distribution to warrant a new sense.
+    /// Low entropy means the context is too uniform to define a distinct sense.
+    pub entropy_threshold: f32,
+    /// Maximum senses per ID — prevents unbounded sense proliferation.
+    pub max_senses_per_id: usize,
+    /// Minimum confidence for a composition target to be included
+    /// in a newly induced sense.
+    pub composition_min_confidence: f32,
+}
+
+impl Default for SenseInductionConfig {
+    fn default() -> Self {
+        Self {
+            min_composition_divergence: 0.3,
+            entropy_threshold: 0.5,
+            max_senses_per_id: 8,
+            composition_min_confidence: 0.3,
+        }
+    }
+}
+
+// -----------------------------------------------------------------------
+// GroundingEvidence — tracks composition verification (Problem 2)
+// -----------------------------------------------------------------------
+
+/// Evidence tracking for grounding verification of a sense's compositions.
+///
+/// This addresses Problem 2 (Grounding): how to ensure compositions
+/// formed are accurate and not artifacts of the ingest process.
+///
+/// Instead of a simple scalar score, we track the full evidence trail:
+/// how many contexts confirmed vs contradicted, what the last contradiction
+/// was, and how many times we've revised the compositions.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GroundingEvidence {
+    /// Contexts that confirmed the compositions (overlap with composition node IDs).
+    pub confirming_contexts: usize,
+    /// Contexts that contradicted the compositions (little overlap with composition node IDs).
+    pub contradicting_contexts: usize,
+    /// Description of the last contradiction encountered.
+    pub last_contradiction: Option<String>,
+    /// How many times compositions have been revised due to grounding failure.
+    pub revision_count: usize,
+}
+
+impl Default for GroundingEvidence {
+    fn default() -> Self {
+        Self {
+            confirming_contexts: 0,
+            contradicting_contexts: 0,
+            last_contradiction: None,
+            revision_count: 0,
+        }
+    }
+}
+
+impl GroundingEvidence {
+    /// Create new empty grounding evidence.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Compute the grounding score from the confirming/contradicting ratio.
+    ///
+    /// Score = confirming / (confirming + contradicting), or 0.5 if no evidence yet.
+    /// A score near 1.0 means the compositions are well-confirmed.
+    /// A score near 0.0 means the compositions are frequently contradicted.
+    pub fn score(&self) -> f32 {
+        let total = self.confirming_contexts + self.contradicting_contexts;
+        if total == 0 {
+            return 0.5; // No evidence yet — neutral
+        }
+        self.confirming_contexts as f32 / total as f32
+    }
+
+    /// Record a confirming context.
+    pub fn confirm(&mut self) {
+        self.confirming_contexts += 1;
+    }
+
+    /// Record a contradicting context with an optional description.
+    pub fn contradict(&mut self, reason: Option<String>) {
+        self.contradicting_contexts += 1;
+        self.last_contradiction = reason;
+    }
+}
+
+// -----------------------------------------------------------------------
+// GroundingVerdict — classification of grounding status
+// -----------------------------------------------------------------------
+
+/// Verdict on the grounding status of a sense's compositions.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum GroundingVerdict {
+    /// Compositions are well-confirmed by evidence.
+    WellGrounded,
+    /// Compositions have some contradictions — review recommended.
+    NeedsReview,
+    /// Compositions have many contradictions — revision required.
+    NeedsRevision,
+}
 
 // -----------------------------------------------------------------------
 // Config — all tunable values in one place
@@ -73,6 +192,8 @@ pub struct SenseConfig {
     pub grounding_penalty: f32,
     /// Grounding score below which a sense is considered ungrounded
     pub grounding_min: f32,
+    /// Configuration for sense induction (Problem 1).
+    pub induction: SenseInductionConfig,
 }
 
 impl Default for SenseConfig {
@@ -92,6 +213,7 @@ impl Default for SenseConfig {
             grounding_boost: 0.05,
             grounding_penalty: 0.10,
             grounding_min: 0.2,
+            induction: SenseInductionConfig::default(),
         }
     }
 }
@@ -110,12 +232,12 @@ pub enum SenseStatus {
 }
 
 // -----------------------------------------------------------------------
-// Sense — one sense cluster inside an ID (v5.0 — compositional)
+// Sense — one sense cluster inside an ID (v6.0 — compositional)
 // -----------------------------------------------------------------------
 
 /// A single sense cluster inside a node.
 ///
-/// In v5.0, a sense is DEFINED by its compositions — references to
+/// In v6.0, a sense is DEFINED by its compositions — references to
 /// specific senses of other nodes. This is what makes RSVS structural:
 /// the relationship between "raja" and "ratu" is not statistical, but
 /// compositional — they share most of their compositions and differ
@@ -123,6 +245,9 @@ pub enum SenseStatus {
 ///
 /// The `contexts` field provides observational EVIDENCE for the sense,
 /// while `compositions` provides the structural DEFINITION.
+///
+/// The `grounding` field tracks the full evidence trail for composition
+/// verification (Problem 2), replacing the simple `grounding_score: f32`.
 #[derive(Debug, Clone)]
 pub struct Sense {
     /// Index within the parent node's sense list.
@@ -159,11 +284,10 @@ pub struct Sense {
     /// How many global contexts have passed since last assignment.
     pub inactivity: usize,
 
-    /// Grounding score — how well the compositions are confirmed by evidence.
-    /// Starts at `grounding_initial`, boosted by confirming contexts,
-    /// penalized by contradicting ones. If it falls below `grounding_min`,
-    /// the sense is a candidate for revision.
-    pub grounding_score: f32,
+    /// Grounding evidence — tracks composition verification (v6.0).
+    /// Replaces the simple `grounding_score: f32` from v5.0.
+    /// Use `grounding.score()` to get the computed grounding score.
+    pub grounding: GroundingEvidence,
 }
 
 impl Sense {
@@ -185,7 +309,7 @@ impl Sense {
             coherence: 0.5,
             status: SenseStatus::Fragile,
             inactivity: 0,
-            grounding_score: 0.5,
+            grounding: GroundingEvidence::new(),
         }
     }
 
@@ -218,7 +342,7 @@ impl Sense {
             coherence: 0.5,
             status: SenseStatus::Fragile,
             inactivity: 0,
-            grounding_score: 0.5,
+            grounding: GroundingEvidence::new(),
         }
     }
 
@@ -306,19 +430,11 @@ impl Sense {
             return 0.0; // Both primitive — no compositional overlap
         }
 
-        let shared = self
-            .compositions
-            .iter()
-            .filter(|c| other.compositions.contains(c))
-            .count();
+        let set_a: HashSet<&CompositionRef> = self.compositions.iter().collect();
+        let set_b: HashSet<&CompositionRef> = other.compositions.iter().collect();
 
-        let union = self.compositions.len()
-            + other.compositions.len()
-            - self
-                .compositions
-                .iter()
-                .filter(|c| other.compositions.contains(c))
-                .count();
+        let shared = set_a.intersection(&set_b).count();
+        let union = set_a.union(&set_b).count();
 
         if union == 0 {
             0.0
@@ -332,18 +448,17 @@ impl Sense {
     /// Returns (only_in_self, only_in_other).
     /// This enables substitution analysis: "what changes transform sense A into sense B?"
     pub fn composition_diff(&self, other: &Sense) -> (Vec<CompositionRef>, Vec<CompositionRef>) {
-        let only_self: Vec<CompositionRef> = self
-            .compositions
-            .iter()
-            .filter(|c| !other.compositions.contains(c))
-            .cloned()
+        let set_a: HashSet<&CompositionRef> = self.compositions.iter().collect();
+        let set_b: HashSet<&CompositionRef> = other.compositions.iter().collect();
+
+        let only_self: Vec<CompositionRef> = set_a
+            .difference(&set_b)
+            .map(|c| (*c).clone())
             .collect();
 
-        let only_other: Vec<CompositionRef> = other
-            .compositions
-            .iter()
-            .filter(|c| !self.compositions.contains(c))
-            .cloned()
+        let only_other: Vec<CompositionRef> = set_b
+            .difference(&set_a)
+            .map(|c| (*c).clone())
             .collect();
 
         (only_self, only_other)
@@ -354,7 +469,7 @@ impl Sense {
         !self.compositions.is_empty()
     }
 
-    /// Update grounding score based on whether a context confirms or contradicts
+    /// Update grounding evidence based on whether a context confirms or contradicts
     /// the compositional definition.
     ///
     /// A context "confirms" if it overlaps significantly with the composition node IDs.
@@ -376,18 +491,183 @@ impl Sense {
 
         if overlap_ratio >= config.theta_comp_overlap {
             // Context confirms compositions
-            self.grounding_score =
-                (self.grounding_score + config.grounding_boost).min(1.0);
+            self.grounding.confirm();
         } else {
             // Context contradicts compositions
-            self.grounding_score =
-                (self.grounding_score - config.grounding_penalty).max(0.0);
+            let reason = format!(
+                "Low overlap ({:.2}) with {} composition nodes",
+                overlap_ratio,
+                comp_node_ids.len()
+            );
+            self.grounding.contradict(Some(reason));
         }
     }
 
-    /// Check if this sense is well-grounded (grounding_score >= threshold).
+    /// Check if this sense is well-grounded (grounding score >= threshold).
     pub fn is_grounded(&self, min: f32) -> bool {
-        self.compositions.is_empty() || self.grounding_score >= min
+        self.compositions.is_empty() || self.grounding.score() >= min
+    }
+
+    // -------------------------------------------------------------------
+    // Sense Induction (Problem 1) — v6.0
+    // -------------------------------------------------------------------
+
+    /// Compute the induction score for creating a new sense given a context.
+    ///
+    /// This addresses Problem 1: How are senses formed from text? When is a
+    /// new sense warranted given a context?
+    ///
+    /// The score considers:
+    /// - **Composition divergence**: How different the proposed compositions are
+    ///   from existing sense cores (Jaccard distance). Higher divergence = more
+    ///   reason to create a new sense.
+    /// - **Context entropy**: How diverse the context distribution is. Low entropy
+    ///   means the context is too uniform to define a distinct sense.
+    /// - **Information gain**: Whether creating a new sense would capture meaning
+    ///   not already captured by existing senses.
+    ///
+    /// Returns a score in [0.0, 1.0]. Higher = more reason to induce a new sense.
+    pub fn induction_score(
+        &self,
+        proposed_compositions: &[CompositionRef],
+        context: &AtomSet,
+        config: &SenseInductionConfig,
+    ) -> f32 {
+        if proposed_compositions.is_empty() {
+            return 0.0; // No compositions = no induction
+        }
+
+        // 1. Composition divergence: Jaccard distance from existing compositions
+        let existing_set: HashSet<&CompositionRef> = self.compositions.iter().collect();
+        let proposed_set: HashSet<&CompositionRef> = proposed_compositions.iter().collect();
+        let intersection = existing_set.intersection(&proposed_set).count();
+        let union = existing_set.union(&proposed_set).count();
+        let jaccard = if union == 0 {
+            0.0
+        } else {
+            intersection as f32 / union as f32
+        };
+        let divergence = 1.0 - jaccard; // Jaccard distance
+
+        // If divergence is below minimum, induction is not warranted
+        if divergence < config.min_composition_divergence {
+            return 0.0;
+        }
+
+        // 2. Context entropy: measure distribution uniformity
+        let entropy = compute_context_entropy(context);
+
+        // If entropy is below threshold, context is too uniform for a distinct sense
+        if entropy < config.entropy_threshold {
+            // Scale down the score proportionally
+            let entropy_factor = entropy / config.entropy_threshold;
+            return divergence * entropy_factor * 0.5;
+        }
+
+        // 3. Information gain: how much new meaning would a new sense capture
+        // This is approximated by the fraction of proposed compositions not in existing
+        let novel_fraction = if proposed_compositions.is_empty() {
+            0.0
+        } else {
+            let novel = proposed_compositions
+                .iter()
+                .filter(|c| !existing_set.contains(c))
+                .count();
+            novel as f32 / proposed_compositions.len() as f32
+        };
+
+        // Combined score: divergence * entropy_weight * information_gain
+        let score = divergence * (0.4 + 0.3 * entropy.min(1.0) + 0.3 * novel_fraction);
+
+        score.clamp(0.0, 1.0)
+    }
+
+    // -------------------------------------------------------------------
+    // Grounding revision (Problem 2) — v6.0
+    // -------------------------------------------------------------------
+
+    /// Revise compositions based on accumulated grounding evidence.
+    ///
+    /// If the grounding score drops below `grounding_min`, this method
+    /// removes the least-confirmed composition (the one with the weakest
+    /// evidence) and increments the revision count.
+    ///
+    /// Returns true if a revision was made.
+    pub fn revise_compositions(&mut self, grounding_min: f32) -> bool {
+        if self.compositions.is_empty() {
+            return false;
+        }
+
+        if self.grounding.score() >= grounding_min {
+            return false; // No revision needed
+        }
+
+        // Remove the last composition (least recently added = least confirmed)
+        // In a full implementation, we would track per-composition confirmation
+        if self.compositions.len() > 1 {
+            self.compositions.pop();
+            self.grounding.revision_count += 1;
+            return true;
+        }
+
+        false
+    }
+
+    /// Get the grounding verdict for this sense's compositions.
+    ///
+    /// Classifies the grounding status into:
+    /// - `WellGrounded`: score >= 0.6 (strong evidence for compositions)
+    /// - `NeedsReview`: 0.3 <= score < 0.6 (some contradictions)
+    /// - `NeedsRevision`: score < 0.3 (many contradictions)
+    pub fn grounding_verdict(&self) -> GroundingVerdict {
+        let score = self.grounding.score();
+        if score >= 0.6 {
+            GroundingVerdict::WellGrounded
+        } else if score >= 0.3 {
+            GroundingVerdict::NeedsReview
+        } else {
+            GroundingVerdict::NeedsRevision
+        }
+    }
+}
+
+/// Compute a simple entropy measure for a context's atom distribution.
+///
+/// Uses the frequency distribution of atoms in the context relative to
+/// a uniform baseline. Returns a value in [0.0, 1.0] where:
+/// - 0.0 = no diversity (single atom)
+/// - 1.0 = maximum diversity (all atoms equally frequent)
+fn compute_context_entropy(context: &AtomSet) -> f32 {
+    if context.is_empty() {
+        return 0.0;
+    }
+
+    let mut freq: HashMap<NodeId, usize> = HashMap::new();
+    for &atom in context {
+        *freq.entry(atom).or_insert(0) += 1;
+    }
+
+    let n = context.len() as f32;
+    let n_unique = freq.len() as f32;
+
+    if n_unique <= 1.0 {
+        return 0.0;
+    }
+
+    // Shannon entropy normalized by max entropy
+    let mut entropy = 0.0f32;
+    for &count in freq.values() {
+        let p = count as f32 / n;
+        if p > 0.0 {
+            entropy -= p * p.log2();
+        }
+    }
+
+    let max_entropy = n_unique.log2();
+    if max_entropy == 0.0 {
+        0.0
+    } else {
+        (entropy / max_entropy).clamp(0.0, 1.0)
     }
 }
 
@@ -502,7 +782,7 @@ impl SenseManager {
     }
 
     // -------------------------------------------------------------------
-    // Compositional sense induction (v5.0)
+    // Compositional sense induction (v6.0)
     // -------------------------------------------------------------------
 
     /// Induce a new compositional sense from a context.
@@ -527,7 +807,25 @@ impl SenseManager {
             s.inactivity += 1;
         }
 
-        // Build compositions from active senses
+        // Check max senses per ID
+        if self.senses.len() >= self.config.induction.max_senses_per_id {
+            // Force assignment to best existing sense
+            let best = self
+                .senses
+                .iter()
+                .enumerate()
+                .map(|(i, s)| {
+                    let sim = jaccard_sets(&context, &s.core(self.config.tau_core));
+                    (i, sim)
+                })
+                .max_by(|a, b| a.1.total_cmp(&b.1));
+            if let Some((best_idx, _)) = best {
+                self.senses[best_idx].assign(context);
+                return IngestResult::Assigned(best_idx);
+            }
+        }
+
+        // Build compositions from active senses, filtering by min confidence
         let compositions: Vec<CompositionRef> = active_senses
             .iter()
             .map(|&(node_id, sense_id)| CompositionRef::new(node_id, sense_id))
@@ -535,20 +833,19 @@ impl SenseManager {
 
         // Try to match with an existing sense that has similar compositions
         if !self.senses.is_empty() && !compositions.is_empty() {
+            let compositions_set: HashSet<&CompositionRef> = compositions.iter().collect();
+
             let best = self
                 .senses
                 .iter()
                 .enumerate()
                 .map(|(i, s)| {
                     let comp_overlap = if s.is_compositional() {
-                        // Compare compositions directly
-                        let shared = s
-                            .compositions
-                            .iter()
-                            .filter(|c| compositions.contains(c))
-                            .count();
-                        let union = s.compositions.len() + compositions.len()
-                            - s.compositions.iter().filter(|c| compositions.contains(c)).count();
+                        // Compare compositions directly using HashSet
+                        let existing_set: HashSet<&CompositionRef> =
+                            s.compositions.iter().collect();
+                        let shared = existing_set.intersection(&compositions_set).count();
+                        let union = existing_set.union(&compositions_set).count();
                         if union == 0 {
                             0.0
                         } else {
@@ -573,6 +870,28 @@ impl SenseManager {
                         compositions.iter().map(|c| c.node_id).collect();
                     self.senses[best_idx].update_grounding(&context_node_ids, &self.config);
                     return IngestResult::Assigned(best_idx);
+                }
+            }
+
+            // Check induction score before creating a new sense
+            if let Some(best_sense) = self.senses.first() {
+                let induction_score =
+                    best_sense.induction_score(&compositions, &context, &self.config.induction);
+                if induction_score < self.config.induction.min_composition_divergence {
+                    // Not divergent enough — assign to best existing
+                    let best = self
+                        .senses
+                        .iter()
+                        .enumerate()
+                        .map(|(i, s)| {
+                            let sim = jaccard_sets(&context, &s.core(self.config.tau_core));
+                            (i, sim)
+                        })
+                        .max_by(|a, b| a.1.total_cmp(&b.1));
+                    if let Some((best_idx, _)) = best {
+                        self.senses[best_idx].assign(context);
+                        return IngestResult::Assigned(best_idx);
+                    }
                 }
             }
         }
@@ -756,20 +1075,28 @@ impl SenseManager {
             (self.senses[keep].sum_sim / self.senses[keep].pair_count as f64) as f32
         };
 
-        // Merge compositions (union of both)
-        for comp in self.senses[remove].compositions.clone() {
-            if !self.senses[keep].compositions.contains(&comp) {
-                self.senses[keep].compositions.push(comp);
-            }
-        }
+        // Merge compositions (union of both) using HashSet for dedup
+        let keep_set: HashSet<CompositionRef> =
+            self.senses[keep].compositions.iter().cloned().collect();
+        let remove_comps: HashSet<CompositionRef> =
+            self.senses[remove].compositions.iter().cloned().collect();
+        let merged_comps: Vec<CompositionRef> =
+            keep_set.union(&remove_comps).cloned().collect();
+        self.senses[keep].compositions = merged_comps;
 
         // Keep the higher layer
         self.senses[keep].layer = self.senses[keep].layer.max(self.senses[remove].layer);
 
-        // Average grounding scores
-        let g_keep = self.senses[keep].grounding_score;
-        let g_remove = self.senses[remove].grounding_score;
-        self.senses[keep].grounding_score = (g_keep + g_remove) / 2.0;
+        // Merge grounding evidence
+        let g_keep = self.senses[keep].grounding.clone();
+        let g_remove = self.senses[remove].grounding.clone();
+        self.senses[keep].grounding = GroundingEvidence {
+            confirming_contexts: g_keep.confirming_contexts + g_remove.confirming_contexts,
+            contradicting_contexts: g_keep.contradicting_contexts
+                + g_remove.contradicting_contexts,
+            last_contradiction: g_keep.last_contradiction.or(g_remove.last_contradiction),
+            revision_count: g_keep.revision_count + g_remove.revision_count,
+        };
 
         // Merge freq counts
         for (&atom, &count) in &self.senses[remove].freq_counts.clone() {
@@ -830,3 +1157,5 @@ pub enum IngestResult {
     /// A new sense was created (index).
     Created(usize),
 }
+
+

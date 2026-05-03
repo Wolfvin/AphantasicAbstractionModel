@@ -1,10 +1,10 @@
-//! Explicit composition API — RSVS v5.0 Compositional Architecture
+//! Explicit composition API — RSVS v6.0 Compositional Architecture
 //!
 //! Contains the `compose()` method for creating compositional nodes from
 //! explicit composition references. This is the core compositional mechanism:
 //! higher-level concepts are built from lower-level senses.
 //!
-//! v5.0: compose() now accepts `Vec<CompositionRef>` — references to specific
+//! v6.0: compose() now accepts `Vec<CompositionRef>` — references to specific
 //! senses of specific nodes, not just node IDs.
 //!
 //! Example:
@@ -20,7 +20,7 @@ use crate::types::{
 };
 
 impl Rsvs {
-    /// Create a compositional node from explicit composition references (v5.0).
+    /// Create a compositional node from explicit composition references (v6.0).
     ///
     /// This is the core compositional mechanism: higher-level concepts
     /// are built from specific senses of lower-level concepts.

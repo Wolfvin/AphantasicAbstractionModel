@@ -4,7 +4,7 @@ Public API:
     run_mode  — unified mode dispatch for FastAPI server
     _run_mode — internal mode dispatch for bridge_server
 
-Updated for RSVS v5.0 compositional architecture.
+Updated for RSVS v6.0 compositional architecture + grounding.
 """
 
 from __future__ import annotations
@@ -55,6 +55,7 @@ __all__ = [
     "_run_compose_rust",
     "_run_structural_similarity_rust",
     "_run_substitution_analysis_rust",
+    "_run_grounding_info_rust",
     "_run_mode",
     "_read_latest_mode",
     "run_mode",
@@ -686,6 +687,77 @@ def _run_substitution_analysis_rust(
 
 
 # ---------------------------------------------------------------------------
+# Mode: grounding_info (Rust core) — v6.0
+# ---------------------------------------------------------------------------
+
+
+def _run_grounding_info_rust(
+    text: str,
+    correlation_id: str,
+    options: dict[str, Any] | None,
+) -> tuple[dict[str, Any], list[dict[str, Any]], dict[str, str]]:
+    """Grounding info via the Rust core: r.grounding_info(label, sense_id).
+
+    Returns detailed grounding evidence for a specific sense, including
+    evidence traces, source references, confidence breakdown, and
+    composition grounding status.
+    """
+    r = _get_rsvs()
+    if r is None:
+        raise RustCoreUnavailableError("Rust core required for grounding_info mode")
+
+    options = options or {}
+    label = options.get("label", text)
+    sense_id = int(options.get("sense_id", 0))
+
+    info_result = r.grounding_info(label, sense_id)
+
+    # Extract fields from grounding info result
+    result = {
+        "label": label,
+        "sense_id": sense_id,
+        "grounding_score": getattr(info_result, "grounding_score", None),
+        "evidence_traces": list(getattr(info_result, "evidence_traces", [])),
+        "source_references": list(getattr(info_result, "source_references", [])),
+        "confidence_breakdown": getattr(info_result, "confidence_breakdown", {}),
+        "composition_grounding": list(getattr(info_result, "composition_grounding", [])),
+        "is_grounded": getattr(info_result, "is_grounded", False),
+    }
+
+    n_traces = len(result["evidence_traces"])
+    n_sources = len(result["source_references"])
+    is_grounded = result["is_grounded"]
+
+    messages = [
+        {
+            "id": make_id("msg"),
+            "type": "system_ingest_status",
+            "content": (
+                f"Grounding info for '{label}' sense #{sense_id}: "
+                f"score={result['grounding_score']}, "
+                f"{n_traces} evidence traces, {n_sources} sources, "
+                f"grounded={'yes' if is_grounded else 'no'} [Rust core]."
+            ),
+            "timestamp": iso_now(),
+            "correlation_id": correlation_id,
+        }
+    ]
+
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    path = CONFIG.atom_dir / f"grounding-info-{stamp}.json"
+    payload = {
+        "schema_version": SCHEMA_VERSION,
+        "mode": "grounding_info",
+        "timestamp": iso_now(),
+        "correlation_id": correlation_id,
+        "input": f"{label} sense #{sense_id}",
+        "result": result,
+    }
+    _write_json(path, payload)
+    return result, messages, {"grounding_info": str(path)}
+
+
+# ---------------------------------------------------------------------------
 # Unified mode dispatch
 # ---------------------------------------------------------------------------
 
@@ -696,6 +768,7 @@ _MODE_HANDLERS = {
     "compose": _run_compose_rust,
     "structural_similarity": _run_structural_similarity_rust,
     "substitution_analysis": _run_substitution_analysis_rust,
+    "grounding_info": _run_grounding_info_rust,
 }
 
 

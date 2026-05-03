@@ -1,6 +1,6 @@
 {
   "name": "@rsvs/frontend",
-  "version": "4.2.0",
+  "version": "6.0.0",
   "private": true,
   "description": "RSVS 3D Knowledge Graph Visualization",
   "keywords": [

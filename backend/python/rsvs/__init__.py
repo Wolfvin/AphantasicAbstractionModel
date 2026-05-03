@@ -11,8 +11,8 @@ Architecture:
     Graph, Attention, Autonomy, Sense, Pipeline
 """
 
-__version__ = "5.0.0"
-__schema_version__ = "v5.0"
+__version__ = "6.0.0"
+__schema_version__ = "v6.0"
 __api_version__ = "v1"
 
 # Try to import the Rust native module. If not available (e.g. maturin not built),
@@ -61,6 +61,7 @@ __all__ = [
     # v5.0
     "StructuralSimResult",
     "SubstitutionResult",
+    # v6.0
     # Bridge modules (lazy-loaded)
     "get_rsvs_instance",
     "run_mode",

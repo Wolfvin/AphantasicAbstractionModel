@@ -19,6 +19,7 @@ import type {
   ModeResult,
   StructuralSimilarityResult,
   SubstitutionAnalysisResult,
+  GroundingInfoResult,
 } from '@/lib/types';
 
 // ── Graph Domain State ──
@@ -428,6 +429,7 @@ interface ModeResultState {
   setComposeResult: (result: ComposeResult) => void;
   setStructuralSimilarityResult: (result: StructuralSimilarityResult) => void;
   setSubstitutionAnalysisResult: (result: SubstitutionAnalysisResult) => void;
+  setGroundingInfoResult: (result: GroundingInfoResult) => void;
   clearResult: () => void;
   setResultLoading: (loading: boolean) => void;
   setResultError: (error: string | null) => void;
@@ -452,6 +454,9 @@ export const useModeResultStore = create<ModeResultState>((set) => ({
 
   setSubstitutionAnalysisResult: (result) =>
     set({ currentResult: { type: 'substitution_analysis', data: result }, isResultLoading: false, resultError: null }),
+
+  setGroundingInfoResult: (result) =>
+    set({ currentResult: { type: 'grounding_info', data: result }, isResultLoading: false, resultError: null }),
 
   clearResult: () =>
     set({ currentResult: null, isResultLoading: false, resultError: null }),

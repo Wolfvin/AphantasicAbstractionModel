@@ -1,6 +1,6 @@
-//! Runtime event stream + snapshot contracts for external subscribers (v5.0)
+//! Runtime event stream + snapshot contracts for external subscribers (v6.0)
 //!
-//! v5.0: Added layer tracking to RuntimeNode.
+//! v6.0: Updated schema version. Added layer tracking to RuntimeNode.
 
 use serde::{Deserialize, Serialize};
 
@@ -9,9 +9,9 @@ use crate::types::{CompositionRef, NodeId};
 /// API version string for event contracts.
 pub const API_VERSION: &str = "v1";
 /// Schema version string for event contracts.
-pub const SCHEMA_VERSION: &str = "v5.0";
+pub const SCHEMA_VERSION: &str = "v6.0";
 
-/// Runtime node info (v5.0: compositional with layer).
+/// Runtime node info (v6.0: compositional with layer).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RuntimeNode {
     /// Unique integer node ID.
@@ -20,7 +20,7 @@ pub struct RuntimeNode {
     pub label: String,
     /// Surface form with language tag (e.g., "raja@id").
     pub surface_label: String,
-    /// Node kind — always "node" in v5.0.
+    /// Node kind — always "node" in v6.0.
     pub kind: String,
     /// Tier number (1, 2, or 3).
     pub tier: u8,
@@ -48,7 +48,7 @@ pub struct RuntimeNode {
     pub compositions: Vec<CompositionRef>,
 }
 
-/// Runtime edge info (v5.0).
+/// Runtime edge info (v6.0).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RuntimeEdge {
     /// Edge ID string (e.g., "1->2").
@@ -63,7 +63,7 @@ pub struct RuntimeEdge {
     pub source_type: String,
 }
 
-/// Full graph snapshot for external consumers (v5.0).
+/// Full graph snapshot for external consumers (v6.0).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RuntimeSnapshot {
     /// API version string.

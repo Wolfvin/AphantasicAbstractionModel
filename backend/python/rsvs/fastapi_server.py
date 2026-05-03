@@ -1,9 +1,11 @@
 """RSVS FastAPI server — async, OpenAPI docs, production-grade.
 
-Updated for RSVS v5.0 compositional architecture with:
+Updated for RSVS v6.0 with:
   - Structural similarity and substitution analysis endpoints
   - Compose with (label, sense_id) pairs
   - Enriched return types from Rust core (layer, grounding_score, compositions, etc.)
+  - Grounding info and sense revision endpoints
+  - Indonesian corpus (kerajaan, konsep domains)
 """
 
 from __future__ import annotations
@@ -47,8 +49,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="RSVS — Relational Symbolic Vocabulary System",
-    version="5.0.0",
-    description="Hard-attention symbolic knowledge engine with Rust core (v5.0 compositional architecture)",
+    version="6.0.0",
+    description="Hard-attention symbolic knowledge engine with Rust core (v6.0 compositional architecture + grounding)",
     lifespan=lifespan,
 )
 
@@ -478,13 +480,13 @@ async def events_endpoint(request: Request) -> dict[str, Any]:
 @app.get("/health")
 @limiter.limit("60/minute")
 async def health(request: Request) -> dict[str, str]:
-    return {"status": "ok", "version": "5.0.0"}
+    return {"status": "ok", "version": "6.0.0"}
 
 
 @app.get("/")
 @limiter.limit("60/minute")
 async def root(request: Request) -> dict[str, str]:
-    return {"name": "RSVS", "version": "5.0.0", "docs": "/docs"}
+    return {"name": "RSVS", "version": "6.0.0", "docs": "/docs"}
 
 
 def main() -> None:

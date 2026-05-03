@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-RSVS CLI — v5.0.0
+RSVS CLI — v6.0.0
 
 Usage:
   rsvs init [--db PATH]
@@ -29,7 +29,7 @@ from pathlib import Path
 # -----------------------------------------------------------------------
 
 DEFAULT_DB    = "rsvs.json"
-VERSION       = "5.0.0"
+VERSION       = "6.0.0"
 BANNER        = f"RSVS v{VERSION} — Relational Symbolic Vocabulary System"
 
 # -----------------------------------------------------------------------

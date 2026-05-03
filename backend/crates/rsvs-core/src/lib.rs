@@ -1,6 +1,6 @@
 #![warn(missing_docs)]
 
-//! RSVS Core — v5.0 Compositional Architecture
+//! RSVS Core — v6.0 Compositional Architecture
 //!
 //! Every sense is formed by compositions — pairs of (ID, sense_id).
 //! Relationships between IDs are structural, derived from shared/differing
@@ -11,6 +11,9 @@
 //! - `layer`: Compositional depth (0 = primitive, N = composed from layer N-1)
 //! - `structural_similarity`: Compare nodes by shared/differing compositions
 //! - `substitution_analysis`: Find what transforms one sense into another
+//! - `TransformerBridge`: Interpretation layer ON TOP of Transformer output
+//! - `GroundingEvidence`: Full evidence trail for composition verification
+//! - `SenseInductionConfig`: Tunable parameters for sense formation
 
 pub mod attention;
 pub mod autonomy;
@@ -24,6 +27,7 @@ pub mod pipeline;
 pub mod seed;
 pub mod sense;
 pub mod tests;
+pub mod transformer_bridge;
 pub mod types;
 
 pub use attention::{
@@ -42,5 +46,9 @@ pub use graph::{
 pub use pipeline::{
     AppraiseResult, IngestStats, PipelineConfig, PipelineStatus, QueryResult, RelateResult, Rsvs,
 };
-pub use sense::{IngestResult, Sense, SenseConfig, SenseManager, SenseStatus};
+pub use sense::{
+    GroundingEvidence, GroundingVerdict, IngestResult, Sense, SenseConfig, SenseInductionConfig,
+    SenseManager, SenseStatus,
+};
+pub use transformer_bridge::{TransformerBridge, TransformerBridgeConfig};
 pub use types::*;

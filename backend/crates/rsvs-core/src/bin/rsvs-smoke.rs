@@ -1,9 +1,9 @@
-//! RSVS CLI — smoke test v4.2 (end-to-end pipeline)
+//! RSVS CLI — smoke test v6.0 (end-to-end pipeline)
 
 use rsvs::{AutonomyConfig, NodeStatus, PipelineConfig, Rsvs, SenseConfig, Tier};
 
 fn main() {
-    println!("=== RSVS Core v4.2 — End-to-End Pipeline ===\n");
+    println!("=== RSVS Core v6.0 — End-to-End Pipeline ===\n");
 
     // ---------------------------------------------------------------
     // Init system
@@ -28,7 +28,7 @@ fn main() {
         rsvs.graph.node_count()
     );
 
-    // Verify v4.2 seed nodes
+    // Verify v6.0 seed nodes
     if let Some(&id) = rsvs.token_to_id.get("exists") {
         let node = rsvs.graph.get_node(id).unwrap();
         println!(
@@ -119,9 +119,9 @@ fn main() {
     println!("  warmed up:      {}", status.warmed_up);
 
     // ---------------------------------------------------------------
-    // v4.2 Node info
+    // v6.0 Node info
     // ---------------------------------------------------------------
-    println!("\n--- Node Info (v4.2) ---");
+    println!("\n--- Node Info (v6.0) ---");
     for token in &[
         "stone", "hard", "solid", "water", "liquid", "heat", "pressure",
     ] {
@@ -143,9 +143,9 @@ fn main() {
     }
 
     // ---------------------------------------------------------------
-    // v4.2: Appraise
+    // v6.0: Appraise
     // ---------------------------------------------------------------
-    println!("\n--- Appraise (v4.2) ---");
+    println!("\n--- Appraise (v6.0) ---");
     let appraise_result = rsvs.appraise("Stone is hard and solid like metal");
     println!(
         "  agree: {:.1}%  disagree: {:.1}%  verdict: {}",
@@ -157,9 +157,9 @@ fn main() {
     );
 
     // ---------------------------------------------------------------
-    // v4.2: Relate
+    // v6.0: Relate
     // ---------------------------------------------------------------
-    println!("\n--- Relate (v4.2) ---");
+    println!("\n--- Relate (v6.0) ---");
     if let Some(relate_result) = rsvs.relate("stone") {
         let node_labels: Vec<String> = relate_result
             .related_nodes
@@ -178,9 +178,9 @@ fn main() {
     }
 
     // ---------------------------------------------------------------
-    // Snapshot v4.2
+    // Snapshot v6.0
     // ---------------------------------------------------------------
-    println!("\n--- Snapshot v4.2 ---");
+    println!("\n--- Snapshot v6.0 ---");
     let snap = rsvs.snapshot_v1();
     println!("  schema_version: {}", snap.schema_version);
     println!("  nodes: {}  edges: {}", snap.nodes.len(), snap.edges.len());
@@ -203,5 +203,5 @@ fn main() {
         }
     }
 
-    println!("\n=== v4.2 smoke test passed ===");
+    println!("\n=== v6.0 smoke test passed ===");
 }

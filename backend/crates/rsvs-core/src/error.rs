@@ -1,4 +1,4 @@
-//! Error types for RSVS v4.2
+//! Error types for RSVS v6.0
 //!
 //! Central error enum using `thiserror` for consistent, typed error handling
 //! across the crate. Replaces ad-hoc `String` errors and `panic!` calls.

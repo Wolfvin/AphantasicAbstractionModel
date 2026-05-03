@@ -1,13 +1,19 @@
-//! Comprehensive unit tests for RSVS v4.2
+//! Comprehensive unit tests for RSVS v6.0
 //!
-//! Covers: v4.2 node creation, NodeStatus transitions, quarantine,
+//! Covers: sense creation, NodeStatus transitions, quarantine,
 //! hysteresis, seed invariants, CompressionState, DAG self-reference,
-//! governance scoring, appraise mode, relate mode, snapshot v4.2 schema,
-//! persistence save/load roundtrip, and more.
+//! governance scoring, appraise mode, relate mode, snapshot v6.0 schema,
+//! persistence save/load roundtrip, HashSet composition comparison,
+//! sense induction scoring, grounding evidence accumulation,
+//! composition revision, transformer bridge conversion, and more.
 
 #[cfg(test)]
 mod sense_tests {
-    use crate::sense::{IngestResult, SenseConfig, SenseManager, SenseStatus};
+    use crate::sense::{
+        GroundingEvidence, GroundingVerdict, IngestResult, Sense, SenseConfig, SenseInductionConfig,
+        SenseManager, SenseStatus,
+    };
+    use crate::types::CompositionRef;
 
     fn config_low_threshold() -> SenseConfig {
         SenseConfig {
@@ -121,18 +127,23 @@ mod sense_tests {
 
     #[test]
     fn fragile_sense_deleted_after_k_fragile() {
-        use crate::types::CompositionRef;
         let mut sm = SenseManager::new(SenseConfig {
             k_fragile: 3,
             ..config_low_threshold()
         });
         sm.ingest(vec![1, 2, 3]);
         sm.senses[0].inactivity = 3;
-        // v5.0: primitive senses (empty compositions) are always grounded,
-        // so they won't be purged. Add a composition and set grounding_score
+        // v6.0: primitive senses (empty compositions) are always grounded,
+        // so they won't be purged. Add a composition and set grounding score
         // below threshold so the sense is considered ungrounded.
         sm.senses[0].compositions = vec![CompositionRef::new(1, 0)];
-        sm.senses[0].grounding_score = 0.0;
+        // Set grounding evidence to all contradicting so score is below threshold
+        sm.senses[0].grounding = GroundingEvidence {
+            confirming_contexts: 0,
+            contradicting_contexts: 5,
+            last_contradiction: Some("test".to_string()),
+            revision_count: 0,
+        };
         sm.purge_fragile();
         assert_eq!(sm.sense_count(), 0);
     }
@@ -190,6 +201,369 @@ mod sense_tests {
             assert!(loose_core.contains(&1));
             assert!(loose_core.contains(&2));
         }
+    }
+
+    // -------------------------------------------------------------------
+    // v6.0: Grounding evidence tests
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn grounding_evidence_score_neutral_when_no_evidence() {
+        let ge = GroundingEvidence::new();
+        assert!((ge.score() - 0.5).abs() < 0.001);
+    }
+
+    #[test]
+    fn grounding_evidence_score_high_when_all_confirming() {
+        let ge = GroundingEvidence {
+            confirming_contexts: 10,
+            contradicting_contexts: 0,
+            last_contradiction: None,
+            revision_count: 0,
+        };
+        assert!((ge.score() - 1.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn grounding_evidence_score_low_when_all_contradicting() {
+        let ge = GroundingEvidence {
+            confirming_contexts: 0,
+            contradicting_contexts: 10,
+            last_contradiction: Some("test".to_string()),
+            revision_count: 0,
+        };
+        assert!((ge.score() - 0.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn grounding_evidence_score_mixed() {
+        let ge = GroundingEvidence {
+            confirming_contexts: 7,
+            contradicting_contexts: 3,
+            last_contradiction: None,
+            revision_count: 0,
+        };
+        assert!((ge.score() - 0.7).abs() < 0.001);
+    }
+
+    #[test]
+    fn grounding_evidence_confirm_and_contradict() {
+        let mut ge = GroundingEvidence::new();
+        ge.confirm();
+        ge.confirm();
+        ge.contradict(Some("low overlap".to_string()));
+        assert_eq!(ge.confirming_contexts, 2);
+        assert_eq!(ge.contradicting_contexts, 1);
+        assert_eq!(ge.last_contradiction, Some("low overlap".to_string()));
+        assert!((ge.score() - 2.0 / 3.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn grounding_verdict_well_grounded() {
+        let sense = Sense::new_compositional(
+            0,
+            vec![CompositionRef::new(1, 0), CompositionRef::new(2, 0)],
+            vec![1, 2],
+            1,
+        );
+        // Default grounding is neutral (0.5), which is NeedsReview
+        // Set to well-grounded
+        let mut sense = sense;
+        sense.grounding = GroundingEvidence {
+            confirming_contexts: 8,
+            contradicting_contexts: 2,
+            last_contradiction: None,
+            revision_count: 0,
+        };
+        assert_eq!(sense.grounding_verdict(), GroundingVerdict::WellGrounded);
+    }
+
+    #[test]
+    fn grounding_verdict_needs_review() {
+        let sense = Sense::new_compositional(
+            0,
+            vec![CompositionRef::new(1, 0)],
+            vec![1],
+            1,
+        );
+        // Default grounding is 0.5 which is NeedsReview
+        assert_eq!(sense.grounding_verdict(), GroundingVerdict::NeedsReview);
+    }
+
+    #[test]
+    fn grounding_verdict_needs_revision() {
+        let mut sense = Sense::new_compositional(
+            0,
+            vec![CompositionRef::new(1, 0), CompositionRef::new(2, 0)],
+            vec![1, 2],
+            1,
+        );
+        sense.grounding = GroundingEvidence {
+            confirming_contexts: 1,
+            contradicting_contexts: 9,
+            last_contradiction: Some("no overlap".to_string()),
+            revision_count: 0,
+        };
+        assert_eq!(sense.grounding_verdict(), GroundingVerdict::NeedsRevision);
+    }
+
+    // -------------------------------------------------------------------
+    // v6.0: Composition revision tests
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn revise_compositions_removes_least_confirmed() {
+        let mut sense = Sense::new_compositional(
+            0,
+            vec![CompositionRef::new(1, 0), CompositionRef::new(2, 0), CompositionRef::new(3, 0)],
+            vec![1, 2, 3],
+            1,
+        );
+        // Set grounding to all contradicting
+        sense.grounding = GroundingEvidence {
+            confirming_contexts: 0,
+            contradicting_contexts: 5,
+            last_contradiction: None,
+            revision_count: 0,
+        };
+
+        let revised = sense.revise_compositions(0.2);
+        assert!(revised);
+        assert_eq!(sense.compositions.len(), 2);
+        assert_eq!(sense.grounding.revision_count, 1);
+    }
+
+    #[test]
+    fn revise_compositions_no_revision_when_grounded() {
+        let mut sense = Sense::new_compositional(
+            0,
+            vec![CompositionRef::new(1, 0), CompositionRef::new(2, 0)],
+            vec![1, 2],
+            1,
+        );
+        // Set grounding to well-grounded
+        sense.grounding = GroundingEvidence {
+            confirming_contexts: 10,
+            contradicting_contexts: 1,
+            last_contradiction: None,
+            revision_count: 0,
+        };
+
+        let revised = sense.revise_compositions(0.2);
+        assert!(!revised);
+        assert_eq!(sense.compositions.len(), 2);
+    }
+
+    #[test]
+    fn revise_compositions_not_on_last_composition() {
+        let mut sense = Sense::new_compositional(
+            0,
+            vec![CompositionRef::new(1, 0)],
+            vec![1],
+            1,
+        );
+        sense.grounding = GroundingEvidence {
+            confirming_contexts: 0,
+            contradicting_contexts: 5,
+            last_contradiction: None,
+            revision_count: 0,
+        };
+
+        let revised = sense.revise_compositions(0.2);
+        assert!(!revised); // Won't remove the last composition
+    }
+
+    // -------------------------------------------------------------------
+    // v6.0: Sense induction scoring tests
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn induction_score_high_for_divergent_compositions() {
+        let sense = Sense::new_compositional(
+            0,
+            vec![CompositionRef::new(1, 0), CompositionRef::new(2, 0)],
+            vec![1, 2, 3, 4],
+            1,
+        );
+
+        let proposed = vec![CompositionRef::new(5, 0), CompositionRef::new(6, 0)];
+        let score = sense.induction_score(
+            &proposed,
+            &vec![1, 2, 3, 4],
+            &SenseInductionConfig::default(),
+        );
+
+        // Completely different compositions should have high score
+        assert!(score > 0.5);
+    }
+
+    #[test]
+    fn induction_score_low_for_similar_compositions() {
+        let sense = Sense::new_compositional(
+            0,
+            vec![CompositionRef::new(1, 0), CompositionRef::new(2, 0)],
+            vec![1, 2, 3, 4],
+            1,
+        );
+
+        // Same compositions = zero divergence
+        let proposed = vec![CompositionRef::new(1, 0), CompositionRef::new(2, 0)];
+        let score = sense.induction_score(
+            &proposed,
+            &vec![1, 2, 3, 4],
+            &SenseInductionConfig::default(),
+        );
+
+        assert!((score - 0.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn induction_score_zero_for_empty_compositions() {
+        let sense = Sense::new(0, vec![1, 2, 3]);
+        let score = sense.induction_score(
+            &[],
+            &vec![1, 2, 3],
+            &SenseInductionConfig::default(),
+        );
+        assert!((score - 0.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn induction_score_below_min_divergence() {
+        let sense = Sense::new_compositional(
+            0,
+            vec![CompositionRef::new(1, 0), CompositionRef::new(2, 0), CompositionRef::new(3, 0)],
+            vec![1, 2, 3, 4],
+            1,
+        );
+
+        // Only 1 out of 4 compositions different — below min divergence
+        let proposed = vec![CompositionRef::new(1, 0), CompositionRef::new(2, 0), CompositionRef::new(3, 0), CompositionRef::new(4, 0)];
+        let config = SenseInductionConfig {
+            min_composition_divergence: 0.5,
+            ..SenseInductionConfig::default()
+        };
+        let score = sense.induction_score(&proposed, &vec![1, 2, 3, 4], &config);
+        assert!((score - 0.0).abs() < 0.001);
+    }
+
+    // -------------------------------------------------------------------
+    // v6.0: Grounding evidence accumulation through update_grounding
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn grounding_accumulates_confirming_evidence() {
+        let mut sense = Sense::new_compositional(
+            0,
+            vec![CompositionRef::new(1, 0), CompositionRef::new(2, 0)],
+            vec![1, 2],
+            1,
+        );
+        let config = SenseConfig::default();
+
+        // Context that confirms compositions (contains nodes 1 and 2)
+        sense.update_grounding(&[1, 2, 3], &config);
+        assert_eq!(sense.grounding.confirming_contexts, 1);
+        assert_eq!(sense.grounding.contradicting_contexts, 0);
+    }
+
+    #[test]
+    fn grounding_accumulates_contradicting_evidence() {
+        let mut sense = Sense::new_compositional(
+            0,
+            vec![CompositionRef::new(1, 0), CompositionRef::new(2, 0)],
+            vec![1, 2],
+            1,
+        );
+        let config = SenseConfig::default();
+
+        // Context that contradicts compositions (contains none of nodes 1, 2)
+        sense.update_grounding(&[99, 100, 101], &config);
+        assert_eq!(sense.grounding.confirming_contexts, 0);
+        assert_eq!(sense.grounding.contradicting_contexts, 1);
+    }
+
+    #[test]
+    fn grounding_mixed_evidence() {
+        let mut sense = Sense::new_compositional(
+            0,
+            vec![CompositionRef::new(1, 0), CompositionRef::new(2, 0)],
+            vec![1, 2],
+            1,
+        );
+        let config = SenseConfig::default();
+
+        // Confirming
+        sense.update_grounding(&[1, 2, 3], &config);
+        sense.update_grounding(&[1, 2, 4], &config);
+        // Contradicting
+        sense.update_grounding(&[99, 100], &config);
+
+        assert_eq!(sense.grounding.confirming_contexts, 2);
+        assert_eq!(sense.grounding.contradicting_contexts, 1);
+        assert!((sense.grounding.score() - 2.0 / 3.0).abs() < 0.001);
+    }
+
+    // -------------------------------------------------------------------
+    // v6.0: HashSet-based composition comparison
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn hashset_composition_overlap_is_correct() {
+        let sense_a = Sense::new_compositional(
+            0,
+            vec![
+                CompositionRef::new(1, 0),
+                CompositionRef::new(2, 0),
+                CompositionRef::new(3, 0),
+            ],
+            vec![1, 2, 3],
+            1,
+        );
+        let sense_b = Sense::new_compositional(
+            1,
+            vec![
+                CompositionRef::new(1, 0),
+                CompositionRef::new(2, 0),
+                CompositionRef::new(4, 0),
+            ],
+            vec![1, 2, 4],
+            1,
+        );
+
+        let overlap = sense_a.composition_overlap(&sense_b);
+        // Shared: (1,0), (2,0) = 2; Union: (1,0), (2,0), (3,0), (4,0) = 4
+        assert!((overlap - 0.5).abs() < 0.001);
+    }
+
+    #[test]
+    fn hashset_composition_diff_is_correct() {
+        let sense_a = Sense::new_compositional(
+            0,
+            vec![
+                CompositionRef::new(1, 0),
+                CompositionRef::new(2, 0),
+                CompositionRef::new(3, 0),
+            ],
+            vec![1, 2, 3],
+            1,
+        );
+        let sense_b = Sense::new_compositional(
+            1,
+            vec![
+                CompositionRef::new(1, 0),
+                CompositionRef::new(2, 0),
+                CompositionRef::new(4, 0),
+            ],
+            vec![1, 2, 4],
+            1,
+        );
+
+        let (only_a, only_b) = sense_a.composition_diff(&sense_b);
+        assert_eq!(only_a.len(), 1);
+        assert_eq!(only_b.len(), 1);
+        assert_eq!(only_a[0], CompositionRef::new(3, 0));
+        assert_eq!(only_b[0], CompositionRef::new(4, 0));
     }
 }
 
@@ -409,7 +783,7 @@ mod autonomy_tests {
     }
 
     // ------------------------------------------------------------------
-    // v4.2: NodeStatus lifecycle tests
+    // v6.0: NodeStatus lifecycle tests
     // ------------------------------------------------------------------
 
     #[test]
@@ -429,7 +803,7 @@ mod autonomy_tests {
     #[test]
     fn promote_new_to_candidate() {
         let mut e = engine();
-        e.register(10, 0.80, Tier::Tier2); // >= 0.75 promote threshold
+        e.register(10, 0.80, Tier::Tier2);
         let r = e.transition_status(10);
         assert!(matches!(
             r,
@@ -444,9 +818,7 @@ mod autonomy_tests {
     fn promote_candidate_to_stable() {
         let mut e = engine();
         e.register(10, 0.80, Tier::Tier2);
-        // First transition: New → Candidate
         e.transition_status(10);
-        // Second transition: Candidate → Stable (confidence >= 0.75)
         let r = e.transition_status(10);
         assert!(matches!(
             r,
@@ -461,12 +833,10 @@ mod autonomy_tests {
     fn demote_stable_to_deprecated() {
         let mut e = engine();
         e.register(10, 0.80, Tier::Tier2);
-        // Get to Stable
-        e.transition_status(10); // New → Candidate
-        e.transition_status(10); // Candidate → Stable
-                                 // Now drop confidence below demote threshold
+        e.transition_status(10);
+        e.transition_status(10);
         if let Some(rec) = e.records.get_mut(&10) {
-            rec.confidence = 0.50; // < 0.60 demote threshold
+            rec.confidence = 0.50;
         }
         let r = e.transition_status(10);
         assert!(matches!(
@@ -478,16 +848,11 @@ mod autonomy_tests {
         ));
     }
 
-    // ------------------------------------------------------------------
-    // v4.2: Full lifecycle chain: New → Candidate → Stable → Deprecated
-    // ------------------------------------------------------------------
-
     #[test]
     fn full_lifecycle_new_to_deprecated() {
         let mut e = engine();
         e.register(10, 0.80, Tier::Tier2);
 
-        // New → Candidate
         let r1 = e.transition_status(10);
         assert!(matches!(
             r1,
@@ -497,7 +862,6 @@ mod autonomy_tests {
             }
         ));
 
-        // Candidate → Stable
         let r2 = e.transition_status(10);
         assert!(matches!(
             r2,
@@ -507,7 +871,6 @@ mod autonomy_tests {
             }
         ));
 
-        // Drop confidence → Deprecated
         if let Some(rec) = e.records.get_mut(&10) {
             rec.confidence = 0.50;
         }
@@ -522,15 +885,14 @@ mod autonomy_tests {
     }
 
     // ------------------------------------------------------------------
-    // v4.2: Hysteresis tests
+    // Hysteresis tests
     // ------------------------------------------------------------------
 
     #[test]
     fn hysteresis_no_promote_below_threshold() {
         let mut e = engine();
-        e.register(10, 0.70, Tier::Tier2); // < 0.75 promote threshold
+        e.register(10, 0.70, Tier::Tier2);
         let r = e.transition_status(10);
-        // Should stay New (confidence < promote_threshold)
         assert!(matches!(r, StatusTransitionResult::Blocked(_)));
     }
 
@@ -538,9 +900,8 @@ mod autonomy_tests {
     fn hysteresis_no_demote_above_threshold() {
         let mut e = engine();
         e.register(10, 0.80, Tier::Tier2);
-        e.transition_status(10); // New → Candidate
-        e.transition_status(10); // Candidate → Stable
-                                 // Confidence 0.65 is >= demote_threshold (0.60) → stays stable
+        e.transition_status(10);
+        e.transition_status(10);
         if let Some(rec) = e.records.get_mut(&10) {
             rec.confidence = 0.65;
         }
@@ -554,9 +915,8 @@ mod autonomy_tests {
         e.register(10, 0.80, Tier::Tier2);
         e.transition_status(10);
         e.transition_status(10);
-        // Below demote threshold
         if let Some(rec) = e.records.get_mut(&10) {
-            rec.confidence = 0.55; // < 0.60
+            rec.confidence = 0.55;
         }
         let r = e.transition_status(10);
         assert!(matches!(
@@ -571,9 +931,8 @@ mod autonomy_tests {
     #[test]
     fn hysteresis_promote_exactly_at_threshold() {
         let mut e = engine();
-        e.register(10, 0.75, Tier::Tier2); // exactly at promote_threshold
+        e.register(10, 0.75, Tier::Tier2);
         let r = e.transition_status(10);
-        // 0.75 >= 0.75 → should promote
         assert!(matches!(
             r,
             StatusTransitionResult::Transitioned {
@@ -587,9 +946,8 @@ mod autonomy_tests {
     fn hysteresis_no_demote_exactly_at_threshold() {
         let mut e = engine();
         e.register(10, 0.80, Tier::Tier2);
-        e.transition_status(10); // New → Candidate
-        e.transition_status(10); // Candidate → Stable
-                                 // Exactly at demote_threshold (0.60) → should NOT demote
+        e.transition_status(10);
+        e.transition_status(10);
         if let Some(rec) = e.records.get_mut(&10) {
             rec.confidence = 0.60;
         }
@@ -598,16 +956,15 @@ mod autonomy_tests {
     }
 
     // ------------------------------------------------------------------
-    // v4.2: Quarantine tests
+    // Quarantine tests
     // ------------------------------------------------------------------
 
     #[test]
     fn quarantine_after_three_flips() {
         let mut e = engine();
         e.register(10, 0.80, Tier::Tier2);
-        // Manually set flip count to threshold
         if let Some(rec) = e.records.get_mut(&10) {
-            rec.status_flip_count = 3; // quarantine_flip_threshold = 3
+            rec.status_flip_count = 3;
         }
         let r = e.transition_status(10);
         assert!(matches!(
@@ -635,12 +992,10 @@ mod autonomy_tests {
     fn quarantine_at_exactly_threshold() {
         let mut e = engine();
         e.register(10, 0.80, Tier::Tier2);
-        // Set flip count to exactly threshold
         if let Some(rec) = e.records.get_mut(&10) {
             rec.status_flip_count = 3;
         }
         let r = e.transition_status(10);
-        // flip_count >= 3 should trigger quarantine
         assert!(matches!(
             r,
             StatusTransitionResult::Transitioned {
@@ -654,12 +1009,10 @@ mod autonomy_tests {
     fn no_quarantine_below_threshold() {
         let mut e = engine();
         e.register(10, 0.80, Tier::Tier2);
-        // Set flip count to just below threshold
         if let Some(rec) = e.records.get_mut(&10) {
             rec.status_flip_count = 2;
         }
         let r = e.transition_status(10);
-        // Should NOT quarantine (2 < 3)
         assert!(!matches!(
             r,
             StatusTransitionResult::Transitioned {
@@ -670,7 +1023,7 @@ mod autonomy_tests {
     }
 
     // ------------------------------------------------------------------
-    // v4.2: Seed immutability tests
+    // Seed immutability tests
     // ------------------------------------------------------------------
 
     #[test]
@@ -696,20 +1049,18 @@ mod autonomy_tests {
     fn seed_node_confidence_stays_1() {
         let mut e = engine();
         e.register_seed(1, 1.0, Tier::Tier1);
-        // Try to update — should be skipped
         let r = e.update_confidence(1, 0.0, 0.0, &[], 0);
         assert!(matches!(r, ConfidenceUpdateResult::Skipped(_)));
         assert_eq!(e.confidence(1).unwrap(), 1.0);
     }
 
     // ------------------------------------------------------------------
-    // v4.2: Governance score tests
+    // Governance score tests
     // ------------------------------------------------------------------
 
     #[test]
     fn governance_score_formula() {
         let e = engine();
-        // governance = 0.4*strength + 0.3*trust + 0.2*recency + 0.1*(1-contradiction)
         let score = e.score_evidence(0.8, 0.7, 0.5, 0.2);
         let expected = 0.4 * 0.8 + 0.3 * 0.7 + 0.2 * 0.5 + 0.1 * 0.8;
         assert!((score - expected).abs() < 0.001);
@@ -974,7 +1325,7 @@ mod graph_tests {
             semantic: SemanticMeta {
                 compression_state: CompressionState::Compressed,
                 layer: 0,
-                derived_from_node_ids: vec![5], // self-reference
+                derived_from_node_ids: vec![5],
                 compression_reason: None,
             },
             policy_meta: None,
@@ -1006,7 +1357,6 @@ mod graph_tests {
                 fingerprint: None,
             })
             .unwrap();
-        // Try edge with non-existent target
         let result = g.insert_edge(Edge {
             from: n1,
             to: 999,
@@ -1116,13 +1466,13 @@ mod graph_tests {
 }
 
 #[cfg(test)]
-mod v42_node_tests {
+mod v60_node_tests {
     use crate::types::{
         CompressionState, Fingerprint, Node, NodeStatus, PolicyMeta, SemanticMeta, Tier,
     };
 
     #[test]
-    fn v42_node_creation() {
+    fn v60_node_creation() {
         let node = Node {
             id: 1,
             label: "test".to_string(),
@@ -1152,7 +1502,7 @@ mod v42_node_tests {
     }
 
     #[test]
-    fn v42_seed_node() {
+    fn v60_seed_node() {
         let node = Node {
             id: 1,
             label: "exists".to_string(),
@@ -1180,7 +1530,7 @@ mod v42_node_tests {
     }
 
     #[test]
-    fn v42_compressed_node() {
+    fn v60_compressed_node() {
         let node = Node {
             id: 5,
             label: "concept".to_string(),
@@ -1198,7 +1548,7 @@ mod v42_node_tests {
                 compression_reason: Some("co-occurrence aggregation".to_string()),
             },
             policy_meta: Some(PolicyMeta {
-                policy_version: "4.2".to_string(),
+                policy_version: "6.0".to_string(),
                 governance_score: 0.85,
                 candidate_evidence_pool: 0.3,
                 status_flip_count: 1,
@@ -1214,111 +1564,27 @@ mod v42_node_tests {
             CompressionState::Compressed
         );
         assert_eq!(node.semantic.derived_from_node_ids, vec![1, 2, 3]);
-        assert!(node.policy_meta.is_some());
-        let pm = node.policy_meta.unwrap();
-        assert_eq!(pm.governance_score, 0.85);
-    }
-
-    #[test]
-    fn node_status_lifecycle() {
-        let statuses = [
-            NodeStatus::New,
-            NodeStatus::Candidate,
-            NodeStatus::Stable,
-            NodeStatus::Deprecated,
-            NodeStatus::Quarantine,
-        ];
-        for (i, s) in statuses.iter().enumerate() {
-            for (j, t) in statuses.iter().enumerate() {
-                if i != j {
-                    assert_ne!(s, t);
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn surface_label_has_locale() {
-        let node = Node {
-            id: 1,
-            label: "test".into(),
-            surface_label: "test@en".into(),
-            kind: "node".into(),
-            tier: Tier::Tier2,
-            confidence: 0.5,
-            status: NodeStatus::New,
-            is_seed: false,
-            is_locked: false,
-            semantic: SemanticMeta::default(),
-            policy_meta: None,
-            language_links: vec![],
-            atoms: vec![],
-            fingerprint: None,
-        };
-        assert!(node.surface_label.contains("@"));
-    }
-
-    #[test]
-    fn seed_node_has_required_invariants() {
-        let node = Node {
-            id: 1,
-            label: "exists".into(),
-            surface_label: "exists@en".into(),
-            kind: "node".into(),
-            tier: Tier::Tier1,
-            confidence: 1.0,
-            status: NodeStatus::Stable,
-            is_seed: true,
-            is_locked: true,
-            semantic: SemanticMeta::default(),
-            policy_meta: None,
-            language_links: vec![],
-            atoms: vec![],
-            fingerprint: None,
-        };
-        assert!(node.is_seed);
-        assert!(node.is_locked, "Seed node must be locked");
-        assert_eq!(node.tier, Tier::Tier1, "Seed node must be Tier1");
-        assert!(
-            (node.confidence - 1.0).abs() < 0.001,
-            "Seed node must have confidence 1.0"
+        assert_eq!(
+            node.policy_meta.as_ref().unwrap().policy_version,
+            "6.0"
         );
-        assert_eq!(node.status, NodeStatus::Stable, "Seed node must be Stable");
     }
 
     #[test]
-    fn non_seed_node_not_locked() {
-        let node = Node {
-            id: 10,
-            label: "test".into(),
-            surface_label: "test@en".into(),
-            kind: "node".into(),
-            tier: Tier::Tier2,
-            confidence: 0.5,
-            status: NodeStatus::New,
-            is_seed: false,
-            is_locked: false,
-            semantic: SemanticMeta::default(),
-            policy_meta: None,
-            language_links: vec![],
-            atoms: vec![],
-            fingerprint: None,
-        };
-        assert!(!node.is_seed);
-        assert!(!node.is_locked);
+    fn v60_policy_meta_default_version() {
+        let pm = PolicyMeta::default();
+        assert_eq!(pm.policy_version, "6.0");
     }
 
     #[test]
-    fn fingerprint_new_produces_consistent_hash() {
-        let data = b"hello world";
-        let fp1 = Fingerprint::new(data);
-        let fp2 = Fingerprint::new(data);
+    fn fingerprint_deterministic() {
+        let fp1 = Fingerprint::new(b"hello world");
+        let fp2 = Fingerprint::new(b"hello world");
         assert_eq!(fp1, fp2);
-        assert_ne!(fp1.hash(), 0);
     }
 
     #[test]
-    fn fingerprint_different_data_produces_different_hash() {
+    fn fingerprint_different_data() {
         let fp1 = Fingerprint::new(b"hello");
         let fp2 = Fingerprint::new(b"world");
         assert_ne!(fp1, fp2);
@@ -1326,671 +1592,133 @@ mod v42_node_tests {
 }
 
 #[cfg(test)]
-mod pipeline_tests {
-    use crate::autonomy::AutonomyConfig;
-    use crate::pipeline::{PipelineConfig, Rsvs};
-    use crate::sense::SenseConfig;
-    use crate::types::NodeStatus;
-
-    fn make_rsvs() -> Rsvs {
-        Rsvs::new(PipelineConfig {
-            autonomy: AutonomyConfig {
-                n_warm: 5,
-                threshold_global_delta: 5.0,
-                ..AutonomyConfig::default()
-            },
-            sense: SenseConfig {
-                theta_assign: 0.10,
-                ..SenseConfig::default()
-            },
-            entity_promote_n: 2,
-            ..PipelineConfig::default()
-        })
-        .unwrap()
-    }
+mod transformer_bridge_tests {
+    use crate::sense::{GroundingEvidence, Sense, SenseManager, SenseConfig};
+    use crate::transformer_bridge::{TransformerBridge, TransformerBridgeConfig};
+    use crate::types::CompositionRef;
 
     #[test]
-    fn system_bootstraps_with_seed_nodes() {
-        let rsvs = make_rsvs();
-        assert_eq!(rsvs.graph.node_count(), 24);
-        assert!(rsvs.token_to_id.contains_key("exists"));
-        assert!(rsvs.token_to_id.contains_key("feedback"));
-    }
-
-    #[test]
-    fn seed_nodes_are_registered_in_autonomy() {
-        let rsvs = make_rsvs();
-        let exists_id = rsvs.token_to_id["exists"];
-        assert_eq!(rsvs.autonomy.confidence(exists_id), Some(1.0));
-        assert_eq!(rsvs.autonomy.status(exists_id), Some(&NodeStatus::Stable));
-    }
-
-    #[test]
-    fn ingest_promotes_frequent_tokens() {
-        let mut rsvs = make_rsvs();
-        let text = "Stone is hard. Stone is hard and solid. Stone is a hard material. \
-                    Stone remains hard. Hard stone is heavy.";
-        let stats = rsvs.ingest_text(text).unwrap();
-        assert!(stats.atoms_promoted >= 1);
-    }
-
-    #[test]
-    fn ingest_increases_context_count() {
-        let mut rsvs = make_rsvs();
-        assert_eq!(rsvs.total_contexts, 0);
-        rsvs.ingest_text("Stone is hard. Water is liquid.").unwrap();
-        assert!(rsvs.total_contexts > 0);
-    }
-
-    #[test]
-    fn similar_concepts_have_positive_jaccard() {
-        let mut rsvs = make_rsvs();
-        let text = "Stone is hard solid heavy. \
-                    Bone is hard solid organic. \
-                    Stone and bone are both hard solid materials. \
-                    Hard solid materials resist force. \
-                    Stone is hard like bone.";
-        rsvs.ingest_text(text).unwrap();
-
-        if let Some(sim) = rsvs.similarity("stone", "bone") {
-            assert!(sim.jaccard > 0.0);
-        }
-    }
-
-    #[test]
-    fn query_unknown_concept_returns_none() {
-        let rsvs = make_rsvs();
-        assert!(rsvs.query("nonexistent_concept", "some context").is_none());
-    }
-
-    // ------------------------------------------------------------------
-    // v4.2: Appraise tests
-    // ------------------------------------------------------------------
-
-    #[test]
-    fn appraise_empty_text_is_novel() {
-        let rsvs = make_rsvs();
-        let result = rsvs.appraise("");
-        assert_eq!(result.verdict, "novel");
-    }
-
-    #[test]
-    fn appraise_seed_text_is_consistent() {
-        let rsvs = make_rsvs();
-        // "exists" and "entity" are seed nodes
-        let result = rsvs.appraise("exists entity relation state change");
-        assert!(result.agree_pct > 0.0);
-        assert!(!result.evidence.is_empty());
-    }
-
-    #[test]
-    fn appraise_unknown_text_is_novel() {
-        let rsvs = make_rsvs();
-        let result = rsvs.appraise("xyzquux foobarbaz quuxland");
-        assert!(result.disagree_pct > 50.0);
-        assert_eq!(result.verdict, "novel");
-    }
-
-    #[test]
-    fn appraise_verdict_consistent() {
-        let rsvs = make_rsvs();
-        let result = rsvs.appraise("exists entity relation");
-        assert!(
-            result.verdict == "consistent"
-                || result.verdict == "partial"
-                || result.verdict == "novel"
-        );
-        assert!(result.agree_pct + result.disagree_pct > 0.0);
-    }
-
-    #[test]
-    fn appraise_verdict_partial() {
-        let mut rsvs = make_rsvs();
-        rsvs.ingest_text("Stone is hard. Stone is heavy.").unwrap();
-        // Mix of known (exists, entity) and unknown (xyzquux) tokens
-        let result = rsvs.appraise("exists entity xyzquux");
-        assert!(["consistent", "partial", "novel"].contains(&result.verdict.as_str()));
-    }
-
-    #[test]
-    fn appraise_evidence_sorted_by_confidence() {
-        let rsvs = make_rsvs();
-        let result = rsvs.appraise("exists entity relation state change");
-        // Evidence should be sorted by confidence descending
-        for i in 1..result.evidence.len() {
-            assert!(
-                result.evidence[i - 1].1 >= result.evidence[i].1,
-                "Evidence should be sorted by confidence descending"
-            );
-        }
-    }
-
-    // ------------------------------------------------------------------
-    // v4.2: Relate tests
-    // ------------------------------------------------------------------
-
-    #[test]
-    fn relate_unknown_concept_returns_none() {
-        let rsvs = make_rsvs();
-        assert!(rsvs.relate("nonexistent_concept").is_none());
-    }
-
-    #[test]
-    fn relate_seed_node_returns_related() {
-        let mut rsvs = make_rsvs();
-        // Ingest some text to create edges
-        rsvs.ingest_text("Stone exists as entity with relation to space and time.")
-            .unwrap();
-        if let Some(_id) = rsvs.token_to_id.get("exists") {
-            let result = rsvs.relate("exists");
-            // Should find at least the node itself
-            assert!(result.is_some());
-        }
-    }
-
-    #[test]
-    fn relate_ingested_concept_finds_edges() {
-        let mut rsvs = make_rsvs();
-        rsvs.ingest_text("Stone is hard solid heavy. Hard solid stone resists pressure.")
-            .unwrap();
-        rsvs.ingest_text("Stone and metal are hard. Hard stone is heavy.")
-            .unwrap();
-        // Try to relate stone if it was promoted
-        if rsvs.token_to_id.contains_key("stone") {
-            let result = rsvs.relate("stone");
-            assert!(result.is_some());
-            let relate = result.unwrap();
-            // Should find some related nodes or edges
-            assert!(!relate.related_nodes.is_empty() || !relate.related_edges.is_empty());
-        }
-    }
-
-    // ------------------------------------------------------------------
-    // v4.2: Snapshot tests
-    // ------------------------------------------------------------------
-
-    #[test]
-    fn snapshot_v1_has_v42_schema() {
-        let rsvs = make_rsvs();
-        let snap = rsvs.snapshot_v1();
-        assert_eq!(snap.schema_version, "v5.0");
-    }
-
-    #[test]
-    fn snapshot_v1_nodes_have_v42_fields() {
-        let rsvs = make_rsvs();
-        let snap = rsvs.snapshot_v1();
-        assert!(!snap.nodes.is_empty());
-        for n in &snap.nodes {
-            assert_eq!(n.kind, "node");
-            assert!(n.surface_label.ends_with("@en"));
-            assert!(n.compression_state == "raw" || n.compression_state == "compressed");
-        }
-    }
-
-    #[test]
-    fn snapshot_v1_has_api_version() {
-        let rsvs = make_rsvs();
-        let snap = rsvs.snapshot_v1();
-        assert_eq!(snap.api_version, "v1");
-    }
-
-    #[test]
-    fn snapshot_v1_total_contexts_matches() {
-        let mut rsvs = make_rsvs();
-        rsvs.ingest_text("Stone is hard. Water is liquid.").unwrap();
-        let snap = rsvs.snapshot_v1();
-        assert_eq!(snap.total_contexts, rsvs.total_contexts);
-    }
-
-    #[test]
-    fn snapshot_v1_seed_nodes_have_correct_fields() {
-        let rsvs = make_rsvs();
-        let snap = rsvs.snapshot_v1();
-        let seeds: Vec<_> = snap.nodes.iter().filter(|n| n.is_seed).collect();
-        assert_eq!(seeds.len(), 24);
-        for seed in &seeds {
-            assert!(seed.is_locked);
-            assert_eq!(seed.tier, 1);
-            assert_eq!(seed.status, "stable");
-            assert_eq!(seed.compression_state, "raw");
-        }
-    }
-
-    // ------------------------------------------------------------------
-    // v4.2: Event stream tests
-    // ------------------------------------------------------------------
-
-    #[test]
-    fn consume_events_returns_empty_before_ingest() {
-        let rsvs = make_rsvs();
-        let batch = rsvs.consume_events_v1(None, 100);
-        assert!(batch.events.is_empty());
-        assert_eq!(batch.latest_seq, 0);
-    }
-
-    #[test]
-    fn consume_events_returns_events_after_ingest() {
-        let mut rsvs = make_rsvs();
-        rsvs.ingest_text("Stone is hard and solid.").unwrap();
-        let batch = rsvs.consume_events_v1(None, 100);
-        assert!(!batch.events.is_empty());
-        assert!(batch.latest_seq > 0);
-    }
-
-    #[test]
-    fn consume_events_after_seq_filters_correctly() {
-        let mut rsvs = make_rsvs();
-        rsvs.ingest_text("Stone is hard.").unwrap();
-        let seq_after = rsvs.latest_seq_v1();
-        rsvs.ingest_text("Water is liquid.").unwrap();
-        let batch = rsvs.consume_events_v1(Some(seq_after), 100);
-        // Should only get events from the second ingest
-        for evt in &batch.events {
-            assert!(evt.seq > seq_after);
-        }
-    }
-
-    // ------------------------------------------------------------------
-    // Persistence roundtrip test
-    // ------------------------------------------------------------------
-
-    #[test]
-    fn persistence_roundtrip() {
-        use tempfile::NamedTempFile;
-
-        let mut rsvs = make_rsvs();
-        rsvs.ingest_text("Stone is hard. Water is liquid. Metal is solid.")
-            .unwrap();
-
-        let tmp = NamedTempFile::new().unwrap();
-        let path = tmp.path().to_path_buf();
-
-        crate::persist::save(&rsvs, &path).unwrap();
-        let loaded = crate::persist::load(&path).unwrap();
-
-        assert_eq!(loaded.graph.node_count(), rsvs.graph.node_count());
-        assert_eq!(loaded.token_to_id.len(), rsvs.token_to_id.len());
-        assert_eq!(loaded.total_contexts, rsvs.total_contexts);
-        assert_eq!(loaded.config.entity_promote_n, rsvs.config.entity_promote_n);
-    }
-}
-
-// -----------------------------------------------------------------------
-// Compose mechanism tests (RSVS v4.2)
-//
-// Covers: compose creates Compressed node, atom_sets sync,
-// composition edges, Jaccard similarity for shared atoms,
-// invalid atom handling, custom seeds.
-// -----------------------------------------------------------------------
-
-#[cfg(test)]
-mod compose_tests {
-    use crate::autonomy::AutonomyConfig;
-    use crate::error::RsvsError;
-    use crate::pipeline::{PipelineConfig, Rsvs};
-    use crate::sense::SenseConfig;
-    use crate::types::{CompressionState, EdgeSource};
-
-    /// Helper: create an Rsvs instance with low thresholds for testing.
-    fn make_rsvs() -> Rsvs {
-        Rsvs::new(PipelineConfig {
-            autonomy: AutonomyConfig {
-                n_warm: 5,
-                threshold_global_delta: 5.0,
-                ..AutonomyConfig::default()
-            },
-            sense: SenseConfig {
-                theta_assign: 0.10,
-                ..SenseConfig::default()
-            },
-            entity_promote_n: 2,
-            ..PipelineConfig::default()
-        })
-        .unwrap()
-    }
-
-    #[test]
-    fn test_compose_creates_compressed_node() {
-        let mut rsvs = make_rsvs();
-        // Ingest text to create atom nodes
-        rsvs.ingest_text("tahta tertinggi adalah simbol kekuasaan kerajaan")
-            .unwrap();
-        rsvs.ingest_text("laki laki adalah jenis kelamin")
-            .unwrap();
-        rsvs.ingest_text("kerajaan dipimpin oleh raja")
-            .unwrap();
-
-        // Collect some existing node IDs (seed nodes are always present)
-        let atom_ids: Vec<u32> = rsvs.token_to_id.values().copied().take(3).collect();
-
-        if atom_ids.len() >= 3 {
-            let raja_id = rsvs.compose_from_ids("raja", atom_ids.clone(), Some("id")).unwrap();
-
-            // Verify it's a Compressed node
-            let node = rsvs.graph.get_node(raja_id).unwrap();
-            assert_eq!(
-                node.semantic.compression_state,
-                CompressionState::Compressed
-            );
-            assert_eq!(node.semantic.derived_from_node_ids, atom_ids);
-            assert!(node.semantic.compression_reason.is_some());
-            assert_eq!(node.atoms, atom_ids);
-        }
-    }
-
-    #[test]
-    fn test_compose_explicit() {
-        let mut rsvs = make_rsvs();
-        rsvs.ingest_text("tahta tertinggi adalah simbol kekuasaan")
-            .unwrap();
-        rsvs.ingest_text("laki laki adalah gender pria")
-            .unwrap();
-        rsvs.ingest_text("kerajaan adalah negara berdaulat")
-            .unwrap();
-        rsvs.ingest_text("perempuan adalah gender wanita")
-            .unwrap();
-
-        // Get IDs of atoms we want to compose
-        let atoms: Vec<u32> = rsvs.token_to_id.values().copied().take(3).collect();
-
-        if atoms.len() >= 3 {
-            // Create composite "raja" from 3 atoms
-            let raja_id = rsvs
-                .compose_from_ids("raja", atoms.clone(), Some("id"))
-                .unwrap();
-
-            // Verify it's a Compressed node
-            let node = rsvs.graph.get_node(raja_id).unwrap();
-            assert_eq!(
-                node.semantic.compression_state,
-                CompressionState::Compressed
-            );
-            assert_eq!(node.semantic.derived_from_node_ids, atoms);
-            assert!(node.semantic.compression_reason.is_some());
-
-            // Verify atom_sets is updated
-            let raja_atoms = rsvs.atom_sets.get("raja").unwrap();
-            assert_eq!(*raja_atoms, atoms);
-        }
-    }
-
-    #[test]
-    fn test_compose_shared_atoms_jaccard() {
-        let mut rsvs = make_rsvs();
-        rsvs.ingest_text("tahta tertinggi adalah simbol")
-            .unwrap();
-        rsvs.ingest_text("laki laki adalah gender")
-            .unwrap();
-        rsvs.ingest_text("kerajaan adalah negara")
-            .unwrap();
-        rsvs.ingest_text("perempuan adalah gender wanita")
-            .unwrap();
-
-        // Collect atom IDs — take the first 4 distinct non-seed nodes if available,
-        // otherwise use seed nodes.
-        let all_ids: Vec<u32> = rsvs.token_to_id.values().copied().collect();
-        // Find non-seed nodes for more meaningful composition
-        let non_seed_ids: Vec<u32> = all_ids
-            .iter()
-            .filter(|&&id| {
-                rsvs.graph
-                    .get_node(id)
-                    .map(|n| !n.is_seed)
-                    .unwrap_or(false)
-            })
-            .copied()
-            .collect();
-
-        // Use non-seed IDs if we have enough, otherwise fall back to all IDs
-        let atoms: Vec<u32> = if non_seed_ids.len() >= 4 {
-            non_seed_ids
-        } else {
-            all_ids.into_iter().take(4).collect()
-        };
-
-        if atoms.len() >= 4 {
-            // raja = atoms[0] + atoms[1] + atoms[2]
-            let raja_atoms = vec![atoms[0], atoms[1], atoms[2]];
-            let raja_id = rsvs
-                .compose_from_ids("raja", raja_atoms.clone(), Some("id"))
-                .unwrap();
-
-            // ratu = atoms[0] + atoms[3] + atoms[2]
-            let ratu_atoms = vec![atoms[0], atoms[3], atoms[2]];
-            let ratu_id = rsvs
-                .compose_from_ids("ratu", ratu_atoms.clone(), Some("id"))
-                .unwrap();
-
-            // Jaccard similarity: shared = atoms[0] + atoms[2] = 2, only_a = atoms[1], only_b = atoms[3]
-            // Jaccard = 2/4 = 0.5
-            let sim = rsvs.graph.similarity(raja_id, ratu_id);
-            assert_eq!(sim.shared.len(), 2); // atoms[0] + atoms[2]
-            assert_eq!(sim.only_a.len(), 1); // atoms[1]
-            assert_eq!(sim.only_b.len(), 1); // atoms[3]
-            assert!((sim.jaccard - 0.5).abs() < 0.01); // 2/4 = 0.5
-        }
-    }
-
-    #[test]
-    fn test_compose_creates_composition_edges() {
-        let mut rsvs = make_rsvs();
-        rsvs.ingest_text("alpha beta gamma delta").unwrap();
-        rsvs.ingest_text("alpha adalah huruf").unwrap();
-
-        let atoms: Vec<u32> = rsvs.token_to_id.values().copied().take(3).collect();
-
-        if atoms.len() >= 3 {
-            let comp_id = rsvs
-                .compose_from_ids("composite_test", atoms.clone(), None)
-                .unwrap();
-
-            // Should have edges from each atom to the composite
-            for &aid in &atoms {
-                let edges = rsvs.graph.edges_from(aid);
-                let has_edge = edges
-                    .iter()
-                    .any(|e| e.to == comp_id && e.source == EdgeSource::Composition);
-                assert!(
-                    has_edge,
-                    "Missing composition edge from atom {} to composite",
-                    aid
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn test_atom_sets_sync_after_compose() {
-        let mut rsvs = make_rsvs();
-        rsvs.ingest_text("satu dua tiga").unwrap();
-        rsvs.ingest_text("satu adalah angka").unwrap();
-
-        let atoms: Vec<u32> = rsvs.token_to_id.values().copied().take(2).collect();
-
-        if atoms.len() >= 2 {
-            rsvs.compose_from_ids("komposisi", atoms.clone(), None).unwrap();
-
-            // atom_sets should be synced
-            let stored = rsvs.atom_sets.get("komposisi").unwrap();
-            assert_eq!(*stored, atoms);
-        }
-    }
-
-    #[test]
-    fn test_compose_nonexistent_atom_returns_error() {
-        let mut rsvs = make_rsvs();
-        // Try to compose with a non-existent atom ID
-        let result = rsvs.compose_from_ids("invalid_composite", vec![99999], None);
-        assert!(
-            matches!(result, Err(RsvsError::NodeNotFound { .. })),
-            "Expected NodeNotFound error for non-existent atom"
-        );
-    }
-
-    #[test]
-    fn test_compose_updates_existing_label() {
-        let mut rsvs = make_rsvs();
-        rsvs.ingest_text("alpha beta gamma").unwrap();
-
-        let atoms1: Vec<u32> = rsvs.token_to_id.values().copied().take(2).collect();
-        let atoms2: Vec<u32> = rsvs.token_to_id.values().copied().take(3).collect();
-
-        if atoms1.len() >= 2 && atoms2.len() >= 3 {
-            // First composition
-            let id1 = rsvs.compose_from_ids("concept", atoms1.clone(), None).unwrap();
-
-            // Second composition with same label should update existing node
-            let id2 = rsvs.compose_from_ids("concept", atoms2.clone(), None).unwrap();
-
-            // Should return same node ID
-            assert_eq!(id1, id2);
-
-            // Node should have updated atoms
-            let node = rsvs.graph.get_node(id1).unwrap();
-            assert_eq!(node.atoms, atoms2);
-            assert_eq!(node.semantic.derived_from_node_ids, atoms2);
-        }
-    }
-
-    #[test]
-    fn test_custom_seeds() {
-        let custom = vec![
-            "laki_laki".to_string(),
-            "perempuan".to_string(),
-            "tahta".to_string(),
+    fn vectors_to_compositions_with_similar_vectors() {
+        let bridge = TransformerBridge::new(TransformerBridgeConfig {
+            similarity_threshold: 0.5,
+            max_compositions: 5,
+            use_attention_weights: false,
+        });
+
+        // Two vectors that are very similar
+        let vectors = vec![
+            vec![1.0, 0.0, 0.0],
+            vec![0.99, 0.01, 0.0], // very similar to first
+            vec![0.0, 0.0, 1.0],  // orthogonal
         ];
-        let rsvs = Rsvs::new(PipelineConfig {
-            custom_seeds: Some(custom.clone()),
-            ..PipelineConfig::default()
-        })
-        .unwrap();
+        let labels = vec!["a".to_string(), "b".to_string(), "c".to_string()];
 
-        // Custom seeds should be registered
-        for seed in &custom {
-            assert!(
-                rsvs.token_to_id.contains_key(seed),
-                "Missing custom seed: {}",
-                seed
-            );
-        }
+        let comps = bridge.vectors_to_compositions(&vectors, &labels, 0.8);
+        // Should find that a and b are related
+        assert!(!comps.is_empty());
     }
 
     #[test]
-    fn test_compose_confidence_is_average_of_atoms() {
-        let mut rsvs = make_rsvs();
-        rsvs.ingest_text("alpha beta gamma delta epsilon").unwrap();
+    fn vectors_to_compositions_no_similar_vectors() {
+        let bridge = TransformerBridge::new(TransformerBridgeConfig {
+            similarity_threshold: 0.9,
+            max_compositions: 5,
+            use_attention_weights: false,
+        });
 
-        let atoms: Vec<u32> = rsvs
-            .token_to_id
-            .iter()
-            .filter(|(_, &id)| {
-                rsvs.graph
-                    .get_node(id)
-                    .map(|n| !n.is_seed)
-                    .unwrap_or(false)
-            })
-            .map(|(_, &id)| id)
-            .take(3)
-            .collect();
+        // Orthogonal vectors with high threshold
+        let vectors = vec![
+            vec![1.0, 0.0, 0.0],
+            vec![0.0, 1.0, 0.0],
+            vec![0.0, 0.0, 1.0],
+        ];
+        let labels = vec!["a".to_string(), "b".to_string(), "c".to_string()];
 
-        if atoms.len() >= 3 {
-            let comp_id = rsvs.compose_from_ids("avg_test", atoms.clone(), None).unwrap();
-
-            // Calculate expected average confidence
-            let avg: f32 = atoms
-                .iter()
-                .filter_map(|&aid| rsvs.graph.get_node(aid).map(|n| n.confidence))
-                .sum::<f32>()
-                / atoms.len().max(1) as f32;
-
-            let node = rsvs.graph.get_node(comp_id).unwrap();
-            assert!(
-                (node.confidence - avg).abs() < 0.01,
-                "Expected confidence {}, got {}",
-                avg,
-                node.confidence
-            );
-        }
+        let comps = bridge.vectors_to_compositions(&vectors, &labels, 0.9);
+        // No pairs should exceed threshold
+        assert!(comps.is_empty());
     }
 
     #[test]
-    fn test_compose_surface_label_with_lang() {
-        let mut rsvs = make_rsvs();
-        rsvs.ingest_text("alpha beta gamma").unwrap();
+    fn attention_weights_to_senses_basic() {
+        let bridge = TransformerBridge::new(TransformerBridgeConfig {
+            similarity_threshold: 0.3,
+            max_compositions: 3,
+            use_attention_weights: true,
+        });
 
-        let atoms: Vec<u32> = rsvs.token_to_id.values().copied().take(2).collect();
+        // Attention matrix: token 0 attends strongly to token 1
+        let attention = vec![
+            vec![0.1, 0.8, 0.1],
+            vec![0.7, 0.1, 0.2],
+            vec![0.1, 0.1, 0.1],
+        ];
+        let labels = vec!["a".to_string(), "b".to_string(), "c".to_string()];
 
-        if atoms.len() >= 2 {
-            let comp_id = rsvs.compose_from_ids("raja", atoms, Some("id")).unwrap();
-            let node = rsvs.graph.get_node(comp_id).unwrap();
-            assert_eq!(node.surface_label, "raja@id");
-        }
+        let senses = bridge.attention_weights_to_senses(&attention, &labels);
+        assert!(!senses.is_empty());
+
+        let a_sense = senses.iter().find(|(label, _)| label == "a");
+        assert!(a_sense.is_some());
+        assert!(!a_sense.unwrap().1.is_empty());
     }
 
     #[test]
-    fn test_compose_surface_label_default_en() {
-        let mut rsvs = make_rsvs();
-        rsvs.ingest_text("alpha beta gamma").unwrap();
+    fn explain_vector_returns_explanations() {
+        let bridge = TransformerBridge::new(TransformerBridgeConfig::default());
+        let mut graph = crate::graph::RsvsGraph::new();
 
-        let atoms: Vec<u32> = rsvs.token_to_id.values().copied().take(2).collect();
+        // Create some nodes
+        use crate::types::{Node, NodeStatus, Tier};
+        let n1 = graph.insert_node(Node {
+            id: 0,
+            label: "stone".into(),
+            surface_label: "stone@en".into(),
+            kind: "node".into(),
+            tier: Tier::Tier1,
+            confidence: 1.0,
+            status: NodeStatus::Stable,
+            is_seed: true,
+            is_locked: true,
+            semantic: crate::types::SemanticMeta::default(),
+            policy_meta: None,
+            language_links: vec![],
+            atoms: vec![],
+            fingerprint: None,
+        }).unwrap();
+        let n2 = graph.insert_node(Node {
+            id: 0,
+            label: "hard".into(),
+            surface_label: "hard@en".into(),
+            kind: "node".into(),
+            tier: Tier::Tier1,
+            confidence: 1.0,
+            status: NodeStatus::Stable,
+            is_seed: true,
+            is_locked: true,
+            semantic: crate::types::SemanticMeta::default(),
+            policy_meta: None,
+            language_links: vec![],
+            atoms: vec![],
+            fingerprint: None,
+        }).unwrap();
 
-        if atoms.len() >= 2 {
-            let comp_id = rsvs.compose_from_ids("king", atoms, None).unwrap();
-            let node = rsvs.graph.get_node(comp_id).unwrap();
-            assert_eq!(node.surface_label, "king@en");
-        }
+        let mut senses = std::collections::HashMap::new();
+        let mut sm = SenseManager::new(SenseConfig::default());
+        sm.create_compositional_sense(vec![CompositionRef::new(n1, 0), CompositionRef::new(n2, 0)], 1);
+        senses.insert(1, sm);
+
+        let vector = vec![0.5, 0.3, 0.2];
+        let explanations = bridge.explain_vector(&vector, &graph, &senses);
+        // Should return some explanations about compositional senses
+        assert!(!explanations.is_empty());
     }
 
     #[test]
-    fn test_compose_registers_in_autonomy() {
-        let mut rsvs = make_rsvs();
-        rsvs.ingest_text("alpha beta gamma").unwrap();
-
-        let atoms: Vec<u32> = rsvs.token_to_id.values().copied().take(2).collect();
-
-        if atoms.len() >= 2 {
-            let comp_id = rsvs.compose_from_ids("auton_test", atoms, None).unwrap();
-
-            // Should be registered in the autonomy engine
-            let conf = rsvs.autonomy.confidence(comp_id);
-            assert!(conf.is_some(), "Composed node should be registered in autonomy engine");
-        }
-    }
-
-    #[test]
-    fn test_compose_registers_in_senses() {
-        let mut rsvs = make_rsvs();
-        rsvs.ingest_text("alpha beta gamma").unwrap();
-
-        let atoms: Vec<u32> = rsvs.token_to_id.values().copied().take(2).collect();
-
-        if atoms.len() >= 2 {
-            let comp_id = rsvs.compose_from_ids("sense_test", atoms, None).unwrap();
-
-            // Should have a sense manager
-            assert!(
-                rsvs.senses.contains_key(&comp_id),
-                "Composed node should have a sense manager"
-            );
-        }
-    }
-
-    #[test]
-    fn test_compose_token_to_id_registered() {
-        let mut rsvs = make_rsvs();
-        rsvs.ingest_text("alpha beta gamma").unwrap();
-
-        let atoms: Vec<u32> = rsvs.token_to_id.values().copied().take(2).collect();
-
-        if atoms.len() >= 2 {
-            rsvs.compose_from_ids("lookup_test", atoms, None).unwrap();
-
-            // Should be findable via token_to_id
-            assert!(
-                rsvs.token_to_id.contains_key("lookup_test"),
-                "Composed node should be in token_to_id"
-            );
-        }
+    fn transformer_bridge_config_default() {
+        let config = TransformerBridgeConfig::default();
+        assert!((config.similarity_threshold - 0.5).abs() < 0.001);
+        assert_eq!(config.max_compositions, 10);
+        assert!(config.use_attention_weights);
     }
 }

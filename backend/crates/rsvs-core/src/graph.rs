@@ -1,11 +1,11 @@
-//! The RSVS graph — in-memory, DAG, integer-keyed (v5.0 — Compositional)
+//! The RSVS graph — in-memory, DAG, integer-keyed (v6.0 — Compositional)
 //!
-//! v5.0: Compositional architecture. Nodes can have multiple senses,
+//! v6.0: Compositional architecture. Nodes can have multiple senses,
 //! each defined by compositions (references to specific senses of other nodes).
 //!
 //! Key additions:
 //! - `structural_similarity()`: Compare two nodes based on shared/differing
-//!   compositions at the sense level.
+//!   compositions at the sense level. Uses HashSet for O(1) lookups.
 //! - `substitution_analysis()`: Find what composition substitutions transform
 //!   one sense into another (e.g., raja→ratu by substituting laki-laki→perempuan).
 //! - `expand()` now recurses through compositions, not just atom sets.
@@ -13,10 +13,10 @@
 use crate::error::RsvsError;
 use crate::sense::SenseManager;
 use crate::types::{AtomSet, CompositionRef, CompressionState, Edge, Node, NodeId};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Debug)]
-/// The RSVS knowledge graph — in-memory, DAG, integer-keyed (v5.0).
+/// The RSVS knowledge graph — in-memory, DAG, integer-keyed (v6.0).
 pub struct RsvsGraph {
     /// All nodes indexed by integer ID.
     pub nodes: HashMap<NodeId, Node>,
@@ -179,10 +179,12 @@ impl RsvsGraph {
         }
     }
 
-    /// Compute structural similarity between two nodes at the sense level (v5.0).
+    /// Compute structural similarity between two nodes at the sense level (v6.0).
     ///
-    /// This is the core of RSVS v5.0's compositional architecture. Two nodes
+    /// This is the core of RSVS v6.0's compositional architecture. Two nodes
     /// are structurally similar if their senses share compositions.
+    ///
+    /// Uses HashSet for O(1) composition lookups instead of Vec::contains().
     ///
     /// Example:
     ///   raja.sense_0 = [(tahta_tertinggi, 0), (laki_laki, 0), (kerajaan, 0)]
@@ -206,30 +208,24 @@ impl RsvsGraph {
                     continue;
                 }
 
-                let shared: Vec<CompositionRef> = sense_a
-                    .compositions
-                    .iter()
-                    .filter(|c| sense_b.compositions.contains(c))
-                    .cloned()
+                // Use HashSet for O(1) lookups
+                let set_a: HashSet<&CompositionRef> = sense_a.compositions.iter().collect();
+                let set_b: HashSet<&CompositionRef> = sense_b.compositions.iter().collect();
+
+                let shared: Vec<CompositionRef> =
+                    set_a.intersection(&set_b).map(|c| (*c).clone()).collect();
+
+                let only_a: Vec<CompositionRef> = set_a
+                    .difference(&set_b)
+                    .map(|c| (*c).clone())
                     .collect();
 
-                let only_a: Vec<CompositionRef> = sense_a
-                    .compositions
-                    .iter()
-                    .filter(|c| !sense_b.compositions.contains(c))
-                    .cloned()
+                let only_b: Vec<CompositionRef> = set_b
+                    .difference(&set_a)
+                    .map(|c| (*c).clone())
                     .collect();
 
-                let only_b: Vec<CompositionRef> = sense_b
-                    .compositions
-                    .iter()
-                    .filter(|c| !sense_a.compositions.contains(c))
-                    .cloned()
-                    .collect();
-
-                let union_len = sense_a.compositions.len()
-                    + sense_b.compositions.len()
-                    - shared.len();
+                let union_len = set_a.union(&set_b).count();
 
                 let score = if union_len == 0 {
                     0.0
@@ -269,7 +265,7 @@ impl RsvsGraph {
         })
     }
 
-    /// Analyze what substitution transforms one node's sense into another's (v5.0).
+    /// Analyze what substitution transforms one node's sense into another's (v6.0).
     ///
     /// This is the "why" of RSVS: it doesn't just say two things are
     /// related, it says exactly WHICH composition needs to change to
@@ -351,7 +347,7 @@ pub struct SimilarityResult {
     pub jaccard: f32,
 }
 
-/// Structural similarity result between two nodes at the sense level (v5.0).
+/// Structural similarity result between two nodes at the sense level (v6.0).
 #[derive(Debug, Clone)]
 pub struct StructuralSimResult {
     /// Index of the best-matching sense in node A.
@@ -372,7 +368,7 @@ pub struct StructuralSimResult {
     pub layer_b: u32,
 }
 
-/// Result of substitution analysis (v5.0).
+/// Result of substitution analysis (v6.0).
 #[derive(Debug, Clone)]
 pub struct SubstitutionResult {
     /// Index of the sense in node A.

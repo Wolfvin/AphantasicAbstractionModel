@@ -1,4 +1,4 @@
-//! Seed graph bootstrap (v4.2)
+//! Seed graph bootstrap (v6.0)
 //!
 //! Loads seed atoms into the graph at startup. By default, uses 24
 //! epistemological seeds, but callers can provide custom seed labels
@@ -13,7 +13,7 @@ use crate::graph::RsvsGraph;
 use crate::types::{CompressionState, Node, NodeId, NodeStatus, SemanticMeta, Tier};
 use std::collections::HashMap;
 
-/// Seed node definitions: label only (v4.2 — all seeds are equal, no layer distinction)
+/// Seed node definitions: label only (v6.0 — all seeds are equal, no layer distinction)
 const SEED_ATOMS: &[&str] = &[
     "exists",
     "entity",
@@ -41,7 +41,7 @@ const SEED_ATOMS: &[&str] = &[
     "feedback",
 ];
 
-/// Bootstrap the graph with seed nodes (v4.2 format).
+/// Bootstrap the graph with seed nodes (v6.0 format).
 ///
 /// If `custom_seeds` is provided, those labels are used instead of the
 /// default 24 epistemological seeds. Returns a map of label → NodeId for

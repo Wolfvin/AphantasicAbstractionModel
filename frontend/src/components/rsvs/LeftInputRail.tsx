@@ -12,7 +12,6 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronUp,
-  ChevronDown,
   Send,
   Paperclip,
   Bot,
@@ -201,7 +200,7 @@ function MessageBubble({ message }: { message: ChatMessage }) {
           {message.mode && (
             <div className="mb-1">
               <Badge variant="outline" className="text-[10px] border-white/15 bg-white/5 text-muted-foreground">
-                {MODE_LABEL[message.mode]}
+                {MODE_LABEL[message.mode as RSVSMode] ?? message.mode}
               </Badge>
             </div>
           )}

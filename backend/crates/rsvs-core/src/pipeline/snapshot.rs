@@ -1,4 +1,4 @@
-//! Snapshot and event helpers — RSVS v5.0
+//! Snapshot and event helpers — RSVS v6.0
 //!
 //! Contains `snapshot_v1()`, `consume_events_v1()`, `latest_seq_v1()`, `status()`.
 
@@ -57,7 +57,7 @@ impl Rsvs {
         }
     }
 
-    /// v5.0 snapshot with compositional architecture.
+    /// v6.0 snapshot with compositional architecture.
     ///
     /// Produces a `RuntimeSnapshot` containing all nodes and edges in the graph,
     /// with sense, composition, layer, and grounding metadata.
@@ -100,7 +100,7 @@ impl Rsvs {
                     derived_from_node_ids: n.semantic.derived_from_node_ids.clone(),
                     sense_count: sense.map(|s| s.sense_count()).unwrap_or(0),
                     coherence: primary_sense.map(|x| x.coherence),
-                    grounding_score: primary_sense.map(|x| x.grounding_score),
+                    grounding_score: primary_sense.map(|x| x.grounding.score()),
                     compositions: primary_sense
                         .map(|x| x.compositions.clone())
                         .unwrap_or_default(),
