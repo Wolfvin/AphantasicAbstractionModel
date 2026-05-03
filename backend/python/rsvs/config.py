@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-import random
+import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -60,8 +60,14 @@ def iso_now() -> str:
 
 
 def make_id(prefix: str) -> str:
-    """Generate a unique identifier with the given prefix."""
-    return f"{prefix}_{int(datetime.now(timezone.utc).timestamp() * 1000)}_{random.randint(1000, 9999)}"
+    """Generate a collision-resistant unique identifier with the given prefix.
+
+    Uses UUID4 for cryptographic uniqueness instead of random.randint.
+    Format: {prefix}_{timestamp_ms}_{uuid4_short}
+    """
+    ts = int(datetime.now(timezone.utc).timestamp() * 1000)
+    short_uuid = uuid.uuid4().hex[:8]
+    return f"{prefix}_{ts}_{short_uuid}"
 
 
 # ---------------------------------------------------------------------------

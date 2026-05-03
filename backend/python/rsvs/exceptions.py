@@ -1,4 +1,9 @@
-"""RSVS Bridge exceptions."""
+"""RSVS Bridge exceptions.
+
+Complete exception hierarchy for RSVS v6.0 operations.
+Each exception maps to a specific HTTP status code via _EXCEPTION_STATUS_MAP
+in fastapi_server.py.
+"""
 
 
 __all__ = [
@@ -8,11 +13,19 @@ __all__ = [
     "InvariantViolationError",
     "InvalidModeError",
     "RustCoreUnavailableError",
+    "NodeNotFoundError",
+    "CompositionError",
+    "SenseError",
+    "GroundingError",
 ]
 
 
 class RsvsError(Exception):
-    """Base exception for RSVS operations."""
+    """Base exception for RSVS operations.
+
+    All RSVS-specific exceptions inherit from this class, enabling
+    both fine-grained catch (specific subclass) and blanket catch (RsvsError).
+    """
     pass
 
 
@@ -38,4 +51,24 @@ class InvalidModeError(RsvsError):
 
 class RustCoreUnavailableError(RsvsError):
     """Raised when the Rust core is not available."""
+    pass
+
+
+class NodeNotFoundError(RsvsError):
+    """Raised when a requested node/label is not found in the graph."""
+    pass
+
+
+class CompositionError(RsvsError):
+    """Raised when a compositional operation fails (e.g., invalid composition refs)."""
+    pass
+
+
+class SenseError(RsvsError):
+    """Raised when a sense-level operation fails (e.g., invalid sense index)."""
+    pass
+
+
+class GroundingError(RsvsError):
+    """Raised when grounding verification fails or produces an invalid state."""
     pass

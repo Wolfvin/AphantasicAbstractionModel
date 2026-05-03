@@ -235,6 +235,12 @@ impl Default for Node {
 }
 
 /// Content-addressable fingerprint for perceptual grounding.
+///
+/// Uses a fixed, well-defined hashing algorithm (SipHash-1-3 via `DefaultHasher`)
+/// for content deduplication. Note: `DefaultHasher` is not guaranteed stable
+/// across Rust versions — it is suitable for runtime dedup within a session
+/// but NOT for persistent content-addressable storage across restarts.
+/// For cross-session persistence, prefer an explicit hasher (e.g., xxhash, ahash).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Fingerprint {
     hash: u64,
@@ -242,14 +248,19 @@ pub struct Fingerprint {
 }
 
 impl Fingerprint {
-    /// Create a new fingerprint from raw byte data using the default hasher.
+    /// Create a new fingerprint from raw byte data.
+    ///
+    /// Uses `std::collections::hash_map::DefaultHasher` (SipHash-1-3 variant).
+    /// The algorithm field accurately reflects the hasher used.
+    /// **Warning**: This hash is NOT stable across Rust compiler versions.
+    /// Use only for in-session deduplication, not for persistent fingerprints.
     pub fn new(data: &[u8]) -> Self {
         use std::hash::{Hash, Hasher};
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
         data.hash(&mut hasher);
         Self {
             hash: hasher.finish(),
-            algorithm: "siphash".into(),
+            algorithm: "std_default_hasher".into(),
         }
     }
 

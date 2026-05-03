@@ -11,18 +11,32 @@ Updated for RSVS v6.0 with:
 from __future__ import annotations
 
 import json
+import os
+import secrets
 from contextlib import asynccontextmanager
 from typing import Any, List, Optional
 
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, Security
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.security import APIKeyHeader
 from pydantic import BaseModel, Field
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
-from .exceptions import RsvsError, RustCoreUnavailableError
+from .exceptions import (
+    CompositionError,
+    GroundingError,
+    InvariantViolationError,
+    InvalidModeError,
+    NodeNotFoundError,
+    RsvsError,
+    RustCoreUnavailableError,
+    SchemaValidationError,
+    SchemaVersionMismatchError,
+    SenseError,
+)
 from .modes import run_mode
 from .protocols import RsvsCoreProtocol
 from .rsvs_core import get_rsvs_instance
@@ -57,11 +71,21 @@ app = FastAPI(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+# --- CORS: configurable whitelist via environment variable ---
+# Set RSVS_ALLOWED_ORIGINS to a comma-separated list of allowed origins.
+# Example: RSVS_ALLOWED_ORIGINS=http://localhost:3000,https://rsvs.example.com
+# If not set, defaults to localhost:3000 (development-safe).
+_ALLOWED_ORIGINS = [
+    o.strip()
+    for o in os.environ.get("RSVS_ALLOWED_ORIGINS", "http://localhost:3000").split(",")
+    if o.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=_ALLOWED_ORIGINS,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-API-Key"],
 )
 
 
@@ -82,15 +106,15 @@ async def limit_request_size(request: Request, call_next):
 # --- Request/Response Models ---
 
 class IngestRequest(BaseModel):
-    text: str = Field(..., min_length=1, description="Text to ingest")
-    source: str | None = Field(None, description="Source identifier")
+    text: str = Field(..., min_length=1, max_length=100_000, description="Text to ingest (max 100K characters)")
+    source: str | None = Field(None, max_length=500, description="Source identifier")
 
 
 class RunRequest(BaseModel):
     mode: str = Field(..., description="Mode: ingest | query | appraise | relate | compose | structural_similarity | substitution_analysis")
-    text: str = Field(..., min_length=1)
-    target: str | None = None
-    source: str | None = None
+    text: str = Field(..., min_length=1, max_length=100_000, description="Input text (max 100K characters)")
+    target: str | None = Field(None, max_length=500)
+    source: str | None = Field(None, max_length=500)
 
 
 class QueryRequest(BaseModel):
@@ -141,12 +165,37 @@ class SensesRequest(BaseModel):
 
 # --- Exception mapping ---
 
+# --- API Key authentication ---
+# Set RSVS_API_KEY to enable authentication. If not set, auth is skipped (dev mode).
+_API_KEY = os.environ.get("RSVS_API_KEY", "")
+_api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+
+async def _verify_api_key(api_key: str = Security(_api_key_header)) -> None:
+    """Verify the API key if RSVS_API_KEY is configured.
+
+    If RSVS_API_KEY is not set (empty), authentication is skipped for development.
+    In production, always set RSVS_API_KEY to a strong random value.
+    """
+    if not _API_KEY:
+        # Dev mode: no API key configured, skip auth
+        return
+    if api_key != _API_KEY:
+        raise HTTPException(status_code=401, detail="Invalid or missing API key")
+
+
+# --- Exception mapping ---
+
 _EXCEPTION_STATUS_MAP: dict[str, int] = {
     "SchemaVersionMismatchError": 409,
     "SchemaValidationError": 422,
     "InvariantViolationError": 422,
     "InvalidModeError": 400,
     "RustCoreUnavailableError": 503,
+    "NodeNotFoundError": 404,
+    "CompositionError": 400,
+    "SenseError": 400,
+    "GroundingError": 422,
 }
 
 
@@ -200,7 +249,7 @@ def _enriched_query_result(raw: Any) -> dict[str, Any]:
 
 @app.post("/run")
 @limiter.limit("30/minute")
-async def run_endpoint(request: Request, req: RunRequest) -> dict[str, Any]:
+async def run_endpoint(request: Request, req: RunRequest, _auth: None = Depends(_verify_api_key)) -> dict[str, Any]:
     try:
         rsvs: RsvsCoreProtocol = get_rsvs_instance()
         return run_mode(rsvs, req.mode, text=req.text, target=req.target, source=req.source)
@@ -212,7 +261,7 @@ async def run_endpoint(request: Request, req: RunRequest) -> dict[str, Any]:
 
 @app.post("/ingest")
 @limiter.limit("30/minute")
-async def ingest_endpoint(request: Request, req: IngestRequest) -> dict[str, Any]:
+async def ingest_endpoint(request: Request, req: IngestRequest, _auth: None = Depends(_verify_api_key)) -> dict[str, Any]:
     try:
         rsvs: RsvsCoreProtocol = get_rsvs_instance()
         return run_mode(rsvs, "ingest", text=req.text, source=req.source)
@@ -224,7 +273,7 @@ async def ingest_endpoint(request: Request, req: IngestRequest) -> dict[str, Any
 
 @app.post("/query")
 @limiter.limit("30/minute")
-async def query_endpoint(request: Request, req: QueryRequest) -> dict[str, Any]:
+async def query_endpoint(request: Request, req: QueryRequest, _auth: None = Depends(_verify_api_key)) -> dict[str, Any]:
     try:
         rsvs: RsvsCoreProtocol = get_rsvs_instance()
         result = rsvs.query(req.text, "")
@@ -241,7 +290,7 @@ async def query_endpoint(request: Request, req: QueryRequest) -> dict[str, Any]:
 
 @app.post("/similarity")
 @limiter.limit("30/minute")
-async def similarity_endpoint(request: Request, req: SimilarityRequest) -> dict[str, Any]:
+async def similarity_endpoint(request: Request, req: SimilarityRequest, _auth: None = Depends(_verify_api_key)) -> dict[str, Any]:
     try:
         rsvs: RsvsCoreProtocol = get_rsvs_instance()
         sim = rsvs.similarity(req.label_a, req.label_b)
@@ -265,6 +314,7 @@ async def structural_similarity_endpoint(
     request: Request,
     a: str = Query(..., min_length=1, description="First label (e.g. 'raja')"),
     b: str = Query(..., min_length=1, description="Second label (e.g. 'ratu')"),
+    _auth: None = Depends(_verify_api_key),
 ) -> dict[str, Any]:
     """Get structural similarity between two labels.
 
@@ -299,6 +349,7 @@ async def substitution_analysis_endpoint(
     request: Request,
     a: str = Query(..., min_length=1, description="First label (e.g. 'raja')"),
     b: str = Query(..., min_length=1, description="Second label (e.g. 'ratu')"),
+    _auth: None = Depends(_verify_api_key),
 ) -> dict[str, Any]:
     """Get substitution analysis between two labels.
 
@@ -335,7 +386,7 @@ async def substitution_analysis_endpoint(
 
 @app.post("/appraise")
 @limiter.limit("30/minute")
-async def appraise_endpoint(request: Request, req: AppraiseRequest) -> dict[str, Any]:
+async def appraise_endpoint(request: Request, req: AppraiseRequest, _auth: None = Depends(_verify_api_key)) -> dict[str, Any]:
     try:
         rsvs: RsvsCoreProtocol = get_rsvs_instance()
         return run_mode(rsvs, "appraise", text=req.target)
@@ -347,7 +398,7 @@ async def appraise_endpoint(request: Request, req: AppraiseRequest) -> dict[str,
 
 @app.post("/relate")
 @limiter.limit("30/minute")
-async def relate_endpoint(request: Request, req: RelateRequest) -> dict[str, Any]:
+async def relate_endpoint(request: Request, req: RelateRequest, _auth: None = Depends(_verify_api_key)) -> dict[str, Any]:
     try:
         rsvs: RsvsCoreProtocol = get_rsvs_instance()
         return run_mode(rsvs, "relate", text=req.source, target=req.target)
@@ -358,7 +409,8 @@ async def relate_endpoint(request: Request, req: RelateRequest) -> dict[str, Any
 
 
 @app.post("/compose", tags=["compose"])
-async def compose_node(request: ComposeRequest):
+@limiter.limit("30/minute")
+async def compose_node(request: Request, body: ComposeRequest, _auth: None = Depends(_verify_api_key)):
     """
     Create a composite node from explicit compositions or atom IDs.
 
@@ -377,30 +429,32 @@ async def compose_node(request: ComposeRequest):
     if rsvs is None:
         raise RustCoreUnavailableError()
 
+    req = body
+
     # Validate mutually exclusive fields
-    if request.compositions and request.atom_ids:
+    if req.compositions and req.atom_ids:
         raise HTTPException(
             status_code=400,
             detail="Provide either 'compositions' or 'atom_ids', not both.",
         )
 
-    if not request.compositions and not request.atom_ids:
+    if not req.compositions and not req.atom_ids:
         raise HTTPException(
             status_code=400,
             detail="Either 'compositions' or 'atom_ids' must be provided.",
         )
 
     try:
-        if request.compositions:
-            # v5.0: compose with (label, sense_id) pairs
-            compositions_tuples = [(c.label, c.sense_id) for c in request.compositions]
-            node_id = rsvs.compose(request.label, compositions_tuples, request.lang)
-            composed_from = [{"label": c.label, "sense_id": c.sense_id} for c in request.compositions]
+        if req.compositions:
+            # v6.0: compose with (label, sense_id) pairs
+            compositions_tuples = [(c.label, c.sense_id) for c in req.compositions]
+            node_id = rsvs.compose(req.label, compositions_tuples, req.lang)
+            composed_from = [{"label": c.label, "sense_id": c.sense_id} for c in req.compositions]
             composed_type = "compositions"
         else:
             # Backward compat: compose_from_ids
-            node_id = rsvs.compose_from_ids(request.label, request.atom_ids, request.lang)
-            composed_from = request.atom_ids
+            node_id = rsvs.compose_from_ids(req.label, req.atom_ids, req.lang)
+            composed_from = req.atom_ids
             composed_type = "atom_ids"
 
         snapshot = rsvs.snapshot_v1()
@@ -409,9 +463,9 @@ async def compose_node(request: ComposeRequest):
             "ok": True,
             "status": "ok",
             "node_id": node_id,
-            "label": request.label,
+            "label": req.label,
             composed_type: composed_from,
-            "lang": request.lang,
+            "lang": req.lang,
             "snapshot": snapshot,
             "events": events,
         }
@@ -423,7 +477,7 @@ async def compose_node(request: ComposeRequest):
 
 @app.post("/node-info", tags=["node"])
 @limiter.limit("30/minute")
-async def node_info_endpoint(request: Request, req: NodeInfoRequest) -> dict[str, Any]:
+async def node_info_endpoint(request: Request, req: NodeInfoRequest, _auth: None = Depends(_verify_api_key)) -> dict[str, Any]:
     """Get enriched node info (v5.0: includes layer field)."""
     try:
         rsvs: RsvsCoreProtocol = get_rsvs_instance()
@@ -440,7 +494,7 @@ async def node_info_endpoint(request: Request, req: NodeInfoRequest) -> dict[str
 
 @app.post("/senses", tags=["node"])
 @limiter.limit("30/minute")
-async def senses_endpoint(request: Request, req: SensesRequest) -> dict[str, Any]:
+async def senses_endpoint(request: Request, req: SensesRequest, _auth: None = Depends(_verify_api_key)) -> dict[str, Any]:
     """Get sense info for a label (v5.0: includes layer, grounding_score, compositions)."""
     try:
         rsvs: RsvsCoreProtocol = get_rsvs_instance()
@@ -455,7 +509,7 @@ async def senses_endpoint(request: Request, req: SensesRequest) -> dict[str, Any
 
 @app.get("/snapshot")
 @limiter.limit("60/minute")
-async def snapshot_endpoint(request: Request) -> dict[str, Any]:
+async def snapshot_endpoint(request: Request, _auth: None = Depends(_verify_api_key)) -> dict[str, Any]:
     try:
         rsvs: RsvsCoreProtocol = get_rsvs_instance()
         return json.loads(rsvs.snapshot_v1())
@@ -467,7 +521,7 @@ async def snapshot_endpoint(request: Request) -> dict[str, Any]:
 
 @app.get("/events")
 @limiter.limit("60/minute")
-async def events_endpoint(request: Request) -> dict[str, Any]:
+async def events_endpoint(request: Request, _auth: None = Depends(_verify_api_key)) -> dict[str, Any]:
     try:
         rsvs: RsvsCoreProtocol = get_rsvs_instance()
         return json.loads(rsvs.consume_events_v1())

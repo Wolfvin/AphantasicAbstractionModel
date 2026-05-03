@@ -19,6 +19,7 @@
 11. [Data Model](#11-data-model)
 12. [API Reference](#12-api-reference)
 13. [Performance Characteristics](#13-performance-characteristics)
+14. [Scalability & Architecture Considerations](#14-scalability--architecture-considerations)
 
 ---
 
@@ -1029,3 +1030,45 @@ The system scales linearly with the number of nodes for most operations. The pri
 - **Cold start** (empty graph): First ingest creates seed nodes and builds initial co-occurrence tables. Expect ~2× slower than steady state due to entity detection overhead and sense creation.
 
 - **Warm state** (existing graph): Ingest benefits from pre-built co-occurrence tables and existing sense structures. Most contexts are assigned to existing senses rather than creating new ones, reducing the overall work per token.
+
+---
+
+## 14. Scalability & Architecture Considerations
+
+### CQRS: Read vs. Write Paths
+
+The current RSVS architecture uses a single in-memory graph for both reads and writes. While this is efficient for the current single-process deployment, it presents challenges at scale. A natural evolution path is to apply the **Command Query Responsibility Segregation (CQRS)** pattern:
+
+- **Write model (Command side)**: The ingest pipeline, compose, and relate operations that mutate the graph. These require exclusive access to the `RsvsGraph`, `SenseManager`, and `AutonomyEngine` to maintain invariants (DAG structure, grounding consistency, confidence EMA). In a distributed deployment, the write model would be owned by a single leader process.
+
+- **Read model (Query side)**: The query, similarity, structural_similarity, substitution_analysis, snapshot, and events operations. These are read-only and can be served from a eventually-consistent replica. The read model can be denormalized for specific query patterns — for example, a pre-computed composition index for fast structural similarity lookups.
+
+The current architecture already implicitly separates these concerns via the pipeline design: ingest writes are batched and atomic, while reads are always against a consistent snapshot. Formalizing this into explicit read/write models would enable horizontal scaling of query throughput without sacrificing write consistency.
+
+### State Persistence: Beyond Single-File JSON
+
+The current persistence mechanism (`rsvs-state.json`) serializes the entire graph state into a single JSON file. This works for graphs up to ~100K nodes but becomes a bottleneck beyond that:
+
+1. **Serialization latency**: Full-graph JSON serialization is O(N) in total nodes + edges + senses. For a 500K-node graph with 2M senses, this can take seconds.
+
+2. **Write amplification**: Every save writes the entire graph, even if only a few nodes changed. Incremental persistence (append-only event log + periodic snapshots) would dramatically reduce I/O.
+
+3. **Recovery time**: Loading a large JSON file at startup requires full deserialization. An event-sourced approach with snapshot + replay would enable faster recovery.
+
+A recommended evolution path:
+
+- **Phase 1**: Append-only event log (already partially implemented via `RuntimeEvent`). Each ingest produces events that can be persisted incrementally. The snapshot becomes a checkpoint, not the primary storage.
+
+- **Phase 2**: Columnar storage for nodes, senses, and edges. Each entity type gets its own storage file, enabling partial reads and writes.
+
+- **Phase 3**: External database backend (SQLite for embedded, PostgreSQL for distributed). The Rust core would use a trait-based storage abstraction, allowing different backends without changing the core logic.
+
+### Concurrency Model
+
+The current architecture is single-writer: the Python bridge holds a `threading.Lock` around the Rust core, serializing all operations. This is correct but limits throughput. Potential improvements:
+
+1. **Read-write lock**: Allow concurrent reads (query, similarity) while serializing writes (ingest, compose). This would improve throughput for read-heavy workloads.
+
+2. **Batch write pipeline**: Accumulate write operations in a queue and apply them in batches. This amortizes the lock acquisition cost and enables better parallelism within the Rust core (rayon already parallelizes within a single ingest batch).
+
+3. **Sharding**: Partition the graph by domain or language, with each shard owning a disjoint subset of nodes. Cross-shard references (CompositionRefs) would require a distributed lookup, but this would enable near-linear scaling for write throughput.

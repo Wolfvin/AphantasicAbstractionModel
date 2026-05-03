@@ -66,7 +66,8 @@ class TestSave:
     def test_snapshot_has_version(self, saved):
         with open(saved) as f:
             data = json.load(f)
-        assert data["version"] == "4.2"
+        # Version should be at least "5.0" (matches Cargo.toml version)
+        assert data["version"] >= "5.0"
 
     def test_snapshot_has_nodes(self, saved):
         with open(saved) as f:
@@ -114,7 +115,7 @@ class TestSave:
         trained.save(tmp_path_str)
         with open(tmp_path_str) as f:
             data = json.load(f)
-        assert data["version"] == "4.2"
+        assert data["version"] >= "5.0"
 
 # -----------------------------------------------------------------------
 # Load tests

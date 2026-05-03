@@ -766,7 +766,22 @@ impl SenseManager {
             })
             .max_by(|a, b| a.1.total_cmp(&b.1));
 
-        let (best_idx, best_score) = best.unwrap();
+        let (best_idx, best_score) = match best {
+            Some(result) => result,
+            None => {
+                // SAFETY: candidates is non-empty when called from ingest(),
+                // because we check `if candidates.is_empty()` above and
+                // fall through only when there is at least one candidate.
+                // However, to be defensive, create a new sense if this
+                // invariant is ever violated.
+                let new_id = self.next_sense_id;
+                self.next_sense_id += 1;
+                let sense = Sense::new(new_id, context);
+                self.senses.push(sense);
+                let idx = self.senses.len() - 1;
+                return IngestResult::Created(idx);
+            }
+        };
 
         if best_score >= self.config.theta_assign {
             self.senses[best_idx].assign(context);

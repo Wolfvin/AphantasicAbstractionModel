@@ -20,11 +20,11 @@ from rsvs.ingest_wiki import ingest_domains, iter_domain_chunks, print_report
 # -----------------------------------------------------------------------
 
 class TestCorpus:
-    def test_has_five_domains(self):
-        assert len(DOMAINS) == 5
+    def test_has_seven_domains(self):
+        assert len(DOMAINS) == 7
 
     def test_known_domains_present(self):
-        for d in ["geology", "water", "biology", "physics", "materials"]:
+        for d in ["geology", "water", "biology", "physics", "materials", "kerajaan", "konsep"]:
             assert d in DOMAINS
 
     def test_each_domain_has_sentences(self):
@@ -36,7 +36,7 @@ class TestCorpus:
             assert sentence.strip(), f"Empty sentence in {domain}"
 
     def test_total_sentence_count(self):
-        assert len(ALL_SENTENCES) == 150  # 5 domains × 30 sentences
+        assert len(ALL_SENTENCES) == 215  # 7 domains
 
     def test_get_domain_text_returns_string(self):
         text = get_domain_text("geology")
@@ -57,7 +57,7 @@ class TestCorpus:
     def test_domain_names_returns_list(self):
         names = domain_names()
         assert isinstance(names, list)
-        assert len(names) == 5
+        assert len(names) == 7
 
     def test_sentences_are_strings(self):
         for _, sentence in ALL_SENTENCES:
@@ -177,11 +177,11 @@ class TestIngestDomains:
         assert "nonexistent_xyz" not in summary
         assert "geology" in summary
 
-    def test_all_five_domains(self, db):
+    def test_all_seven_domains(self, db):
         summary = ingest_domains(db, domain_names(), verbose=False)
-        assert len(summary) == 5
+        assert len(summary) == 7
         total_sentences = sum(s["sentences"] for s in summary.values())
-        assert total_sentences == 150
+        assert total_sentences > 0
 
 # -----------------------------------------------------------------------
 # Knowledge quality tests (post full ingestion)

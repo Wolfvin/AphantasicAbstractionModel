@@ -349,17 +349,24 @@ class TestNormalizers:
         assert _normalize_lang("id") == "id"
         assert _normalize_lang("zh") == "zh"
         assert _normalize_lang("fr") == "fr"
-        assert _normalize_lang("python") == "python"
+        assert _normalize_lang("ja") == "ja"
+        assert _normalize_lang("ko") == "ko"
 
     def test_normalize_lang_invalid(self):
         """Invalid language code is rejected."""
         with pytest.raises(SchemaValidationError, match="invalid_language_code"):
             _normalize_lang("xx")
 
+    def test_normalize_lang_runtime_codes_separate(self):
+        """Runtime codes (python, javascript) are NOT language codes."""
+        with pytest.raises(SchemaValidationError, match="invalid_language_code"):
+            _normalize_lang("python")
+
     def test_normalize_lang_case_insensitive(self):
         """Language code is case-insensitive."""
         assert _normalize_lang("EN") == "en"
-        assert _normalize_lang("Python") == "python"
+        assert _normalize_lang("ID") == "id"
+        assert _normalize_lang("ZH") == "zh"
 
     def test_normalize_lang_none_defaults_to_id(self):
         """None defaults to 'id'."""

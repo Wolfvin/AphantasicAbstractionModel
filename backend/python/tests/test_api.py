@@ -271,11 +271,11 @@ class TestRunEndpoint:
         body = json.loads(data)
         assert body.get("error") == "text_required"
 
-    def test_ingest_snapshot_has_v42_schema(self, fresh_bridge):
-        """Ingest snapshot must use schema_version v4.2."""
-        env = _run_mode("ingest", GEOLOGY, "corr_v42", {"view": "compact"})
+    def test_ingest_snapshot_has_v6_schema(self, fresh_bridge):
+        """Ingest snapshot must use schema_version v6.0."""
+        env = _run_mode("ingest", GEOLOGY, "corr_v6", {"view": "compact"})
         snapshot = env["result"]["snapshot"]
-        assert snapshot["schema_version"] == "v4.2"
+        assert snapshot["schema_version"] == "v6.0"
 
     def test_ingest_nodes_have_kind_node(self, fresh_bridge):
         """All nodes in an ingest snapshot must have kind='node'."""

@@ -1,9 +1,32 @@
 # ──────────────────────────────────────────────────────────────────────
 #  SymbolicPuzzle3D — Docker Compose
-#  Backend (Rust + Python bridge) + Frontend (Next.js)
+#  Nginx (reverse proxy) + Backend (Rust + Python bridge) + Frontend (Next.js)
 # ──────────────────────────────────────────────────────────────────────
 
 services:
+  # ── Nginx reverse proxy ─────────────────────────────────────────────
+  # Centralizes TLS termination, rate limiting, and access control.
+  # Only Nginx exposes ports to the host; backend/frontend are internal.
+  nginx:
+    image: nginx:alpine
+    container_name: sp3d-nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+    restart: unless-stopped
+
   # ── Backend: Rust core + Python bridge ──────────────────────────────
   backend:
     build:
@@ -18,8 +41,9 @@ services:
       - |
         pip install --no-cache-dir /dist/wheels/*.whl || maturin develop --manifest-path crates/rsvs-core/Cargo.toml
         cd /build && PYTHONPATH=python python3 -m rsvs.fastapi_server
-    ports:
-      - "8000:8000"
+    # No direct port exposure — accessible only via nginx
+    expose:
+      - "8000"
     volumes:
       - rsvs-data:/app/data
     environment:
@@ -28,6 +52,9 @@ services:
       - RSVS_ATOM_DIR=/app/data
       - RSVS_BRIDGE_HOST=0.0.0.0
       - RSVS_BRIDGE_PORT=8000
+      # Security: Set these in production via .env or docker-compose.override.yml
+      - RSVS_API_KEY=${RSVS_API_KEY:-}
+      - RSVS_ALLOWED_ORIGINS=http://frontend:3000,http://localhost:3000
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -44,11 +71,13 @@ services:
     image: symbolic-puzzle-3d/frontend:latest
     container_name: sp3d-frontend
     command: ["node", "server.js"]
-    ports:
-      - "3000:3000"
+    # No direct port exposure — accessible only via nginx
+    expose:
+      - "3000"
     environment:
       - NODE_ENV=production
       - NEXT_PUBLIC_RSVS_BACKEND_URL=http://backend:8000
+      - NEXT_PUBLIC_RSVS_API_KEY=${RSVS_API_KEY:-}
       - HOSTNAME=0.0.0.0
       - PORT=3000
     depends_on:
