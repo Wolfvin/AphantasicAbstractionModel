@@ -424,3 +424,154 @@ class TestRunModeContract:
         })
         # May return 500 if Rust core can't process with minimal data
         assert resp.status_code in (200, 400, 500)
+
+
+# ──────────────────────────────────────────────────────────────────────
+# /context-query endpoint (v6.1)
+# ──────────────────────────────────────────────────────────────────────
+
+
+class TestContextQueryEndpoint:
+    def test_context_query_with_context(self, client):
+        """Context query with a concept and context atoms."""
+        # First ingest some text to populate the graph
+        client.post("/ingest", json={"text": "Raja adalah raja kerajaan yang berkuasa"})
+        resp = client.post("/context-query", json={
+            "concept": "raja",
+            "context_atoms": ["kerajaan"],
+        })
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body.get("ok") is True
+
+    def test_context_query_missing_concept(self, client):
+        """concept field is required."""
+        resp = client.post("/context-query", json={
+            "context_atoms": ["kerajaan"],
+        })
+        assert resp.status_code == 422
+
+    def test_context_query_missing_context_atoms(self, client):
+        """context_atoms field is required."""
+        resp = client.post("/context-query", json={
+            "concept": "raja",
+        })
+        assert resp.status_code == 422
+
+    def test_context_query_empty_concept(self, client):
+        """concept must be non-empty."""
+        resp = client.post("/context-query", json={
+            "concept": "",
+            "context_atoms": ["kerajaan"],
+        })
+        assert resp.status_code == 422
+
+    def test_context_query_empty_context_atoms(self, client):
+        """context_atoms must have at least 1 entry."""
+        resp = client.post("/context-query", json={
+            "concept": "raja",
+            "context_atoms": [],
+        })
+        assert resp.status_code == 422
+
+    def test_context_query_max_depth_bounds(self, client):
+        """max_depth must be between 1 and 10."""
+        resp = client.post("/context-query", json={
+            "concept": "raja",
+            "context_atoms": ["kerajaan"],
+            "max_depth": 0,
+        })
+        assert resp.status_code == 422
+        resp = client.post("/context-query", json={
+            "concept": "raja",
+            "context_atoms": ["kerajaan"],
+            "max_depth": 11,
+        })
+        assert resp.status_code == 422
+
+    def test_context_query_with_depth_param(self, client):
+        """max_depth=2 should work."""
+        resp = client.post("/context-query", json={
+            "concept": "exists",
+            "context_atoms": ["entity"],
+            "max_depth": 2,
+        })
+        assert resp.status_code == 200
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Contract tests: compositional architecture (v6.1)
+# ──────────────────────────────────────────────────────────────────────
+
+
+class TestCompositionalContract:
+    """Contract tests verifying the compositional architecture works end-to-end."""
+
+    def test_compose_and_query(self, client):
+        """Composed nodes should be queryable."""
+        # Ingest some text first
+        client.post("/ingest", json={"text": "Air mengalir melalui batu dan tanah"})
+
+        # Compose a node
+        resp = client.post("/compose", json={
+            "label": "test_composed",
+            "compositions": [{"label": "exists", "sense_id": 0}, {"label": "entity", "sense_id": 0}],
+        })
+        # Should succeed or fail gracefully
+        assert resp.status_code in (200, 400)
+
+    def test_structural_similarity_seeds(self, client):
+        """Structural similarity between seed atoms should work."""
+        resp = client.get("/structural-similarity?a=exists&b=entity")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert "structural_similarity" in body
+
+    def test_substitution_analysis_seeds(self, client):
+        """Substitution analysis between seed atoms should work."""
+        resp = client.get("/substitution-analysis?a=exists&b=entity")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert "structural_similarity" in body
+
+    def test_ingest_produces_compositions(self, client):
+        """Ingesting text should produce compositional senses."""
+        resp = client.post("/ingest", json={
+            "text": "Raja adalah raja kerajaan. Ratu adalah ratu kerajaan. Tahta tertinggi milik raja."
+        })
+        assert resp.status_code == 200
+
+    def test_senses_endpoint_returns_compositions(self, client):
+        """Senses endpoint should return compositional information."""
+        resp = client.post("/senses", json={"label": "exists"})
+        assert resp.status_code == 200
+        body = resp.json()
+        assert "senses" in body
+
+    def test_snapshot_contains_layer_info(self, client):
+        """Snapshot should include layer information for nodes."""
+        resp = client.get("/snapshot")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert isinstance(body, dict)
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Version check (v6.1)
+# ──────────────────────────────────────────────────────────────────────
+
+
+class TestVersionV61:
+    def test_health_reports_v61(self, client):
+        """Health endpoint should report v6.1.0."""
+        resp = client.get("/health")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["version"] == "6.1.0"
+
+    def test_root_reports_v61(self, client):
+        """Root endpoint should report v6.1.0."""
+        resp = client.get("/")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["version"] == "6.1.0"

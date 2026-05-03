@@ -1,5 +1,5 @@
 import type { ChatMessage, GraphSnapshot, RSVSEvent, ComposeResult, StructuralSimilarityResult, SubstitutionAnalysisResult, CompositionPair } from '@/lib/types';
-export type RSVSMode = 'ingest' | 'appraise' | 'relate' | 'compose' | 'structural_similarity' | 'substitution_analysis' | 'grounding_info';
+export type RSVSMode = 'ingest' | 'appraise' | 'relate' | 'compose' | 'structural_similarity' | 'substitution_analysis' | 'grounding_info' | 'context_query';
 
 export interface BackendIngestResponse {
   ok: boolean;
@@ -199,6 +199,58 @@ export async function fetchSubstitutionAnalysis(
     throw new Error(`Substitution analysis failed (${res.status}): ${body}`);
   }
   return (await res.json()) as SubstitutionAnalysisResult;
+}
+
+/**
+ * v6.1: Context-aware depth-controlled query.
+ * POST /context-query with concept, context_atoms, and optional traversal params.
+ *
+ * Uses P(a|S,q) scoring, cycle detection, and adaptive halting
+ * for recursive composition expansion.
+ *
+ * Depth presets:
+ * - Shallow (max_depth=1): Fast appraise-style lookup
+ * - Medium (max_depth=2): Relate-style one-hop expansion
+ * - Deep (max_depth=5): Full grounding verification
+ */
+export interface ContextQueryOptions {
+  concept: string;
+  context_atoms: string[];
+  max_depth?: number;
+  gamma?: number;
+  halt_confidence?: number;
+  tau_relevance?: number;
+}
+
+export interface ContextQueryResult {
+  ok: boolean;
+  concept: string;
+  result: {
+    active_sense_idx: number | null;
+    total_senses: number;
+    scored_atoms: [string, number][];
+    depth_reached: number;
+    halt_reason: string;
+    cycles_detected: number;
+    layer: number;
+    grounding_score: number;
+  } | null;
+}
+
+export async function contextQuery(
+  options: ContextQueryOptions,
+): Promise<ContextQueryResult> {
+  const url = `${getBackendBaseUrl()}/context-query`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(options),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Context query failed (${res.status}): ${body}`);
+  }
+  return (await res.json()) as ContextQueryResult;
 }
 
 /**

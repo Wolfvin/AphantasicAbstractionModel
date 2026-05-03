@@ -32,6 +32,8 @@ pub struct PyIngestStats {
     pub confidence_updated: usize,
     pub frozen_batches: usize,
     pub compositions_induced: usize,
+    /// v6.1: Number of atoms flagged as inactive by TTL.
+    pub atoms_flagged_inactive: usize,
 }
 
 #[pyclass(get_all)]
@@ -49,17 +51,20 @@ pub struct PyIngestMetaV1 {
     pub confidence_updated: usize,
     pub frozen_batches: usize,
     pub compositions_induced: usize,
+    /// v6.1: Number of atoms flagged as inactive by TTL.
+    pub atoms_flagged_inactive: usize,
 }
 
 #[pymethods]
 impl PyIngestStats {
     fn __repr__(&self) -> String {
         format!(
-            "IngestStats(sentences={}, atoms_promoted={}, senses_created={}, compositions={})",
+            "IngestStats(sentences={}, atoms_promoted={}, senses_created={}, compositions={}, inactive={})",
             self.sentences_processed,
             self.atoms_promoted,
             self.sense_created,
-            self.compositions_induced
+            self.compositions_induced,
+            self.atoms_flagged_inactive
         )
     }
 }
@@ -308,6 +313,52 @@ pub struct PyGroundingEvidence {
     pub revision_count: usize,
 }
 
+/// Result of a context-aware traversal query (v6.1).
+///
+/// Contains scored atoms with P(a|S,q) weighting, traversal metadata,
+/// and cycle detection info from depth-controlled lazy traversal.
+#[pyclass(get_all)]
+#[derive(Clone, Debug)]
+pub struct PyContextQueryResult {
+    /// The active sense index selected for the queried node.
+    pub active_sense_idx: usize,
+    /// Total number of senses for the node.
+    pub total_senses: usize,
+    /// Scored atoms: (label, P(a|S,q) score).
+    pub scored_atoms: Vec<(String, f32)>,
+    /// Compositional depth reached during traversal.
+    pub depth_reached: usize,
+    /// Which halting criterion stopped the traversal.
+    pub halt_reason: String,
+    /// Number of cycle detections encountered during traversal.
+    pub cycles_detected: usize,
+    /// Layer of the active sense.
+    pub layer: u32,
+    /// Grounding score of the active sense.
+    pub grounding_score: f32,
+}
+
+#[pymethods]
+impl PyContextQueryResult {
+    fn __repr__(&self) -> String {
+        let top: Vec<_> = self
+            .scored_atoms
+            .iter()
+            .take(3)
+            .map(|(l, s)| format!("{}:{:.2}", l, s))
+            .collect();
+        format!(
+            "ContextQueryResult(sense={}, layer={}, depth={}, halt={}, cycles={}, atoms=[{}])",
+            self.active_sense_idx,
+            self.layer,
+            self.depth_reached,
+            self.halt_reason,
+            self.cycles_detected,
+            top.join(", ")
+        )
+    }
+}
+
 #[pymethods]
 impl PyGroundingEvidence {
     fn __repr__(&self) -> String {
@@ -463,6 +514,7 @@ impl PyRsvs {
             confidence_updated: s.confidence_updated,
             frozen_batches: s.frozen_batches,
             compositions_induced: s.compositions_induced,
+            atoms_flagged_inactive: s.atoms_flagged_inactive,
         })
     }
 
@@ -500,6 +552,7 @@ impl PyRsvs {
             confidence_updated: s.confidence_updated,
             frozen_batches: s.frozen_batches,
             compositions_induced: s.compositions_induced,
+            atoms_flagged_inactive: s.atoms_flagged_inactive,
         })
     }
 
@@ -513,6 +566,52 @@ impl PyRsvs {
             layer: r.layer,
             grounding_score: r.grounding_score,
             compositions: r.compositions,
+        })
+    }
+
+    /// v6.1: Context-aware query using depth-controlled lazy traversal.
+    ///
+    /// This query method uses P(a|S,q) scoring, cycle detection,
+    /// and adaptive halting criteria for recursive composition expansion.
+    ///
+    /// # Arguments
+    /// * `concept` - The concept label to query
+    /// * `context_atoms` - Context atom labels to disambiguate the query
+    /// * `max_depth` - Maximum traversal depth (default: from pipeline config)
+    /// * `gamma` - Stability halting threshold (default: from pipeline config)
+    /// * `halt_confidence` - Confidence halting threshold (default: from pipeline config)
+    /// * `tau_relevance` - Relevance gating threshold (default: from pipeline config)
+    #[pyo3(signature = (concept, context_atoms, max_depth=None, gamma=None, halt_confidence=None, tau_relevance=None))]
+    fn context_query(
+        &self,
+        concept: &str,
+        context_atoms: Vec<String>,
+        max_depth: Option<usize>,
+        gamma: Option<f32>,
+        halt_confidence: Option<f32>,
+        tau_relevance: Option<usize>,
+    ) -> Option<PyContextQueryResult> {
+        let default_config = &self.inner.config.traversal;
+        let config = crate::types::TraversalConfig {
+            max_depth: max_depth.unwrap_or(default_config.max_depth),
+            gamma: gamma.unwrap_or(default_config.gamma),
+            halt_epsilon: default_config.halt_epsilon,
+            halt_confidence: halt_confidence.unwrap_or(default_config.halt_confidence),
+            tau_relevance: tau_relevance.unwrap_or(default_config.tau_relevance) as f32,
+        };
+
+        let context_refs: Vec<&str> = context_atoms.iter().map(|s| s.as_str()).collect();
+        let result = self.inner.context_query(concept, &context_refs, Some(&config))?;
+
+        Some(PyContextQueryResult {
+            active_sense_idx: result.active_sense_idx,
+            total_senses: result.total_senses,
+            scored_atoms: result.scored_atoms,
+            depth_reached: result.depth_reached,
+            halt_reason: format!("{:?}", result.halt_reason),
+            cycles_detected: result.cycles_detected,
+            layer: result.layer,
+            grounding_score: result.grounding_score,
         })
     }
 
@@ -902,5 +1001,6 @@ fn _rsvs(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PySenseInfo>()?;
     m.add_class::<PyGroundingEvidence>()?;
     m.add_class::<PyTransformerBridgeConfig>()?;
+    m.add_class::<PyContextQueryResult>()?;
     Ok(())
 }

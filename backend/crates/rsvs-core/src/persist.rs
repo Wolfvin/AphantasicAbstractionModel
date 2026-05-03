@@ -149,6 +149,10 @@ pub struct SavedSense {
     pub layer: u32,
     pub contexts: Vec<Vec<u32>>,
     pub freq_counts: HashMap<u32, usize>,
+    /// v6.1: Composition frequency map for P(a|S,q) scoring.
+    /// Missing in v6.0 snapshots — defaults to empty HashMap.
+    #[serde(default)]
+    pub freq_map: Vec<SavedFreqMapEntry>,
     pub sum_sim: f64,
     pub pair_count: usize,
     pub coherence: f32,
@@ -180,6 +184,14 @@ pub struct SavedAtomRecord {
     pub status_flip_count: u32,
     pub governance_score: f32,
     pub candidate_evidence_pool: f32,
+    /// v6.1: Context counter at which this atom was last seen.
+    /// Missing in v6.0 snapshots — defaults to 0.
+    #[serde(default)]
+    pub last_seen_context: usize,
+    /// v6.1: Inactivity TTL — number of contexts before stale.
+    /// Missing in v6.0 snapshots — defaults to 50.
+    #[serde(default = "default_inactivity_ttl")]
+    pub inactivity_ttl: usize,
 }
 
 /// Serializable mirror of `CoocStats` for JSON persistence.
@@ -216,11 +228,78 @@ pub struct RsvsSnapshot {
     pub n_warm: usize,
     pub eta: f32,
     pub current_domain: usize,
+    /// v6.1: Traversal configuration. Missing in v6.0 snapshots.
+    #[serde(default)]
+    pub traversal: SavedTraversalConfig,
 }
 
 // -----------------------------------------------------------------------
 // Serialization helpers
 // -----------------------------------------------------------------------
+
+/// Default value for inactivity_ttl (v6.1).
+fn default_inactivity_ttl() -> usize {
+    50
+}
+
+/// Serializable entry for freq_map: (node_id, sense_id, frequency).
+/// Vec is used instead of HashMap because CompositionRef isn't a simple key.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct SavedFreqMapEntry {
+    /// The target node ID.
+    pub node_id: u32,
+    /// The target sense index.
+    pub sense_id: u32,
+    /// The normalized frequency value.
+    pub freq: f32,
+}
+
+/// Serializable mirror of `TraversalConfig` (v6.1).
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct SavedTraversalConfig {
+    pub max_depth: usize,
+    pub gamma: f32,
+    pub halt_epsilon: f32,
+    pub halt_confidence: f32,
+    pub tau_relevance: f32,
+}
+
+impl Default for SavedTraversalConfig {
+    fn default() -> Self {
+        let tc = crate::types::TraversalConfig::default();
+        Self {
+            max_depth: tc.max_depth,
+            gamma: tc.gamma,
+            halt_epsilon: tc.halt_epsilon,
+            halt_confidence: tc.halt_confidence,
+            tau_relevance: tc.tau_relevance,
+        }
+    }
+}
+
+impl From<&crate::types::TraversalConfig> for SavedTraversalConfig {
+    fn from(tc: &crate::types::TraversalConfig) -> Self {
+        Self {
+            max_depth: tc.max_depth,
+            gamma: tc.gamma,
+            halt_epsilon: tc.halt_epsilon,
+            halt_confidence: tc.halt_confidence,
+            tau_relevance: tc.tau_relevance,
+        }
+    }
+}
+
+impl From<&SavedTraversalConfig> for crate::types::TraversalConfig {
+    fn from(stc: &SavedTraversalConfig) -> Self {
+        Self {
+            max_depth: stc.max_depth,
+            gamma: stc.gamma,
+            halt_epsilon: stc.halt_epsilon,
+            halt_confidence: stc.halt_confidence,
+            tau_relevance: stc.tau_relevance,
+        }
+    }
+}
 
 fn tier_to_u8(t: &Tier) -> u8 {
     match t {
@@ -364,6 +443,11 @@ pub fn to_snapshot(rsvs: &Rsvs) -> RsvsSnapshot {
                 },
                 inactivity: s.inactivity,
                 grounding: SavedGroundingEvidence::from(&s.grounding),
+                freq_map: s.freq_map.iter().map(|(comp, freq)| SavedFreqMapEntry {
+                    node_id: comp.node_id,
+                    sense_id: comp.sense_id,
+                    freq: *freq,
+                }).collect(),
             })
             .collect();
 
@@ -398,6 +482,8 @@ pub fn to_snapshot(rsvs: &Rsvs) -> RsvsSnapshot {
             status_flip_count: r.status_flip_count,
             governance_score: r.governance_score,
             candidate_evidence_pool: r.candidate_evidence_pool,
+            last_seen_context: r.last_seen_context,
+            inactivity_ttl: r.inactivity_ttl,
         })
         .collect();
 
@@ -421,7 +507,7 @@ pub fn to_snapshot(rsvs: &Rsvs) -> RsvsSnapshot {
     };
 
     RsvsSnapshot {
-        version: "6.0".to_string(),
+        version: "6.1".to_string(),
         total_contexts: rsvs.total_contexts,
         token_to_id: rsvs.token_to_id.clone(),
         next_node_id: rsvs.graph.next_id,
@@ -436,6 +522,7 @@ pub fn to_snapshot(rsvs: &Rsvs) -> RsvsSnapshot {
         n_warm: rsvs.config.autonomy.n_warm,
         eta: rsvs.config.autonomy.eta,
         current_domain: rsvs.config.current_domain,
+        traversal: SavedTraversalConfig::from(&rsvs.config.traversal),
     }
 }
 
@@ -467,6 +554,7 @@ pub fn from_snapshot(snap: RsvsSnapshot) -> Rsvs {
             threshold_global_delta: 5.0,
             ..AutonomyConfig::default()
         },
+        traversal: crate::types::TraversalConfig::from(&snap.traversal),
         ..PipelineConfig::default()
     };
 
@@ -559,6 +647,11 @@ pub fn from_snapshot(snap: RsvsSnapshot) -> Rsvs {
             };
             sense.inactivity = ss.inactivity;
             sense.grounding = GroundingEvidence::from(&ss.grounding);
+            // v6.1: Restore freq_map from saved entries
+            sense.freq_map = ss.freq_map.iter().map(|entry| {
+                let comp = crate::types::CompositionRef::new(entry.node_id, entry.sense_id);
+                (comp, entry.freq)
+            }).collect();
             sm.senses.push(sense);
         }
         senses.insert(node_id, sm);
@@ -594,6 +687,8 @@ pub fn from_snapshot(snap: RsvsSnapshot) -> Rsvs {
         record.status_flip_count = sar.status_flip_count;
         record.governance_score = sar.governance_score;
         record.candidate_evidence_pool = sar.candidate_evidence_pool;
+        record.last_seen_context = sar.last_seen_context;
+        record.inactivity_ttl = sar.inactivity_ttl;
         autonomy.records.insert(sar.id, record);
     }
 

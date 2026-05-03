@@ -63,8 +63,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="RSVS — Relational Symbolic Vocabulary System",
-    version="6.0.0",
-    description="Hard-attention symbolic knowledge engine with Rust core (v6.0 compositional architecture + grounding)",
+    version="6.1.0",
+    description="Hard-attention symbolic knowledge engine with Rust core (v6.1 context-query + compositional architecture + grounding)",
     lifespan=lifespan,
 )
 
@@ -161,6 +161,16 @@ class NodeInfoRequest(BaseModel):
 
 class SensesRequest(BaseModel):
     label: str = Field(..., min_length=1)
+
+
+class ContextQueryRequest(BaseModel):
+    """Request for context-aware depth-controlled query (v6.1)."""
+    concept: str = Field(..., min_length=1, max_length=500, description="Concept label to query (e.g. 'raja')")
+    context_atoms: List[str] = Field(..., min_length=1, description="Context atom labels for disambiguation (e.g. ['kerajaan', 'tahta'])")
+    max_depth: Optional[int] = Field(None, ge=1, le=10, description="Maximum traversal depth (default: from pipeline config)")
+    gamma: Optional[float] = Field(None, ge=0.001, le=1.0, description="Stability halting threshold")
+    halt_confidence: Optional[float] = Field(None, ge=0.0, le=1.0, description="Confidence halting threshold")
+    tau_relevance: Optional[float] = Field(None, ge=0.0, le=1.0, description="Relevance gating threshold")
 
 
 # --- Exception mapping ---
@@ -507,6 +517,52 @@ async def senses_endpoint(request: Request, req: SensesRequest, _auth: None = De
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/context-query", tags=["query"])
+@limiter.limit("30/minute")
+async def context_query_endpoint(request: Request, req: ContextQueryRequest, _auth: None = Depends(_verify_api_key)) -> dict[str, Any]:
+    """Context-aware depth-controlled query (v6.1).
+
+    Uses P(a|S,q) scoring, cycle detection, and adaptive halting
+    for recursive composition expansion. Returns scored atoms with
+    traversal metadata.
+
+    Depth presets:
+    - Shallow (max_depth=1): Fast appraise-style lookup
+    - Medium (max_depth=2): Relate-style one-hop expansion
+    - Deep (max_depth=5): Full grounding verification
+    """
+    try:
+        rsvs: RsvsCoreProtocol = get_rsvs_instance()
+        result = rsvs.context_query(
+            req.concept,
+            req.context_atoms,
+            req.max_depth,
+            req.gamma,
+            req.halt_confidence,
+            req.tau_relevance,
+        )
+        if result is None:
+            return {"ok": True, "result": None}
+        return {
+            "ok": True,
+            "concept": req.concept,
+            "result": {
+                "active_sense_idx": getattr(result, "active_sense_idx", None),
+                "total_senses": getattr(result, "total_senses", 0),
+                "scored_atoms": list(getattr(result, "scored_atoms", [])),
+                "depth_reached": getattr(result, "depth_reached", 0),
+                "halt_reason": getattr(result, "halt_reason", "unknown"),
+                "cycles_detected": getattr(result, "cycles_detected", 0),
+                "layer": getattr(result, "layer", 0),
+                "grounding_score": getattr(result, "grounding_score", 0.0),
+            },
+        }
+    except RsvsError:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/snapshot")
 @limiter.limit("60/minute")
 async def snapshot_endpoint(request: Request, _auth: None = Depends(_verify_api_key)) -> dict[str, Any]:
@@ -534,13 +590,13 @@ async def events_endpoint(request: Request, _auth: None = Depends(_verify_api_ke
 @app.get("/health")
 @limiter.limit("60/minute")
 async def health(request: Request) -> dict[str, str]:
-    return {"status": "ok", "version": "6.0.0"}
+    return {"status": "ok", "version": "6.1.0"}
 
 
 @app.get("/")
 @limiter.limit("60/minute")
 async def root(request: Request) -> dict[str, str]:
-    return {"name": "RSVS", "version": "6.0.0", "docs": "/docs"}
+    return {"name": "RSVS", "version": "6.1.0", "docs": "/docs"}
 
 
 def main() -> None:

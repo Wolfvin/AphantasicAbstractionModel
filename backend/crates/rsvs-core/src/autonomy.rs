@@ -1,6 +1,9 @@
-//! Autonomy engine for RSVS v6.0
+//! Autonomy engine for RSVS v6.1
 //!
 //! Keeps confidence/tier/memory lifecycle deterministic and testable.
+//! v6.1: Adds inactivity TTL tracking — atoms that haven't been seen
+//! recently get their confidence aggressively decayed and moved to Tier3.
+//!
 //! v6.0: Adds NodeStatus lifecycle transitions, quarantine, hysteresis,
 //! seed immutability, and governance scoring.
 
@@ -18,6 +21,10 @@ pub enum MemoryClass {
 }
 
 /// Record for a single node in the autonomy engine.
+///
+/// v6.1: Adds `last_seen_context` and `inactivity_ttl` fields for
+/// tracking atom staleness. Atoms that haven't been seen within
+/// their TTL get aggressively decayed and moved to Tier3.
 #[derive(Debug, Clone)]
 pub struct AtomRecord {
     /// The node ID this record tracks.
@@ -44,6 +51,16 @@ pub struct AtomRecord {
     pub governance_score: f32,
     /// Pool of accumulated candidate evidence.
     pub candidate_evidence_pool: f32,
+    /// v6.1: Context counter at which this atom was last seen.
+    /// Updated every time `update_confidence()` is called for this atom.
+    /// Default is 0 (never seen).
+    pub last_seen_context: usize,
+    /// v6.1: Inactivity time-to-live — number of contexts this atom
+    /// can be absent before it's considered stale.
+    /// When `current_context - last_seen_context >= inactivity_ttl`,
+    /// the atom is flagged for aggressive confidence decay.
+    /// Default is 50 contexts.
+    pub inactivity_ttl: usize,
 }
 
 impl AtomRecord {
@@ -68,6 +85,8 @@ impl AtomRecord {
             status_flip_count: 0,
             governance_score: 0.0,
             candidate_evidence_pool: 0.0,
+            last_seen_context: 0,
+            inactivity_ttl: 50,
         }
     }
 
@@ -77,6 +96,7 @@ impl AtomRecord {
         rec.is_seed = true;
         rec.status = NodeStatus::Stable;
         rec.memory = MemoryClass::Stable;
+        rec.inactivity_ttl = usize::MAX; // Seeds never expire
         rec
     }
 }
@@ -222,6 +242,8 @@ pub struct AutonomyEngine {
     changelog: Vec<String>,
     assign_history: Vec<f32>,
     merge_history: Vec<f32>,
+    /// v6.1: Monotonically increasing context counter for inactivity TTL tracking.
+    pub context_counter: usize,
 }
 
 impl AutonomyEngine {
@@ -244,6 +266,7 @@ impl AutonomyEngine {
             changelog: Vec::new(),
             assign_history: Vec::new(),
             merge_history: Vec::new(),
+            context_counter: 0,
         }
     }
 
@@ -285,8 +308,11 @@ impl AutonomyEngine {
     }
 
     /// Tick the context counter (advances warm-up).
+    ///
+    /// v6.1: Also increments the global context counter for inactivity TTL tracking.
     pub fn tick_context(&mut self) {
         self.contexts_seen += 1;
+        self.context_counter += 1;
         if self.contexts_seen >= self.config.n_warm {
             self.warmup = WarmUpState::Complete;
         }
@@ -497,6 +523,8 @@ impl AutonomyEngine {
             rec.domain_count = rec.domain_count.max(domain);
         }
         rec.cooccurring_mature.extend(co_ids.iter().copied());
+        // v6.1: Update last_seen_context to mark this atom as recently active
+        rec.last_seen_context = self.context_counter;
         let _ = rec;
 
         let _ = self.reclassify(id);
@@ -623,6 +651,42 @@ impl AutonomyEngine {
     /// Return the number of entries in the changelog.
     pub fn changelog_len(&self) -> usize {
         self.changelog.len()
+    }
+
+    // ---------------------------------------------------------------
+    // v6.1: Inactivity TTL — flag and decay stale atoms
+    // ---------------------------------------------------------------
+
+    /// Flag atoms that have exceeded their inactivity TTL.
+    ///
+    /// For each atom where `current_context - last_seen_context >= inactivity_ttl`,
+    /// aggressively decay confidence by multiplying by 0.5 and move to Tier3.
+    /// Seed nodes are exempt from inactivity decay.
+    ///
+    /// Returns the number of atoms flagged as inactive.
+    ///
+    /// # Examples
+    /// ```ignore
+    /// let flagged = engine.flag_inactive_atoms(engine.context_counter);
+    /// ```
+    pub fn flag_inactive_atoms(&mut self, current_context: usize) -> usize {
+        let mut flagged = 0;
+        for rec in self.records.values_mut() {
+            // Seed nodes never expire
+            if rec.is_seed {
+                continue;
+            }
+            let elapsed = current_context.saturating_sub(rec.last_seen_context);
+            if elapsed >= rec.inactivity_ttl {
+                // Aggressively decay confidence
+                rec.confidence = (rec.confidence * 0.5).clamp(0.0, 1.0);
+                // Move to Tier3
+                rec.tier = Tier::Tier3;
+                rec.memory = MemoryClass::Working;
+                flagged += 1;
+            }
+        }
+        flagged
     }
 }
 

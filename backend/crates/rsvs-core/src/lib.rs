@@ -1,8 +1,16 @@
 #![warn(missing_docs)]
 
-//! RSVS Core — v6.0 Compositional Architecture
+//! RSVS Core — v6.1 Compositional Architecture with Depth-Controlled Traversal
 //!
-//! Every sense is formed by compositions — pairs of (ID, sense_id).
+//! v6.1 builds on v6.0 with:
+//! - `TraversalConfig`: Controls recursive composition expansion during queries
+//! - `HaltReason`: Why a traversal stopped (stability, confidence, depth, relevance)
+//! - `ContextQueryResult`: Scored atoms with P(a|S,q) from depth-controlled traversal
+//! - Cycle detection via `HashSet<(NodeId, SenseId)>` during traversal
+//! - Freq map per sense for weighted scoring P(a|S,q)
+//! - Inactivity TTL for atom expiry
+//!
+//! v6.0: Every sense is formed by compositions — pairs of (ID, sense_id).
 //! Relationships between IDs are structural, derived from shared/differing
 //! compositions, not statistical co-occurrence alone.
 //!
@@ -45,6 +53,7 @@ pub use graph::{
 };
 pub use pipeline::{
     AppraiseResult, IngestStats, PipelineConfig, PipelineStatus, QueryResult, RelateResult, Rsvs,
+    traverse_query,
 };
 pub use sense::{
     GroundingEvidence, GroundingVerdict, IngestResult, Sense, SenseConfig, SenseInductionConfig,

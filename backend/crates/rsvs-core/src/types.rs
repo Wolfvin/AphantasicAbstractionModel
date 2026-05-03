@@ -1,4 +1,12 @@
-//! Core types for RSVS v6.0 — Compositional Architecture
+//! Core types for RSVS v6.1 — Compositional Architecture with Depth-Controlled Traversal
+//!
+//! v6.1 builds on v6.0 with:
+//! - `TraversalConfig`: Controls recursive composition expansion during queries
+//! - `HaltReason`: Why a traversal stopped (stability, confidence, depth, relevance)
+//! - `ContextQueryResult`: Scored atoms with P(a|S,q) from depth-controlled traversal
+//! - Cycle detection via `HashSet<(NodeId, SenseId)>` during traversal
+//! - Freq map per sense for weighted scoring P(a|S,q)
+//! - Inactivity TTL for atom expiry
 //!
 //! v6.0: Every sense is formed by compositions — pairs of (ID, sense_id).
 //! Relationships between IDs are structural, derived from shared/differing
@@ -236,11 +244,9 @@ impl Default for Node {
 
 /// Content-addressable fingerprint for perceptual grounding.
 ///
-/// Uses a fixed, well-defined hashing algorithm (SipHash-1-3 via `DefaultHasher`)
-/// for content deduplication. Note: `DefaultHasher` is not guaranteed stable
-/// across Rust versions — it is suitable for runtime dedup within a session
-/// but NOT for persistent content-addressable storage across restarts.
-/// For cross-session persistence, prefer an explicit hasher (e.g., xxhash, ahash).
+/// Uses XxHash64 — a fast, deterministic, cross-version-stable hash
+/// algorithm suitable for both in-session dedup and persistent
+/// content-addressable storage across restarts and Rust compiler versions.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Fingerprint {
     hash: u64,
@@ -250,17 +256,15 @@ pub struct Fingerprint {
 impl Fingerprint {
     /// Create a new fingerprint from raw byte data.
     ///
-    /// Uses `std::collections::hash_map::DefaultHasher` (SipHash-1-3 variant).
-    /// The algorithm field accurately reflects the hasher used.
-    /// **Warning**: This hash is NOT stable across Rust compiler versions.
-    /// Use only for in-session deduplication, not for persistent fingerprints.
+    /// Uses `twox_hash::XxHash64` with seed 0 — a fast, deterministic,
+    /// cross-version-stable hash algorithm.
     pub fn new(data: &[u8]) -> Self {
         use std::hash::{Hash, Hasher};
-        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        let mut hasher = twox_hash::XxHash64::with_seed(0);
         data.hash(&mut hasher);
         Self {
             hash: hasher.finish(),
-            algorithm: "std_default_hasher".into(),
+            algorithm: "xxhash64".into(),
         }
     }
 
@@ -281,4 +285,96 @@ pub struct Edge {
     pub weight: f32,
     /// Whether this edge was created by bootstrap or learned.
     pub source: EdgeSource,
+}
+
+// ---------------------------------------------------------------------------
+// v6.1: Depth-Controlled Lazy Traversal types
+// ---------------------------------------------------------------------------
+
+/// Configuration for depth-controlled lazy traversal (v6.1).
+///
+/// Controls how the query engine recursively expands `CompositionRef`s
+/// during context-aware queries. Traversal stops when any halting
+/// criterion is met — stability, confidence, or depth safety net.
+///
+/// # Halting Criteria
+///
+/// 1. **Stability**: ||h_{k+1} - h_k|| < gamma — score vector converges
+/// 2. **Confidence**: max_score >= halt_confidence — found a strong enough answer
+/// 3. **Safety net**: depth >= max_depth — prevent unbounded recursion
+/// 4. **Relevance gating**: only expand nodes with similarity >= tau_relevance
+///
+/// # Example
+///
+/// ```ignore
+/// // Shallow traversal for appraise — just active sense
+/// let shallow = TraversalConfig { max_depth: 1, ..Default::default() };
+/// // Medium traversal for relate — one hop
+/// let medium = TraversalConfig { max_depth: 2, tau_relevance: 0.15, ..Default::default() };
+/// // Deep traversal for grounding — full recursive
+/// let deep = TraversalConfig { max_depth: 5, gamma: 0.005, ..Default::default() };
+/// ```
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TraversalConfig {
+    /// Maximum recursion depth before forced stop (safety net).
+    pub max_depth: usize,
+    /// Stability halting: stop when ||h_{k+1} - h_k|| < gamma.
+    pub gamma: f32,
+    /// Epsilon for stability check (alias for gamma in some contexts).
+    pub halt_epsilon: f32,
+    /// Confidence threshold for early halt — stop when max score >= this.
+    pub halt_confidence: f32,
+    /// Relevance gating: only expand nodes with similarity(node, query_context) >= tau_relevance.
+    pub tau_relevance: f32,
+}
+
+impl Default for TraversalConfig {
+    fn default() -> Self {
+        Self {
+            max_depth: 3,
+            gamma: 0.01,
+            halt_epsilon: 0.001,
+            halt_confidence: 0.90,
+            tau_relevance: 0.10,
+        }
+    }
+}
+
+/// Why a traversal halted (v6.1).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum HaltReason {
+    /// Reached max_depth safety net.
+    MaxDepth,
+    /// Stability: ||h_{k+1} - h_k|| < epsilon.
+    Stability,
+    /// Confidence: max score >= tau_confidence.
+    Confidence,
+    /// No more compositions to expand (leaf reached).
+    LeafReached,
+    /// Relevance gating: no children passed tau_relevance.
+    RelevanceGate,
+}
+
+/// Result of a context-aware traversal query (v6.1).
+///
+/// Contains scored atoms with P(a|S,q) weighting, traversal metadata,
+/// and cycle detection info.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ContextQueryResult {
+    /// The active sense index selected for the queried node.
+    pub active_sense_idx: usize,
+    /// Total number of senses for the node.
+    pub total_senses: usize,
+    /// Scored atoms: (label, P(a|S,q) score).
+    pub scored_atoms: Vec<(String, f32)>,
+    /// Compositional depth reached during traversal.
+    pub depth_reached: usize,
+    /// Which halting criterion stopped the traversal.
+    pub halt_reason: HaltReason,
+    /// Number of cycle detections encountered during traversal.
+    pub cycles_detected: usize,
+    /// Layer of the active sense.
+    pub layer: u32,
+    /// Grounding score of the active sense.
+    pub grounding_score: f32,
 }

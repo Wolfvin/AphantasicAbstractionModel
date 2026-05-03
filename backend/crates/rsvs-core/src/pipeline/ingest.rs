@@ -39,6 +39,8 @@ pub struct IngestStats {
     pub frozen_batches: usize,
     /// Number of compositions induced (v6.0).
     pub compositions_induced: usize,
+    /// Number of atoms flagged as inactive by inactivity TTL (v6.1).
+    pub atoms_flagged_inactive: usize,
 }
 
 impl Rsvs {
@@ -354,6 +356,8 @@ impl Rsvs {
         }
 
         stats.watchlist_additions = self.autonomy.watchlist_len();
+        // v6.1: Flag inactive atoms and record count
+        stats.atoms_flagged_inactive = self.autonomy.flag_inactive_atoms(self.autonomy.context_counter);
         self.emit_event(
             &correlation_id,
             "ingest_completed",
@@ -364,7 +368,8 @@ impl Rsvs {
                 "sense_created": stats.sense_created,
                 "confidence_updated": stats.confidence_updated,
                 "frozen_batches": stats.frozen_batches,
-                "compositions_induced": stats.compositions_induced
+                "compositions_induced": stats.compositions_induced,
+                "atoms_flagged_inactive": stats.atoms_flagged_inactive
             }),
         );
         Ok(stats)

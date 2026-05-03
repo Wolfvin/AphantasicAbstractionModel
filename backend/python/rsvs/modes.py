@@ -56,6 +56,7 @@ __all__ = [
     "_run_structural_similarity_rust",
     "_run_substitution_analysis_rust",
     "_run_grounding_info_rust",
+    "_run_context_query_rust",
     "_run_mode",
     "_read_latest_mode",
     "run_mode",
@@ -761,6 +762,95 @@ def _run_grounding_info_rust(
 # Unified mode dispatch
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Mode: context_query (Rust core) — v6.1
+# ---------------------------------------------------------------------------
+
+
+def _run_context_query_rust(
+    text: str,
+    correlation_id: str,
+    options: dict[str, Any] | None,
+) -> tuple[dict[str, Any], list[dict[str, Any]], dict[str, str]]:
+    """Context-aware depth-controlled query via Rust core.
+
+    Uses P(a|S,q) scoring, cycle detection, and adaptive halting
+    for recursive composition expansion (v6.1).
+    """
+    r = _get_rsvs()
+    if r is None:
+        raise RustCoreUnavailableError("Rust core required for context_query mode")
+
+    options = options or {}
+    concept = options.get("concept", text)
+    context_atoms = options.get("context_atoms", [])
+    if isinstance(context_atoms, str):
+        context_atoms = [context_atoms]
+
+    if not context_atoms:
+        # Fallback: tokenize the text to get context atoms
+        context_atoms = _tokenize(text)
+
+    max_depth = options.get("max_depth")
+    gamma = options.get("gamma")
+    halt_confidence = options.get("halt_confidence")
+    tau_relevance = options.get("tau_relevance")
+
+    result = r.context_query(
+        concept,
+        context_atoms,
+        max_depth,
+        gamma,
+        halt_confidence,
+        tau_relevance,
+    )
+
+    if result is None:
+        result_dict = {"concept": concept, "result": None}
+    else:
+        result_dict = {
+            "concept": concept,
+            "active_sense_idx": getattr(result, "active_sense_idx", None),
+            "total_senses": getattr(result, "total_senses", 0),
+            "scored_atoms": list(getattr(result, "scored_atoms", [])),
+            "depth_reached": getattr(result, "depth_reached", 0),
+            "halt_reason": getattr(result, "halt_reason", "unknown"),
+            "cycles_detected": getattr(result, "cycles_detected", 0),
+            "layer": getattr(result, "layer", 0),
+            "grounding_score": getattr(result, "grounding_score", 0.0),
+        }
+
+    messages = [
+        {
+            "id": make_id("msg"),
+            "type": "system_context_query",
+            "content": (
+                f"Context query for '{concept}' with {len(context_atoms)} context atoms: "
+                f"depth={result_dict.get('depth_reached', 0)}, "
+                f"halt={result_dict.get('halt_reason', 'unknown')}, "
+                f"cycles={result_dict.get('cycles_detected', 0)}, "
+                f"atoms={len(result_dict.get('scored_atoms', []))} "
+                f"[Rust core]."
+            ),
+            "timestamp": iso_now(),
+            "correlation_id": correlation_id,
+        }
+    ]
+
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    path = CONFIG.atom_dir / f"context-query-{stamp}.json"
+    payload = {
+        "schema_version": SCHEMA_VERSION,
+        "mode": "context_query",
+        "timestamp": iso_now(),
+        "correlation_id": correlation_id,
+        "input": concept,
+        "result": result_dict,
+    }
+    _write_json(path, payload)
+    return result_dict, messages, {"context_query": str(path)}
+
+
 _MODE_HANDLERS = {
     "ingest": _run_ingest_rust,
     "appraise": _run_appraise_rust,
@@ -769,6 +859,7 @@ _MODE_HANDLERS = {
     "structural_similarity": _run_structural_similarity_rust,
     "substitution_analysis": _run_substitution_analysis_rust,
     "grounding_info": _run_grounding_info_rust,
+    "context_query": _run_context_query_rust,
 }
 
 

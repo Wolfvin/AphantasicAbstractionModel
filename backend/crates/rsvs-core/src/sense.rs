@@ -1,6 +1,10 @@
-//! Multi-sense framework for RSVS v6.0 — Compositional Architecture
+//! Multi-sense framework for RSVS v6.1 — Compositional Architecture with Depth-Controlled Traversal
 //!
-//! Every sense of an ID is not standalone — it is FORMED BY other senses
+//! v6.1 builds on v6.0 with:
+//! - `freq_map: HashMap<CompositionRef, f32>` per sense for weighted P(a|S,q) scoring
+//! - `p_a_given_s_q()` method for context-aware probability computation
+//!
+//! v6.0: Every sense of an ID is not standalone — it is FORMED BY other senses
 //! that already exist in the system, recursively. A sense is represented
 //! as a set of compositions — pairs of (ID_a, sense_z) that collectively
 //! define the meaning of (ID_x, sense_k).
@@ -270,6 +274,18 @@ pub struct Sense {
     /// Frequency map: atom_id → how often it appears across contexts.
     pub(crate) freq_counts: HashMap<NodeId, usize>,
 
+    /// v6.1: Composition frequency map for P(a|S,q) scoring.
+    ///
+    /// Maps each CompositionRef to a normalized frequency (0.0–1.0)
+    /// representing how often that composition is active when this sense
+    /// is assigned. Used by `p_a_given_s_q()` for context-aware scoring.
+    ///
+    /// When a context is assigned to this sense, each CompositionRef in
+    /// the context's active senses increments its frequency. The query
+    /// engine then computes P(a|S,q) ∝ freq_map[a] × edge_weight(a→q)
+    /// instead of just "present or not".
+    pub freq_map: HashMap<CompositionRef, f32>,
+
     /// Incremental coherence state — avoids O(n^2) recompute.
     pub sum_sim: f64,
     /// Number of pairs used in coherence calculation.
@@ -304,6 +320,7 @@ impl Sense {
             layer: 0,
             contexts: vec![first_context],
             freq_counts,
+            freq_map: HashMap::new(),
             sum_sim: 0.0,
             pair_count: 0,
             coherence: 0.5,
@@ -317,6 +334,9 @@ impl Sense {
     ///
     /// This is used by the compose() API and by sense induction.
     /// The layer is computed as max(layer of compositions) + 1.
+    ///
+    /// v6.1: Also initializes `freq_map` with each composition's frequency
+    /// set to 1.0 / |compositions| as a prior.
     pub fn new_compositional(
         id: SenseId,
         compositions: Vec<CompositionRef>,
@@ -331,12 +351,22 @@ impl Sense {
         for comp in &compositions {
             *freq_counts.entry(comp.node_id).or_insert(0) += 1;
         }
+
+        // v6.1: Initialize freq_map with uniform prior for each composition
+        let freq_map = if compositions.is_empty() {
+            HashMap::new()
+        } else {
+            let prior = 1.0 / compositions.len() as f32;
+            compositions.iter().map(|c| (c.clone(), prior)).collect()
+        };
+
         Self {
             id,
             compositions,
             layer,
             contexts: vec![first_context],
             freq_counts,
+            freq_map,
             sum_sim: 0.0,
             pair_count: 0,
             coherence: 0.5,
@@ -367,7 +397,11 @@ impl Sense {
     }
 
     /// Add a new context to this sense.
-    /// Updates freq_map and coherence incrementally — O(n).
+    /// Updates freq_map, freq_counts (v6.1), and coherence incrementally — O(n).
+    ///
+    /// v6.1: Also increments `freq_map` for each CompositionRef that appears
+    /// in the assigned context. The freq_map values are normalized
+    /// (summing to ~1.0 across all compositions) after each assignment.
     pub fn assign(&mut self, context: AtomSet) {
         // Incremental coherence update
         let add_sum: f64 = self
@@ -385,9 +419,28 @@ impl Sense {
             (self.sum_sim / self.pair_count as f64) as f32
         };
 
-        // Update freq map
+        // Update freq_counts
         for &atom in &context {
             *self.freq_counts.entry(atom).or_insert(0) += 1;
+        }
+
+        // v6.1: Increment freq_map for each composition in this sense
+        // that also appears in the context. This tracks how often each
+        // composition is "active" when this sense is selected.
+        if !self.compositions.is_empty() {
+            let context_set: HashSet<NodeId> = context.iter().copied().collect();
+            for comp in &self.compositions {
+                if context_set.contains(&comp.node_id) {
+                    *self.freq_map.entry(comp.clone()).or_insert(0.0) += 1.0;
+                }
+            }
+            // Normalize freq_map so values sum to ~1.0
+            let total: f32 = self.freq_map.values().sum();
+            if total > 0.0 {
+                for val in self.freq_map.values_mut() {
+                    *val /= total;
+                }
+            }
         }
 
         // Append context
@@ -506,6 +559,42 @@ impl Sense {
     /// Check if this sense is well-grounded (grounding score >= threshold).
     pub fn is_grounded(&self, min: f32) -> bool {
         self.compositions.is_empty() || self.grounding.score() >= min
+    }
+
+    // -------------------------------------------------------------------
+    // v6.1: P(a|S,q) — context-aware probability scoring
+    // -------------------------------------------------------------------
+
+    /// Compute P(a|S,q) for a given composition reference and edge weight.
+    ///
+    /// This is the v6.1 scoring function that replaces the simple "present
+    /// or not" binary with a weighted probability:
+    ///
+    /// P(a|S,q) ∝ freq_map[a] × edge_weight(a→q)
+    ///
+    /// Where:
+    /// - `freq_map[a]` is the normalized frequency of composition `a` in
+    ///   this sense's context assignments (how often `a` is active)
+    /// - `edge_weight(a→q)` is the graph edge weight from `a` to the
+    ///   query context (how strongly `a` relates to the query)
+    ///
+    /// If the composition is not in freq_map, returns 0.0.
+    /// If edge_weight is 0.0, returns just freq_map[a] (presence-only score).
+    ///
+    /// # Examples
+    /// ```ignore
+    /// let score = sense.p_a_given_s_q(&comp_ref, 0.5);
+    /// ```
+    pub fn p_a_given_s_q(&self, comp: &CompositionRef, edge_weight: f32) -> f32 {
+        let freq = self.freq_map.get(comp).copied().unwrap_or(0.0);
+        if edge_weight > 0.0 {
+            freq * edge_weight
+        } else if freq > 0.0 {
+            // No edge weight — just use the frequency as a presence score
+            freq
+        } else {
+            0.0
+        }
     }
 
     // -------------------------------------------------------------------

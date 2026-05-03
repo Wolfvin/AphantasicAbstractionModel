@@ -16,6 +16,7 @@ pub mod ingest;
 pub mod modes;
 pub mod query;
 pub mod snapshot;
+pub mod traverse;
 
 use crate::attention::{CoocStats, EntityDetector, RsvsAttention};
 use crate::autonomy::AutonomyEngine;
@@ -24,7 +25,7 @@ use crate::events::{API_VERSION, SCHEMA_VERSION};
 use crate::graph::RsvsGraph;
 use crate::seed;
 use crate::sense::SenseManager;
-use crate::types::{NodeId, SenseId, Tier};
+use crate::types::{AtomSet, ContextQueryResult, NodeId, SenseId, Tier, TraversalConfig};
 
 use std::collections::HashMap;
 use std::collections::VecDeque;
@@ -34,6 +35,7 @@ pub use ingest::IngestStats;
 pub use modes::{AppraiseResult, RelateResult};
 pub use query::QueryResult;
 pub use snapshot::PipelineStatus;
+pub use traverse::traverse as traverse_query;
 
 // -----------------------------------------------------------------------
 // PipelineConfig — all tunable knobs in one place
@@ -60,6 +62,11 @@ pub struct PipelineConfig {
 
     /// Custom seed labels to use instead of the default 24 epistemological seeds.
     pub custom_seeds: Option<Vec<String>>,
+
+    /// v6.1: Traversal configuration for depth-controlled lazy traversal.
+    /// Controls how context-aware queries recursively expand CompositionRef trees.
+    /// Default is TraversalConfig::default().
+    pub traversal: TraversalConfig,
 }
 
 impl Default for PipelineConfig {
@@ -83,6 +90,7 @@ impl Default for PipelineConfig {
                 .collect(),
             current_domain: 1,
             custom_seeds: None,
+            traversal: TraversalConfig::default(),
         }
     }
 }
@@ -250,5 +258,63 @@ impl Rsvs {
 
         // Fallback: first sense
         Some((0, sm.senses[0].id))
+    }
+
+    // -------------------------------------------------------------------
+    // v6.1: Context-Aware Query Endpoint
+    // -------------------------------------------------------------------
+
+    /// Context-aware query that uses depth-controlled lazy traversal.
+    ///
+    /// This is the v6.1 query endpoint (Point 4) that:
+    /// 1. Resolves label to NodeId
+    /// 2. Uses lazy_lookup to select active sense based on context
+    /// 3. Computes P(a|S,q) per atom using freq_map
+    /// 4. Optionally recurses into compositions based on TraversalConfig
+    /// 5. Returns ContextQueryResult
+    ///
+    /// # Arguments
+    ///
+    /// * `id_or_label` - The concept label (e.g., "raja") or node ID string
+    /// * `context_atoms` - Context atom labels to disambiguate the query
+    /// * `config` - Optional TraversalConfig (uses PipelineConfig.traversal if None)
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// let result = rsvs.context_query("raja", &vec!["kerajaan", "tahta"], None);
+    /// ```
+    pub fn context_query(
+        &self,
+        id_or_label: &str,
+        context_atoms: &[&str],
+        config: Option<&TraversalConfig>,
+    ) -> Option<ContextQueryResult> {
+        // 1. Resolve label to NodeId
+        let start_node = *self.token_to_id.get(id_or_label)?;
+
+        // 2. Convert context atom labels to NodeIds
+        let context_ids: AtomSet = context_atoms
+            .iter()
+            .filter_map(|label| self.token_to_id.get(*label).copied())
+            .collect();
+
+        if context_ids.is_empty() {
+            // No context atoms found — fall back to basic query
+            return None;
+        }
+
+        // 3. Use provided config or fall back to pipeline config
+        let traversal_config = config.cloned().unwrap_or_else(|| self.config.traversal.clone());
+
+        // 4. Call the traversal engine
+        Some(traverse::traverse(
+            &self.graph,
+            &self.senses,
+            start_node,
+            &context_ids,
+            &traversal_config,
+            &self.token_to_id,
+        ))
     }
 }
