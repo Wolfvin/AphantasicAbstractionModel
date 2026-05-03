@@ -1,0 +1,67 @@
+# ──────────────────────────────────────────────────────────────────────
+#  SymbolicPuzzle3D — Docker Compose
+#  Backend (Rust + Python bridge) + Frontend (Next.js)
+# ──────────────────────────────────────────────────────────────────────
+
+services:
+  # ── Backend: Rust core + Python bridge ──────────────────────────────
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: rust-builder
+    image: symbolic-puzzle-3d/backend:latest
+    container_name: sp3d-backend
+    command:
+      - bash
+      - -c
+      - |
+        pip install --no-cache-dir /dist/wheels/*.whl || maturin develop --manifest-path crates/rsvs-core/Cargo.toml
+        cd /build && PYTHONPATH=python python3 -m rsvs.bridge_server
+    ports:
+      - "8000:8000"
+    volumes:
+      - rsvs-data:/app/data
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1
+      - RSVS_ATOM_DIR=/app/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+    restart: unless-stopped
+
+  # ── Frontend: Next.js dev server ───────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.frontend
+    image: symbolic-puzzle-3d/frontend:latest
+    container_name: sp3d-frontend
+    command: npm run dev
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - rsvs-data:/app/data
+    environment:
+      - NODE_ENV=development
+      - NEXT_PUBLIC_RSVS_BACKEND_URL=http://backend:8000
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+    restart: unless-stopped
+
+volumes:
+  rsvs-data:
+    driver: local

@@ -19,6 +19,7 @@ use crate::types::{AtomSet, NodeId};
 // Config — all tunable values in one place
 // -----------------------------------------------------------------------
 
+/// Configuration for the multi-sense framework.
 #[derive(Debug, Clone)]
 pub struct SenseConfig {
     /// Weight for similarity term in score assignment
@@ -61,6 +62,7 @@ impl Default for SenseConfig {
 // SenseStatus
 // -----------------------------------------------------------------------
 
+/// Status of a sense cluster.
 #[derive(Debug, Clone, PartialEq)]
 pub enum SenseStatus {
     /// N=1 — not enough context yet. Not eligible for merge.
@@ -73,9 +75,11 @@ pub enum SenseStatus {
 // Sense — one sense cluster inside an ID
 // -----------------------------------------------------------------------
 
+/// A single sense cluster inside a node.
 #[derive(Debug, Clone)]
 pub struct Sense {
-    pub id: usize, // index within parent ID's sense list
+    /// Index within the parent node's sense list.
+    pub id: usize,
 
     /// All context atom-sets that have been assigned to this sense.
     pub contexts: Vec<AtomSet>,
@@ -86,11 +90,13 @@ pub struct Sense {
 
     /// Incremental coherence state — avoids O(n²) recompute.
     pub sum_sim: f64,
+    /// Number of pairs used in coherence calculation.
     pub pair_count: usize,
 
     /// Cached coherence value.
     pub coherence: f32,
 
+    /// Whether this sense is fragile (N=1) or mature (N>=2).
     pub status: SenseStatus,
 
     /// How many global contexts have passed since last assignment.
@@ -117,6 +123,7 @@ impl Sense {
         }
     }
 
+    /// Return the number of contexts assigned to this sense.
     pub fn context_count(&self) -> usize {
         self.contexts.len()
     }
@@ -198,8 +205,11 @@ impl Sense {
 // SenseManager — manages all senses for one ID
 // -----------------------------------------------------------------------
 
+/// Manager for all senses of a single node.
 pub struct SenseManager {
+    /// The sense clusters for this node.
     pub senses: Vec<Sense>,
+    /// Configuration for sense scoring thresholds.
     pub config: SenseConfig,
     pub(crate) next_sense_id: usize,
     /// Global context counter (for stopword frequency — placeholder)
@@ -207,6 +217,7 @@ pub struct SenseManager {
 }
 
 impl SenseManager {
+    /// Create a new sense manager with the given configuration.
     pub fn new(config: SenseConfig) -> Self {
         Self {
             senses: Vec::new(),
@@ -220,8 +231,16 @@ impl SenseManager {
     // Core operation: ingest a new context
     // -------------------------------------------------------------------
 
-    /// Process a new context set for this ID.
-    /// Returns the sense index that was assigned or created.
+    /// Process a new context set for this node.
+    ///
+    /// Assigns the context to the best-matching existing sense if the score exceeds
+    /// `theta_assign`; otherwise creates a new fragile sense.
+    ///
+    /// # Examples
+    /// ```ignore
+    /// let mut sm = SenseManager::new(SenseConfig::default());
+    /// let result = sm.ingest(vec![1, 2, 3]);
+    /// ```
     pub fn ingest(&mut self, context: AtomSet) -> IngestResult {
         self.global_context_count += 1;
 
@@ -309,6 +328,8 @@ impl SenseManager {
     // -------------------------------------------------------------------
 
     /// Given a query context, return the index of the most relevant sense.
+    ///
+    /// Uses Jaccard similarity between the query and each sense's core atoms.
     pub fn lazy_lookup(&self, context: &AtomSet) -> Option<usize> {
         if self.senses.is_empty() {
             return None;
@@ -422,7 +443,7 @@ impl SenseManager {
     // Sense deletion (FRAGILE cleanup)
     // -------------------------------------------------------------------
 
-    /// Remove FRAGILE senses that have exceeded inactivity limit.
+    /// Remove FRAGILE senses that have exceeded the inactivity limit.
     pub fn purge_fragile(&mut self) {
         let k = self.config.k_fragile;
         self.senses
@@ -433,10 +454,12 @@ impl SenseManager {
     // Accessors
     // -------------------------------------------------------------------
 
+    /// Return the number of senses for this node.
     pub fn sense_count(&self) -> usize {
         self.senses.len()
     }
 
+    /// Get a reference to a sense by index.
     pub fn get_sense(&self, idx: usize) -> Option<&Sense> {
         self.senses.get(idx)
     }
@@ -446,6 +469,7 @@ impl SenseManager {
 // IngestResult
 // -----------------------------------------------------------------------
 
+/// Result of ingesting a context into the sense manager.
 #[derive(Debug, Clone, PartialEq)]
 pub enum IngestResult {
     /// Context was assigned to an existing sense (index).

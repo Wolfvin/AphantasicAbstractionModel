@@ -3,10 +3,12 @@
 //! v4.2: Unified node model. No more Atom/Composite distinction.
 //! expand() checks CompressionState to decide expansion strategy.
 
+use crate::error::RsvsError;
 use crate::types::{AtomSet, CompressionState, Edge, Node, NodeId};
 use std::collections::HashMap;
 
 #[derive(Debug)]
+/// The RSVS knowledge graph — in-memory, DAG, integer-keyed (v4.2).
 pub struct RsvsGraph {
     /// All nodes indexed by integer ID.
     pub nodes: HashMap<NodeId, Node>,
@@ -28,6 +30,7 @@ impl Default for RsvsGraph {
 }
 
 impl RsvsGraph {
+    /// Create a new empty graph.
     pub fn new() -> Self {
         Self {
             nodes: HashMap::new(),
@@ -51,8 +54,17 @@ impl RsvsGraph {
     // Node insertion (v4.2)
     // ---------------------------------------------------------------
 
-    /// Insert a node. Returns Err if circular reference detected.
-    pub fn insert_node(&mut self, mut node: Node) -> Result<NodeId, String> {
+    /// Insert a new node into the graph.
+    ///
+    /// Returns the assigned `NodeId`. Returns `Err` if a circular reference is detected
+    /// in `derived_from_node_ids` or if a referenced derived node does not exist.
+    ///
+    /// # Examples
+    /// ```ignore
+    /// let mut g = RsvsGraph::new();
+    /// let id = g.insert_node(Node { id: 0, label: "test".into(), ..Default::default() })?;
+    /// ```
+    pub fn insert_node(&mut self, mut node: Node) -> Result<NodeId, RsvsError> {
         // Assign ID if not already set (0 = unassigned sentinel)
         if node.id == 0 {
             node.id = self.alloc_id();
@@ -61,18 +73,15 @@ impl RsvsGraph {
         // v4.2 DAG constraint: no self-reference in derived_from_node_ids
         if node.semantic.compression_state == CompressionState::Compressed {
             if node.semantic.derived_from_node_ids.contains(&node.id) {
-                return Err(format!(
-                    "Circular reference: ID {} appears in its own derived_from_node_ids",
-                    node.id
-                ));
+                return Err(RsvsError::CircularRef {
+                    from: node.id,
+                    to: node.id,
+                });
             }
             // All referenced derived nodes must already exist
             for &derived_id in &node.semantic.derived_from_node_ids {
                 if !self.nodes.contains_key(&derived_id) {
-                    return Err(format!(
-                        "Unknown node ID {} referenced in derived_from_node_ids of {}",
-                        derived_id, node.id
-                    ));
+                    return Err(RsvsError::NodeNotFound { id: derived_id });
                 }
             }
         }
@@ -91,13 +100,24 @@ impl RsvsGraph {
     // Edge insertion (v4.2: any node → any node)
     // ---------------------------------------------------------------
 
-    pub fn insert_edge(&mut self, edge: Edge) -> Result<(), String> {
+    /// Insert a directed edge between two existing nodes.
+    ///
+    /// Returns `Err` if either endpoint does not exist in the graph.
+    ///
+    /// # Examples
+    /// ```ignore
+    /// let mut g = RsvsGraph::new();
+    /// let a = g.insert_node(Node { id: 0, label: "a".into(), ..Default::default() })?;
+    /// let b = g.insert_node(Node { id: 0, label: "b".into(), ..Default::default() })?;
+    /// g.insert_edge(Edge { from: a, to: b, weight: 0.8, source: EdgeSource::Learned })?;
+    /// ```
+    pub fn insert_edge(&mut self, edge: Edge) -> Result<(), RsvsError> {
         // Both endpoints must exist
         if !self.nodes.contains_key(&edge.from) {
-            return Err(format!("Edge source {} does not exist", edge.from));
+            return Err(RsvsError::NodeNotFound { id: edge.from });
         }
         if !self.nodes.contains_key(&edge.to) {
-            return Err(format!("Edge target {} does not exist", edge.to));
+            return Err(RsvsError::NodeNotFound { id: edge.to });
         }
         self.edges.entry(edge.from).or_default().push(edge);
         Ok(())
@@ -107,14 +127,17 @@ impl RsvsGraph {
     // Lookup
     // ---------------------------------------------------------------
 
+    /// Look up a node by its integer ID.
     pub fn get_node(&self, id: NodeId) -> Option<&Node> {
         self.nodes.get(&id)
     }
 
+    /// Look up a node ID by its label string.
     pub fn id_for_label(&self, label: &str) -> Option<NodeId> {
         self.label_to_id.get(label).copied()
     }
 
+    /// Return the outgoing edges from a node.
     pub fn edges_from(&self, node_id: NodeId) -> &[Edge] {
         self.edges
             .get(&node_id)
@@ -122,10 +145,12 @@ impl RsvsGraph {
             .unwrap_or(&[])
     }
 
+    /// Return the number of nodes in the graph.
     pub fn node_count(&self) -> usize {
         self.nodes.len()
     }
 
+    /// Return the total number of edges in the graph.
     pub fn edge_count(&self) -> usize {
         self.edges.values().map(|v| v.len()).sum()
     }
@@ -137,6 +162,10 @@ impl RsvsGraph {
     // If raw: expand to atoms, or just [id] if atoms is empty
     // ---------------------------------------------------------------
 
+    /// Expand a node into its atom set based on `CompressionState`.
+    ///
+    /// Compressed nodes expand to `derived_from_node_ids`; raw nodes expand to
+    /// their `atoms` field, or just `[id]` if atoms is empty.
     pub fn expand(&self, id: NodeId) -> AtomSet {
         match self.nodes.get(&id) {
             None => vec![],
@@ -163,6 +192,7 @@ impl RsvsGraph {
         }
     }
 
+    /// Compute the full similarity breakdown between two nodes.
     pub fn similarity(&self, a: NodeId, b: NodeId) -> SimilarityResult {
         let atoms_a = self.expand(a);
         let atoms_b = self.expand(b);
@@ -194,6 +224,12 @@ impl RsvsGraph {
     // Jaccard between two atom sets (used by attention scoring)
     // ---------------------------------------------------------------
 
+    /// Compute Jaccard similarity between the expanded atom sets of two nodes.
+    ///
+    /// # Examples
+    /// ```ignore
+    /// let score = graph.jaccard_atom_sets(node_a, node_b);
+    /// ```
     pub fn jaccard_atom_sets(&self, a: NodeId, b: NodeId) -> f32 {
         let atoms_a = self.expand(a);
         let atoms_b = self.expand(b);
@@ -217,9 +253,14 @@ pub fn jaccard_sets(a: &[NodeId], b: &[NodeId]) -> f32 {
 }
 
 #[derive(Debug)]
+/// Detailed similarity breakdown between two nodes.
 pub struct SimilarityResult {
+    /// Node IDs shared between both nodes.
     pub shared: Vec<NodeId>,
+    /// Node IDs only in node A.
     pub only_a: Vec<NodeId>,
+    /// Node IDs only in node B.
     pub only_b: Vec<NodeId>,
+    /// Jaccard similarity coefficient.
     pub jaccard: f32,
 }

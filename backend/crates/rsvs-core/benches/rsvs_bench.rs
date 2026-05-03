@@ -47,11 +47,11 @@ fn bench_sense_ingest(c: &mut Criterion) {
 }
 
 fn bench_pipeline_ingest(c: &mut Criterion) {
-    let mut rsvs = Rsvs::new(PipelineConfig::default());
+    let mut rsvs = Rsvs::new(PipelineConfig::default()).expect("Failed to create RSVS");
     let text = "Stone is hard and solid. Rock is heavy and rough. \
                 Water is clear and liquid. Metal conducts heat well.";
     c.bench_function("pipeline_ingest_text", |bencher| {
-        bencher.iter(|| rsvs.ingest_text(black_box(text)))
+        bencher.iter(|| rsvs.ingest_text(black_box(text)).expect("ingest failed"))
     });
 }
 

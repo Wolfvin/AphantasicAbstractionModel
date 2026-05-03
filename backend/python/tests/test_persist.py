@@ -1,5 +1,5 @@
 """
-Persistence tests for RSVS v0.7.
+Persistence tests for RSVS v4.2.
 Run with: python3 -m pytest tests/test_persist.py -v
 """
 import pytest
@@ -66,7 +66,7 @@ class TestSave:
     def test_snapshot_has_version(self, saved):
         with open(saved) as f:
             data = json.load(f)
-        assert data["version"] == "0.7"
+        assert data["version"] == "4.2"
 
     def test_snapshot_has_nodes(self, saved):
         with open(saved) as f:
@@ -114,7 +114,7 @@ class TestSave:
         trained.save(tmp_path_str)
         with open(tmp_path_str) as f:
             data = json.load(f)
-        assert data["version"] == "0.7"
+        assert data["version"] == "4.2"
 
 # -----------------------------------------------------------------------
 # Load tests
@@ -290,7 +290,7 @@ class TestJsonStructure:
         with open(saved) as f:
             data = json.load(f)
         for node in data["nodes"]:
-            assert node["kind"] in ("atom", "composite"), \
+            assert node["kind"] == "node", \
                 f"Invalid kind: {node['kind']}"
 
     def test_node_tier_valid(self, saved):

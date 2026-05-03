@@ -78,11 +78,11 @@ class BridgeConfig:
 
 CONFIG = BridgeConfig(
     host=os.environ.get("RSVS_BRIDGE_HOST", "127.0.0.1"),
-    port=int(os.environ.get("RSVS_BRIDGE_PORT", "8787")),
+    port=int(os.environ.get("RSVS_BRIDGE_PORT", "8000")),
     atom_dir=Path(
         os.environ.get(
             "RSVS_ATOM_OUTPUT_DIR",
-            str(Path(__file__).resolve().parent.parent.parent.parent / "atom"),
+            "./atom",
         )
     ),
 )

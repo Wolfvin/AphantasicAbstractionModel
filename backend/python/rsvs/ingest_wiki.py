@@ -17,7 +17,7 @@ import json
 import sys
 import time
 from pathlib import Path
-from typing import Iterator
+from collections.abc import Iterator
 
 from .corpus import DOMAINS, get_domain_text, domain_names
 

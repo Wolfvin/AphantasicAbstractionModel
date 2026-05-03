@@ -3,6 +3,7 @@
 //! Exposes the Rsvs pipeline to Python with a clean, Pythonic API.
 //! v4.2: Unified node model, appraise/relate methods, PyNodeInfo.
 
+use crate::error::RsvsError;
 use crate::events::{API_VERSION, SCHEMA_VERSION};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
@@ -206,6 +207,14 @@ impl PySenseInfo {
 }
 
 // -----------------------------------------------------------------------
+// Helper: convert RsvsError to PyErr
+// -----------------------------------------------------------------------
+
+fn to_py_err(e: RsvsError) -> PyErr {
+    pyo3::exceptions::PyRuntimeError::new_err(e.to_string())
+}
+
+// -----------------------------------------------------------------------
 // PyRsvs — main Python class (v4.2)
 // -----------------------------------------------------------------------
 
@@ -225,7 +234,7 @@ impl PyRsvs {
         n_warm=20,
         eta=0.1
     ))]
-    fn new(entity_promote_n: usize, theta_assign: f32, n_warm: usize, eta: f32) -> Self {
+    fn new(entity_promote_n: usize, theta_assign: f32, n_warm: usize, eta: f32) -> PyResult<Self> {
         let config = PipelineConfig {
             entity_promote_n,
             sense: SenseConfig {
@@ -240,9 +249,8 @@ impl PyRsvs {
             },
             ..PipelineConfig::default()
         };
-        Self {
-            inner: Rsvs::new(config),
-        }
+        let inner = Rsvs::new(config).map_err(to_py_err)?;
+        Ok(Self { inner })
     }
 
     // -------------------------------------------------------------------
@@ -250,26 +258,30 @@ impl PyRsvs {
     // -------------------------------------------------------------------
 
     /// Ingest a block of text and update the knowledge graph.
-    fn ingest(&mut self, text: &str) -> PyIngestStats {
-        let s = self.inner.ingest_text(text);
-        PyIngestStats {
+    fn ingest(&mut self, text: &str) -> PyResult<PyIngestStats> {
+        let s = self.inner.ingest_text(text).map_err(to_py_err)?;
+        Ok(PyIngestStats {
             sentences_processed: s.sentences_processed,
             atoms_promoted: s.atoms_promoted,
             sense_assigned: s.sense_assigned,
             sense_created: s.sense_created,
             confidence_updated: s.confidence_updated,
             frozen_batches: s.frozen_batches,
-        }
+        })
     }
 
     /// Ingest with stable API metadata and seq range.
     #[pyo3(signature = (text, domain_id=None))]
-    fn ingest_with_meta_v1(&mut self, text: &str, domain_id: Option<usize>) -> PyIngestMetaV1 {
+    fn ingest_with_meta_v1(
+        &mut self,
+        text: &str,
+        domain_id: Option<usize>,
+    ) -> PyResult<PyIngestMetaV1> {
         if let Some(d) = domain_id {
             self.inner.config.current_domain = d;
         }
         let before = self.inner.latest_seq_v1();
-        let s = self.inner.ingest_text(text);
+        let s = self.inner.ingest_text(text).map_err(to_py_err)?;
         let after = self.inner.latest_seq_v1();
 
         let batch = self.inner.consume_events_v1(Some(before), 10_000);
@@ -279,7 +291,7 @@ impl PyRsvs {
             .map(|e| e.correlation_id.clone())
             .unwrap_or_else(|| "ingest_00000000".to_string());
 
-        PyIngestMetaV1 {
+        Ok(PyIngestMetaV1 {
             api_version: API_VERSION.to_string(),
             schema_version: SCHEMA_VERSION.to_string(),
             correlation_id,
@@ -291,7 +303,7 @@ impl PyRsvs {
             sense_created: s.sense_created,
             confidence_updated: s.confidence_updated,
             frozen_batches: s.frozen_batches,
-        }
+        })
     }
 
     /// Query a concept with a context string.
@@ -535,16 +547,14 @@ impl PyRsvs {
     /// Save the full RSVS state to a JSON file.
     fn save(&self, path: &str) -> PyResult<()> {
         use std::path::Path;
-        crate::persist::save(&self.inner, Path::new(path))
-            .map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))
+        crate::persist::save(&self.inner, Path::new(path)).map_err(to_py_err)
     }
 
     /// Load RSVS state from a JSON file. Returns a new Rsvs instance.
     #[staticmethod]
     fn load(path: &str) -> PyResult<PyRsvs> {
         use std::path::Path;
-        let inner = crate::persist::load(Path::new(path))
-            .map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
+        let inner = crate::persist::load(Path::new(path)).map_err(to_py_err)?;
         Ok(PyRsvs { inner })
     }
 

@@ -13,11 +13,11 @@ Each benchmark returns a BenchmarkResult with score, details, and verdict.
 """
 
 from __future__ import annotations
+
 import time
 import json
 import statistics
 from dataclasses import dataclass, field
-from typing import Optional
 from pathlib import Path
 
 from rsvs import Rsvs
@@ -482,8 +482,8 @@ def benchmark_speed_runtime(r: Rsvs) -> BenchmarkResult:
 # -----------------------------------------------------------------------
 
 def run_eval(
-    db_path: Optional[str] = None,
-    domains: Optional[list[str]] = None,
+    db_path: str | None = None,
+    domains: list[str] | None = None,
     verbose: bool = True,
     compare_adaptive: bool = True,
 ) -> EvalReport:

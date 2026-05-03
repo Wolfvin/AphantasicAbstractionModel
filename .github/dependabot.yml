@@ -1,0 +1,89 @@
+# ──────────────────────────────────────────────────────────────────────
+#  SymbolicPuzzle3D — Dependabot configuration
+#  Automated dependency updates for npm, Cargo, and pip
+# ──────────────────────────────────────────────────────────────────────
+
+version: 2
+
+updates:
+  # ── npm (frontend) ────────────────────────────────────────────────
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 10
+    groups:
+      react-and-next:
+        patterns:
+          - "react"
+          - "react-dom"
+          - "next"
+          - "@types/react"
+          - "@types/react-dom"
+      radix-ui:
+        patterns:
+          - "@radix-ui/*"
+      dev-dependencies:
+        patterns:
+          - "eslint*"
+          - "tailwindcss*"
+          - "typescript"
+          - "@tailwindcss/*"
+    labels:
+      - "dependencies"
+      - "frontend"
+    commit-message:
+      prefix: chore(deps)
+      prefix-development: chore(deps-dev)
+
+  # ── Cargo (Rust backend) ──────────────────────────────────────────
+  - package-ecosystem: cargo
+    directory: /backend
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      rust-dependencies:
+        patterns:
+          - "*"
+    labels:
+      - "dependencies"
+      - "rust"
+    commit-message:
+      prefix: chore(deps)
+
+  # ── pip (Python backend) ──────────────────────────────────────────
+  - package-ecosystem: pip
+    directory: /backend
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      python-dependencies:
+        patterns:
+          - "*"
+    labels:
+      - "dependencies"
+      - "python"
+    commit-message:
+      prefix: chore(deps)
+
+  # ── GitHub Actions ────────────────────────────────────────────────
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      actions-dependencies:
+        patterns:
+          - "*"
+    labels:
+      - "dependencies"
+      - "ci"
+    commit-message:
+      prefix: chore(deps)

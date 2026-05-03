@@ -8,12 +8,14 @@ use std::collections::{HashMap, HashSet};
 
 use crate::types::{NodeId, NodeStatus, Tier};
 
+/// Memory class of a node.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MemoryClass {
     Stable,
     Working,
 }
 
+/// Record for a single node in the autonomy engine.
 #[derive(Debug, Clone)]
 pub struct AtomRecord {
     pub id: NodeId,
@@ -31,6 +33,7 @@ pub struct AtomRecord {
 }
 
 impl AtomRecord {
+    /// Create a new atom record for a non-seed node.
     pub fn new(id: NodeId, confidence: f32, tier: Tier) -> Self {
         let memory = if matches!(tier, Tier::Tier1) && confidence >= 0.99 {
             MemoryClass::Stable
@@ -54,6 +57,7 @@ impl AtomRecord {
         }
     }
 
+    /// Create a new seed atom record — immutable, Tier1, Stable.
     pub fn new_seed(id: NodeId, confidence: f32, tier: Tier) -> Self {
         let mut rec = Self::new(id, confidence, tier);
         rec.is_seed = true;
@@ -63,6 +67,7 @@ impl AtomRecord {
     }
 }
 
+/// Configuration for the autonomy engine.
 #[derive(Debug, Clone)]
 pub struct AutonomyConfig {
     pub eta: f32,
@@ -106,18 +111,21 @@ impl Default for AutonomyConfig {
     }
 }
 
+/// Warm-up state of the autonomy engine.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WarmUpState {
     Active,
     Complete,
 }
 
+/// Result of a confidence update.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ConfidenceUpdateResult {
     Updated { old: f32, new: f32, evidence: f32 },
     Skipped(&'static str),
 }
 
+/// Decision on whether to remove a node.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RemovalDecision {
     Remove,
@@ -125,6 +133,7 @@ pub enum RemovalDecision {
     Retain(&'static str),
 }
 
+/// Stability status after a batch update.
 #[derive(Debug, Clone, PartialEq)]
 pub enum StabilityStatus {
     Stable,
@@ -138,6 +147,7 @@ pub enum StatusTransitionResult {
     Blocked(&'static str),
 }
 
+/// The autonomy engine managing node confidence, tier classification, and status lifecycle.
 pub struct AutonomyEngine {
     pub config: AutonomyConfig,
     pub records: HashMap<NodeId, AtomRecord>,
@@ -153,6 +163,7 @@ pub struct AutonomyEngine {
 }
 
 impl AutonomyEngine {
+    /// Create a new autonomy engine with the given configuration.
     pub fn new(config: AutonomyConfig) -> Self {
         let warmup = if config.n_warm == 0 {
             WarmUpState::Complete
@@ -174,6 +185,7 @@ impl AutonomyEngine {
         }
     }
 
+    /// Register a non-seed node with initial confidence and tier.
     pub fn register(&mut self, id: NodeId, confidence: f32, tier: Tier) {
         self.records
             .insert(id, AtomRecord::new(id, confidence, tier));
@@ -185,26 +197,32 @@ impl AutonomyEngine {
             .insert(id, AtomRecord::new_seed(id, confidence, tier));
     }
 
+    /// Get the current confidence for a node.
     pub fn confidence(&self, id: NodeId) -> Option<f32> {
         self.records.get(&id).map(|r| r.confidence)
     }
 
+    /// Get the current tier for a node.
     pub fn tier(&self, id: NodeId) -> Option<&Tier> {
         self.records.get(&id).map(|r| &r.tier)
     }
 
+    /// Get the current status for a node.
     pub fn status(&self, id: NodeId) -> Option<&NodeStatus> {
         self.records.get(&id).map(|r| &r.status)
     }
 
+    /// Get the memory class for a node.
     pub fn memory_class(&self, id: NodeId) -> Option<&MemoryClass> {
         self.records.get(&id).map(|r| &r.memory)
     }
 
+    /// Check whether a node is a seed node.
     pub fn is_seed(&self, id: NodeId) -> bool {
         self.records.get(&id).map(|r| r.is_seed).unwrap_or(false)
     }
 
+    /// Tick the context counter (advances warm-up).
     pub fn tick_context(&mut self) {
         self.contexts_seen += 1;
         if self.contexts_seen >= self.config.n_warm {
@@ -212,10 +230,12 @@ impl AutonomyEngine {
         }
     }
 
+    /// Check whether the engine has finished warm-up.
     pub fn is_warmed_up(&self) -> bool {
         matches!(self.warmup, WarmUpState::Complete)
     }
 
+    /// Record an observation of an assign score for adaptive thresholds.
     pub fn observe_assign_score(&mut self, score: f32) {
         self.assign_history.push(score.clamp(0.0, 1.0));
         if self.assign_history.len() > 512 {
@@ -224,6 +244,7 @@ impl AutonomyEngine {
         }
     }
 
+    /// Record an observation of a merge score for adaptive thresholds.
     pub fn observe_merge_score(&mut self, score: f32) {
         self.merge_history.push(score.clamp(0.0, 1.0));
         if self.merge_history.len() > 512 {
@@ -232,6 +253,7 @@ impl AutonomyEngine {
         }
     }
 
+    /// Get the current adaptive threshold for sense assignment.
     pub fn current_theta_assign(&self) -> f32 {
         if !self.is_warmed_up() || self.assign_history.len() < 3 {
             return self.config.fallback_theta_assign;
@@ -239,6 +261,7 @@ impl AutonomyEngine {
         adaptive_threshold(&self.assign_history, self.config.k1).clamp(0.01, 0.99)
     }
 
+    /// Get the current adaptive threshold for sense merging.
     pub fn current_theta_merge(&self) -> f32 {
         if !self.is_warmed_up() || self.merge_history.len() < 3 {
             return self.config.fallback_theta_merge;
@@ -246,6 +269,7 @@ impl AutonomyEngine {
         adaptive_threshold(&self.merge_history, self.config.k2).clamp(0.01, 0.99)
     }
 
+    /// Check whether an energy constraint allows the proposed confidence update.
     pub fn energy_allows_update(&self, id: NodeId, proposed_confidence: f32) -> bool {
         let Some(rec) = self.records.get(&id) else {
             return true;
@@ -366,6 +390,17 @@ impl AutonomyEngine {
     // Confidence update (v4.2: with EMA, max delta, seed check)
     // ---------------------------------------------------------------
 
+    /// Update a node's confidence using EMA with evidence.
+    ///
+    /// `new_conf = (1 - η) · old_conf + η · (freq × coherence)`
+    ///
+    /// Also attempts a status transition after the confidence update.
+    /// Seed nodes are immutable and will be skipped.
+    ///
+    /// # Examples
+    /// ```ignore
+    /// let result = engine.update_confidence(node_id, 1.0, 0.8, &[1, 2, 3], 1);
+    /// ```
     pub fn update_confidence(
         &mut self,
         id: NodeId,
@@ -427,6 +462,7 @@ impl AutonomyEngine {
         }
     }
 
+    /// Reclassify a node's tier based on its current confidence and observation count.
     pub fn reclassify(&mut self, id: NodeId) -> Option<Tier> {
         let rec = self.records.get_mut(&id)?;
 
@@ -446,6 +482,7 @@ impl AutonomyEngine {
         Some(next)
     }
 
+    /// Decide whether a node should be removed, requires approval, or be retained.
     pub fn should_remove(&mut self, id: NodeId, impact: usize) -> RemovalDecision {
         let Some(rec) = self.records.get(&id) else {
             return RemovalDecision::Retain("unknown node");
@@ -466,11 +503,13 @@ impl AutonomyEngine {
         RemovalDecision::Retain("confidence above threshold")
     }
 
+    /// Begin a new batch of confidence updates.
     pub fn begin_batch(&mut self) {
         self.batch_delta = 0.0;
         self.frozen = false;
     }
 
+    /// Take a snapshot of all node confidences for potential rollback.
     pub fn snapshot(&self) -> HashMap<NodeId, f32> {
         self.records
             .iter()
@@ -478,6 +517,7 @@ impl AutonomyEngine {
             .collect()
     }
 
+    /// Roll back all confidences to a previous snapshot.
     pub fn rollback(&mut self, snapshot: &HashMap<NodeId, f32>) {
         for (&id, &confidence) in snapshot {
             if let Some(rec) = self.records.get_mut(&id) {
@@ -488,6 +528,19 @@ impl AutonomyEngine {
         self.batch_delta = 0.0;
     }
 
+    /// Check global stability after a batch of updates.
+    ///
+    /// If the total confidence delta exceeds the threshold, marks the engine as frozen.
+    ///
+    /// # Examples
+    /// ```ignore
+    /// engine.begin_batch();
+    /// // ... multiple update_confidence calls ...
+    /// let stability = engine.check_global_stability();
+    /// if let StabilityStatus::Frozen { delta, threshold } = stability {
+    ///     engine.rollback(&snapshot);
+    /// }
+    /// ```
     pub fn check_global_stability(&mut self) -> StabilityStatus {
         if self.batch_delta > self.config.threshold_global_delta {
             self.frozen = true;
@@ -500,10 +553,12 @@ impl AutonomyEngine {
         }
     }
 
+    /// Return the number of nodes on the removal watchlist.
     pub fn watchlist_len(&self) -> usize {
         self.watchlist.len()
     }
 
+    /// Return the number of entries in the changelog.
     pub fn changelog_len(&self) -> usize {
         self.changelog.len()
     }

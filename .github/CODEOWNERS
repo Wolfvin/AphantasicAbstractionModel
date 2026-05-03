@@ -1,0 +1,14 @@
+# Default owners
+* @Wolfvin
+
+# Rust core
+/backend/crates/ @Wolfvin
+
+# Python bridge
+/backend/python/ @Wolfvin
+
+# Frontend
+/frontend/ @Wolfvin
+
+# Documentation
+/docs/ @Wolfvin

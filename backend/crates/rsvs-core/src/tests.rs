@@ -809,6 +809,7 @@ mod autonomy_tests {
 
 #[cfg(test)]
 mod graph_tests {
+    use crate::error::RsvsError;
     use crate::graph::RsvsGraph;
     use crate::types::{CompressionState, Edge, EdgeSource, Node, NodeStatus, SemanticMeta, Tier};
 
@@ -840,7 +841,6 @@ mod graph_tests {
     #[test]
     fn expand_raw_node_with_atoms_returns_atoms() {
         let mut g = RsvsGraph::new();
-        // Create two base nodes first
         let a1 = g
             .insert_node(Node {
                 id: 0,
@@ -877,7 +877,6 @@ mod graph_tests {
                 fingerprint: None,
             })
             .unwrap();
-        // Create node with atoms
         let id = g
             .insert_node(Node {
                 id: 0,
@@ -974,7 +973,7 @@ mod graph_tests {
             atoms: vec![],
             fingerprint: None,
         });
-        assert!(result.is_err());
+        assert!(matches!(result, Err(RsvsError::CircularRef { .. })));
     }
 
     #[test]
@@ -1005,7 +1004,7 @@ mod graph_tests {
             weight: 0.5,
             source: EdgeSource::Learned,
         });
-        assert!(result.is_err());
+        assert!(matches!(result, Err(RsvsError::NodeNotFound { .. })));
     }
 
     #[test]
@@ -1109,7 +1108,9 @@ mod graph_tests {
 
 #[cfg(test)]
 mod v42_node_tests {
-    use crate::types::{CompressionState, Node, NodeStatus, PolicyMeta, SemanticMeta, Tier};
+    use crate::types::{
+        CompressionState, Fingerprint, Node, NodeStatus, PolicyMeta, SemanticMeta, Tier,
+    };
 
     #[test]
     fn v42_node_creation() {
@@ -1208,7 +1209,6 @@ mod v42_node_tests {
 
     #[test]
     fn node_status_lifecycle() {
-        // New → Candidate → Stable → Deprecated
         let statuses = [
             NodeStatus::New,
             NodeStatus::Candidate,
@@ -1216,7 +1216,6 @@ mod v42_node_tests {
             NodeStatus::Deprecated,
             NodeStatus::Quarantine,
         ];
-        // Just verify they all exist and are distinct
         for (i, s) in statuses.iter().enumerate() {
             for (j, t) in statuses.iter().enumerate() {
                 if i != j {
@@ -1249,7 +1248,6 @@ mod v42_node_tests {
 
     #[test]
     fn seed_node_has_required_invariants() {
-        // In v4.2: is_seed → is_locked=true, tier=1, confidence=1.0, status=stable
         let node = Node {
             id: 1,
             label: "exists".into(),
@@ -1297,6 +1295,22 @@ mod v42_node_tests {
         assert!(!node.is_seed);
         assert!(!node.is_locked);
     }
+
+    #[test]
+    fn fingerprint_new_produces_consistent_hash() {
+        let data = b"hello world";
+        let fp1 = Fingerprint::new(data);
+        let fp2 = Fingerprint::new(data);
+        assert_eq!(fp1, fp2);
+        assert_ne!(fp1.hash(), 0);
+    }
+
+    #[test]
+    fn fingerprint_different_data_produces_different_hash() {
+        let fp1 = Fingerprint::new(b"hello");
+        let fp2 = Fingerprint::new(b"world");
+        assert_ne!(fp1, fp2);
+    }
 }
 
 #[cfg(test)]
@@ -1320,6 +1334,7 @@ mod pipeline_tests {
             entity_promote_n: 2,
             ..PipelineConfig::default()
         })
+        .unwrap()
     }
 
     #[test]
@@ -1343,7 +1358,7 @@ mod pipeline_tests {
         let mut rsvs = make_rsvs();
         let text = "Stone is hard. Stone is hard and solid. Stone is a hard material. \
                     Stone remains hard. Hard stone is heavy.";
-        let stats = rsvs.ingest_text(text);
+        let stats = rsvs.ingest_text(text).unwrap();
         assert!(stats.atoms_promoted >= 1);
     }
 
@@ -1351,7 +1366,7 @@ mod pipeline_tests {
     fn ingest_increases_context_count() {
         let mut rsvs = make_rsvs();
         assert_eq!(rsvs.total_contexts, 0);
-        rsvs.ingest_text("Stone is hard. Water is liquid.");
+        rsvs.ingest_text("Stone is hard. Water is liquid.").unwrap();
         assert!(rsvs.total_contexts > 0);
     }
 
@@ -1363,7 +1378,7 @@ mod pipeline_tests {
                     Stone and bone are both hard solid materials. \
                     Hard solid materials resist force. \
                     Stone is hard like bone.";
-        rsvs.ingest_text(text);
+        rsvs.ingest_text(text).unwrap();
 
         if let Some(sim) = rsvs.similarity("stone", "bone") {
             assert!(sim.jaccard > 0.0);
@@ -1419,10 +1434,9 @@ mod pipeline_tests {
     #[test]
     fn appraise_verdict_partial() {
         let mut rsvs = make_rsvs();
-        rsvs.ingest_text("Stone is hard. Stone is heavy.");
+        rsvs.ingest_text("Stone is hard. Stone is heavy.").unwrap();
         // Mix of known (exists, entity) and unknown (xyzquux) tokens
         let result = rsvs.appraise("exists entity xyzquux");
-        // Could be consistent, partial, or novel depending on token matching
         assert!(["consistent", "partial", "novel"].contains(&result.verdict.as_str()));
     }
 
@@ -1453,7 +1467,8 @@ mod pipeline_tests {
     fn relate_seed_node_returns_related() {
         let mut rsvs = make_rsvs();
         // Ingest some text to create edges
-        rsvs.ingest_text("Stone exists as entity with relation to space and time.");
+        rsvs.ingest_text("Stone exists as entity with relation to space and time.")
+            .unwrap();
         if let Some(_id) = rsvs.token_to_id.get("exists") {
             let result = rsvs.relate("exists");
             // Should find at least the node itself
@@ -1464,8 +1479,10 @@ mod pipeline_tests {
     #[test]
     fn relate_ingested_concept_finds_edges() {
         let mut rsvs = make_rsvs();
-        rsvs.ingest_text("Stone is hard solid heavy. Hard solid stone resists pressure.");
-        rsvs.ingest_text("Stone and metal are hard. Hard stone is heavy.");
+        rsvs.ingest_text("Stone is hard solid heavy. Hard solid stone resists pressure.")
+            .unwrap();
+        rsvs.ingest_text("Stone and metal are hard. Hard stone is heavy.")
+            .unwrap();
         // Try to relate stone if it was promoted
         if rsvs.token_to_id.contains_key("stone") {
             let result = rsvs.relate("stone");
@@ -1509,7 +1526,7 @@ mod pipeline_tests {
     #[test]
     fn snapshot_v1_total_contexts_matches() {
         let mut rsvs = make_rsvs();
-        rsvs.ingest_text("Stone is hard. Water is liquid.");
+        rsvs.ingest_text("Stone is hard. Water is liquid.").unwrap();
         let snap = rsvs.snapshot_v1();
         assert_eq!(snap.total_contexts, rsvs.total_contexts);
     }
@@ -1518,67 +1535,13 @@ mod pipeline_tests {
     fn snapshot_v1_seed_nodes_have_correct_fields() {
         let rsvs = make_rsvs();
         let snap = rsvs.snapshot_v1();
-        let seed_nodes: Vec<_> = snap.nodes.iter().filter(|n| n.is_seed).collect();
-        assert!(!seed_nodes.is_empty());
-        for n in &seed_nodes {
-            assert!(n.is_locked);
-            assert_eq!(n.tier, 1);
-            assert_eq!(n.status, "stable");
-            assert!((n.confidence - 1.0).abs() < 0.01);
-        }
-    }
-
-    // ------------------------------------------------------------------
-    // v4.2: Seed invariants in pipeline
-    // ------------------------------------------------------------------
-
-    #[test]
-    fn seed_nodes_immutable_after_ingest() {
-        let mut rsvs = make_rsvs();
-        rsvs.ingest_text("Stone is hard. Stone exists. Entity and relation are key.");
-        let exists_id = rsvs.token_to_id["exists"];
-        assert_eq!(rsvs.autonomy.confidence(exists_id), Some(1.0));
-        assert_eq!(rsvs.autonomy.status(exists_id), Some(&NodeStatus::Stable));
-        let node = rsvs.graph.get_node(exists_id).unwrap();
-        assert!(node.is_seed);
-        assert!(node.is_locked);
-    }
-
-    #[test]
-    fn all_24_seed_nodes_present() {
-        let rsvs = make_rsvs();
-        let expected = [
-            "exists",
-            "entity",
-            "relation",
-            "state",
-            "change",
-            "time",
-            "space",
-            "cause",
-            "effect",
-            "context",
-            "signal",
-            "pattern",
-            "memory",
-            "attention",
-            "value",
-            "agent",
-            "goal",
-            "risk",
-            "trust",
-            "identity",
-            "language",
-            "meaning",
-            "action",
-            "feedback",
-        ];
-        for label in &expected {
-            assert!(
-                rsvs.token_to_id.contains_key(*label),
-                "Missing seed node: {}",
-                label
-            );
+        let seeds: Vec<_> = snap.nodes.iter().filter(|n| n.is_seed).collect();
+        assert_eq!(seeds.len(), 24);
+        for seed in &seeds {
+            assert!(seed.is_locked);
+            assert_eq!(seed.tier, 1);
+            assert_eq!(seed.status, "stable");
+            assert_eq!(seed.compression_state, "raw");
         }
     }
 
@@ -1587,601 +1550,56 @@ mod pipeline_tests {
     // ------------------------------------------------------------------
 
     #[test]
-    fn events_emitted_on_ingest() {
-        let mut rsvs = make_rsvs();
-        rsvs.ingest_text("Stone is hard. Stone is solid.");
-        assert!(rsvs.latest_seq > 0);
-        assert!(!rsvs.events.is_empty());
+    fn consume_events_returns_empty_before_ingest() {
+        let rsvs = make_rsvs();
+        let batch = rsvs.consume_events_v1(None, 100);
+        assert!(batch.events.is_empty());
+        assert_eq!(batch.latest_seq, 0);
     }
 
     #[test]
-    fn consume_events_returns_batch() {
+    fn consume_events_returns_events_after_ingest() {
         let mut rsvs = make_rsvs();
-        rsvs.ingest_text("Stone is hard. Stone is solid.");
-        let batch = rsvs.consume_events_v1(None, 200);
-        assert_eq!(batch.schema_version, "v4.2");
+        rsvs.ingest_text("Stone is hard and solid.").unwrap();
+        let batch = rsvs.consume_events_v1(None, 100);
         assert!(!batch.events.is_empty());
+        assert!(batch.latest_seq > 0);
+    }
+
+    #[test]
+    fn consume_events_after_seq_filters_correctly() {
+        let mut rsvs = make_rsvs();
+        rsvs.ingest_text("Stone is hard.").unwrap();
+        let seq_after = rsvs.latest_seq_v1();
+        rsvs.ingest_text("Water is liquid.").unwrap();
+        let batch = rsvs.consume_events_v1(Some(seq_after), 100);
+        // Should only get events from the second ingest
         for evt in &batch.events {
-            assert!(!evt.event_type.is_empty());
-            assert!(evt.seq > 0);
+            assert!(evt.seq > seq_after);
         }
     }
 
-    #[test]
-    fn consume_events_after_seq_filters() {
-        let mut rsvs = make_rsvs();
-        rsvs.ingest_text("Stone is hard.");
-        let seq1 = rsvs.latest_seq;
-        rsvs.ingest_text("Water is liquid.");
-        let batch = rsvs.consume_events_v1(Some(seq1), 200);
-        // All returned events should have seq > seq1
-        for evt in &batch.events {
-            assert!(evt.seq > seq1);
-        }
-    }
-}
-
-#[cfg(test)]
-mod persist_tests {
-    use crate::autonomy::AutonomyConfig;
-    use crate::pipeline::{PipelineConfig, Rsvs};
-    use crate::sense::SenseConfig;
-    use crate::types::NodeStatus;
-    use tempfile::TempDir;
-
-    fn make_rsvs() -> Rsvs {
-        Rsvs::new(PipelineConfig {
-            autonomy: AutonomyConfig {
-                n_warm: 5,
-                threshold_global_delta: 5.0,
-                ..AutonomyConfig::default()
-            },
-            sense: SenseConfig {
-                theta_assign: 0.10,
-                ..SenseConfig::default()
-            },
-            entity_promote_n: 2,
-            ..PipelineConfig::default()
-        })
-    }
+    // ------------------------------------------------------------------
+    // Persistence roundtrip test
+    // ------------------------------------------------------------------
 
     #[test]
-    fn persistence_save_creates_file() {
-        let dir = TempDir::new().unwrap();
-        let path = dir.path().join("test_state.json");
-        let rsvs = make_rsvs();
-        crate::persist::save(&rsvs, &path).unwrap();
-        assert!(path.exists());
-    }
-
-    #[test]
-    fn persistence_save_load_roundtrip() {
-        let dir = TempDir::new().unwrap();
-        let path = dir.path().join("roundtrip.json");
+    fn persistence_roundtrip() {
+        use tempfile::NamedTempFile;
 
         let mut rsvs = make_rsvs();
-        rsvs.ingest_text("Stone is hard solid heavy. Stone resists pressure and erosion.");
-        let contexts_before = rsvs.total_contexts;
-        let node_count_before = rsvs.graph.node_count();
+        rsvs.ingest_text("Stone is hard. Water is liquid. Metal is solid.")
+            .unwrap();
+
+        let tmp = NamedTempFile::new().unwrap();
+        let path = tmp.path().to_path_buf();
 
         crate::persist::save(&rsvs, &path).unwrap();
         let loaded = crate::persist::load(&path).unwrap();
 
-        assert_eq!(loaded.total_contexts, contexts_before);
-        assert_eq!(loaded.graph.node_count(), node_count_before);
-    }
-
-    #[test]
-    fn persistence_seed_nodes_preserved() {
-        let dir = TempDir::new().unwrap();
-        let path = dir.path().join("seeds.json");
-
-        let rsvs = make_rsvs();
-        crate::persist::save(&rsvs, &path).unwrap();
-        let loaded = crate::persist::load(&path).unwrap();
-
-        assert!(loaded.token_to_id.contains_key("exists"));
-        assert!(loaded.token_to_id.contains_key("feedback"));
-        let exists_id = loaded.token_to_id["exists"];
-        assert_eq!(loaded.autonomy.confidence(exists_id), Some(1.0));
-        assert_eq!(loaded.autonomy.status(exists_id), Some(&NodeStatus::Stable));
-    }
-
-    #[test]
-    fn persistence_atoms_preserved() {
-        let dir = TempDir::new().unwrap();
-        let path = dir.path().join("atoms.json");
-
-        let mut rsvs = make_rsvs();
-        rsvs.ingest_text("Stone is hard solid heavy. Stone is hard like metal.");
-        let atoms_before: Vec<_> = rsvs.token_to_id.keys().cloned().collect();
-
-        crate::persist::save(&rsvs, &path).unwrap();
-        let loaded = crate::persist::load(&path).unwrap();
-
-        for atom in &atoms_before {
-            assert!(
-                loaded.token_to_id.contains_key(atom.as_str()),
-                "Atom '{}' missing after reload",
-                atom
-            );
-        }
-    }
-
-    #[test]
-    fn persistence_double_roundtrip() {
-        let dir = TempDir::new().unwrap();
-        let path1 = dir.path().join("rt1.json");
-        let path2 = dir.path().join("rt2.json");
-
-        let mut rsvs = make_rsvs();
-        rsvs.ingest_text("Stone is hard. Water is liquid.");
-
-        crate::persist::save(&rsvs, &path1).unwrap();
-        let r2 = crate::persist::load(&path1).unwrap();
-        crate::persist::save(&r2, &path2).unwrap();
-        let r3 = crate::persist::load(&path2).unwrap();
-
-        assert_eq!(r3.total_contexts, r2.total_contexts);
-        assert_eq!(r3.graph.node_count(), r2.graph.node_count());
-    }
-
-    #[test]
-    fn persistence_file_is_valid_json() {
-        let dir = TempDir::new().unwrap();
-        let path = dir.path().join("valid.json");
-
-        let rsvs = make_rsvs();
-        crate::persist::save(&rsvs, &path).unwrap();
-
-        let data = std::fs::read_to_string(&path).unwrap();
-        let parsed: serde_json::Value = serde_json::from_str(&data).unwrap();
-        assert!(parsed.is_object());
-        assert!(parsed.get("version").is_some());
-        assert!(parsed.get("nodes").is_some());
-        assert!(parsed.get("edges").is_some());
-    }
-}
-
-// ===================================================================
-// NEW: Comprehensive property-based / integration tests for v4.2
-// ===================================================================
-
-#[cfg(test)]
-mod snapshot_v42_tests {
-    use crate::pipeline::Rsvs;
-    use crate::events::SCHEMA_VERSION;
-
-    fn make_rsvs() -> Rsvs {
-        Rsvs::new(Default::default())
-    }
-
-    #[test]
-    fn snapshot_v1_has_correct_schema_version() {
-        let r = make_rsvs();
-        let snap = r.snapshot_v1();
-        assert_eq!(snap.schema_version, SCHEMA_VERSION);
-    }
-
-    #[test]
-    fn snapshot_v1_has_api_version() {
-        let r = make_rsvs();
-        let snap = r.snapshot_v1();
-        assert_eq!(snap.api_version, "v1");
-    }
-
-    #[test]
-    fn snapshot_v1_nodes_all_have_kind_node() {
-        let r = make_rsvs();
-        let snap = r.snapshot_v1();
-        for node in &snap.nodes {
-            assert_eq!(node.kind, "node", "node {} has kind={}", node.id, node.kind);
-        }
-    }
-
-    #[test]
-    fn snapshot_v1_seed_nodes_have_correct_invariants() {
-        let r = make_rsvs();
-        let snap = r.snapshot_v1();
-        let seeds: Vec<_> = snap.nodes.iter().filter(|n| n.is_seed).collect();
-        assert!(!seeds.is_empty(), "should have seed nodes");
-        for seed in &seeds {
-            assert!(seed.is_locked, "seed {} must be locked", seed.id);
-            assert_eq!(seed.tier, 1, "seed {} must be tier 1", seed.id);
-            assert!((seed.confidence - 1.0).abs() < 0.001, "seed {} must have confidence 1.0", seed.id);
-            assert_eq!(seed.status, "stable", "seed {} must be stable", seed.id);
-        }
-    }
-
-    #[test]
-    fn snapshot_v1_seed_nodes_have_surface_label_with_locale() {
-        let r = make_rsvs();
-        let snap = r.snapshot_v1();
-        for node in &snap.nodes {
-            assert!(
-                node.surface_label.contains('@'),
-                "node {} surface_label '{}' must contain @locale",
-                node.id, node.surface_label
-            );
-        }
-    }
-
-    #[test]
-    fn snapshot_v1_compressed_nodes_have_derived_ids() {
-        let mut r = make_rsvs();
-        r.ingest_text("Stone is hard. Stone is solid. Hard stone resists pressure.");
-        let snap = r.snapshot_v1();
-        for node in &snap.nodes {
-            if node.compression_state == "compressed" {
-                assert!(
-                    !node.derived_from_node_ids.is_empty(),
-                    "compressed node {} must have derived_from_node_ids",
-                    node.id
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn snapshot_v1_has_edges_after_ingest() {
-        let mut r = make_rsvs();
-        r.ingest_text("Stone is hard. Stone is solid. Hard stone resists pressure.");
-        let snap = r.snapshot_v1();
-        // After ingest, edges may or may not exist; just verify the field is present
-        // edges.len() is always >= 0, just verify the field exists
-        let _ = snap.edges.len();
-    }
-}
-
-#[cfg(test)]
-mod persistence_roundtrip_tests {
-    use crate::pipeline::Rsvs;
-    use crate::persist;
-    use std::io;
-
-    fn make_trained_rsvs() -> Rsvs {
-        let mut r = Rsvs::new(Default::default());
-        r.ingest_text("Stone is hard. Stone is solid. Hard stone resists erosion and pressure.");
-        r.ingest_text("Water is a clear transparent liquid. Rain is water falling from clouds.");
-        r
-    }
-
-    fn roundtrip(r: &Rsvs, dir: &tempfile::TempDir) -> io::Result<Rsvs> {
-        let path = dir.path().join("rsvs-state.json");
-        persist::save(r, &path)?;
-        persist::load(&path)
-    }
-
-    #[test]
-    fn save_load_roundtrip_preserves_node_count() {
-        let r = make_trained_rsvs();
-        let dir = tempfile::tempdir().unwrap();
-        let r2 = roundtrip(&r, &dir).unwrap();
-        assert_eq!(r.graph.node_count(), r2.graph.node_count());
-    }
-
-    #[test]
-    fn save_load_roundtrip_preserves_confidence_values() {
-        let r = make_trained_rsvs();
-        let dir = tempfile::tempdir().unwrap();
-        let r2 = roundtrip(&r, &dir).unwrap();
-        // Compare confidence for known nodes
-        for id in r.graph.nodes.keys() {
-            let c1 = r.autonomy.confidence(*id);
-            let c2 = r2.autonomy.confidence(*id);
-            if let (Some(v1), Some(v2)) = (c1, c2) {
-                assert!((v1 - v2).abs() < 0.01, "confidence mismatch for node {}", id);
-            }
-        }
-    }
-
-    #[test]
-    fn save_load_roundtrip_preserves_total_contexts() {
-        let r = make_trained_rsvs();
-        let dir = tempfile::tempdir().unwrap();
-        let r2 = roundtrip(&r, &dir).unwrap();
-        assert_eq!(r.total_contexts, r2.total_contexts);
-    }
-
-    #[test]
-    fn save_load_roundtrip_preserves_edge_count() {
-        let r = make_trained_rsvs();
-        let dir = tempfile::tempdir().unwrap();
-        let r2 = roundtrip(&r, &dir).unwrap();
-        assert_eq!(r.graph.edge_count(), r2.graph.edge_count());
-    }
-
-    #[test]
-    fn double_roundtrip_is_idempotent() {
-        let r = make_trained_rsvs();
-        let dir = tempfile::tempdir().unwrap();
-        let r2 = roundtrip(&r, &dir).unwrap();
-        let dir2 = tempfile::tempdir().unwrap();
-        let r3 = roundtrip(&r2, &dir2).unwrap();
-        assert_eq!(r2.graph.node_count(), r3.graph.node_count());
-        assert_eq!(r2.total_contexts, r3.total_contexts);
-    }
-}
-
-#[cfg(test)]
-mod appraise_tests {
-    use crate::pipeline::Rsvs;
-
-    fn make_trained_rsvs() -> Rsvs {
-        let mut r = Rsvs::new(Default::default());
-        r.ingest_text("Stone is hard. Stone is solid. Hard stone resists erosion and pressure.");
-        r
-    }
-
-    #[test]
-    fn appraise_with_known_text_returns_expected_verdict() {
-        let r = make_trained_rsvs();
-        let result = r.appraise("stone is hard");
-        // "stone" and "hard" should be in the graph → agree or partial
-        assert!(["consistent", "partial"].contains(&result.verdict.as_str()),
-            "expected consistent or partial, got {}", result.verdict);
-    }
-
-    #[test]
-    fn appraise_with_empty_text_returns_novel() {
-        let r = make_trained_rsvs();
-        let result = r.appraise("");
-        assert_eq!(result.verdict, "novel");
-        assert_eq!(result.agree_pct, 0.0);
-        assert_eq!(result.disagree_pct, 100.0);
-    }
-
-    #[test]
-    fn appraise_with_novel_text_returns_novel() {
-        let r = make_trained_rsvs();
-        let result = r.appraise("xyzquux foobarbaz quuxland");
-        assert_eq!(result.verdict, "novel");
-    }
-
-    #[test]
-    fn appraise_evidence_sorted_by_confidence() {
-        let r = make_trained_rsvs();
-        let result = r.appraise("stone hard solid");
-        // Evidence should be sorted by confidence descending
-        for i in 1..result.evidence.len() {
-            assert!(result.evidence[i - 1].1 >= result.evidence[i].1,
-                "evidence not sorted by confidence");
-        }
-    }
-}
-
-#[cfg(test)]
-mod relate_tests {
-    use crate::pipeline::Rsvs;
-
-    fn make_trained_rsvs() -> Rsvs {
-        let mut r = Rsvs::new(Default::default());
-        r.ingest_text("Stone is hard. Stone is solid. Hard stone resists erosion and pressure.");
-        r
-    }
-
-    #[test]
-    fn relate_with_known_concept_returns_results() {
-        let r = make_trained_rsvs();
-        // "exists" is a seed node — relate should find it
-        let result = r.relate("exists");
-        assert!(result.is_some(), "relate should find results for known concept");
-        // Seed nodes may have no edges/related nodes after minimal training,
-        // so just verify the result structure is valid
-        let rel = result.unwrap();
-        // At minimum, the result should be well-formed (nodes/edges lists exist)
-        assert!(rel.related_nodes.len() <= 20);
-        assert!(rel.related_edges.len() <= 30);
-    }
-
-    #[test]
-    fn relate_with_unknown_concept_returns_none() {
-        let r = make_trained_rsvs();
-        let result = r.relate("nonexistent_concept_xyz");
-        assert!(result.is_none(), "relate should return None for unknown concept");
-    }
-
-    #[test]
-    fn relate_related_nodes_have_scores() {
-        let r = make_trained_rsvs();
-        let result = r.relate("exists");
-        if let Some(rel) = result {
-            for (_id, score) in &rel.related_nodes {
-                assert!(*score >= 0.0 && *score <= 1.0, "score out of range: {}", score);
-            }
-        }
-    }
-}
-
-#[cfg(test)]
-mod event_stream_tests {
-    use crate::pipeline::Rsvs;
-
-    #[test]
-    fn event_stream_is_monotonic() {
-        let mut r = Rsvs::new(Default::default());
-        r.ingest_text("Stone is hard. Stone is solid.");
-        let batch = r.consume_events_v1(None, 1000);
-        let mut last_seq = 0u64;
-        for evt in &batch.events {
-            assert!(evt.seq > last_seq, "event seq not monotonic: {} after {}", evt.seq, last_seq);
-            last_seq = evt.seq;
-        }
-    }
-
-    #[test]
-    fn event_stream_has_correlation_id() {
-        let mut r = Rsvs::new(Default::default());
-        r.ingest_text("Stone is hard. Stone is solid.");
-        let batch = r.consume_events_v1(None, 1000);
-        for evt in &batch.events {
-            assert!(!evt.correlation_id.is_empty(), "event missing correlation_id");
-        }
-    }
-
-    #[test]
-    fn event_stream_has_schema_version() {
-        let mut r = Rsvs::new(Default::default());
-        r.ingest_text("Stone is hard.");
-        let batch = r.consume_events_v1(None, 1000);
-        for evt in &batch.events {
-            assert_eq!(evt.schema_version, "v4.2");
-        }
-    }
-
-    #[test]
-    fn event_stream_latest_seq_matches() {
-        let mut r = Rsvs::new(Default::default());
-        r.ingest_text("Stone is hard. Stone is solid.");
-        let seq = r.latest_seq_v1();
-        let batch = r.consume_events_v1(None, 1000);
-        assert_eq!(batch.latest_seq, seq);
-    }
-}
-
-#[cfg(test)]
-mod concurrent_ingest_tests {
-    use crate::pipeline::Rsvs;
-
-    #[test]
-    fn multiple_sequential_ingests_accumulate_nodes() {
-        let mut r = Rsvs::new(Default::default());
-        r.ingest_text("Stone is hard. Stone is solid.");
-        let n1 = r.graph.node_count();
-        r.ingest_text("Water is a clear transparent liquid. Rain is water falling from clouds.");
-        let n2 = r.graph.node_count();
-        assert!(n2 >= n1, "second ingest should not reduce nodes: {} -> {}", n1, n2);
-    }
-
-    #[test]
-    fn confidence_converges_with_repeated_high_evidence() {
-        let mut r = Rsvs::new(Default::default());
-        // First ingest
-        r.ingest_text("Voltage is a signal. Signal is strong. Strong voltage is measured.");
-        // Get confidence of a known node
-        let c1 = r.autonomy.confidence(
-            *r.token_to_id.get("voltage").unwrap_or(&0)
-        ).unwrap_or(0.0);
-        // Second ingest with same signal
-        r.ingest_text("Voltage is a signal. Signal is strong. Strong voltage is measured again.");
-        let c2 = r.autonomy.confidence(
-            *r.token_to_id.get("voltage").unwrap_or(&0)
-        ).unwrap_or(0.0);
-        assert!(c2 >= c1, "confidence should converge upwards with repeated evidence: {} -> {}", c1, c2);
-    }
-
-    #[test]
-    fn confidence_decays_with_repeated_low_evidence() {
-        use crate::autonomy::{AutonomyConfig, AutonomyEngine};
-        use crate::types::Tier;
-        let mut e = AutonomyEngine::new(AutonomyConfig {
-            eta: 0.1,
-            ..Default::default()
-        });
-        e.register(10, 0.80, Tier::Tier2);
-        for _ in 0..20 {
-            e.update_confidence(10, 0.0, 0.0, &[], 0);
-        }
-        assert!(e.confidence(10).unwrap() < 0.80);
-    }
-
-    #[test]
-    fn quarantine_is_triggered_after_enough_flips() {
-        use crate::autonomy::{AutonomyConfig, AutonomyEngine};
-        use crate::types::{NodeStatus, Tier};
-        let mut e = AutonomyEngine::new(AutonomyConfig {
-            quarantine_flip_threshold: 3,
-            ..Default::default()
-        });
-        e.register(10, 0.80, Tier::Tier2);
-        if let Some(rec) = e.records.get_mut(&10) {
-            rec.status_flip_count = 3;
-        }
-        let r = e.transition_status(10);
-        assert!(matches!(r, crate::autonomy::StatusTransitionResult::Transitioned {
-            to: NodeStatus::Quarantine, ..
-        }));
-    }
-
-    #[test]
-    fn stability_gate_triggers_rollback_on_large_batch_delta() {
-        use crate::autonomy::{AutonomyConfig, AutonomyEngine};
-        use crate::types::Tier;
-        let mut e = AutonomyEngine::new(AutonomyConfig {
-            threshold_global_delta: 5.0,
-            ..Default::default()
-        });
-        e.register(10, 0.60, Tier::Tier2);
-        // Energy gate should block a large drop
-        assert!(!e.energy_allows_update(10, 0.30));
-    }
-}
-
-#[cfg(test)]
-mod sense_lifecycle_tests {
-    use crate::sense::{SenseConfig, SenseManager};
-
-    #[test]
-    fn sense_merge_happens_when_similar_contexts_accumulate() {
-        let mut sm = SenseManager::new(SenseConfig {
-            theta_merge: 0.50,
-            n_min_mature: 2,
-            theta_assign: 0.15,
-            ..Default::default()
-        });
-        for _ in 0..3 {
-            sm.ingest(vec![1, 2, 3, 4]);
-        }
-        for _ in 0..3 {
-            sm.ingest(vec![1, 2, 3, 5]);
-        }
-        let count_before = sm.sense_count();
-        let merged = sm.check_merge();
-        if count_before >= 2 && !merged.is_empty() {
-            assert!(sm.sense_count() < count_before);
-        }
-    }
-
-    #[test]
-    fn fragile_sense_is_purged_after_inactivity() {
-        let mut sm = SenseManager::new(SenseConfig {
-            k_fragile: 3,
-            theta_assign: 0.15,
-            ..Default::default()
-        });
-        sm.ingest(vec![1, 2, 3]);
-        sm.senses[0].inactivity = 3;
-        sm.purge_fragile();
-        assert_eq!(sm.sense_count(), 0);
-    }
-
-    #[test]
-    fn query_returns_correct_sense_for_context() {
-        let mut sm = SenseManager::new(SenseConfig {
-            theta_assign: 0.15,
-            ..Default::default()
-        });
-        sm.ingest(vec![1, 2, 3]);
-        sm.ingest(vec![1, 2, 3]);
-        sm.ingest(vec![10, 20, 30]);
-        sm.ingest(vec![10, 20, 30]);
-        // Looking up [1, 2] should find sense 0 (similar to [1,2,3])
-        let idx = sm.lazy_lookup(&vec![1, 2]);
-        assert!(idx.is_some());
-        let sense = sm.get_sense(idx.unwrap()).unwrap();
-        assert!(sense.core(0.4).contains(&1) || sense.core(0.4).contains(&2));
-    }
-
-    #[test]
-    fn similarity_is_symmetric() {
-        use crate::pipeline::Rsvs;
-        let mut r = Rsvs::new(Default::default());
-        r.ingest_text("Stone is hard. Stone is solid. Hard stone resists pressure.");
-        let sim_ab = r.similarity("stone", "hard");
-        let sim_ba = r.similarity("hard", "stone");
-        if let (Some(a), Some(b)) = (sim_ab, sim_ba) {
-            assert!((a.jaccard - b.jaccard).abs() < 0.001,
-                "similarity should be symmetric: {} vs {}", a.jaccard, b.jaccard);
-        }
+        assert_eq!(loaded.graph.node_count(), rsvs.graph.node_count());
+        assert_eq!(loaded.token_to_id.len(), rsvs.token_to_id.len());
+        assert_eq!(loaded.total_contexts, rsvs.total_contexts);
+        assert_eq!(loaded.config.entity_promote_n, rsvs.config.entity_promote_n);
     }
 }

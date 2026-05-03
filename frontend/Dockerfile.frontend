@@ -1,0 +1,35 @@
+# ──────────────────────────────────────────────────────────────────────
+#  SymbolicPuzzle3D — Frontend Dockerfile
+#  Used by docker-compose.yml for the frontend service
+# ──────────────────────────────────────────────────────────────────────
+
+FROM node:20-bookworm-slim AS builder
+
+WORKDIR /app
+
+COPY package.json package-lock.json* ./
+RUN npm ci
+
+COPY . .
+RUN npm run build
+
+# ── Runtime ──────────────────────────────────────────────────────────
+FROM node:20-bookworm-slim AS runtime
+
+RUN groupadd --gid 1000 appuser \
+    && useradd --uid 1000 --gid appuser --shell /bin/bash --create-home appuser
+
+WORKDIR /app
+
+COPY --from=builder --chown=appuser:appuser /app/.next/standalone ./
+COPY --from=builder --chown=appuser:appuser /app/.next/static ./.next/static
+COPY --from=builder --chown=appuser:appuser /app/public ./public
+
+ENV NODE_ENV=production
+ENV PORT=3000
+
+EXPOSE 3000
+
+USER appuser
+
+CMD ["node", "server.js"]

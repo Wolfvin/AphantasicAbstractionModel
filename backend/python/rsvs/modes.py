@@ -1,4 +1,9 @@
-"""RSVS Bridge mode implementations — ingest, appraise, relate via Rust core."""
+"""RSVS Bridge mode implementations — ingest, appraise, relate via Rust core.
+
+Public API:
+    run_mode  — unified mode dispatch for FastAPI server
+    _run_mode — internal mode dispatch for bridge_server
+"""
 
 from __future__ import annotations
 
@@ -36,6 +41,18 @@ from .rsvs_core import (
     is_rust_core_available,
 )
 from .validation import _normalize_lang, _normalize_view
+
+
+__all__ = [
+    "_tokenize",
+    "_score_overlap",
+    "_run_ingest_rust",
+    "_run_appraise_rust",
+    "_run_relate_rust",
+    "_run_mode",
+    "_read_latest_mode",
+    "run_mode",
+]
 
 
 # ---------------------------------------------------------------------------
@@ -432,9 +449,36 @@ def _run_mode(mode: str, text: str, correlation_id: str, options: dict[str, Any]
             "schema_version": SCHEMA_VERSION,
             "atom_dir": str(CONFIG.atom_dir),
             "latency_ms": latency_ms,
-            "backend": "rust" if is_rust_core_available() else "python_legacy",
+            "backend": "rust" if is_rust_core_available() else "unavailable",
         },
     }
+
+
+
+def run_mode(
+    rsvs: Any,
+    mode: str,
+    *,
+    text: str,
+    target: str | None = None,
+    source: str | None = None,
+    top_k: int = 10,
+) -> dict[str, Any]:
+    """Public unified mode dispatch for the FastAPI server.
+
+    This is the primary entry point for the async FastAPI layer.
+    It accepts a pre-obtained Rsvs instance and keyword arguments.
+    """
+    from .config import make_id
+    correlation_id = make_id("corr")
+    options: dict[str, Any] = {}
+    if target is not None:
+        options["target"] = target
+    if source is not None:
+        options["source"] = source
+    if top_k != 10:
+        options["top_k"] = top_k
+    return _run_mode(mode, text, correlation_id, options)
 
 
 def _read_latest_mode(mode: str) -> dict[str, Any] | None:

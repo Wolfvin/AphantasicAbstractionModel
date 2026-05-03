@@ -1,6 +1,16 @@
 """RSVS Bridge exceptions."""
 
 
+__all__ = [
+    "RsvsError",
+    "SchemaVersionMismatchError",
+    "SchemaValidationError",
+    "InvariantViolationError",
+    "InvalidModeError",
+    "RustCoreUnavailableError",
+]
+
+
 class RsvsError(Exception):
     """Base exception for RSVS operations."""
     pass

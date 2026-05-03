@@ -22,7 +22,7 @@ fn main() {
         ..PipelineConfig::default()
     };
 
-    let mut rsvs = Rsvs::new(config);
+    let mut rsvs = Rsvs::new(config).expect("Failed to initialize RSVS");
     println!(
         "System initialized. Seed nodes: {}",
         rsvs.graph.node_count()
@@ -64,7 +64,9 @@ fn main() {
         "\n--- Ingesting geology corpus ({} sentences) ---",
         corpus_geo.len()
     );
-    let stats1 = rsvs.ingest_text(&corpus_geo.join(" "));
+    let stats1 = rsvs
+        .ingest_text(&corpus_geo.join(" "))
+        .expect("Ingest failed");
     println!(
         "  sentences: {}  nodes promoted: {}  senses created: {}  updated: {}",
         stats1.sentences_processed,
@@ -95,7 +97,9 @@ fn main() {
         "\n--- Ingesting water corpus ({} sentences) ---",
         corpus_water.len()
     );
-    let stats2 = rsvs.ingest_text(&corpus_water.join(" "));
+    let stats2 = rsvs
+        .ingest_text(&corpus_water.join(" "))
+        .expect("Ingest failed");
     println!(
         "  sentences: {}  nodes promoted: {}  senses created: {}  updated: {}",
         stats2.sentences_processed,

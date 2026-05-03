@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""RSVS backend bridge server — Rust-core integration (v4.2).
+"""DEPRECATED: Use fastapi_server.py instead. This module will be removed in v5.0.
+
+RSVS backend bridge server — Rust-core integration (v4.2).
 
 Mode-aware HTTP bridge for agent/frontend workflows.
 Delegates all computational heavy lifting to the Rust core via PyO3,
@@ -18,6 +20,7 @@ Architecture:
 from __future__ import annotations
 
 import json
+import warnings
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 from typing import Any
@@ -40,6 +43,14 @@ from .exceptions import (
 from .modes import _read_latest_ingest_bundle, _read_latest_mode, _run_mode
 from .rsvs_core import _get_rsvs, _save_rsvs, is_rust_core_available
 from .validation import _normalize_view
+
+
+# Emit deprecation warning when this module is imported
+warnings.warn(
+    "bridge_server is deprecated, use fastapi_server instead",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 
 # ---------------------------------------------------------------------------

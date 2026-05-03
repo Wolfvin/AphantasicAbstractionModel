@@ -8,13 +8,14 @@
 
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{self, BufReader, BufWriter};
+use std::io::{BufReader, BufWriter};
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
 use crate::attention::CoocStats;
 use crate::autonomy::{AtomRecord, AutonomyConfig, AutonomyEngine, MemoryClass};
+use crate::error::RsvsError;
 use crate::graph::RsvsGraph;
 use crate::pipeline::{PipelineConfig, Rsvs};
 use crate::sense::{Sense, SenseConfig, SenseManager, SenseStatus};
@@ -26,6 +27,7 @@ use crate::types::{
 // Serializable mirror types (v4.2 serde-friendly)
 // -----------------------------------------------------------------------
 
+/// Serializable mirror of a `Node` for JSON persistence.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SavedNode {
     pub id: u32,
@@ -44,6 +46,7 @@ pub struct SavedNode {
     pub atoms: Vec<u32>,
 }
 
+/// Serializable mirror of `PolicyMeta` for JSON persistence.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SavedPolicyMeta {
     pub policy_version: String,
@@ -54,6 +57,7 @@ pub struct SavedPolicyMeta {
     pub last_seen_at: Option<String>,
 }
 
+/// Serializable mirror of an `Edge` for JSON persistence.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SavedEdge {
     pub from: u32,
@@ -62,6 +66,7 @@ pub struct SavedEdge {
     pub source: String, // "bootstrap" | "learned"
 }
 
+/// Serializable mirror of a `Sense` for JSON persistence.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SavedSense {
     pub contexts: Vec<Vec<u32>>,
@@ -73,6 +78,7 @@ pub struct SavedSense {
     pub inactivity: usize,
 }
 
+/// Serializable mirror of a `SenseManager` for JSON persistence.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SavedSenseManager {
     pub senses: Vec<SavedSense>,
@@ -80,6 +86,7 @@ pub struct SavedSenseManager {
     pub global_context_count: usize,
 }
 
+/// Serializable mirror of an `AtomRecord` for JSON persistence.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SavedAtomRecord {
     pub id: u32,
@@ -96,6 +103,7 @@ pub struct SavedAtomRecord {
     pub candidate_evidence_pool: f32,
 }
 
+/// Serializable mirror of `CoocStats` for JSON persistence.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SavedCoocStats {
     pub token_count: HashMap<String, usize>,
@@ -104,6 +112,7 @@ pub struct SavedCoocStats {
     pub total_sentences: usize,
 }
 
+/// Serializable mirror of `EntityDetector` for JSON persistence.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SavedEntityDetector {
     pub sentence_count: HashMap<String, usize>,
@@ -195,14 +204,23 @@ fn pair_key(a: &str, b: &str) -> String {
 // Save
 // -----------------------------------------------------------------------
 
-pub fn save(rsvs: &Rsvs, path: &Path) -> io::Result<()> {
+/// Save the full RSVS state to a JSON file.
+///
+/// # Examples
+/// ```ignore
+/// use rsvs::persist;
+/// persist::save(&rsvs, Path::new("rsvs-state.json"))?;
+/// ```
+pub fn save(rsvs: &Rsvs, path: &Path) -> Result<(), RsvsError> {
     let snapshot = to_snapshot(rsvs);
-    let file = File::create(path)?;
+    let file = File::create(path).map_err(|e| RsvsError::Persistence(e.to_string()))?;
     let writer = BufWriter::new(file);
-    serde_json::to_writer_pretty(writer, &snapshot).map_err(io::Error::other)?;
+    serde_json::to_writer_pretty(writer, &snapshot)
+        .map_err(|e| RsvsError::Persistence(e.to_string()))?;
     Ok(())
 }
 
+/// Serialize the RSVS state into a snapshot struct (for programmatic use).
 pub fn to_snapshot(rsvs: &Rsvs) -> RsvsSnapshot {
     // --- Nodes (v4.2) ---
     let nodes: Vec<SavedNode> = rsvs
@@ -346,13 +364,22 @@ pub fn to_snapshot(rsvs: &Rsvs) -> RsvsSnapshot {
 // Load
 // -----------------------------------------------------------------------
 
-pub fn load(path: &Path) -> io::Result<Rsvs> {
-    let file = File::open(path)?;
+/// Load the full RSVS state from a JSON file.
+///
+/// # Examples
+/// ```ignore
+/// use rsvs::persist;
+/// let rsvs = persist::load(Path::new("rsvs-state.json"))?;
+/// ```
+pub fn load(path: &Path) -> Result<Rsvs, RsvsError> {
+    let file = File::open(path).map_err(|e| RsvsError::Persistence(e.to_string()))?;
     let reader = BufReader::new(file);
-    let snapshot: RsvsSnapshot = serde_json::from_reader(reader).map_err(io::Error::other)?;
+    let snapshot: RsvsSnapshot =
+        serde_json::from_reader(reader).map_err(|e| RsvsError::Persistence(e.to_string()))?;
     Ok(from_snapshot(snapshot))
 }
 
+/// Reconstruct an `Rsvs` instance from a deserialized snapshot.
 pub fn from_snapshot(snap: RsvsSnapshot) -> Rsvs {
     // Rebuild config from snapshot
     let config = PipelineConfig {

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "schedule": ["every weekend"],
+  "packageRules": [
+    {
+      "groupName": "rust dependencies",
+      "matchManagers": ["cargo"],
+      "schedule": ["every weekend"]
+    },
+    {
+      "groupName": "python dependencies",
+      "matchManagers": ["pip_requirements", "pyproject"],
+      "schedule": ["every weekend"]
+    },
+    {
+      "groupName": "npm dependencies",
+      "matchManagers": ["npm"],
+      "schedule": ["every weekend"]
+    }
+  ],
+  "labels": ["dependencies"],
+  "reviewers": ["Wolfvin"]
+}

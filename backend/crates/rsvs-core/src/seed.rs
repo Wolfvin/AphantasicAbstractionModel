@@ -5,6 +5,7 @@
 //! is_seed=true, is_locked=true, and cannot be removed.
 //! All nodes above the seed layer emerge from data.
 
+use crate::error::RsvsError;
 use crate::graph::RsvsGraph;
 use crate::types::{CompressionState, Node, NodeId, NodeStatus, SemanticMeta, Tier};
 use std::collections::HashMap;
@@ -39,7 +40,7 @@ const SEED_ATOMS: &[&str] = &[
 
 /// Bootstrap the graph with all 24 seed nodes (v4.2 format).
 /// Returns a map of label → NodeId for external reference.
-pub fn bootstrap(graph: &mut RsvsGraph) -> HashMap<String, NodeId> {
+pub fn bootstrap(graph: &mut RsvsGraph) -> Result<HashMap<String, NodeId>, RsvsError> {
     let mut label_map = HashMap::new();
 
     for label in SEED_ATOMS {
@@ -67,14 +68,8 @@ pub fn bootstrap(graph: &mut RsvsGraph) -> HashMap<String, NodeId> {
             fingerprint: None,
         };
 
-        match graph.insert_node(node) {
-            Ok(id) => {
-                label_map.insert(label.to_string(), id);
-            }
-            Err(e) => {
-                panic!("Failed to seed node '{}': {}", label, e);
-            }
-        }
+        let id = graph.insert_node(node)?;
+        label_map.insert(label.to_string(), id);
     }
 
     assert_eq!(
@@ -84,7 +79,7 @@ pub fn bootstrap(graph: &mut RsvsGraph) -> HashMap<String, NodeId> {
         SEED_ATOMS.len()
     );
 
-    label_map
+    Ok(label_map)
 }
 
 /// Public list of seed atom labels — used by pipeline for grounding checks.
@@ -122,7 +117,7 @@ mod tests {
     #[test]
     fn seed_count_is_correct() {
         let mut graph = RsvsGraph::new();
-        let map = bootstrap(&mut graph);
+        let map = bootstrap(&mut graph).unwrap();
         assert_eq!(map.len(), 24);
         assert_eq!(graph.node_count(), 24);
     }
@@ -130,7 +125,7 @@ mod tests {
     #[test]
     fn all_seed_nodes_are_tier1_and_stable() {
         let mut graph = RsvsGraph::new();
-        let map = bootstrap(&mut graph);
+        let map = bootstrap(&mut graph).unwrap();
         for id in map.values() {
             let node = graph.get_node(*id).unwrap();
             assert_eq!(node.tier, Tier::Tier1);
@@ -144,7 +139,7 @@ mod tests {
     #[test]
     fn seed_nodes_have_surface_label_format() {
         let mut graph = RsvsGraph::new();
-        let map = bootstrap(&mut graph);
+        let map = bootstrap(&mut graph).unwrap();
         for id in map.values() {
             let node = graph.get_node(*id).unwrap();
             assert!(
@@ -158,7 +153,7 @@ mod tests {
     #[test]
     fn seed_nodes_have_correct_labels() {
         let mut graph = RsvsGraph::new();
-        let map = bootstrap(&mut graph);
+        let map = bootstrap(&mut graph).unwrap();
         assert!(map.contains_key("exists"));
         assert!(map.contains_key("entity"));
         assert!(map.contains_key("relation"));
@@ -168,7 +163,7 @@ mod tests {
     #[test]
     fn seed_nodes_are_raw_compression() {
         let mut graph = RsvsGraph::new();
-        let map = bootstrap(&mut graph);
+        let map = bootstrap(&mut graph).unwrap();
         for id in map.values() {
             let node = graph.get_node(*id).unwrap();
             assert_eq!(node.semantic.compression_state, CompressionState::Raw);

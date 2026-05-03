@@ -21,6 +21,7 @@ use std::path::Path;
 // -----------------------------------------------------------------------
 
 #[derive(Debug, Clone)]
+/// Configuration for the hard-attention scoring mechanism.
 pub struct AttentionConfig {
     /// Weight for NPMI term
     pub alpha: f32,
@@ -94,6 +95,7 @@ impl AttentionConfig {
 // Statistics store — tracks counts needed for NPMI and cooc
 // -----------------------------------------------------------------------
 
+/// Co-occurrence statistics store — tracks counts needed for NPMI and cooc.
 #[derive(Debug, Default)]
 pub struct CoocStats {
     /// count(t) — how many times token t appears across all sentences
@@ -110,6 +112,7 @@ pub struct CoocStats {
 }
 
 impl CoocStats {
+    /// Create a new empty statistics store.
     pub fn new() -> Self {
         Self::default()
     }
@@ -188,6 +191,7 @@ impl CoocStats {
         (pmi / norm).clamp(-1.0, 1.0) as f32
     }
 
+    /// Return the raw co-occurrence count for a token pair.
     pub fn pair_cooc_count(&self, t: &str, c: &str) -> usize {
         self.pair_count
             .get(&ordered_pair(t, c))
@@ -208,25 +212,48 @@ fn ordered_pair(a: &str, b: &str) -> (String, String) {
 // Attention scorer
 // -----------------------------------------------------------------------
 
+/// A scored candidate from the attention mechanism.
 #[derive(Debug, Clone)]
 pub struct ScoredCandidate {
+    /// The candidate token string.
     pub token: String,
+    /// Combined attention score.
     pub score: f32,
+    /// NPMI component of the score.
     pub npmi: f32,
+    /// Jaccard component of the score.
     pub jaccard: f32,
+    /// Co-occurrence component of the score.
     pub cooc: f32,
 }
 
+/// The RSVS hard-attention scorer.
+///
+/// Computes `score(t, c) = α·NPMI + β·Jaccard + γ·cooc` and selects
+/// top-k candidates per token.
 pub struct RsvsAttention {
+    /// Attention configuration.
     pub config: AttentionConfig,
 }
 
 impl RsvsAttention {
+    /// Create a new attention scorer with the given configuration.
     pub fn new(config: AttentionConfig) -> Self {
         Self { config }
     }
 
-    /// Score all (token, candidate) pairs in a sentence.
+    /// Compute hard-attention scores for all (token, candidate) pairs in a sentence.
+    ///
+    /// Score = α·NPMI + β·Jaccard + γ·cooc (sparse, deterministic, interpretable).
+    /// Returns a map from each token to its top-k scored candidates.
+    ///
+    /// # Examples
+    /// ```ignore
+    /// let scored = attention.select(&tokens, &stats, &atom_sets);
+    /// for (token, candidates) in &scored {
+    ///     println!("{}: top score = {:.3}", token, candidates[0].score);
+    /// }
+    /// ```
     pub fn select(
         &self,
         tokens: &[String],
@@ -325,7 +352,7 @@ pub fn text_to_sentences(text: &str) -> Vec<Vec<String>> {
 // EntityDetector — bootstrap rule-based (N>=3 contexts + groundable)
 // -----------------------------------------------------------------------
 
-/// Tracks candidate entities for promotion to ID.
+/// Tracks candidate entities for promotion to nodes.
 #[derive(Debug, Default)]
 pub struct EntityDetector {
     /// token → number of distinct sentences it appeared in
@@ -335,6 +362,7 @@ pub struct EntityDetector {
 }
 
 impl EntityDetector {
+    /// Create a new entity detector.
     pub fn new() -> Self {
         Self::default()
     }
@@ -347,7 +375,7 @@ impl EntityDetector {
         }
     }
 
-    /// Return tokens that qualify for ID promotion.
+    /// Return tokens that qualify for node promotion (N >= threshold and groundable).
     pub fn candidates(&self, n_threshold: usize) -> Vec<String> {
         self.sentence_count
             .iter()
@@ -363,6 +391,7 @@ impl EntityDetector {
 // Grounding check
 // -----------------------------------------------------------------------
 
+/// Check whether a token is groundable to any seed atom.
 pub fn is_groundable_to_seeds(token: &str, seed_labels: &[&str]) -> bool {
     for seed in seed_labels {
         if token.contains(seed) || seed.contains(token) {

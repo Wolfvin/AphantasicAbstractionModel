@@ -1,7 +1,8 @@
-"""RSVS Rust core singleton management."""
+"""RSVS Rust core singleton management — thread-safe."""
 
 from __future__ import annotations
 
+import threading
 from typing import Any
 
 from .config import CONFIG, RSVS_STATE_PATH
@@ -23,14 +24,52 @@ except Exception:
     _RSVS_AVAILABLE = False
 
 
-# Module-level singleton state
-_rsvs_instance: Any | None = None
+# ---------------------------------------------------------------------------
+# Thread-safe singleton state
+# ---------------------------------------------------------------------------
+
+_lock = threading.Lock()
+_instance: Any | None = None
 _last_ingest_seq: int = 0  # track seq for event consumption
+
+
+def _create_instance() -> Any:
+    """Create or load an Rsvs instance. Must be called with _lock held."""
+    if not _RSVS_AVAILABLE:
+        return None
+
+    # Try to load from saved state
+    if RSVS_STATE_PATH.exists():
+        try:
+            inst = _Rsvs.load(str(RSVS_STATE_PATH))  # type: ignore[union-attr]
+            global _last_ingest_seq
+            _last_ingest_seq = inst.latest_seq_v1()
+            print(f"[bridge] Loaded Rsvs state from {RSVS_STATE_PATH} "
+                  f"(seq={_last_ingest_seq})")
+            return inst
+        except Exception as exc:
+            print(f"[bridge] WARNING: Failed to load Rsvs state: {exc}")
+            print("[bridge] Creating fresh Rsvs instance instead.")
+
+    # Fresh instance
+    _last_ingest_seq = 0
+    print("[bridge] Created fresh Rsvs instance")
+    return _Rsvs()  # type: ignore[misc]
 
 
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
+__all__ = [
+    "get_rsvs_instance",
+    "is_rust_core_available",
+    "require_rust_core",
+    "_get_rsvs",
+    "_save_rsvs",
+    "_get_last_ingest_seq",
+    "_set_last_ingest_seq",
+]
 
 
 def is_rust_core_available() -> bool:
@@ -38,36 +77,44 @@ def is_rust_core_available() -> bool:
     return _RSVS_AVAILABLE
 
 
-def _get_rsvs() -> Any:
+def get_rsvs_instance() -> Any:
     """Return the singleton Rsvs instance, creating or loading as needed.
 
-    Returns None if the Rust core is not available.
+    Thread-safe double-checked locking pattern.
+    Raises RustCoreUnavailableError if the Rust core is not available.
     """
-    global _rsvs_instance, _last_ingest_seq
+    global _instance
 
-    if _rsvs_instance is not None:
-        return _rsvs_instance
+    if _instance is not None:
+        return _instance
+
+    with _lock:
+        if _instance is None:
+            _instance = _create_instance()
+        if _instance is None:
+            raise RustCoreUnavailableError(
+                "Rust core is not available. Build with `maturin develop`."
+            )
+        return _instance
+
+
+def _get_rsvs() -> Any:
+    """Return the singleton Rsvs instance, or None if unavailable.
+
+    Backward-compatible accessor used by bridge_server.py.
+    """
+    global _instance
+
+    if _instance is not None:
+        return _instance
 
     if not _RSVS_AVAILABLE:
         return None
 
-    # Try to load from saved state
-    if RSVS_STATE_PATH.exists():
-        try:
-            _rsvs_instance = _Rsvs.load(str(RSVS_STATE_PATH))
-            _last_ingest_seq = _rsvs_instance.latest_seq_v1()
-            print(f"[bridge] Loaded Rsvs state from {RSVS_STATE_PATH} "
-                  f"(seq={_last_ingest_seq})")
-            return _rsvs_instance
-        except Exception as exc:
-            print(f"[bridge] WARNING: Failed to load Rsvs state: {exc}")
-            print("[bridge] Creating fresh Rsvs instance instead.")
-
-    # Fresh instance
-    _rsvs_instance = _Rsvs()
-    _last_ingest_seq = 0
-    print("[bridge] Created fresh Rsvs instance")
-    return _rsvs_instance
+    with _lock:
+        if _instance is None:
+            _instance = _create_instance()
+        return _instance
 
 
 def _save_rsvs() -> None:
@@ -95,9 +142,4 @@ def _set_last_ingest_seq(seq: int) -> None:
 
 def require_rust_core() -> Any:
     """Return the Rsvs instance or raise RustCoreUnavailableError."""
-    r = _get_rsvs()
-    if r is None:
-        raise RustCoreUnavailableError(
-            "Rust core is not available. Build with `maturin develop`."
-        )
-    return r
+    return get_rsvs_instance()

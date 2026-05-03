@@ -7,6 +7,15 @@ from typing import Any
 from .config import SCHEMA_VERSION, iso_now, make_id
 
 
+__all__ = [
+    "_project_node",
+    "_convert_rust_node",
+    "_convert_rust_edge",
+    "_convert_rust_event",
+    "_build_bridge_snapshot",
+]
+
+
 # ---------------------------------------------------------------------------
 # View projection
 # ---------------------------------------------------------------------------

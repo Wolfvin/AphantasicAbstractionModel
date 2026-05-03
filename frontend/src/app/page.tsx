@@ -8,6 +8,8 @@ import TimelineBar from '@/components/rsvs/TimelineBar';
 import GraphHUD from '@/components/rsvs/GraphHUD';
 import { useUIStore, useGraphStore, useAnimationStore, useTimelineStore, useChatStore } from '@/store/rsvsStore';
 import { fetchLatestFromBackend } from '@/lib/backendBridge';
+// Mock data is only used as a fallback when the backend is unreachable.
+// In production, the backend is the sole data source.
 import { generateTimelineEvents } from '@/lib/mockData';
 
 // Dynamic import for Three.js canvas (SSR-incompatible)

@@ -4,7 +4,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::types::NodeId;
 
+/// API version string for event contracts.
 pub const API_VERSION: &str = "v1";
+/// Schema version string for event contracts.
 pub const SCHEMA_VERSION: &str = "v4.2";
 
 /// Runtime node info (v4.2: unified model)
@@ -25,6 +27,7 @@ pub struct RuntimeNode {
     pub coherence: Option<f32>,
 }
 
+/// Runtime edge info (v4.2).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RuntimeEdge {
     pub id: String,
@@ -34,6 +37,7 @@ pub struct RuntimeEdge {
     pub source_type: String,
 }
 
+/// Full graph snapshot for external consumers (v4.2).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RuntimeSnapshot {
     pub api_version: String,
@@ -44,6 +48,7 @@ pub struct RuntimeSnapshot {
     pub edges: Vec<RuntimeEdge>,
 }
 
+/// A single runtime event in the event stream.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RuntimeEvent {
     pub api_version: String,
@@ -54,6 +59,7 @@ pub struct RuntimeEvent {
     pub payload: serde_json::Value,
 }
 
+/// A batch of runtime events returned from a poll.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EventBatch {
     pub api_version: String,

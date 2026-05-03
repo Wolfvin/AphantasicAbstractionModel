@@ -17,6 +17,7 @@ use crate::attention::{
     RsvsAttention,
 };
 use crate::autonomy::{AutonomyConfig, AutonomyEngine, ConfidenceUpdateResult};
+use crate::error::RsvsError;
 use crate::events::{
     EventBatch, RuntimeEdge, RuntimeEvent, RuntimeNode, RuntimeSnapshot, API_VERSION,
     SCHEMA_VERSION,
@@ -27,6 +28,7 @@ use crate::sense::{IngestResult, SenseConfig, SenseManager};
 use crate::types::{
     CompressionState, Edge, EdgeSource, Node, NodeId, NodeStatus, PolicyMeta, SemanticMeta, Tier,
 };
+use rayon::prelude::*;
 use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::path::Path;
@@ -36,6 +38,7 @@ use std::path::Path;
 // -----------------------------------------------------------------------
 
 #[derive(Debug, Clone)]
+/// All tunable knobs for the RSVS pipeline in one place.
 pub struct PipelineConfig {
     pub attention: AttentionConfig,
     pub sense: SenseConfig,
@@ -78,6 +81,7 @@ impl Default for PipelineConfig {
 // -----------------------------------------------------------------------
 
 #[derive(Debug, Default)]
+/// Statistics returned from a single `ingest_text()` call.
 pub struct IngestStats {
     pub sentences_processed: usize,
     pub atoms_promoted: usize,
@@ -93,6 +97,7 @@ pub struct IngestStats {
 // -----------------------------------------------------------------------
 
 #[derive(Debug, Clone)]
+/// Output of a context-aware query.
 pub struct QueryResult {
     pub active_sense_idx: usize,
     pub active_sense_n: usize,
@@ -104,6 +109,7 @@ pub struct QueryResult {
 // -----------------------------------------------------------------------
 
 #[derive(Debug, Clone)]
+/// v4.2 appraise mode output: agree/disagree percentages, verdict, and evidence.
 pub struct AppraiseResult {
     pub agree_pct: f32,               // % of tokens found in graph
     pub disagree_pct: f32,            // % of tokens NOT found
@@ -116,6 +122,7 @@ pub struct AppraiseResult {
 // -----------------------------------------------------------------------
 
 #[derive(Debug, Clone)]
+/// v4.2 relate mode output: related nodes and edges by overlap scoring.
 pub struct RelateResult {
     pub related_nodes: Vec<(NodeId, f32)>, // (node_id, overlap_score)
     pub related_edges: Vec<(NodeId, NodeId, f32)>, // (from, to, weight)
@@ -125,6 +132,10 @@ pub struct RelateResult {
 // Rsvs — the main system struct (v4.2)
 // -----------------------------------------------------------------------
 
+/// The main RSVS system struct (v4.2).
+///
+/// Holds the knowledge graph, sense managers, autonomy engine, co-occurrence
+/// statistics, entity detector, and attention scorer.
 pub struct Rsvs {
     pub graph: RsvsGraph,
     pub senses: HashMap<NodeId, SenseManager>,
@@ -148,14 +159,19 @@ pub struct Rsvs {
 }
 
 impl Rsvs {
-    /// Create a new RSVS instance and bootstrap seed nodes.
-    pub fn new(config: PipelineConfig) -> Self {
+    /// Create a new RSVS instance and bootstrap the 24 seed atoms.
+    ///
+    /// # Examples
+    /// ```ignore
+    /// let mut rsvs = Rsvs::new(PipelineConfig::default())?;
+    /// ```
+    pub fn new(config: PipelineConfig) -> Result<Self, RsvsError> {
         let mut graph = RsvsGraph::new();
         let mut autonomy = AutonomyEngine::new(config.autonomy.clone());
         let attention = RsvsAttention::new(config.attention.clone());
 
         // Bootstrap seed nodes (v4.2 format)
-        let seed_map = seed::bootstrap(&mut graph);
+        let seed_map = seed::bootstrap(&mut graph)?;
         let mut token_to_id: HashMap<String, NodeId> = HashMap::new();
 
         for (label, &id) in &seed_map {
@@ -174,7 +190,7 @@ impl Rsvs {
             atom_sets.insert(label.clone(), vec![id]);
         }
 
-        Self {
+        Ok(Self {
             graph,
             senses,
             autonomy,
@@ -189,7 +205,7 @@ impl Rsvs {
             ingest_counter: 0,
             event_retention: 10_000,
             events: VecDeque::new(),
-        }
+        })
     }
 
     fn next_correlation_id(&mut self) -> String {
@@ -308,7 +324,18 @@ impl Rsvs {
     // Main entry: ingest a block of text (v4.2 mode: ingest)
     // -----------------------------------------------------------------------
 
-    pub fn ingest_text(&mut self, text: &str) -> IngestStats {
+    /// Ingest raw text into the knowledge graph.
+    ///
+    /// Runs the full pipeline: tokenize → co-occurrence → entity detection →
+    /// node promotion → attention scoring → sense assignment → confidence update →
+    /// stability check.
+    ///
+    /// # Examples
+    /// ```ignore
+    /// let mut rsvs = Rsvs::new(PipelineConfig::default())?;
+    /// rsvs.ingest_text("Stone is hard and solid. Rock is heavy.")?;
+    /// ```
+    pub fn ingest_text(&mut self, text: &str) -> Result<IngestStats, RsvsError> {
         let mut stats = IngestStats::default();
         let correlation_id = self.next_correlation_id();
         self.emit_event(
@@ -323,25 +350,31 @@ impl Rsvs {
 
         let sentences = text_to_sentences(text);
         if sentences.is_empty() {
-            return stats;
+            return Ok(stats);
         }
 
         // --- Step 1: Update co-occurrence statistics ---
-        for tokens in &sentences {
+        // Use rayon for parallel entity detection across sentences
+        let seed_refs: Vec<&str> = self.config.seed_labels.iter().map(|s| s.as_str()).collect();
+        let entity_records: Vec<Vec<(String, bool)>> = sentences
+            .par_iter()
+            .map(|tokens| {
+                tokens
+                    .iter()
+                    .map(|token| {
+                        let groundable = is_groundable_to_seeds(token, &seed_refs);
+                        (token.clone(), groundable)
+                    })
+                    .collect()
+            })
+            .collect();
+
+        for (tokens, records) in sentences.iter().zip(entity_records.iter()) {
             self.stats_db.ingest_sentence(tokens);
             stats.sentences_processed += 1;
 
-            for token in tokens {
-                let groundable = is_groundable_to_seeds(
-                    token,
-                    &self
-                        .config
-                        .seed_labels
-                        .iter()
-                        .map(|s| s.as_str())
-                        .collect::<Vec<_>>(),
-                );
-                self.entities.record(token, groundable);
+            for (token, groundable) in records {
+                self.entities.record(token, *groundable);
             }
         }
 
@@ -352,39 +385,36 @@ impl Rsvs {
                 continue;
             }
 
-            let id = self
-                .graph
-                .insert_node(Node {
-                    id: 0,
-                    label: token.clone(),
-                    surface_label: format!("{}@en", token),
+            let id = self.graph.insert_node(Node {
+                id: 0,
+                label: token.clone(),
+                surface_label: format!("{}@en", token),
 
-                    kind: "node".to_string(),
-                    tier: Tier::Tier2,
-                    confidence: 0.50,
-                    status: NodeStatus::Candidate,
-                    is_seed: false,
-                    is_locked: false,
+                kind: "node".to_string(),
+                tier: Tier::Tier2,
+                confidence: 0.50,
+                status: NodeStatus::Candidate,
+                is_seed: false,
+                is_locked: false,
 
-                    semantic: SemanticMeta {
-                        compression_state: CompressionState::Raw,
-                        derived_from_node_ids: vec![],
-                        compression_reason: None,
-                    },
-                    policy_meta: Some(PolicyMeta {
-                        policy_version: "4.2".to_string(),
-                        governance_score: 0.0,
-                        candidate_evidence_pool: 0.0,
-                        status_flip_count: 0,
-                        seen_fingerprints: vec![],
-                        last_seen_at: None,
-                    }),
-                    language_links: vec![],
+                semantic: SemanticMeta {
+                    compression_state: CompressionState::Raw,
+                    derived_from_node_ids: vec![],
+                    compression_reason: None,
+                },
+                policy_meta: Some(PolicyMeta {
+                    policy_version: "4.2".to_string(),
+                    governance_score: 0.0,
+                    candidate_evidence_pool: 0.0,
+                    status_flip_count: 0,
+                    seen_fingerprints: vec![],
+                    last_seen_at: None,
+                }),
+                language_links: vec![],
 
-                    atoms: vec![],
-                    fingerprint: None,
-                })
-                .unwrap();
+                atoms: vec![],
+                fingerprint: None,
+            })?;
 
             self.autonomy.register(id, 0.50, Tier::Tier2);
             self.token_to_id.insert(token.clone(), id);
@@ -509,7 +539,7 @@ impl Rsvs {
                         match t.unwrap_or(Tier::Tier3) {
                             Tier::Tier1 => 1,
                             Tier::Tier2 => 2,
-                            Tier::Tier3 => 3,
+                            _ => 3,
                         }
                     };
                     self.emit_event(
@@ -574,7 +604,7 @@ impl Rsvs {
                 "watchlist_additions": stats.watchlist_additions
             }),
         );
-        stats
+        Ok(stats)
     }
 
     // -----------------------------------------------------------------------
@@ -619,7 +649,7 @@ impl Rsvs {
                 continue;
             }
 
-            cooc_nodes.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+            cooc_nodes.sort_by(|a, b| b.1.total_cmp(&a.1));
             cooc_nodes.truncate(8);
 
             let atom_ids: Vec<NodeId> = cooc_nodes.iter().map(|(id, _)| *id).collect();
@@ -753,7 +783,7 @@ impl Rsvs {
             })
             .collect();
 
-        scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        scored.sort_by(|a, b| b.1.total_cmp(&a.1));
 
         Some(QueryResult {
             active_sense_idx,
@@ -776,7 +806,18 @@ impl Rsvs {
     // v4.2: Appraise — evaluate text against graph
     // -----------------------------------------------------------------------
 
-    /// Evaluate text against the graph. Returns agree/disagree %, verdict, evidence.
+    /// Evaluate text against the graph.
+    ///
+    /// Returns agree/disagree percentages, a verdict ("consistent", "partial", or "novel"),
+    /// and per-token evidence with confidence scores.
+    ///
+    /// # Examples
+    /// ```ignore
+    /// let mut rsvs = Rsvs::new(PipelineConfig::default())?;
+    /// rsvs.ingest_text("Stone is hard and solid.")?;
+    /// let result = rsvs.appraise("Stone is hard");
+    /// println!("Verdict: {}", result.verdict);
+    /// ```
     pub fn appraise(&self, text: &str) -> AppraiseResult {
         let tokens = crate::attention::tokenize(text);
         if tokens.is_empty() {
@@ -813,7 +854,7 @@ impl Rsvs {
         .to_string();
 
         // Sort evidence by confidence descending
-        evidence.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        evidence.sort_by(|a, b| b.1.total_cmp(&a.1));
 
         AppraiseResult {
             agree_pct,
@@ -828,21 +869,38 @@ impl Rsvs {
     // -----------------------------------------------------------------------
 
     /// Find nodes and edges related to the given concept by overlap scoring.
+    ///
+    /// Uses Jaccard similarity (parallelized with rayon) to rank related nodes,
+    /// and collects both outgoing and incoming edges involving the concept.
+    ///
+    /// # Examples
+    /// ```ignore
+    /// let mut rsvs = Rsvs::new(PipelineConfig::default())?;
+    /// rsvs.ingest_text("Stone is hard. Rock is heavy.")?;
+    /// if let Some(result) = rsvs.relate("stone") {
+    ///     println!("Found {} related nodes", result.related_nodes.len());
+    /// }
+    /// ```
     pub fn relate(&self, concept: &str) -> Option<RelateResult> {
         let concept_id = *self.token_to_id.get(concept)?;
 
-        // Find related nodes by Jaccard similarity
-        let mut related_nodes: Vec<(NodeId, f32)> = Vec::new();
-        for &other_id in self.graph.nodes.keys() {
-            if other_id == concept_id {
-                continue;
-            }
-            let jaccard = self.graph.jaccard_atom_sets(concept_id, other_id);
-            if jaccard > 0.0 {
-                related_nodes.push((other_id, jaccard));
-            }
-        }
-        related_nodes.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        // Find related nodes by Jaccard similarity (parallelized with rayon)
+        let node_ids: Vec<NodeId> = self.graph.nodes.keys().copied().collect();
+        let related_nodes: Vec<(NodeId, f32)> = node_ids
+            .par_iter()
+            .filter(|&&other_id| other_id != concept_id)
+            .filter_map(|&other_id| {
+                let jaccard = self.graph.jaccard_atom_sets(concept_id, other_id);
+                if jaccard > 0.0 {
+                    Some((other_id, jaccard))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        let mut related_nodes = related_nodes;
+        related_nodes.sort_by(|a, b| b.1.total_cmp(&a.1));
         related_nodes.truncate(20);
 
         // Find related edges involving this concept
@@ -877,7 +935,7 @@ impl Rsvs {
             }
         }
 
-        related_edges.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap());
+        related_edges.sort_by(|a, b| b.2.total_cmp(&a.2));
         related_edges.truncate(30);
 
         Some(RelateResult {
@@ -890,6 +948,7 @@ impl Rsvs {
     // Status report
     // -----------------------------------------------------------------------
 
+    /// Return a status report with key pipeline metrics.
     pub fn status(&self) -> PipelineStatus {
         PipelineStatus {
             total_nodes: self.graph.node_count(),
@@ -905,6 +964,7 @@ impl Rsvs {
 }
 
 #[derive(Debug)]
+/// Key pipeline metrics at a point in time.
 pub struct PipelineStatus {
     pub total_nodes: usize,
     pub total_atoms: usize,

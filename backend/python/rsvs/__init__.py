@@ -40,6 +40,10 @@ except ImportError:
     pass
 
 __all__ = [
+    "__version__",
+    "__schema_version__",
+    "__api_version__",
+    # Rust core types
     "Rsvs",
     "IngestStats",
     "IngestMetaV1",
@@ -51,19 +55,29 @@ __all__ = [
     "NodeInfo",
     "AppraiseResult",
     "RelateResult",
+    # Bridge modules (lazy-loaded)
+    "get_rsvs_instance",
+    "run_mode",
+    "cli_main",
+    "DOMAINS",
+    "get_domain_text",
+    "get_all_text",
+    "domain_names",
 ]
 
 from .cli import main as cli_main
 
-__all__ += ["cli_main"]
-
 from .corpus import DOMAINS, get_domain_text, get_all_text, domain_names
-
-__all__ += ["DOMAINS", "get_domain_text", "get_all_text", "domain_names"]
 
 
 def __getattr__(name):
     """Lazy imports for modules that depend on Rsvs (avoid circular import)."""
+    if name == "get_rsvs_instance":
+        from .rsvs_core import get_rsvs_instance
+        return get_rsvs_instance
+    if name == "run_mode":
+        from .modes import run_mode
+        return run_mode
     if name == "ingest_domains":
         from .ingest_wiki import ingest_domains
         return ingest_domains

@@ -39,7 +39,8 @@ import { cn } from '@/lib/utils';
 import { useChatStore, useUIStore, useGraphStore, useTimelineStore, useModeResultStore } from '@/store/rsvsStore';
 import { generateChatMessages, generateTimelineEvents } from '@/lib/mockData';
 import { runModeToBackend } from '@/lib/backendBridge';
-import type { ChatMessage, MessageType } from '@/lib/types';
+import type { ChatMessage, MessageType, AppraiseResult, RelateResult } from '@/lib/types';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 // ── Relative Time ──
 
@@ -390,12 +391,12 @@ export default function LeftInputRail({
   const [activeMode, setActiveMode] = useState<RSVSMode>('ingest');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const isMobile = false; // Could use useIsMobile() from hooks if needed
+  const isMobile = useIsMobile();
 
-  // ── Load mock data on first mount if store is empty ──
+  // ── Load mock data on first mount if store is empty (development/demo only) ──
   const hasInitialized = useRef(false);
   useEffect(() => {
-    if (!hasInitialized.current && messages.length === 0) {
+    if (!hasInitialized.current && messages.length === 0 && process.env.NODE_ENV === 'development') {
       const mockMessages = generateChatMessages();
       mockMessages.forEach((msg) => addMessage(msg));
       hasInitialized.current = true;
@@ -428,7 +429,9 @@ export default function LeftInputRail({
     adjustTextareaHeight();
   }, [inputValue, adjustTextareaHeight]);
 
-  // ── Simulated system response ──
+  // ── Simulated system response (development/demo only) ──
+  // This fallback is only used when the backend is unreachable in development mode.
+  // In production, the backend is required and this function should never be called.
   const ingestTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const simulateIngestResponse = useCallback(
@@ -535,12 +538,12 @@ export default function LeftInputRail({
       }
 
       if (parsed.mode === 'appraise') {
-        const appraiseResult = (res.result as any) as import('@/lib/types').AppraiseResult | undefined;
+        const appraiseResult = res.result as AppraiseResult | undefined;
         if (appraiseResult?.verdict) {
           useModeResultStore.getState().setAppraiseResult(appraiseResult);
         }
-        const stance = appraiseResult?.stance || { agree: 0, disagree: 0, neutral: 0 };
-        const verdict = appraiseResult?.verdict || 'mixed';
+        const stance = appraiseResult?.stance ?? { agree: 0, disagree: 0, neutral: 0 };
+        const verdict = appraiseResult?.verdict ?? 'mixed';
         addMessage({
           id: `resp_${correlationId}_appraise`,
           type: 'system_ingest_status',
@@ -552,7 +555,7 @@ export default function LeftInputRail({
       }
 
       if (parsed.mode === 'relate') {
-        const relateResult = (res.result as any) as import('@/lib/types').RelateResult | undefined;
+        const relateResult = res.result as RelateResult | undefined;
         if (relateResult?.related_nodes) {
           useModeResultStore.getState().setRelateResult(relateResult);
         }
@@ -571,8 +574,10 @@ export default function LeftInputRail({
       (res.messages || []).forEach((msg) => addMessage({ ...msg, mode: parsed.mode }));
       setLoading(false);
     } catch {
-      // Backend not ready/unreachable: fallback to local simulation.
-      if (parsed.mode === 'ingest') {
+      // Backend not ready/unreachable.
+      // In development mode, simulate an ingest response for demo purposes.
+      // In production, show an error message.
+      if (parsed.mode === 'ingest' && process.env.NODE_ENV === 'development') {
         simulateIngestResponse(correlationId);
       } else {
         addMessage({

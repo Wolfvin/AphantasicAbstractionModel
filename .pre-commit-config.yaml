@@ -1,0 +1,81 @@
+# ──────────────────────────────────────────────────────────────────────
+#  SymbolicPuzzle3D — Pre-commit hooks
+#  Install:  pip install pre-commit && pre-commit install
+#  Run all:  pre-commit run --all-files
+# ──────────────────────────────────────────────────────────────────────
+
+default_install_hook_types:
+  - pre-commit
+  - commit-msg
+
+repos:
+  # ── General file checks ─────────────────────────────────────────────
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        args: [--fix]
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-json
+      - id: check-added-large-files
+        args: [--maxkb=512]
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: detect-private-key
+      - id: no-commit-to-branch
+        args: [--branch, main]
+
+  # ── Rust: rustfmt ──────────────────────────────────────────────────
+  - repo: local
+    hooks:
+      - id: cargo-fmt
+        name: cargo fmt
+        entry: bash -c 'cd backend && cargo fmt --all -- --check'
+        language: system
+        types: [rust]
+        pass_filenames: false
+
+  # ── Rust: clippy ───────────────────────────────────────────────────
+  - repo: local
+    hooks:
+      - id: cargo-clippy
+        name: cargo clippy
+        entry: bash -c 'cd backend && cargo clippy --all-targets -- -D warnings'
+        language: system
+        types: [rust]
+        pass_filenames: false
+
+  # ── Python: ruff lint ──────────────────────────────────────────────
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.6
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+        files: ^backend/python/
+
+  # ── Python: ruff format ────────────────────────────────────────────
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.6
+    hooks:
+      - id: ruff-format
+        files: ^backend/python/
+
+  # ── JS/TS: prettier ────────────────────────────────────────────────
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: v4.0.0-alpha.8
+    hooks:
+      - id: prettier
+        types_or: [javascript, jsx, ts, tsx, json, css, markdown]
+        files: ^frontend/
+        additional_dependencies:
+          - prettier@3.4.2
+
+  # ── Conventional commits ───────────────────────────────────────────
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v4.0.0
+    hooks:
+      - id: conventional-pre-commit
+        stages: [commit-msg]
+        args: [feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert]

@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useTimelineStore, useGraphStore, useChatStore, useUIStore } from '@/store/rsvsStore';
 import { generateInitialSnapshot, generateEventStream, generateChatMessages, generateTimelineEvents } from '@/lib/mockData';
-import type { RSVSEvent } from '@/lib/types';
+import type { RSVSEvent, RSVSNode, RSVSEdge } from '@/lib/types';
 
 const EVENT_COLORS: Record<string, string> = {
   atom_created: '#69F0AE',
@@ -213,23 +213,29 @@ export function DemoControls() {
 
       // Apply event to graph
       switch (evt.event_type) {
-        case 'atom_created':
-          if (evt.payload.node && evt.payload.node.id) {
-            addNode(evt.payload.node as any);
+        case 'atom_created': {
+          // Demo events always contain complete node objects
+          const node = evt.payload.node as RSVSNode | undefined;
+          if (node?.id) {
+            addNode(node);
           }
           break;
-        case 'edge_created':
-          if (evt.payload.edge) {
-            addEdge(evt.payload.edge as any);
+        }
+        case 'edge_created': {
+          const edge = evt.payload.edge as RSVSEdge | undefined;
+          if (edge) {
+            addEdge(edge);
           }
           break;
-        case 'confidence_changed':
-          if (evt.payload.node?.id && evt.payload.after) {
-            updateNode(evt.payload.node.id as number, {
-              confidence: evt.payload.after.confidence as number,
-            });
+        }
+        case 'confidence_changed': {
+          const nodeId = evt.payload.node?.id;
+          const newConf = evt.payload.after?.confidence;
+          if (nodeId != null && newConf != null) {
+            updateNode(nodeId, { confidence: newConf });
           }
           break;
+        }
       }
     });
 
