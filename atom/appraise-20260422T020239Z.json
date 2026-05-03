@@ -1,0 +1,47 @@
+{
+  "mode": "appraise",
+  "timestamp": "2026-04-22T02:02:39.230828+00:00",
+  "correlation_id": "corr_1776823359225_5213",
+  "input": "water is liquid",
+  "result": {
+    "stance": {
+      "agree": 50,
+      "disagree": 50
+    },
+    "confidence": 0.5,
+    "verdict": "mixed",
+    "rationale": "Input has partial alignment with current graph evidence.",
+    "evidence": {
+      "support_nodes": [
+        {
+          "id": 1001,
+          "label": "water",
+          "score": 0.5
+        }
+      ],
+      "conflict_nodes": [
+        {
+          "id": 1002,
+          "label": "flows",
+          "score": 1.0
+        },
+        {
+          "id": 1003,
+          "label": "through",
+          "score": 1.0
+        },
+        {
+          "id": 1004,
+          "label": "porous",
+          "score": 1.0
+        },
+        {
+          "id": 1005,
+          "label": "stone",
+          "score": 1.0
+        }
+      ],
+      "paths": []
+    }
+  }
+}

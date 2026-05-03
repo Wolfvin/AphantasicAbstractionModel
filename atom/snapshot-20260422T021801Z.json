@@ -1,0 +1,74 @@
+{
+  "snapshot_id": "snapshot_1776824281026_9270",
+  "generated_at": "2026-04-22T02:18:01.026771+00:00",
+  "context": {
+    "domain": "user-input",
+    "batch_id": "ingest_1776824281022_9520",
+    "input_message_id": "corr_1776824280991_4163"
+  },
+  "nodes": [
+    {
+      "id": 1001,
+      "label": "scan",
+      "kind": "atom",
+      "tier": 1,
+      "confidence": 0.48,
+      "status": "new",
+      "render": {
+        "position": {
+          "x": 3.95,
+          "y": 3.45,
+          "z": -1.53
+        },
+        "size": 0.68,
+        "color": "#00E5FF",
+        "glow": 0.81
+      },
+      "provenance": {
+        "source_batch_id": "ingest_1776824281022_9520",
+        "source_domain": "user_input",
+        "source_type": "learned"
+      }
+    },
+    {
+      "id": 1002,
+      "label": "baseline",
+      "kind": "atom",
+      "tier": 1,
+      "confidence": 0.51,
+      "status": "new",
+      "render": {
+        "position": {
+          "x": 4.17,
+          "y": -3.94,
+          "z": 1.26
+        },
+        "size": 0.96,
+        "color": "#B388FF",
+        "glow": 0.46
+      },
+      "provenance": {
+        "source_batch_id": "ingest_1776824281022_9520",
+        "source_domain": "user_input",
+        "source_type": "learned"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "1001->1002",
+      "source": 1001,
+      "target": 1002,
+      "direction": "undirected",
+      "weight": 0.52,
+      "source_type": "learned",
+      "status": "new",
+      "render": {
+        "thickness": 0.79,
+        "color": "#80D8FF",
+        "opacity": 0.54,
+        "pulse": 0.49
+      }
+    }
+  ]
+}

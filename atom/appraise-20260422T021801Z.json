@@ -1,0 +1,31 @@
+{
+  "mode": "appraise",
+  "timestamp": "2026-04-22T02:18:01.374172+00:00",
+  "correlation_id": "corr_1776824281348_2778",
+  "input": "water is liquid",
+  "result": {
+    "stance": {
+      "agree": 30,
+      "disagree": 70
+    },
+    "confidence": 0.64,
+    "verdict": "disagree",
+    "rationale": "Input weakly supported by current graph; conflicting concepts dominate.",
+    "evidence": {
+      "support_nodes": [],
+      "conflict_nodes": [
+        {
+          "id": 1001,
+          "label": "scan",
+          "score": 1.0
+        },
+        {
+          "id": 1002,
+          "label": "baseline",
+          "score": 1.0
+        }
+      ],
+      "paths": []
+    }
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "mode": "relate",
+  "timestamp": "2026-04-22T02:18:01.652485+00:00",
+  "correlation_id": "corr_1776824281650_8381",
+  "input": "water stone",
+  "result": {
+    "query_terms": [
+      "water",
+      "stone"
+    ],
+    "related_nodes": [],
+    "related_edges": [],
+    "clusters": []
+  }
+}

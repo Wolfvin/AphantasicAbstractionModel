@@ -1,0 +1,8 @@
+[workspace]
+members = ["crates/rsvs-core"]
+resolver = "2"
+
+[profile.release]
+opt-level = 3
+strip = true
+lto = true
