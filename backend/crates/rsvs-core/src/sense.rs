@@ -12,8 +12,8 @@
 //! v4.2: Updated to use new Node type. No NodeKind references.
 //! Sense.coherence still works the same.
 
-use crate::types::{NodeId, AtomSet};
 use crate::graph::jaccard_sets;
+use crate::types::{AtomSet, NodeId};
 
 // -----------------------------------------------------------------------
 // Config — all tunable values in one place
@@ -44,15 +44,15 @@ pub struct SenseConfig {
 impl Default for SenseConfig {
     fn default() -> Self {
         Self {
-            w_sim:           0.6,
-            w_coh:           0.4,
-            theta_assign:    0.30,
-            tau_core:        0.40,
-            tau_high:        0.65,
-            gamma_stopword:  0.70,
-            theta_merge:     0.50,
-            n_min_mature:    5,
-            k_fragile:       30,
+            w_sim: 0.6,
+            w_coh: 0.4,
+            theta_assign: 0.30,
+            tau_core: 0.40,
+            tau_high: 0.65,
+            gamma_stopword: 0.70,
+            theta_merge: 0.50,
+            n_min_mature: 5,
+            k_fragile: 30,
         }
     }
 }
@@ -140,11 +140,13 @@ impl Sense {
     /// Updates freq_map and coherence incrementally — O(n).
     pub fn assign(&mut self, context: AtomSet) {
         // Incremental coherence update
-        let add_sum: f64 = self.contexts.iter()
+        let add_sum: f64 = self
+            .contexts
+            .iter()
             .map(|c| jaccard_sets(&context, c) as f64)
             .sum();
 
-        self.sum_sim    += add_sum;
+        self.sum_sim += add_sum;
         self.pair_count += self.contexts.len();
 
         // coherence = sum_sim / pair_count  (0 if no pairs yet)
@@ -173,12 +175,14 @@ impl Sense {
     /// Simulate adding context and return the new coherence (for scoring).
     /// Does NOT mutate self.
     pub fn simulate_coherence_gain(&self, context: &AtomSet) -> f32 {
-        let add_sum: f64 = self.contexts.iter()
+        let add_sum: f64 = self
+            .contexts
+            .iter()
             .map(|c| jaccard_sets(context, c) as f64)
             .sum();
 
-        let new_sum    = self.sum_sim + add_sum;
-        let new_pairs  = self.pair_count + self.contexts.len();
+        let new_sum = self.sum_sim + add_sum;
+        let new_pairs = self.pair_count + self.contexts.len();
 
         let new_coh = if new_pairs == 0 {
             0.5f32
@@ -235,16 +239,24 @@ impl SenseManager {
         }
 
         // Candidate pruning — only score senses with enough core overlap
-        let tau      = self.config.tau_core;
+        let tau = self.config.tau_core;
         let tau_high = self.config.tau_high;
         let m = ((self.senses.len() as f32 + 1.0).ln().ceil()) as usize;
         let m = m.max(1);
 
-        let candidates: Vec<usize> = self.senses.iter().enumerate()
+        let candidates: Vec<usize> = self
+            .senses
+            .iter()
+            .enumerate()
             .filter(|(_, s)| {
-                let prune_tau = if s.context_count() == 1 { tau } else { tau_high };
+                let prune_tau = if s.context_count() == 1 {
+                    tau
+                } else {
+                    tau_high
+                };
                 let core_for_prune = s.core(prune_tau);
-                let overlap = core_for_prune.iter()
+                let overlap = core_for_prune
+                    .iter()
                     .filter(|&&a| context.contains(&a))
                     .count();
                 overlap >= m
@@ -263,14 +275,17 @@ impl SenseManager {
         let w_sim = self.config.w_sim;
         let w_coh = self.config.w_coh;
 
-        let best = candidate_indices.iter().map(|&i| {
-            let sense = &self.senses[i];
-            let core  = sense.core(tau);
-            let sim   = jaccard_sets(&context, &core);
-            let gain  = sense.simulate_coherence_gain(&context);
-            let score = w_sim * sim + w_coh * gain;
-            (i, score)
-        }).max_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+        let best = candidate_indices
+            .iter()
+            .map(|&i| {
+                let sense = &self.senses[i];
+                let core = sense.core(tau);
+                let sim = jaccard_sets(&context, &core);
+                let gain = sense.simulate_coherence_gain(&context);
+                let score = w_sim * sim + w_coh * gain;
+                (i, score)
+            })
+            .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
 
         let (best_idx, best_score) = best.unwrap(); // safe: candidate_indices non-empty
 
@@ -299,7 +314,9 @@ impl SenseManager {
             return None;
         }
         let tau = self.config.tau_core;
-        self.senses.iter().enumerate()
+        self.senses
+            .iter()
+            .enumerate()
             .map(|(i, s)| {
                 let core = s.core(tau);
                 let score = jaccard_sets(context, &core);
@@ -317,25 +334,35 @@ impl SenseManager {
     pub fn check_merge(&mut self) -> Vec<(usize, usize)> {
         let mut merged_pairs = Vec::new();
         let n = self.senses.len();
-        if n < 2 { return merged_pairs; }
+        if n < 2 {
+            return merged_pairs;
+        }
 
-        let tau         = self.config.tau_core;
+        let tau = self.config.tau_core;
         let theta_merge = self.config.theta_merge;
-        let n_min       = self.config.n_min_mature;
+        let n_min = self.config.n_min_mature;
 
         let mut to_merge: Option<(usize, usize)> = None;
         'outer: for i in 0..n {
-            for j in (i+1)..n {
+            for j in (i + 1)..n {
                 let si = &self.senses[i];
                 let sj = &self.senses[j];
-                if si.status != SenseStatus::Mature { continue; }
-                if sj.status != SenseStatus::Mature { continue; }
-                if si.context_count() < n_min       { continue; }
-                if sj.context_count() < n_min       { continue; }
+                if si.status != SenseStatus::Mature {
+                    continue;
+                }
+                if sj.status != SenseStatus::Mature {
+                    continue;
+                }
+                if si.context_count() < n_min {
+                    continue;
+                }
+                if sj.context_count() < n_min {
+                    continue;
+                }
 
                 let core_i = si.core(tau);
                 let core_j = sj.core(tau);
-                let score  = jaccard_sets(&core_i, &core_j);
+                let score = jaccard_sets(&core_i, &core_j);
                 if score >= theta_merge {
                     to_merge = Some((i, j));
                     break 'outer;
@@ -354,17 +381,21 @@ impl SenseManager {
     /// Merge sense j into sense i. Removes sense j.
     fn merge_senses(&mut self, keep: usize, remove: usize) {
         let contexts_remove = self.senses[remove].contexts.clone();
-        let sum_cross: f64 = self.senses[keep].contexts.iter()
-            .flat_map(|ci| contexts_remove.iter().map(move |cj| {
-                jaccard_sets(ci, cj) as f64
-            }))
+        let sum_cross: f64 = self.senses[keep]
+            .contexts
+            .iter()
+            .flat_map(|ci| {
+                contexts_remove
+                    .iter()
+                    .map(move |cj| jaccard_sets(ci, cj) as f64)
+            })
             .sum();
 
-        let n_keep   = self.senses[keep].context_count();
+        let n_keep = self.senses[keep].context_count();
         let n_remove = self.senses[remove].context_count();
 
         // Pool coherence state
-        self.senses[keep].sum_sim    += self.senses[remove].sum_sim + sum_cross;
+        self.senses[keep].sum_sim += self.senses[remove].sum_sim + sum_cross;
         self.senses[keep].pair_count += self.senses[remove].pair_count + n_keep * n_remove;
 
         // Recompute coherence
@@ -394,9 +425,8 @@ impl SenseManager {
     /// Remove FRAGILE senses that have exceeded inactivity limit.
     pub fn purge_fragile(&mut self) {
         let k = self.config.k_fragile;
-        self.senses.retain(|s| {
-            !(s.status == SenseStatus::Fragile && s.inactivity >= k)
-        });
+        self.senses
+            .retain(|s| !(s.status == SenseStatus::Fragile && s.inactivity >= k));
     }
 
     // -------------------------------------------------------------------

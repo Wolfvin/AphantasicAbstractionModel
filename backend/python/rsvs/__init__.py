@@ -1,31 +1,23 @@
+"""RSVS — Relational Symbolic Vocabulary System.
+
+A cognitive symbolic engine with hard attention, multi-sense disambiguation,
+and autonomous tiered memory lifecycle.
+
+Architecture:
+    Python HTTP layer + artifact persistence
+         ↓
+    Rust core via PyO3 (rsvs._rsvs.Rsvs)
+         ↓
+    Graph, Attention, Autonomy, Sense, Pipeline
 """
-RSVS — Recursive Symbolic Vector Space
-Python bindings for the RSVS knowledge graph system.
 
-v4.2: Unified node model, appraise/relate methods, PyNodeInfo.
+__version__ = "4.2.0"
+__schema_version__ = "v4.2"
+__api_version__ = "v1"
 
-Quick start::
-
-    from rsvs import Rsvs
-
-    r = Rsvs()
-    r.ingest("Stone is a hard solid mineral material.")
-    r.ingest("Bone is a hard solid organic structure.")
-
-    sim = r.similarity("stone", "bone")
-    print(f"jaccard: {sim.jaccard:.3f}")
-    print(f"shared:  {sim.shared}")
-
-    result = r.query("stone", "texture surface")
-    print(result.top_atoms(3))
-
-    # v4.2: appraise and relate
-    appraise = r.appraise("stone is hard")
-    print(f"verdict: {appraise.verdict}")
-
-    relate = r.relate("stone")
-    print(f"related nodes: {len(relate.related_nodes)}")
-"""
+# Try to import the Rust native module. If not available (e.g. maturin not built),
+# set a flag so downstream code can adapt gracefully.
+_rust_core_available = False
 
 try:
     from ._rsvs import (
@@ -41,11 +33,11 @@ try:
         PyAppraiseResult as AppraiseResult,
         PyRelateResult as RelateResult,
     )
-except Exception as exc:  # pragma: no cover - import guard
-    raise RuntimeError(
-        "Failed to import native module 'rsvs._rsvs'. "
-        "Build/install with `maturin develop` or `pip install -e .` first."
-    ) from exc
+    _rust_core_available = True
+except ImportError:
+    # Rust core not built — this is OK for import-time, the bridge server
+    # and validation tests can still function without it.
+    pass
 
 __all__ = [
     "Rsvs",
@@ -60,17 +52,31 @@ __all__ = [
     "AppraiseResult",
     "RelateResult",
 ]
-__version__ = "0.5.0"
 
 from .cli import main as cli_main
 
 __all__ += ["cli_main"]
 
 from .corpus import DOMAINS, get_domain_text, get_all_text, domain_names
-from .ingest_wiki import ingest_domains, print_report
 
-__all__ += ["DOMAINS", "get_domain_text", "get_all_text", "domain_names",
-            "ingest_domains", "print_report"]
+__all__ += ["DOMAINS", "get_domain_text", "get_all_text", "domain_names"]
 
-from .eval import run_eval, EvalReport, BenchmarkResult
-__all__ += ["run_eval", "EvalReport", "BenchmarkResult"]
+
+def __getattr__(name):
+    """Lazy imports for modules that depend on Rsvs (avoid circular import)."""
+    if name == "ingest_domains":
+        from .ingest_wiki import ingest_domains
+        return ingest_domains
+    if name == "print_report":
+        from .ingest_wiki import print_report
+        return print_report
+    if name == "run_eval":
+        from .eval import run_eval
+        return run_eval
+    if name == "EvalReport":
+        from .eval import EvalReport
+        return EvalReport
+    if name == "BenchmarkResult":
+        from .eval import BenchmarkResult
+        return BenchmarkResult
+    raise AttributeError(f"module 'rsvs' has no attribute {name!r}")

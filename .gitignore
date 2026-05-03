@@ -1,0 +1,48 @@
+# Rust
+target/
+**/*.rs.bk
+Cargo.lock  # Keep for workspace, but individual crates should regenerate
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+
+# Node
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env
+.env
+.env.local
+.env.production
+
+# RSVS state
+atom/rsvs-state.json
+
+# Database
+*.db
+*.db-journal
+
+# Benchmarks
+target/criterion/

@@ -5,13 +5,17 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   X, Crosshair, Pin, GitCompare, Download, Brain,
   Link2, Activity, Eye, Sparkles, AlertTriangle,
+  Shield, Layers, Globe, GitBranch, ArrowUpDown,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import { useUIStore, useGraphStore } from '@/store/rsvsStore';
-import type { RSVSNode, Tier } from '@/lib/types';
+import { useUIStore, useGraphStore, useModeResultStore } from '@/store/rsvsStore';
+import type { RSVSNode, Tier, PolicyMeta, CompressionState, LanguageLink } from '@/lib/types';
+import { getStatusColor } from '@/lib/nodeRendering';
+import AppraisePanel from '@/components/rsvs/AppraisePanel';
+import RelatePanel from '@/components/rsvs/RelatePanel';
 
 const TIER_COLORS: Record<Tier, string> = {
   1: '#00E5FF',
@@ -26,10 +30,13 @@ const TIER_LABELS: Record<Tier, string> = {
 };
 
 const STATUS_STYLES: Record<string, { color: string; label: string }> = {
-  new: { color: '#69F0AE', label: 'New' },
-  stable: { color: '#00E5FF', label: 'Stable' },
-  decaying: { color: '#FF9800', label: 'Decaying' },
+  new: { color: '#B388FF', label: 'New' },
+  stable: { color: '#69F0AE', label: 'Stable' },
+  candidate: { color: '#00E5FF', label: 'Candidate' },
+  decaying: { color: '#FFB74D', label: 'Decaying' },
+  deprecated: { color: '#FFB74D', label: 'Deprecated' },
   removed: { color: '#FF5252', label: 'Removed' },
+  quarantine: { color: '#FF5252', label: 'Quarantine' },
 };
 
 function ConfidenceRing({ value }: { value: number }) {
@@ -61,7 +68,7 @@ function ConfidenceRing({ value }: { value: number }) {
   );
 }
 
-function StatCard({ label, value }: { label: string; value: number }) {
+function StatCard({ label, value }: { label: string; value: number | string }) {
   return (
     <div className="bg-[#0d1520] rounded-lg p-3 text-center border border-[#1e293b]">
       <div className="text-lg font-bold text-[#e2e8f0]">{value}</div>
@@ -89,6 +96,112 @@ function WeightBar({ label, weight }: { label: string; weight: number }) {
   );
 }
 
+// ── v4.2 Compression State Section ──
+function CompressionStateSection({ state }: { state: CompressionState }) {
+  return (
+    <div className="mb-5">
+      <div className="flex items-center gap-2 mb-2">
+        <Layers className="w-3.5 h-3.5 text-[#FFB74D]" />
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-[#94a3b8]">Compression State</h3>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <StatCard label="Compressed" value={state.compressed ? 'Yes' : 'No'} />
+        {state.original_count != null && (
+          <StatCard label="Original Count" value={state.original_count} />
+        )}
+      </div>
+      {state.merged_into != null && (
+        <div className="mt-2 text-[10px] text-[#64748b] font-mono">
+          Merged into node #{state.merged_into}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── v4.2 Policy Meta Section ──
+function PolicyMetaSection({ meta }: { meta: PolicyMeta }) {
+  return (
+    <div className="mb-5">
+      <div className="flex items-center gap-2 mb-2">
+        <Shield className="w-3.5 h-3.5 text-[#69F0AE]" />
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-[#94a3b8]">Policy & Governance</h3>
+      </div>
+      <div className="grid grid-cols-2 gap-2 mb-2">
+        <StatCard label="Governance Score" value={meta.governance_score.toFixed(2)} />
+        <StatCard label="Status Flips" value={meta.status_flip_count} />
+      </div>
+      <div className="grid grid-cols-3 gap-2">
+        <div className="bg-[#0d1520] rounded-lg p-2 text-center border border-[#1e293b]">
+          <div className="text-xs font-bold text-[#e2e8f0]">{meta.auto_promote ? '✓' : '✗'}</div>
+          <div className="text-[9px] uppercase tracking-wider text-[#64748b]">Auto-Promote</div>
+        </div>
+        <div className="bg-[#0d1520] rounded-lg p-2 text-center border border-[#1e293b]">
+          <div className="text-xs font-bold text-[#e2e8f0]">T{meta.max_tier}</div>
+          <div className="text-[9px] uppercase tracking-wider text-[#64748b]">Max Tier</div>
+        </div>
+        <div className="bg-[#0d1520] rounded-lg p-2 text-center border border-[#1e293b]">
+          <div className="text-xs font-bold text-[#e2e8f0]">{meta.min_confidence.toFixed(2)}</div>
+          <div className="text-[9px] uppercase tracking-wider text-[#64748b]">Min Conf</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── v4.2 Language Links Section ──
+function LanguageLinksSection({ links }: { links: LanguageLink[] }) {
+  return (
+    <div className="mb-5">
+      <div className="flex items-center gap-2 mb-2">
+        <Globe className="w-3.5 h-3.5 text-[#80D8FF]" />
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-[#94a3b8]">Language Links</h3>
+      </div>
+      <div className="space-y-1">
+        {links.map((link, i) => (
+          <div key={i} className="flex items-center gap-2 px-2 py-1 rounded-md bg-[#0d1520] border border-[#1e293b]">
+            <Badge variant="outline" className="text-[9px] border-[#334155] text-[#64748b] shrink-0 px-1">
+              {link.lang}
+            </Badge>
+            <span className="text-xs text-[#e2e8f0] font-mono truncate flex-1">{link.label}</span>
+            <span className="text-[10px] text-[#64748b] font-mono shrink-0">{link.confidence.toFixed(2)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── v4.2 Derived From Section ──
+function DerivedFromSection({ nodeIds, onSelectNode }: { nodeIds: number[]; onSelectNode: (id: number) => void }) {
+  const nodes = useGraphStore((s) => s.nodes);
+
+  return (
+    <div className="mb-5">
+      <div className="flex items-center gap-2 mb-2">
+        <GitBranch className="w-3.5 h-3.5 text-[#B388FF]" />
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-[#94a3b8]">Derived From</h3>
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {nodeIds.map((id) => {
+          const sourceNode = nodes.get(id);
+          const label = sourceNode?.label ?? `#${id}`;
+          return (
+            <button
+              key={id}
+              type="button"
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-mono bg-[#B388FF10] border border-[#B388FF30] text-[#B388FF] hover:bg-[#B388FF20] transition-colors cursor-pointer"
+              onClick={() => onSelectNode(id)}
+            >
+              {label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export default function RightNodeDrawer() {
   const selectedNodeId = useUIStore((s) => s.selectedNodeId);
   const isDrawerOpen = useUIStore((s) => s.isDrawerOpen);
@@ -99,6 +212,7 @@ export default function RightNodeDrawer() {
   const getNode = useGraphStore((s) => s.getNode);
   const getNodeNeighbors = useGraphStore((s) => s.getNodeNeighbors);
   const selectNode = useUIStore((s) => s.selectNode);
+  const modeResult = useModeResultStore((s) => s.currentResult);
 
   const node = selectedNodeId !== null ? getNode(selectedNodeId) : undefined;
   const neighbors = useMemo(
@@ -117,6 +231,11 @@ export default function RightNodeDrawer() {
   const handlePin = useCallback(() => {
     if (selectedNodeId !== null) togglePinNode(selectedNodeId);
   }, [selectedNodeId, togglePinNode]);
+
+  const handleSelectNode = useCallback((id: number) => {
+    selectNode(id);
+    focusNode(id);
+  }, [selectNode, focusNode]);
 
   const isPinned = selectedNodeId !== null && pinnedNodeIds.has(selectedNodeId);
 
@@ -145,7 +264,7 @@ export default function RightNodeDrawer() {
         {isDrawerOpen && node && (
           <motion.aside
             className="fixed right-0 top-0 h-full z-50 flex flex-col border-l border-[#1e293b] overflow-hidden"
-            style={{ width: 'min(34vw, 420px)', backgroundColor: '#0a0e18' }}
+            style={{ width: 'min(38vw, 460px)', backgroundColor: '#0a0e18' }}
             initial={{ x: '100%', opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
             exit={{ x: '100%', opacity: 0 }}
@@ -200,12 +319,17 @@ export default function RightNodeDrawer() {
                   <Badge
                     className="text-[10px]"
                     style={{
-                      backgroundColor: `${STATUS_STYLES[node.status].color}15`,
-                      color: STATUS_STYLES[node.status].color,
-                      borderColor: `${STATUS_STYLES[node.status].color}40`,
+                      backgroundColor: `${(STATUS_STYLES[node.status] ?? STATUS_STYLES.new).color}15`,
+                      color: (STATUS_STYLES[node.status] ?? STATUS_STYLES.new).color,
+                      borderColor: `${(STATUS_STYLES[node.status] ?? STATUS_STYLES.new).color}40`,
                     }}
                   >
-                    {STATUS_STYLES[node.status].label}
+                    {(STATUS_STYLES[node.status] ?? STATUS_STYLES.new).label}
+                  </Badge>
+                )}
+                {node.is_seed && (
+                  <Badge className="text-[10px] bg-[#FFD74015] text-[#FFD740] border-[#FFD74040]">
+                    ★ Seed
                   </Badge>
                 )}
               </div>
@@ -215,6 +339,13 @@ export default function RightNodeDrawer() {
                 <div className="text-[10px] text-[#475569] font-mono flex gap-3">
                   {node.provenance.source_domain && <span>domain: {node.provenance.source_domain}</span>}
                   {node.provenance.source_type && <span>type: {node.provenance.source_type}</span>}
+                </div>
+              )}
+
+              {/* Semantic tag (v4.2) */}
+              {node.semantic && (
+                <div className="text-[10px] text-[#80D8FF] font-mono mt-1">
+                  semantic: {node.semantic}
                 </div>
               )}
             </div>
@@ -266,6 +397,38 @@ export default function RightNodeDrawer() {
               )}
 
               <Separator className="bg-[#1e293b] mb-5" />
+
+              {/* v4.2: Compression State */}
+              {node.compression_state && node.compression_state.compressed && (
+                <>
+                  <CompressionStateSection state={node.compression_state} />
+                  <Separator className="bg-[#1e293b] mb-5" />
+                </>
+              )}
+
+              {/* v4.2: Policy & Governance */}
+              {node.policy_meta && (
+                <>
+                  <PolicyMetaSection meta={node.policy_meta} />
+                  <Separator className="bg-[#1e293b] mb-5" />
+                </>
+              )}
+
+              {/* v4.2: Derived From */}
+              {node.derived_from_node_ids && node.derived_from_node_ids.length > 0 && (
+                <>
+                  <DerivedFromSection nodeIds={node.derived_from_node_ids} onSelectNode={handleSelectNode} />
+                  <Separator className="bg-[#1e293b] mb-5" />
+                </>
+              )}
+
+              {/* v4.2: Language Links */}
+              {node.language_links && node.language_links.length > 0 && (
+                <>
+                  <LanguageLinksSection links={node.language_links} />
+                  <Separator className="bg-[#1e293b] mb-5" />
+                </>
+              )}
 
               {/* Composition */}
               {node.composition && (
@@ -319,6 +482,20 @@ export default function RightNodeDrawer() {
                   </div>
                 )}
               </div>
+
+              {/* Mode Result Panels (Appraise / Relate) */}
+              {modeResult && modeResult.type === 'appraise' && (
+                <>
+                  <Separator className="bg-[#1e293b] mb-5" />
+                  <AppraisePanel result={modeResult.data} />
+                </>
+              )}
+              {modeResult && modeResult.type === 'relate' && (
+                <>
+                  <Separator className="bg-[#1e293b] mb-5" />
+                  <RelatePanel result={modeResult.data} />
+                </>
+              )}
 
               {node.metrics?.last_updated_at && (
                 <div className="text-[10px] text-[#475569] font-mono">

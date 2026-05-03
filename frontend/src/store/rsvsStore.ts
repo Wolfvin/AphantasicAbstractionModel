@@ -13,6 +13,9 @@ import type {
   AnimationQueueItem,
   NodeStatus,
   Tier,
+  AppraiseResult,
+  RelateResult,
+  ModeResult,
 } from '@/lib/types';
 
 // ── Graph Domain State ──
@@ -322,4 +325,40 @@ export const useAnimationStore = create<AnimationQueueStore>((set) => ({
       return { activeAnimations: active };
     }),
   setReducedMotion: (reduced) => set({ reducedMotion: reduced }),
+}));
+
+// ── Mode Result State ──
+// Stores the latest appraise/relate result for display in panels.
+
+interface ModeResultState {
+  currentResult: ModeResult;
+  isResultLoading: boolean;
+  resultError: string | null;
+
+  setAppraiseResult: (result: AppraiseResult) => void;
+  setRelateResult: (result: RelateResult) => void;
+  clearResult: () => void;
+  setResultLoading: (loading: boolean) => void;
+  setResultError: (error: string | null) => void;
+}
+
+export const useModeResultStore = create<ModeResultState>((set) => ({
+  currentResult: null,
+  isResultLoading: false,
+  resultError: null,
+
+  setAppraiseResult: (result) =>
+    set({ currentResult: { type: 'appraise', data: result }, isResultLoading: false, resultError: null }),
+
+  setRelateResult: (result) =>
+    set({ currentResult: { type: 'relate', data: result }, isResultLoading: false, resultError: null }),
+
+  clearResult: () =>
+    set({ currentResult: null, isResultLoading: false, resultError: null }),
+
+  setResultLoading: (loading) =>
+    set({ isResultLoading: loading }),
+
+  setResultError: (error) =>
+    set({ resultError: error, isResultLoading: false }),
 }));

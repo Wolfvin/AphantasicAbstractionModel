@@ -3,14 +3,14 @@
 //! Exposes the Rsvs pipeline to Python with a clean, Pythonic API.
 //! v4.2: Unified node model, appraise/relate methods, PyNodeInfo.
 
-use pyo3::prelude::*;
-use pyo3::exceptions::PyValueError;
-use std::collections::HashMap;
 use crate::events::{API_VERSION, SCHEMA_VERSION};
+use pyo3::exceptions::PyValueError;
+use pyo3::prelude::*;
+use std::collections::HashMap;
 
-use crate::pipeline::{Rsvs, PipelineConfig};
-use crate::sense::SenseConfig;
 use crate::autonomy::AutonomyConfig;
+use crate::pipeline::{PipelineConfig, Rsvs};
+use crate::sense::SenseConfig;
 
 // -----------------------------------------------------------------------
 // Python-visible data classes (v4.2)
@@ -21,11 +21,11 @@ use crate::autonomy::AutonomyConfig;
 #[derive(Clone, Debug)]
 pub struct PyIngestStats {
     pub sentences_processed: usize,
-    pub atoms_promoted:      usize,
-    pub sense_assigned:      usize,
-    pub sense_created:       usize,
-    pub confidence_updated:  usize,
-    pub frozen_batches:      usize,
+    pub atoms_promoted: usize,
+    pub sense_assigned: usize,
+    pub sense_created: usize,
+    pub confidence_updated: usize,
+    pub frozen_batches: usize,
 }
 
 #[pyclass(get_all)]
@@ -49,8 +49,10 @@ impl PyIngestStats {
     fn __repr__(&self) -> String {
         format!(
             "IngestStats(sentences={}, atoms_promoted={}, senses_created={}, updated={})",
-            self.sentences_processed, self.atoms_promoted,
-            self.sense_created, self.confidence_updated
+            self.sentences_processed,
+            self.atoms_promoted,
+            self.sense_created,
+            self.confidence_updated
         )
     }
 }
@@ -59,19 +61,26 @@ impl PyIngestStats {
 #[pyclass(get_all)]
 #[derive(Clone, Debug)]
 pub struct PyQueryResult {
-    pub sense_idx:    usize,
-    pub sense_n:      usize,
-    pub atoms:        Vec<(String, f32)>,
+    pub sense_idx: usize,
+    pub sense_n: usize,
+    pub atoms: Vec<(String, f32)>,
 }
 
 #[pymethods]
 impl PyQueryResult {
     fn __repr__(&self) -> String {
-        let top: Vec<_> = self.atoms.iter().take(3)
+        let top: Vec<_> = self
+            .atoms
+            .iter()
+            .take(3)
             .map(|(l, s)| format!("{}:{:.2}", l, s))
             .collect();
-        format!("QueryResult(sense={}, N={}, atoms=[{}])",
-                self.sense_idx, self.sense_n, top.join(", "))
+        format!(
+            "QueryResult(sense={}, N={}, atoms=[{}])",
+            self.sense_idx,
+            self.sense_n,
+            top.join(", ")
+        )
     }
 
     fn top_atoms(&self, k: usize) -> Vec<String> {
@@ -83,16 +92,19 @@ impl PyQueryResult {
 #[pyclass(get_all)]
 #[derive(Clone, Debug)]
 pub struct PySimResult {
-    pub jaccard:  f32,
-    pub shared:   Vec<String>,
-    pub only_a:   Vec<String>,
-    pub only_b:   Vec<String>,
+    pub jaccard: f32,
+    pub shared: Vec<String>,
+    pub only_a: Vec<String>,
+    pub only_b: Vec<String>,
 }
 
 #[pymethods]
 impl PySimResult {
     fn __repr__(&self) -> String {
-        format!("SimResult(jaccard={:.3}, shared={:?})", self.jaccard, self.shared)
+        format!(
+            "SimResult(jaccard={:.3}, shared={:?})",
+            self.jaccard, self.shared
+        )
     }
 }
 
@@ -100,23 +112,25 @@ impl PySimResult {
 #[pyclass(get_all)]
 #[derive(Clone, Debug)]
 pub struct PyNodeInfo {
-    pub label:            String,
-    pub surface_label:    String,
-    pub id:               u32,
-    pub confidence:       f32,
-    pub tier:             u8,
-    pub status:           String,
-    pub is_seed:          bool,
-    pub is_locked:        bool,
-    pub is_stable:        bool,
+    pub label: String,
+    pub surface_label: String,
+    pub id: u32,
+    pub confidence: f32,
+    pub tier: u8,
+    pub status: String,
+    pub is_seed: bool,
+    pub is_locked: bool,
+    pub is_stable: bool,
     pub compression_state: String,
 }
 
 #[pymethods]
 impl PyNodeInfo {
     fn __repr__(&self) -> String {
-        format!("NodeInfo('{}', id={}, conf={:.3}, tier={}, status={}, seed={})",
-                self.label, self.id, self.confidence, self.tier, self.status, self.is_seed)
+        format!(
+            "NodeInfo('{}', id={}, conf={:.3}, tier={}, status={}, seed={})",
+            self.label, self.id, self.confidence, self.tier, self.status, self.is_seed
+        )
     }
 }
 
@@ -124,17 +138,19 @@ impl PyNodeInfo {
 #[pyclass(get_all)]
 #[derive(Clone, Debug)]
 pub struct PyAppraiseResult {
-    pub agree_pct:    f32,
+    pub agree_pct: f32,
     pub disagree_pct: f32,
-    pub verdict:      String,
-    pub evidence:     Vec<(String, f32)>,
+    pub verdict: String,
+    pub evidence: Vec<(String, f32)>,
 }
 
 #[pymethods]
 impl PyAppraiseResult {
     fn __repr__(&self) -> String {
-        format!("AppraiseResult(agree={:.1}%, disagree={:.1}%, verdict='{}')",
-                self.agree_pct, self.disagree_pct, self.verdict)
+        format!(
+            "AppraiseResult(agree={:.1}%, disagree={:.1}%, verdict='{}')",
+            self.agree_pct, self.disagree_pct, self.verdict
+        )
     }
 }
 
@@ -149,13 +165,17 @@ pub struct PyRelateResult {
 #[pymethods]
 impl PyRelateResult {
     fn __repr__(&self) -> String {
-        format!("RelateResult(nodes={}, edges={})",
-                self.related_nodes.len(), self.related_edges.len())
+        format!(
+            "RelateResult(nodes={}, edges={})",
+            self.related_nodes.len(),
+            self.related_edges.len()
+        )
     }
 
     /// Get labels for related nodes
     fn node_labels(&self, rsvs: &PyRsvs) -> Vec<(String, f32)> {
-        self.related_nodes.iter()
+        self.related_nodes
+            .iter()
             .filter_map(|(id, score)| {
                 let label = rsvs.inner.graph.get_node(*id)?.label.clone();
                 Some((label, *score))
@@ -168,18 +188,20 @@ impl PyRelateResult {
 #[pyclass(get_all)]
 #[derive(Clone, Debug)]
 pub struct PySenseInfo {
-    pub sense_idx:  usize,
+    pub sense_idx: usize,
     pub n_contexts: usize,
-    pub coherence:  f32,
-    pub status:     String,
+    pub coherence: f32,
+    pub status: String,
     pub core_atoms: Vec<String>,
 }
 
 #[pymethods]
 impl PySenseInfo {
     fn __repr__(&self) -> String {
-        format!("SenseInfo(idx={}, N={}, coh={:.3}, core={:?})",
-                self.sense_idx, self.n_contexts, self.coherence, self.core_atoms)
+        format!(
+            "SenseInfo(idx={}, N={}, coh={:.3}, core={:?})",
+            self.sense_idx, self.n_contexts, self.coherence, self.core_atoms
+        )
     }
 }
 
@@ -203,12 +225,7 @@ impl PyRsvs {
         n_warm=20,
         eta=0.1
     ))]
-    fn new(
-        entity_promote_n: usize,
-        theta_assign:     f32,
-        n_warm:           usize,
-        eta:              f32,
-    ) -> Self {
+    fn new(entity_promote_n: usize, theta_assign: f32, n_warm: usize, eta: f32) -> Self {
         let config = PipelineConfig {
             entity_promote_n,
             sense: SenseConfig {
@@ -223,7 +240,9 @@ impl PyRsvs {
             },
             ..PipelineConfig::default()
         };
-        Self { inner: Rsvs::new(config) }
+        Self {
+            inner: Rsvs::new(config),
+        }
     }
 
     // -------------------------------------------------------------------
@@ -235,11 +254,11 @@ impl PyRsvs {
         let s = self.inner.ingest_text(text);
         PyIngestStats {
             sentences_processed: s.sentences_processed,
-            atoms_promoted:      s.atoms_promoted,
-            sense_assigned:      s.sense_assigned,
-            sense_created:       s.sense_created,
-            confidence_updated:  s.confidence_updated,
-            frozen_batches:      s.frozen_batches,
+            atoms_promoted: s.atoms_promoted,
+            sense_assigned: s.sense_assigned,
+            sense_created: s.sense_created,
+            confidence_updated: s.confidence_updated,
+            frozen_batches: s.frozen_batches,
         }
     }
 
@@ -254,7 +273,9 @@ impl PyRsvs {
         let after = self.inner.latest_seq_v1();
 
         let batch = self.inner.consume_events_v1(Some(before), 10_000);
-        let correlation_id = batch.events.first()
+        let correlation_id = batch
+            .events
+            .first()
             .map(|e| e.correlation_id.clone())
             .unwrap_or_else(|| "ingest_00000000".to_string());
 
@@ -278,8 +299,8 @@ impl PyRsvs {
         let r = self.inner.query(concept, context)?;
         Some(PyQueryResult {
             sense_idx: r.active_sense_idx,
-            sense_n:   r.active_sense_n,
-            atoms:     r.scored_atoms,
+            sense_n: r.active_sense_n,
+            atoms: r.scored_atoms,
         })
     }
 
@@ -287,15 +308,17 @@ impl PyRsvs {
     fn similarity(&self, a: &str, b: &str) -> Option<PySimResult> {
         let sim = self.inner.similarity(a, b)?;
         let node_label = |id: u32| -> String {
-            self.inner.graph.get_node(id)
+            self.inner
+                .graph
+                .get_node(id)
                 .map(|n| n.label.clone())
                 .unwrap_or_else(|| format!("#{}", id))
         };
         Some(PySimResult {
             jaccard: sim.jaccard,
-            shared:  sim.shared.iter().map(|&id| node_label(id)).collect(),
-            only_a:  sim.only_a.iter().map(|&id| node_label(id)).collect(),
-            only_b:  sim.only_b.iter().map(|&id| node_label(id)).collect(),
+            shared: sim.shared.iter().map(|&id| node_label(id)).collect(),
+            only_a: sim.only_a.iter().map(|&id| node_label(id)).collect(),
+            only_b: sim.only_b.iter().map(|&id| node_label(id)).collect(),
         })
     }
 
@@ -304,10 +327,10 @@ impl PyRsvs {
     fn appraise(&self, text: &str) -> PyAppraiseResult {
         let r = self.inner.appraise(text);
         PyAppraiseResult {
-            agree_pct:    r.agree_pct,
+            agree_pct: r.agree_pct,
             disagree_pct: r.disagree_pct,
-            verdict:      r.verdict,
-            evidence:     r.evidence,
+            verdict: r.verdict,
+            evidence: r.evidence,
         }
     }
 
@@ -335,8 +358,9 @@ impl PyRsvs {
     #[pyo3(signature = (after_seq=None, limit=500))]
     fn consume_events_v1(&self, after_seq: Option<u64>, limit: usize) -> PyResult<String> {
         let batch = self.inner.consume_events_v1(after_seq, limit);
-        serde_json::to_string(&batch)
-            .map_err(|e| PyValueError::new_err(format!("consume_events_v1 serialization failed: {}", e)))
+        serde_json::to_string(&batch).map_err(|e| {
+            PyValueError::new_err(format!("consume_events_v1 serialization failed: {}", e))
+        })
     }
 
     /// Latest monotonic event sequence number.
@@ -350,13 +374,23 @@ impl PyRsvs {
 
     /// v4.2: Get info about a specific node by label.
     fn node_info(&self, label: &str) -> PyResult<PyNodeInfo> {
-        let &id = self.inner.token_to_id.get(label)
+        let &id = self
+            .inner
+            .token_to_id
+            .get(label)
             .ok_or_else(|| PyValueError::new_err(format!("Node '{}' not found", label)))?;
 
-        let node = self.inner.graph.get_node(id)
+        let node = self
+            .inner
+            .graph
+            .get_node(id)
             .ok_or_else(|| PyValueError::new_err(format!("Node ID {} not in graph", id)))?;
 
-        let conf = self.inner.autonomy.confidence(id).unwrap_or(node.confidence);
+        let conf = self
+            .inner
+            .autonomy
+            .confidence(id)
+            .unwrap_or(node.confidence);
         let tier_num = match self.inner.autonomy.tier(id) {
             Some(crate::types::Tier::Tier1) => 1u8,
             Some(crate::types::Tier::Tier2) => 2,
@@ -399,42 +433,56 @@ impl PyRsvs {
 
     /// Get all senses for a concept.
     fn senses(&self, concept: &str) -> PyResult<Vec<PySenseInfo>> {
-        let &id = self.inner.token_to_id.get(concept)
+        let &id = self
+            .inner
+            .token_to_id
+            .get(concept)
             .ok_or_else(|| PyValueError::new_err(format!("Concept '{}' not found", concept)))?;
 
-        let sm = self.inner.senses.get(&id)
+        let sm = self
+            .inner
+            .senses
+            .get(&id)
             .ok_or_else(|| PyValueError::new_err(format!("No senses for '{}'", concept)))?;
 
         let tau = self.inner.config.sense.tau_core;
 
-        Ok(sm.senses.iter().enumerate().map(|(i, s)| {
-            let core = s.core(tau);
-            let core_labels: Vec<String> = core.iter()
-                .filter_map(|&aid| {
-                    Some(self.inner.graph.get_node(aid)?.label.clone())
-                })
-                .collect();
+        Ok(sm
+            .senses
+            .iter()
+            .enumerate()
+            .map(|(i, s)| {
+                let core = s.core(tau);
+                let core_labels: Vec<String> = core
+                    .iter()
+                    .filter_map(|&aid| Some(self.inner.graph.get_node(aid)?.label.clone()))
+                    .collect();
 
-            PySenseInfo {
-                sense_idx:  i,
-                n_contexts: s.context_count(),
-                coherence:  s.coherence,
-                status:     if s.status == crate::sense::SenseStatus::Fragile {
-                    "fragile".into()
-                } else {
-                    "mature".into()
-                },
-                core_atoms: core_labels,
-            }
-        }).collect())
+                PySenseInfo {
+                    sense_idx: i,
+                    n_contexts: s.context_count(),
+                    coherence: s.coherence,
+                    status: if s.status == crate::sense::SenseStatus::Fragile {
+                        "fragile".into()
+                    } else {
+                        "mature".into()
+                    },
+                    core_atoms: core_labels,
+                }
+            })
+            .collect())
     }
 
     /// List all known nodes (excluding seed nodes if seed_only=False).
     #[pyo3(signature = (include_seeds=false))]
     fn nodes(&self, include_seeds: bool) -> Vec<String> {
-        self.inner.token_to_id.keys()
+        self.inner
+            .token_to_id
+            .keys()
             .filter(|label| {
-                if include_seeds { return true; }
+                if include_seeds {
+                    return true;
+                }
                 let id = self.inner.token_to_id[*label];
                 let node = self.inner.graph.get_node(id);
                 node.map(|n| !n.is_seed).unwrap_or(true)
@@ -451,7 +499,9 @@ impl PyRsvs {
 
     /// Get confidence scores for all nodes.
     fn confidence_map(&self) -> HashMap<String, f32> {
-        self.inner.token_to_id.iter()
+        self.inner
+            .token_to_id
+            .iter()
             .filter_map(|(label, &id)| {
                 let conf = self.inner.autonomy.confidence(id)?;
                 Some((label.clone(), conf))
@@ -467,14 +517,14 @@ impl PyRsvs {
     fn status(&self) -> HashMap<String, f64> {
         let s = self.inner.status();
         let mut m = HashMap::new();
-        m.insert("total_nodes".into(),     s.total_nodes     as f64);
-        m.insert("total_atoms".into(),     s.total_atoms     as f64);
-        m.insert("total_contexts".into(),  s.total_contexts  as f64);
-        m.insert("warmed_up".into(),       s.warmed_up       as i32 as f64);
+        m.insert("total_nodes".into(), s.total_nodes as f64);
+        m.insert("total_atoms".into(), s.total_atoms as f64);
+        m.insert("total_contexts".into(), s.total_contexts as f64);
+        m.insert("warmed_up".into(), s.warmed_up as i32 as f64);
         m.insert("watchlist_count".into(), s.watchlist_count as f64);
         m.insert("changelog_count".into(), s.changelog_count as f64);
-        m.insert("theta_assign".into(),    s.theta_assign    as f64);
-        m.insert("theta_merge".into(),     s.theta_merge     as f64);
+        m.insert("theta_assign".into(), s.theta_assign as f64);
+        m.insert("theta_merge".into(), s.theta_merge as f64);
         m
     }
 
@@ -500,8 +550,10 @@ impl PyRsvs {
 
     fn __repr__(&self) -> String {
         let s = self.inner.status();
-        format!("Rsvs(nodes={}, contexts={}, warmed_up={})",
-                s.total_atoms, s.total_contexts, s.warmed_up)
+        format!(
+            "Rsvs(nodes={}, contexts={}, warmed_up={})",
+            s.total_atoms, s.total_contexts, s.warmed_up
+        )
     }
 }
 

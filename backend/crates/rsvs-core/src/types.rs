@@ -3,7 +3,7 @@
 //! v4.2: Unified node model — no more Atom/Composite distinction.
 //! All entities are "nodes". Compression is expressed as metadata.
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 /// An node ID. u32 = 4 bytes vs ~50 bytes for a String.
 pub type NodeId = u32;
@@ -12,8 +12,9 @@ pub type NodeId = u32;
 pub type AtomSet = Vec<NodeId>;
 
 /// Node status lifecycle (v4.2)
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub enum NodeStatus {
+    #[default]
     New,
     Candidate,
     Stable,
@@ -21,56 +22,35 @@ pub enum NodeStatus {
     Quarantine,
 }
 
-impl Default for NodeStatus {
-    fn default() -> Self {
-        NodeStatus::New
-    }
-}
-
 /// Compression state (v4.2: replaces Atom/Composite distinction)
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub enum CompressionState {
+    #[default]
     Raw,
     Compressed,
 }
 
-impl Default for CompressionState {
-    fn default() -> Self {
-        CompressionState::Raw
-    }
-}
-
 /// Tier for node autonomy.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub enum Tier {
-    Tier1,  // Autonomous — high confidence, trusted
-    Tier2,  // Flagged — revocable, under evaluation
-    Tier3,  // Blocked — low confidence, needs decision
-}
-
-impl Default for Tier {
-    fn default() -> Self {
-        Tier::Tier3
-    }
+    Tier1, // Autonomous — high confidence, trusted
+    Tier2, // Flagged — revocable, under evaluation
+    #[default]
+    Tier3, // Blocked — low confidence, needs decision
 }
 
 /// Source type for edges
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub enum EdgeSource {
+    #[default]
     Bootstrap,
     Learned,
-}
-
-impl Default for EdgeSource {
-    fn default() -> Self {
-        EdgeSource::Bootstrap
-    }
 }
 
 /// A language link between nodes
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LanguageLink {
-    pub link_type: String,  // "same_as", etc.
+    pub link_type: String, // "same_as", etc.
     pub target_id: NodeId,
 }
 
@@ -121,9 +101,9 @@ impl Default for PolicyMeta {
 pub struct Node {
     pub id: NodeId,
     pub label: String,
-    pub surface_label: String,  // "stone@en" format
+    pub surface_label: String, // "stone@en" format
 
-    pub kind: String,  // Always "node" in v4.2
+    pub kind: String, // Always "node" in v4.2
     pub tier: Tier,
     pub confidence: f32,
     pub status: NodeStatus,

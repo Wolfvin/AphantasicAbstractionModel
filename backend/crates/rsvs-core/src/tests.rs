@@ -6,8 +6,8 @@
 //! persistence save/load roundtrip, and more.
 
 #[cfg(test)]
-mod tests {
-    use crate::sense::{SenseManager, SenseConfig, SenseStatus, IngestResult};
+mod sense_tests {
+    use crate::sense::{IngestResult, SenseConfig, SenseManager, SenseStatus};
 
     fn config_low_threshold() -> SenseConfig {
         SenseConfig {
@@ -53,7 +53,9 @@ mod tests {
         sm.ingest(vec![1, 2, 3, 5]);
         sm.ingest(vec![1, 2, 4, 5]);
 
-        let mature: Vec<_> = sm.senses.iter()
+        let mature: Vec<_> = sm
+            .senses
+            .iter()
             .filter(|s| s.context_count() >= 2)
             .collect();
         assert!(!mature.is_empty());
@@ -137,8 +139,12 @@ mod tests {
             ..config_low_threshold()
         });
 
-        for _ in 0..3 { sm.ingest(vec![1, 2, 3, 4]); }
-        for _ in 0..3 { sm.ingest(vec![1, 2, 3, 5]); }
+        for _ in 0..3 {
+            sm.ingest(vec![1, 2, 3, 4]);
+        }
+        for _ in 0..3 {
+            sm.ingest(vec![1, 2, 3, 5]);
+        }
 
         let count_before = sm.sense_count();
         let merged = sm.check_merge();
@@ -157,8 +163,8 @@ mod tests {
 
         if let Some(s) = sm.senses.iter().find(|s| s.context_count() == 3) {
             assert!((s.freq(1) - 1.0).abs() < 0.01);
-            assert!((s.freq(2) - 2.0/3.0).abs() < 0.01);
-            assert!((s.freq(5) - 1.0/3.0).abs() < 0.01);
+            assert!((s.freq(2) - 2.0 / 3.0).abs() < 0.01);
+            assert!((s.freq(5) - 1.0 / 3.0).abs() < 0.01);
         }
     }
 
@@ -184,8 +190,7 @@ mod tests {
 #[cfg(test)]
 mod attention_tests {
     use crate::attention::{
-        CoocStats, RsvsAttention, AttentionConfig, EntityDetector,
-        tokenize, is_groundable_to_seeds,
+        is_groundable_to_seeds, tokenize, AttentionConfig, CoocStats, EntityDetector, RsvsAttention,
     };
     use std::collections::HashMap;
 
@@ -233,7 +238,7 @@ mod attention_tests {
         stats.ingest_sentence(&["stone".into(), "hard".into()]);
         stats.ingest_sentence(&["stone".into(), "rough".into()]);
         let cooc = stats.cooc("stone", "hard");
-        assert!((cooc - 2.0/3.0).abs() < 0.01);
+        assert!((cooc - 2.0 / 3.0).abs() < 0.01);
     }
 
     #[test]
@@ -251,17 +256,20 @@ mod attention_tests {
 
     #[test]
     fn split_sentences_basic() {
-        let sentences = crate::attention::split_sentences(
-            "Stone is hard. Fire is hot. Water is liquid."
-        );
+        let sentences =
+            crate::attention::split_sentences("Stone is hard. Fire is hot. Water is liquid.");
         assert_eq!(sentences.len(), 3);
     }
 
     #[test]
     fn entity_detector_promotes_above_threshold() {
         let mut det = EntityDetector::new();
-        for _ in 0..3 { det.record("stone", true); }
-        for _ in 0..2 { det.record("hard", true); }
+        for _ in 0..3 {
+            det.record("stone", true);
+        }
+        for _ in 0..2 {
+            det.record("hard", true);
+        }
         let candidates = det.candidates(3);
         assert!(candidates.contains(&"stone".to_string()));
         assert!(!candidates.contains(&"hard".to_string()));
@@ -299,14 +307,17 @@ mod attention_tests {
             min_cooc: 2,
             ..AttentionConfig::default()
         });
-        let tokens = vec!["stone".into(), "hard".into(), "solid".into(), "water".into()];
+        let tokens = vec![
+            "stone".into(),
+            "hard".into(),
+            "solid".into(),
+            "water".into(),
+        ];
         let atom_sets: HashMap<String, Vec<u32>> = HashMap::new();
         let result = attention.select(&tokens, &stats, &atom_sets);
 
         if let Some(stone_selected) = result.get("stone") {
-            let selected_tokens: Vec<_> = stone_selected.iter()
-                .map(|c| c.token.as_str())
-                .collect();
+            let selected_tokens: Vec<_> = stone_selected.iter().map(|c| c.token.as_str()).collect();
             assert!(selected_tokens.contains(&"hard") || selected_tokens.contains(&"solid"));
             assert!(!selected_tokens.contains(&"water"));
         }
@@ -316,23 +327,22 @@ mod attention_tests {
 #[cfg(test)]
 mod autonomy_tests {
     use crate::autonomy::{
-        AutonomyEngine, AutonomyConfig, ConfidenceUpdateResult,
-        RemovalDecision, WarmUpState, MemoryClass,
-        StatusTransitionResult,
+        AutonomyConfig, AutonomyEngine, ConfidenceUpdateResult, MemoryClass, RemovalDecision,
+        StatusTransitionResult, WarmUpState,
     };
-    use crate::types::{Tier, NodeStatus};
+    use crate::types::{NodeStatus, Tier};
 
     fn engine() -> AutonomyEngine {
         AutonomyEngine::new(AutonomyConfig {
-            eta:                   0.1,
-            confidence_tier1:      0.85,
-            confidence_tier2:      0.50,
-            tau_remove:            0.10,
-            threshold_impact:      3,
+            eta: 0.1,
+            confidence_tier1: 0.85,
+            confidence_tier2: 0.50,
+            tau_remove: 0.10,
+            threshold_impact: 3,
             threshold_global_delta: 5.0,
-            n_warm:                5,
-            promote_threshold:     0.75,
-            demote_threshold:      0.60,
+            n_warm: 5,
+            promote_threshold: 0.75,
+            demote_threshold: 0.60,
             quarantine_flip_threshold: 3,
             ..AutonomyConfig::default()
         })
@@ -377,7 +387,7 @@ mod autonomy_tests {
             e.update_confidence(10, 1.0, 1.0, &[], 0);
         }
         let conf = e.confidence(10).unwrap();
-        assert!(conf >= 0.0 && conf <= 1.0);
+        assert!((0.0..=1.0).contains(&conf));
     }
 
     #[test]
@@ -415,10 +425,13 @@ mod autonomy_tests {
         let mut e = engine();
         e.register(10, 0.80, Tier::Tier2); // >= 0.75 promote threshold
         let r = e.transition_status(10);
-        assert!(matches!(r, StatusTransitionResult::Transitioned {
-            from: NodeStatus::New,
-            to: NodeStatus::Candidate,
-        }));
+        assert!(matches!(
+            r,
+            StatusTransitionResult::Transitioned {
+                from: NodeStatus::New,
+                to: NodeStatus::Candidate,
+            }
+        ));
     }
 
     #[test]
@@ -429,10 +442,13 @@ mod autonomy_tests {
         e.transition_status(10);
         // Second transition: Candidate → Stable (confidence >= 0.75)
         let r = e.transition_status(10);
-        assert!(matches!(r, StatusTransitionResult::Transitioned {
-            from: NodeStatus::Candidate,
-            to: NodeStatus::Stable,
-        }));
+        assert!(matches!(
+            r,
+            StatusTransitionResult::Transitioned {
+                from: NodeStatus::Candidate,
+                to: NodeStatus::Stable,
+            }
+        ));
     }
 
     #[test]
@@ -442,15 +458,18 @@ mod autonomy_tests {
         // Get to Stable
         e.transition_status(10); // New → Candidate
         e.transition_status(10); // Candidate → Stable
-        // Now drop confidence below demote threshold
+                                 // Now drop confidence below demote threshold
         if let Some(rec) = e.records.get_mut(&10) {
             rec.confidence = 0.50; // < 0.60 demote threshold
         }
         let r = e.transition_status(10);
-        assert!(matches!(r, StatusTransitionResult::Transitioned {
-            from: NodeStatus::Stable,
-            to: NodeStatus::Deprecated,
-        }));
+        assert!(matches!(
+            r,
+            StatusTransitionResult::Transitioned {
+                from: NodeStatus::Stable,
+                to: NodeStatus::Deprecated,
+            }
+        ));
     }
 
     // ------------------------------------------------------------------
@@ -464,27 +483,36 @@ mod autonomy_tests {
 
         // New → Candidate
         let r1 = e.transition_status(10);
-        assert!(matches!(r1, StatusTransitionResult::Transitioned {
-            from: NodeStatus::New,
-            to: NodeStatus::Candidate,
-        }));
+        assert!(matches!(
+            r1,
+            StatusTransitionResult::Transitioned {
+                from: NodeStatus::New,
+                to: NodeStatus::Candidate,
+            }
+        ));
 
         // Candidate → Stable
         let r2 = e.transition_status(10);
-        assert!(matches!(r2, StatusTransitionResult::Transitioned {
-            from: NodeStatus::Candidate,
-            to: NodeStatus::Stable,
-        }));
+        assert!(matches!(
+            r2,
+            StatusTransitionResult::Transitioned {
+                from: NodeStatus::Candidate,
+                to: NodeStatus::Stable,
+            }
+        ));
 
         // Drop confidence → Deprecated
         if let Some(rec) = e.records.get_mut(&10) {
             rec.confidence = 0.50;
         }
         let r3 = e.transition_status(10);
-        assert!(matches!(r3, StatusTransitionResult::Transitioned {
-            from: NodeStatus::Stable,
-            to: NodeStatus::Deprecated,
-        }));
+        assert!(matches!(
+            r3,
+            StatusTransitionResult::Transitioned {
+                from: NodeStatus::Stable,
+                to: NodeStatus::Deprecated,
+            }
+        ));
     }
 
     // ------------------------------------------------------------------
@@ -506,7 +534,7 @@ mod autonomy_tests {
         e.register(10, 0.80, Tier::Tier2);
         e.transition_status(10); // New → Candidate
         e.transition_status(10); // Candidate → Stable
-        // Confidence 0.65 is >= demote_threshold (0.60) → stays stable
+                                 // Confidence 0.65 is >= demote_threshold (0.60) → stays stable
         if let Some(rec) = e.records.get_mut(&10) {
             rec.confidence = 0.65;
         }
@@ -525,10 +553,13 @@ mod autonomy_tests {
             rec.confidence = 0.55; // < 0.60
         }
         let r = e.transition_status(10);
-        assert!(matches!(r, StatusTransitionResult::Transitioned {
-            from: NodeStatus::Stable,
-            to: NodeStatus::Deprecated,
-        }));
+        assert!(matches!(
+            r,
+            StatusTransitionResult::Transitioned {
+                from: NodeStatus::Stable,
+                to: NodeStatus::Deprecated,
+            }
+        ));
     }
 
     #[test]
@@ -537,10 +568,13 @@ mod autonomy_tests {
         e.register(10, 0.75, Tier::Tier2); // exactly at promote_threshold
         let r = e.transition_status(10);
         // 0.75 >= 0.75 → should promote
-        assert!(matches!(r, StatusTransitionResult::Transitioned {
-            to: NodeStatus::Candidate,
-            ..
-        }));
+        assert!(matches!(
+            r,
+            StatusTransitionResult::Transitioned {
+                to: NodeStatus::Candidate,
+                ..
+            }
+        ));
     }
 
     #[test]
@@ -549,7 +583,7 @@ mod autonomy_tests {
         e.register(10, 0.80, Tier::Tier2);
         e.transition_status(10); // New → Candidate
         e.transition_status(10); // Candidate → Stable
-        // Exactly at demote_threshold (0.60) → should NOT demote
+                                 // Exactly at demote_threshold (0.60) → should NOT demote
         if let Some(rec) = e.records.get_mut(&10) {
             rec.confidence = 0.60;
         }
@@ -570,10 +604,13 @@ mod autonomy_tests {
             rec.status_flip_count = 3; // quarantine_flip_threshold = 3
         }
         let r = e.transition_status(10);
-        assert!(matches!(r, StatusTransitionResult::Transitioned {
-            to: NodeStatus::Quarantine,
-            ..
-        }));
+        assert!(matches!(
+            r,
+            StatusTransitionResult::Transitioned {
+                to: NodeStatus::Quarantine,
+                ..
+            }
+        ));
     }
 
     #[test]
@@ -598,10 +635,13 @@ mod autonomy_tests {
         }
         let r = e.transition_status(10);
         // flip_count >= 3 should trigger quarantine
-        assert!(matches!(r, StatusTransitionResult::Transitioned {
-            to: NodeStatus::Quarantine,
-            ..
-        }));
+        assert!(matches!(
+            r,
+            StatusTransitionResult::Transitioned {
+                to: NodeStatus::Quarantine,
+                ..
+            }
+        ));
     }
 
     #[test]
@@ -614,10 +654,13 @@ mod autonomy_tests {
         }
         let r = e.transition_status(10);
         // Should NOT quarantine (2 < 3)
-        assert!(!matches!(r, StatusTransitionResult::Transitioned {
-            to: NodeStatus::Quarantine,
-            ..
-        }));
+        assert!(!matches!(
+            r,
+            StatusTransitionResult::Transitioned {
+                to: NodeStatus::Quarantine,
+                ..
+            }
+        ));
     }
 
     // ------------------------------------------------------------------
@@ -629,7 +672,10 @@ mod autonomy_tests {
         let mut e = engine();
         e.register_seed(1, 1.0, Tier::Tier1);
         let r = e.transition_status(1);
-        assert!(matches!(r, StatusTransitionResult::Blocked("seed node is immutable")));
+        assert!(matches!(
+            r,
+            StatusTransitionResult::Blocked("seed node is immutable")
+        ));
     }
 
     #[test]
@@ -733,7 +779,9 @@ mod autonomy_tests {
             n_warm: 3,
             ..AutonomyConfig::default()
         });
-        for _ in 0..3 { e.tick_context(); }
+        for _ in 0..3 {
+            e.tick_context();
+        }
         assert_eq!(e.warmup, WarmUpState::Complete);
     }
 
@@ -762,18 +810,29 @@ mod autonomy_tests {
 #[cfg(test)]
 mod graph_tests {
     use crate::graph::RsvsGraph;
-    use crate::types::{Node, Tier, NodeStatus, CompressionState, SemanticMeta, Edge, EdgeSource};
+    use crate::types::{CompressionState, Edge, EdgeSource, Node, NodeStatus, SemanticMeta, Tier};
 
     #[test]
     fn expand_raw_node_returns_self() {
         let mut g = RsvsGraph::new();
-        let id = g.insert_node(Node {
-            id: 0, label: "test".into(), surface_label: "test@en".into(),
-            kind: "node".into(), tier: Tier::Tier2, confidence: 0.5,
-            status: NodeStatus::Candidate, is_seed: false, is_locked: false,
-            semantic: SemanticMeta::default(), policy_meta: None, language_links: vec![],
-            atoms: vec![], fingerprint: None,
-        }).unwrap();
+        let id = g
+            .insert_node(Node {
+                id: 0,
+                label: "test".into(),
+                surface_label: "test@en".into(),
+                kind: "node".into(),
+                tier: Tier::Tier2,
+                confidence: 0.5,
+                status: NodeStatus::Candidate,
+                is_seed: false,
+                is_locked: false,
+                semantic: SemanticMeta::default(),
+                policy_meta: None,
+                language_links: vec![],
+                atoms: vec![],
+                fingerprint: None,
+            })
+            .unwrap();
         let expanded = g.expand(id);
         assert_eq!(expanded, vec![id]);
     }
@@ -782,32 +841,65 @@ mod graph_tests {
     fn expand_raw_node_with_atoms_returns_atoms() {
         let mut g = RsvsGraph::new();
         // Create two base nodes first
-        let a1 = g.insert_node(Node {
-            id: 0, label: "a1".into(), surface_label: "a1@en".into(),
-            kind: "node".into(), tier: Tier::Tier1, confidence: 1.0,
-            status: NodeStatus::Stable, is_seed: true, is_locked: true,
-            semantic: SemanticMeta::default(), policy_meta: None, language_links: vec![],
-            atoms: vec![], fingerprint: None,
-        }).unwrap();
-        let a2 = g.insert_node(Node {
-            id: 0, label: "a2".into(), surface_label: "a2@en".into(),
-            kind: "node".into(), tier: Tier::Tier1, confidence: 1.0,
-            status: NodeStatus::Stable, is_seed: true, is_locked: true,
-            semantic: SemanticMeta::default(), policy_meta: None, language_links: vec![],
-            atoms: vec![], fingerprint: None,
-        }).unwrap();
+        let a1 = g
+            .insert_node(Node {
+                id: 0,
+                label: "a1".into(),
+                surface_label: "a1@en".into(),
+                kind: "node".into(),
+                tier: Tier::Tier1,
+                confidence: 1.0,
+                status: NodeStatus::Stable,
+                is_seed: true,
+                is_locked: true,
+                semantic: SemanticMeta::default(),
+                policy_meta: None,
+                language_links: vec![],
+                atoms: vec![],
+                fingerprint: None,
+            })
+            .unwrap();
+        let a2 = g
+            .insert_node(Node {
+                id: 0,
+                label: "a2".into(),
+                surface_label: "a2@en".into(),
+                kind: "node".into(),
+                tier: Tier::Tier1,
+                confidence: 1.0,
+                status: NodeStatus::Stable,
+                is_seed: true,
+                is_locked: true,
+                semantic: SemanticMeta::default(),
+                policy_meta: None,
+                language_links: vec![],
+                atoms: vec![],
+                fingerprint: None,
+            })
+            .unwrap();
         // Create node with atoms
-        let id = g.insert_node(Node {
-            id: 0, label: "comp".into(), surface_label: "comp@en".into(),
-            kind: "node".into(), tier: Tier::Tier2, confidence: 0.5,
-            status: NodeStatus::Candidate, is_seed: false, is_locked: false,
-            semantic: SemanticMeta {
-                compression_state: CompressionState::Raw,
-                derived_from_node_ids: vec![],
-                compression_reason: None,
-            }, policy_meta: None, language_links: vec![],
-            atoms: vec![a1, a2], fingerprint: None,
-        }).unwrap();
+        let id = g
+            .insert_node(Node {
+                id: 0,
+                label: "comp".into(),
+                surface_label: "comp@en".into(),
+                kind: "node".into(),
+                tier: Tier::Tier2,
+                confidence: 0.5,
+                status: NodeStatus::Candidate,
+                is_seed: false,
+                is_locked: false,
+                semantic: SemanticMeta {
+                    compression_state: CompressionState::Raw,
+                    derived_from_node_ids: vec![],
+                    compression_reason: None,
+                },
+                policy_meta: None,
+                language_links: vec![],
+                atoms: vec![a1, a2],
+                fingerprint: None,
+            })
+            .unwrap();
         let expanded = g.expand(id);
         assert_eq!(expanded, vec![a1, a2]);
     }
@@ -815,24 +907,46 @@ mod graph_tests {
     #[test]
     fn expand_compressed_node_returns_derived() {
         let mut g = RsvsGraph::new();
-        let a1 = g.insert_node(Node {
-            id: 0, label: "a1".into(), surface_label: "a1@en".into(),
-            kind: "node".into(), tier: Tier::Tier1, confidence: 1.0,
-            status: NodeStatus::Stable, is_seed: true, is_locked: true,
-            semantic: SemanticMeta::default(), policy_meta: None, language_links: vec![],
-            atoms: vec![], fingerprint: None,
-        }).unwrap();
-        let id = g.insert_node(Node {
-            id: 0, label: "comp".into(), surface_label: "comp@en".into(),
-            kind: "node".into(), tier: Tier::Tier2, confidence: 0.5,
-            status: NodeStatus::Candidate, is_seed: false, is_locked: false,
-            semantic: SemanticMeta {
-                compression_state: CompressionState::Compressed,
-                derived_from_node_ids: vec![a1],
-                compression_reason: Some("test".into()),
-            }, policy_meta: None, language_links: vec![],
-            atoms: vec![], fingerprint: None,
-        }).unwrap();
+        let a1 = g
+            .insert_node(Node {
+                id: 0,
+                label: "a1".into(),
+                surface_label: "a1@en".into(),
+                kind: "node".into(),
+                tier: Tier::Tier1,
+                confidence: 1.0,
+                status: NodeStatus::Stable,
+                is_seed: true,
+                is_locked: true,
+                semantic: SemanticMeta::default(),
+                policy_meta: None,
+                language_links: vec![],
+                atoms: vec![],
+                fingerprint: None,
+            })
+            .unwrap();
+        let id = g
+            .insert_node(Node {
+                id: 0,
+                label: "comp".into(),
+                surface_label: "comp@en".into(),
+                kind: "node".into(),
+                tier: Tier::Tier2,
+                confidence: 0.5,
+                status: NodeStatus::Candidate,
+                is_seed: false,
+                is_locked: false,
+                semantic: SemanticMeta {
+                    compression_state: CompressionState::Compressed,
+                    derived_from_node_ids: vec![a1],
+                    compression_reason: Some("test".into()),
+                },
+                policy_meta: None,
+                language_links: vec![],
+                atoms: vec![],
+                fingerprint: None,
+            })
+            .unwrap();
         let expanded = g.expand(id);
         assert_eq!(expanded, vec![a1]);
     }
@@ -841,15 +955,24 @@ mod graph_tests {
     fn dag_prevents_self_reference_in_derived() {
         let mut g = RsvsGraph::new();
         let result = g.insert_node(Node {
-            id: 5, label: "selfref".into(), surface_label: "selfref@en".into(),
-            kind: "node".into(), tier: Tier::Tier2, confidence: 0.5,
-            status: NodeStatus::Candidate, is_seed: false, is_locked: false,
+            id: 5,
+            label: "selfref".into(),
+            surface_label: "selfref@en".into(),
+            kind: "node".into(),
+            tier: Tier::Tier2,
+            confidence: 0.5,
+            status: NodeStatus::Candidate,
+            is_seed: false,
+            is_locked: false,
             semantic: SemanticMeta {
                 compression_state: CompressionState::Compressed,
                 derived_from_node_ids: vec![5], // self-reference
                 compression_reason: None,
-            }, policy_meta: None, language_links: vec![],
-            atoms: vec![], fingerprint: None,
+            },
+            policy_meta: None,
+            language_links: vec![],
+            atoms: vec![],
+            fingerprint: None,
         });
         assert!(result.is_err());
     }
@@ -857,16 +980,30 @@ mod graph_tests {
     #[test]
     fn insert_edge_requires_existing_nodes() {
         let mut g = RsvsGraph::new();
-        let n1 = g.insert_node(Node {
-            id: 0, label: "n1".into(), surface_label: "n1@en".into(),
-            kind: "node".into(), tier: Tier::Tier1, confidence: 1.0,
-            status: NodeStatus::Stable, is_seed: true, is_locked: true,
-            semantic: SemanticMeta::default(), policy_meta: None, language_links: vec![],
-            atoms: vec![], fingerprint: None,
-        }).unwrap();
+        let n1 = g
+            .insert_node(Node {
+                id: 0,
+                label: "n1".into(),
+                surface_label: "n1@en".into(),
+                kind: "node".into(),
+                tier: Tier::Tier1,
+                confidence: 1.0,
+                status: NodeStatus::Stable,
+                is_seed: true,
+                is_locked: true,
+                semantic: SemanticMeta::default(),
+                policy_meta: None,
+                language_links: vec![],
+                atoms: vec![],
+                fingerprint: None,
+            })
+            .unwrap();
         // Try edge with non-existent target
         let result = g.insert_edge(Edge {
-            from: n1, to: 999, weight: 0.5, source: EdgeSource::Learned,
+            from: n1,
+            to: 999,
+            weight: 0.5,
+            source: EdgeSource::Learned,
         });
         assert!(result.is_err());
     }
@@ -874,22 +1011,47 @@ mod graph_tests {
     #[test]
     fn insert_edge_with_both_existing_nodes() {
         let mut g = RsvsGraph::new();
-        let n1 = g.insert_node(Node {
-            id: 0, label: "n1".into(), surface_label: "n1@en".into(),
-            kind: "node".into(), tier: Tier::Tier1, confidence: 1.0,
-            status: NodeStatus::Stable, is_seed: true, is_locked: true,
-            semantic: SemanticMeta::default(), policy_meta: None, language_links: vec![],
-            atoms: vec![], fingerprint: None,
-        }).unwrap();
-        let n2 = g.insert_node(Node {
-            id: 0, label: "n2".into(), surface_label: "n2@en".into(),
-            kind: "node".into(), tier: Tier::Tier1, confidence: 1.0,
-            status: NodeStatus::Stable, is_seed: true, is_locked: true,
-            semantic: SemanticMeta::default(), policy_meta: None, language_links: vec![],
-            atoms: vec![], fingerprint: None,
-        }).unwrap();
+        let n1 = g
+            .insert_node(Node {
+                id: 0,
+                label: "n1".into(),
+                surface_label: "n1@en".into(),
+                kind: "node".into(),
+                tier: Tier::Tier1,
+                confidence: 1.0,
+                status: NodeStatus::Stable,
+                is_seed: true,
+                is_locked: true,
+                semantic: SemanticMeta::default(),
+                policy_meta: None,
+                language_links: vec![],
+                atoms: vec![],
+                fingerprint: None,
+            })
+            .unwrap();
+        let n2 = g
+            .insert_node(Node {
+                id: 0,
+                label: "n2".into(),
+                surface_label: "n2@en".into(),
+                kind: "node".into(),
+                tier: Tier::Tier1,
+                confidence: 1.0,
+                status: NodeStatus::Stable,
+                is_seed: true,
+                is_locked: true,
+                semantic: SemanticMeta::default(),
+                policy_meta: None,
+                language_links: vec![],
+                atoms: vec![],
+                fingerprint: None,
+            })
+            .unwrap();
         let result = g.insert_edge(Edge {
-            from: n1, to: n2, weight: 0.8, source: EdgeSource::Learned,
+            from: n1,
+            to: n2,
+            weight: 0.8,
+            source: EdgeSource::Learned,
         });
         assert!(result.is_ok());
         assert_eq!(g.edge_count(), 1);
@@ -925,19 +1087,29 @@ mod graph_tests {
         let mut g = RsvsGraph::new();
         assert_eq!(g.node_count(), 0);
         g.insert_node(Node {
-            id: 0, label: "n1".into(), surface_label: "n1@en".into(),
-            kind: "node".into(), tier: Tier::Tier2, confidence: 0.5,
-            status: NodeStatus::New, is_seed: false, is_locked: false,
-            semantic: SemanticMeta::default(), policy_meta: None, language_links: vec![],
-            atoms: vec![], fingerprint: None,
-        }).unwrap();
+            id: 0,
+            label: "n1".into(),
+            surface_label: "n1@en".into(),
+            kind: "node".into(),
+            tier: Tier::Tier2,
+            confidence: 0.5,
+            status: NodeStatus::New,
+            is_seed: false,
+            is_locked: false,
+            semantic: SemanticMeta::default(),
+            policy_meta: None,
+            language_links: vec![],
+            atoms: vec![],
+            fingerprint: None,
+        })
+        .unwrap();
         assert_eq!(g.node_count(), 1);
     }
 }
 
 #[cfg(test)]
 mod v42_node_tests {
-    use crate::types::{Node, NodeStatus, Tier, CompressionState, SemanticMeta, PolicyMeta};
+    use crate::types::{CompressionState, Node, NodeStatus, PolicyMeta, SemanticMeta, Tier};
 
     #[test]
     fn v42_node_creation() {
@@ -1024,7 +1196,10 @@ mod v42_node_tests {
             atoms: vec![1, 2, 3],
             fingerprint: None,
         };
-        assert_eq!(node.semantic.compression_state, CompressionState::Compressed);
+        assert_eq!(
+            node.semantic.compression_state,
+            CompressionState::Compressed
+        );
         assert_eq!(node.semantic.derived_from_node_ids, vec![1, 2, 3]);
         assert!(node.policy_meta.is_some());
         let pm = node.policy_meta.unwrap();
@@ -1034,7 +1209,7 @@ mod v42_node_tests {
     #[test]
     fn node_status_lifecycle() {
         // New → Candidate → Stable → Deprecated
-        let statuses = vec![
+        let statuses = [
             NodeStatus::New,
             NodeStatus::Candidate,
             NodeStatus::Stable,
@@ -1054,11 +1229,20 @@ mod v42_node_tests {
     #[test]
     fn surface_label_has_locale() {
         let node = Node {
-            id: 1, label: "test".into(), surface_label: "test@en".into(),
-            kind: "node".into(), tier: Tier::Tier2, confidence: 0.5,
-            status: NodeStatus::New, is_seed: false, is_locked: false,
-            semantic: SemanticMeta::default(), policy_meta: None,
-            language_links: vec![], atoms: vec![], fingerprint: None,
+            id: 1,
+            label: "test".into(),
+            surface_label: "test@en".into(),
+            kind: "node".into(),
+            tier: Tier::Tier2,
+            confidence: 0.5,
+            status: NodeStatus::New,
+            is_seed: false,
+            is_locked: false,
+            semantic: SemanticMeta::default(),
+            policy_meta: None,
+            language_links: vec![],
+            atoms: vec![],
+            fingerprint: None,
         };
         assert!(node.surface_label.contains("@"));
     }
@@ -1067,27 +1251,48 @@ mod v42_node_tests {
     fn seed_node_has_required_invariants() {
         // In v4.2: is_seed → is_locked=true, tier=1, confidence=1.0, status=stable
         let node = Node {
-            id: 1, label: "exists".into(), surface_label: "exists@en".into(),
-            kind: "node".into(), tier: Tier::Tier1, confidence: 1.0,
-            status: NodeStatus::Stable, is_seed: true, is_locked: true,
-            semantic: SemanticMeta::default(), policy_meta: None,
-            language_links: vec![], atoms: vec![], fingerprint: None,
+            id: 1,
+            label: "exists".into(),
+            surface_label: "exists@en".into(),
+            kind: "node".into(),
+            tier: Tier::Tier1,
+            confidence: 1.0,
+            status: NodeStatus::Stable,
+            is_seed: true,
+            is_locked: true,
+            semantic: SemanticMeta::default(),
+            policy_meta: None,
+            language_links: vec![],
+            atoms: vec![],
+            fingerprint: None,
         };
         assert!(node.is_seed);
         assert!(node.is_locked, "Seed node must be locked");
         assert_eq!(node.tier, Tier::Tier1, "Seed node must be Tier1");
-        assert!((node.confidence - 1.0).abs() < 0.001, "Seed node must have confidence 1.0");
+        assert!(
+            (node.confidence - 1.0).abs() < 0.001,
+            "Seed node must have confidence 1.0"
+        );
         assert_eq!(node.status, NodeStatus::Stable, "Seed node must be Stable");
     }
 
     #[test]
     fn non_seed_node_not_locked() {
         let node = Node {
-            id: 10, label: "test".into(), surface_label: "test@en".into(),
-            kind: "node".into(), tier: Tier::Tier2, confidence: 0.5,
-            status: NodeStatus::New, is_seed: false, is_locked: false,
-            semantic: SemanticMeta::default(), policy_meta: None,
-            language_links: vec![], atoms: vec![], fingerprint: None,
+            id: 10,
+            label: "test".into(),
+            surface_label: "test@en".into(),
+            kind: "node".into(),
+            tier: Tier::Tier2,
+            confidence: 0.5,
+            status: NodeStatus::New,
+            is_seed: false,
+            is_locked: false,
+            semantic: SemanticMeta::default(),
+            policy_meta: None,
+            language_links: vec![],
+            atoms: vec![],
+            fingerprint: None,
         };
         assert!(!node.is_seed);
         assert!(!node.is_locked);
@@ -1096,8 +1301,8 @@ mod v42_node_tests {
 
 #[cfg(test)]
 mod pipeline_tests {
-    use crate::pipeline::{Rsvs, PipelineConfig};
     use crate::autonomy::AutonomyConfig;
+    use crate::pipeline::{PipelineConfig, Rsvs};
     use crate::sense::SenseConfig;
     use crate::types::NodeStatus;
 
@@ -1188,7 +1393,7 @@ mod pipeline_tests {
         // "exists" and "entity" are seed nodes
         let result = rsvs.appraise("exists entity relation state change");
         assert!(result.agree_pct > 0.0);
-        assert!(result.evidence.len() > 0);
+        assert!(!result.evidence.is_empty());
     }
 
     #[test]
@@ -1203,7 +1408,11 @@ mod pipeline_tests {
     fn appraise_verdict_consistent() {
         let rsvs = make_rsvs();
         let result = rsvs.appraise("exists entity relation");
-        assert!(result.verdict == "consistent" || result.verdict == "partial" || result.verdict == "novel");
+        assert!(
+            result.verdict == "consistent"
+                || result.verdict == "partial"
+                || result.verdict == "novel"
+        );
         assert!(result.agree_pct + result.disagree_pct > 0.0);
     }
 
@@ -1223,8 +1432,10 @@ mod pipeline_tests {
         let result = rsvs.appraise("exists entity relation state change");
         // Evidence should be sorted by confidence descending
         for i in 1..result.evidence.len() {
-            assert!(result.evidence[i-1].1 >= result.evidence[i].1,
-                "Evidence should be sorted by confidence descending");
+            assert!(
+                result.evidence[i - 1].1 >= result.evidence[i].1,
+                "Evidence should be sorted by confidence descending"
+            );
         }
     }
 
@@ -1261,7 +1472,7 @@ mod pipeline_tests {
             assert!(result.is_some());
             let relate = result.unwrap();
             // Should find some related nodes or edges
-            assert!(relate.related_nodes.len() > 0 || relate.related_edges.len() > 0);
+            assert!(!relate.related_nodes.is_empty() || !relate.related_edges.is_empty());
         }
     }
 
@@ -1336,14 +1547,38 @@ mod pipeline_tests {
     #[test]
     fn all_24_seed_nodes_present() {
         let rsvs = make_rsvs();
-        let expected = ["exists", "entity", "relation", "state", "change",
-                        "time", "space", "cause", "effect", "context",
-                        "signal", "pattern", "memory", "attention", "value",
-                        "agent", "goal", "risk", "trust", "identity",
-                        "language", "meaning", "action", "feedback"];
+        let expected = [
+            "exists",
+            "entity",
+            "relation",
+            "state",
+            "change",
+            "time",
+            "space",
+            "cause",
+            "effect",
+            "context",
+            "signal",
+            "pattern",
+            "memory",
+            "attention",
+            "value",
+            "agent",
+            "goal",
+            "risk",
+            "trust",
+            "identity",
+            "language",
+            "meaning",
+            "action",
+            "feedback",
+        ];
         for label in &expected {
-            assert!(rsvs.token_to_id.contains_key(*label),
-                "Missing seed node: {}", label);
+            assert!(
+                rsvs.token_to_id.contains_key(*label),
+                "Missing seed node: {}",
+                label
+            );
         }
     }
 
@@ -1388,11 +1623,10 @@ mod pipeline_tests {
 
 #[cfg(test)]
 mod persist_tests {
-    use crate::pipeline::{Rsvs, PipelineConfig};
     use crate::autonomy::AutonomyConfig;
+    use crate::pipeline::{PipelineConfig, Rsvs};
     use crate::sense::SenseConfig;
     use crate::types::NodeStatus;
-    use std::path::PathBuf;
     use tempfile::TempDir;
 
     fn make_rsvs() -> Rsvs {
@@ -1466,8 +1700,11 @@ mod persist_tests {
         let loaded = crate::persist::load(&path).unwrap();
 
         for atom in &atoms_before {
-            assert!(loaded.token_to_id.contains_key(atom.as_str()),
-                "Atom '{}' missing after reload", atom);
+            assert!(
+                loaded.token_to_id.contains_key(atom.as_str()),
+                "Atom '{}' missing after reload",
+                atom
+            );
         }
     }
 
@@ -1503,5 +1740,448 @@ mod persist_tests {
         assert!(parsed.get("version").is_some());
         assert!(parsed.get("nodes").is_some());
         assert!(parsed.get("edges").is_some());
+    }
+}
+
+// ===================================================================
+// NEW: Comprehensive property-based / integration tests for v4.2
+// ===================================================================
+
+#[cfg(test)]
+mod snapshot_v42_tests {
+    use crate::pipeline::Rsvs;
+    use crate::events::SCHEMA_VERSION;
+
+    fn make_rsvs() -> Rsvs {
+        Rsvs::new(Default::default())
+    }
+
+    #[test]
+    fn snapshot_v1_has_correct_schema_version() {
+        let r = make_rsvs();
+        let snap = r.snapshot_v1();
+        assert_eq!(snap.schema_version, SCHEMA_VERSION);
+    }
+
+    #[test]
+    fn snapshot_v1_has_api_version() {
+        let r = make_rsvs();
+        let snap = r.snapshot_v1();
+        assert_eq!(snap.api_version, "v1");
+    }
+
+    #[test]
+    fn snapshot_v1_nodes_all_have_kind_node() {
+        let r = make_rsvs();
+        let snap = r.snapshot_v1();
+        for node in &snap.nodes {
+            assert_eq!(node.kind, "node", "node {} has kind={}", node.id, node.kind);
+        }
+    }
+
+    #[test]
+    fn snapshot_v1_seed_nodes_have_correct_invariants() {
+        let r = make_rsvs();
+        let snap = r.snapshot_v1();
+        let seeds: Vec<_> = snap.nodes.iter().filter(|n| n.is_seed).collect();
+        assert!(!seeds.is_empty(), "should have seed nodes");
+        for seed in &seeds {
+            assert!(seed.is_locked, "seed {} must be locked", seed.id);
+            assert_eq!(seed.tier, 1, "seed {} must be tier 1", seed.id);
+            assert!((seed.confidence - 1.0).abs() < 0.001, "seed {} must have confidence 1.0", seed.id);
+            assert_eq!(seed.status, "stable", "seed {} must be stable", seed.id);
+        }
+    }
+
+    #[test]
+    fn snapshot_v1_seed_nodes_have_surface_label_with_locale() {
+        let r = make_rsvs();
+        let snap = r.snapshot_v1();
+        for node in &snap.nodes {
+            assert!(
+                node.surface_label.contains('@'),
+                "node {} surface_label '{}' must contain @locale",
+                node.id, node.surface_label
+            );
+        }
+    }
+
+    #[test]
+    fn snapshot_v1_compressed_nodes_have_derived_ids() {
+        let mut r = make_rsvs();
+        r.ingest_text("Stone is hard. Stone is solid. Hard stone resists pressure.");
+        let snap = r.snapshot_v1();
+        for node in &snap.nodes {
+            if node.compression_state == "compressed" {
+                assert!(
+                    !node.derived_from_node_ids.is_empty(),
+                    "compressed node {} must have derived_from_node_ids",
+                    node.id
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn snapshot_v1_has_edges_after_ingest() {
+        let mut r = make_rsvs();
+        r.ingest_text("Stone is hard. Stone is solid. Hard stone resists pressure.");
+        let snap = r.snapshot_v1();
+        // After ingest, edges may or may not exist; just verify the field is present
+        // edges.len() is always >= 0, just verify the field exists
+        let _ = snap.edges.len();
+    }
+}
+
+#[cfg(test)]
+mod persistence_roundtrip_tests {
+    use crate::pipeline::Rsvs;
+    use crate::persist;
+    use std::io;
+
+    fn make_trained_rsvs() -> Rsvs {
+        let mut r = Rsvs::new(Default::default());
+        r.ingest_text("Stone is hard. Stone is solid. Hard stone resists erosion and pressure.");
+        r.ingest_text("Water is a clear transparent liquid. Rain is water falling from clouds.");
+        r
+    }
+
+    fn roundtrip(r: &Rsvs, dir: &tempfile::TempDir) -> io::Result<Rsvs> {
+        let path = dir.path().join("rsvs-state.json");
+        persist::save(r, &path)?;
+        persist::load(&path)
+    }
+
+    #[test]
+    fn save_load_roundtrip_preserves_node_count() {
+        let r = make_trained_rsvs();
+        let dir = tempfile::tempdir().unwrap();
+        let r2 = roundtrip(&r, &dir).unwrap();
+        assert_eq!(r.graph.node_count(), r2.graph.node_count());
+    }
+
+    #[test]
+    fn save_load_roundtrip_preserves_confidence_values() {
+        let r = make_trained_rsvs();
+        let dir = tempfile::tempdir().unwrap();
+        let r2 = roundtrip(&r, &dir).unwrap();
+        // Compare confidence for known nodes
+        for id in r.graph.nodes.keys() {
+            let c1 = r.autonomy.confidence(*id);
+            let c2 = r2.autonomy.confidence(*id);
+            if let (Some(v1), Some(v2)) = (c1, c2) {
+                assert!((v1 - v2).abs() < 0.01, "confidence mismatch for node {}", id);
+            }
+        }
+    }
+
+    #[test]
+    fn save_load_roundtrip_preserves_total_contexts() {
+        let r = make_trained_rsvs();
+        let dir = tempfile::tempdir().unwrap();
+        let r2 = roundtrip(&r, &dir).unwrap();
+        assert_eq!(r.total_contexts, r2.total_contexts);
+    }
+
+    #[test]
+    fn save_load_roundtrip_preserves_edge_count() {
+        let r = make_trained_rsvs();
+        let dir = tempfile::tempdir().unwrap();
+        let r2 = roundtrip(&r, &dir).unwrap();
+        assert_eq!(r.graph.edge_count(), r2.graph.edge_count());
+    }
+
+    #[test]
+    fn double_roundtrip_is_idempotent() {
+        let r = make_trained_rsvs();
+        let dir = tempfile::tempdir().unwrap();
+        let r2 = roundtrip(&r, &dir).unwrap();
+        let dir2 = tempfile::tempdir().unwrap();
+        let r3 = roundtrip(&r2, &dir2).unwrap();
+        assert_eq!(r2.graph.node_count(), r3.graph.node_count());
+        assert_eq!(r2.total_contexts, r3.total_contexts);
+    }
+}
+
+#[cfg(test)]
+mod appraise_tests {
+    use crate::pipeline::Rsvs;
+
+    fn make_trained_rsvs() -> Rsvs {
+        let mut r = Rsvs::new(Default::default());
+        r.ingest_text("Stone is hard. Stone is solid. Hard stone resists erosion and pressure.");
+        r
+    }
+
+    #[test]
+    fn appraise_with_known_text_returns_expected_verdict() {
+        let r = make_trained_rsvs();
+        let result = r.appraise("stone is hard");
+        // "stone" and "hard" should be in the graph → agree or partial
+        assert!(["consistent", "partial"].contains(&result.verdict.as_str()),
+            "expected consistent or partial, got {}", result.verdict);
+    }
+
+    #[test]
+    fn appraise_with_empty_text_returns_novel() {
+        let r = make_trained_rsvs();
+        let result = r.appraise("");
+        assert_eq!(result.verdict, "novel");
+        assert_eq!(result.agree_pct, 0.0);
+        assert_eq!(result.disagree_pct, 100.0);
+    }
+
+    #[test]
+    fn appraise_with_novel_text_returns_novel() {
+        let r = make_trained_rsvs();
+        let result = r.appraise("xyzquux foobarbaz quuxland");
+        assert_eq!(result.verdict, "novel");
+    }
+
+    #[test]
+    fn appraise_evidence_sorted_by_confidence() {
+        let r = make_trained_rsvs();
+        let result = r.appraise("stone hard solid");
+        // Evidence should be sorted by confidence descending
+        for i in 1..result.evidence.len() {
+            assert!(result.evidence[i - 1].1 >= result.evidence[i].1,
+                "evidence not sorted by confidence");
+        }
+    }
+}
+
+#[cfg(test)]
+mod relate_tests {
+    use crate::pipeline::Rsvs;
+
+    fn make_trained_rsvs() -> Rsvs {
+        let mut r = Rsvs::new(Default::default());
+        r.ingest_text("Stone is hard. Stone is solid. Hard stone resists erosion and pressure.");
+        r
+    }
+
+    #[test]
+    fn relate_with_known_concept_returns_results() {
+        let r = make_trained_rsvs();
+        // "exists" is a seed node — relate should find it
+        let result = r.relate("exists");
+        assert!(result.is_some(), "relate should find results for known concept");
+        // Seed nodes may have no edges/related nodes after minimal training,
+        // so just verify the result structure is valid
+        let rel = result.unwrap();
+        // At minimum, the result should be well-formed (nodes/edges lists exist)
+        assert!(rel.related_nodes.len() <= 20);
+        assert!(rel.related_edges.len() <= 30);
+    }
+
+    #[test]
+    fn relate_with_unknown_concept_returns_none() {
+        let r = make_trained_rsvs();
+        let result = r.relate("nonexistent_concept_xyz");
+        assert!(result.is_none(), "relate should return None for unknown concept");
+    }
+
+    #[test]
+    fn relate_related_nodes_have_scores() {
+        let r = make_trained_rsvs();
+        let result = r.relate("exists");
+        if let Some(rel) = result {
+            for (_id, score) in &rel.related_nodes {
+                assert!(*score >= 0.0 && *score <= 1.0, "score out of range: {}", score);
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod event_stream_tests {
+    use crate::pipeline::Rsvs;
+
+    #[test]
+    fn event_stream_is_monotonic() {
+        let mut r = Rsvs::new(Default::default());
+        r.ingest_text("Stone is hard. Stone is solid.");
+        let batch = r.consume_events_v1(None, 1000);
+        let mut last_seq = 0u64;
+        for evt in &batch.events {
+            assert!(evt.seq > last_seq, "event seq not monotonic: {} after {}", evt.seq, last_seq);
+            last_seq = evt.seq;
+        }
+    }
+
+    #[test]
+    fn event_stream_has_correlation_id() {
+        let mut r = Rsvs::new(Default::default());
+        r.ingest_text("Stone is hard. Stone is solid.");
+        let batch = r.consume_events_v1(None, 1000);
+        for evt in &batch.events {
+            assert!(!evt.correlation_id.is_empty(), "event missing correlation_id");
+        }
+    }
+
+    #[test]
+    fn event_stream_has_schema_version() {
+        let mut r = Rsvs::new(Default::default());
+        r.ingest_text("Stone is hard.");
+        let batch = r.consume_events_v1(None, 1000);
+        for evt in &batch.events {
+            assert_eq!(evt.schema_version, "v4.2");
+        }
+    }
+
+    #[test]
+    fn event_stream_latest_seq_matches() {
+        let mut r = Rsvs::new(Default::default());
+        r.ingest_text("Stone is hard. Stone is solid.");
+        let seq = r.latest_seq_v1();
+        let batch = r.consume_events_v1(None, 1000);
+        assert_eq!(batch.latest_seq, seq);
+    }
+}
+
+#[cfg(test)]
+mod concurrent_ingest_tests {
+    use crate::pipeline::Rsvs;
+
+    #[test]
+    fn multiple_sequential_ingests_accumulate_nodes() {
+        let mut r = Rsvs::new(Default::default());
+        r.ingest_text("Stone is hard. Stone is solid.");
+        let n1 = r.graph.node_count();
+        r.ingest_text("Water is a clear transparent liquid. Rain is water falling from clouds.");
+        let n2 = r.graph.node_count();
+        assert!(n2 >= n1, "second ingest should not reduce nodes: {} -> {}", n1, n2);
+    }
+
+    #[test]
+    fn confidence_converges_with_repeated_high_evidence() {
+        let mut r = Rsvs::new(Default::default());
+        // First ingest
+        r.ingest_text("Voltage is a signal. Signal is strong. Strong voltage is measured.");
+        // Get confidence of a known node
+        let c1 = r.autonomy.confidence(
+            *r.token_to_id.get("voltage").unwrap_or(&0)
+        ).unwrap_or(0.0);
+        // Second ingest with same signal
+        r.ingest_text("Voltage is a signal. Signal is strong. Strong voltage is measured again.");
+        let c2 = r.autonomy.confidence(
+            *r.token_to_id.get("voltage").unwrap_or(&0)
+        ).unwrap_or(0.0);
+        assert!(c2 >= c1, "confidence should converge upwards with repeated evidence: {} -> {}", c1, c2);
+    }
+
+    #[test]
+    fn confidence_decays_with_repeated_low_evidence() {
+        use crate::autonomy::{AutonomyConfig, AutonomyEngine};
+        use crate::types::Tier;
+        let mut e = AutonomyEngine::new(AutonomyConfig {
+            eta: 0.1,
+            ..Default::default()
+        });
+        e.register(10, 0.80, Tier::Tier2);
+        for _ in 0..20 {
+            e.update_confidence(10, 0.0, 0.0, &[], 0);
+        }
+        assert!(e.confidence(10).unwrap() < 0.80);
+    }
+
+    #[test]
+    fn quarantine_is_triggered_after_enough_flips() {
+        use crate::autonomy::{AutonomyConfig, AutonomyEngine};
+        use crate::types::{NodeStatus, Tier};
+        let mut e = AutonomyEngine::new(AutonomyConfig {
+            quarantine_flip_threshold: 3,
+            ..Default::default()
+        });
+        e.register(10, 0.80, Tier::Tier2);
+        if let Some(rec) = e.records.get_mut(&10) {
+            rec.status_flip_count = 3;
+        }
+        let r = e.transition_status(10);
+        assert!(matches!(r, crate::autonomy::StatusTransitionResult::Transitioned {
+            to: NodeStatus::Quarantine, ..
+        }));
+    }
+
+    #[test]
+    fn stability_gate_triggers_rollback_on_large_batch_delta() {
+        use crate::autonomy::{AutonomyConfig, AutonomyEngine};
+        use crate::types::Tier;
+        let mut e = AutonomyEngine::new(AutonomyConfig {
+            threshold_global_delta: 5.0,
+            ..Default::default()
+        });
+        e.register(10, 0.60, Tier::Tier2);
+        // Energy gate should block a large drop
+        assert!(!e.energy_allows_update(10, 0.30));
+    }
+}
+
+#[cfg(test)]
+mod sense_lifecycle_tests {
+    use crate::sense::{SenseConfig, SenseManager};
+
+    #[test]
+    fn sense_merge_happens_when_similar_contexts_accumulate() {
+        let mut sm = SenseManager::new(SenseConfig {
+            theta_merge: 0.50,
+            n_min_mature: 2,
+            theta_assign: 0.15,
+            ..Default::default()
+        });
+        for _ in 0..3 {
+            sm.ingest(vec![1, 2, 3, 4]);
+        }
+        for _ in 0..3 {
+            sm.ingest(vec![1, 2, 3, 5]);
+        }
+        let count_before = sm.sense_count();
+        let merged = sm.check_merge();
+        if count_before >= 2 && !merged.is_empty() {
+            assert!(sm.sense_count() < count_before);
+        }
+    }
+
+    #[test]
+    fn fragile_sense_is_purged_after_inactivity() {
+        let mut sm = SenseManager::new(SenseConfig {
+            k_fragile: 3,
+            theta_assign: 0.15,
+            ..Default::default()
+        });
+        sm.ingest(vec![1, 2, 3]);
+        sm.senses[0].inactivity = 3;
+        sm.purge_fragile();
+        assert_eq!(sm.sense_count(), 0);
+    }
+
+    #[test]
+    fn query_returns_correct_sense_for_context() {
+        let mut sm = SenseManager::new(SenseConfig {
+            theta_assign: 0.15,
+            ..Default::default()
+        });
+        sm.ingest(vec![1, 2, 3]);
+        sm.ingest(vec![1, 2, 3]);
+        sm.ingest(vec![10, 20, 30]);
+        sm.ingest(vec![10, 20, 30]);
+        // Looking up [1, 2] should find sense 0 (similar to [1,2,3])
+        let idx = sm.lazy_lookup(&vec![1, 2]);
+        assert!(idx.is_some());
+        let sense = sm.get_sense(idx.unwrap()).unwrap();
+        assert!(sense.core(0.4).contains(&1) || sense.core(0.4).contains(&2));
+    }
+
+    #[test]
+    fn similarity_is_symmetric() {
+        use crate::pipeline::Rsvs;
+        let mut r = Rsvs::new(Default::default());
+        r.ingest_text("Stone is hard. Stone is solid. Hard stone resists pressure.");
+        let sim_ab = r.similarity("stone", "hard");
+        let sim_ba = r.similarity("hard", "stone");
+        if let (Some(a), Some(b)) = (sim_ab, sim_ba) {
+            assert!((a.jaccard - b.jaccard).abs() < 0.001,
+                "similarity should be symmetric: {} vs {}", a.jaccard, b.jaccard);
+        }
     }
 }

@@ -6,7 +6,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::types::{NodeId, Tier, NodeStatus};
+use crate::types::{NodeId, NodeStatus, Tier};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MemoryClass {
@@ -78,10 +78,10 @@ pub struct AutonomyConfig {
     pub k2: f32,
     pub max_drop_tolerance: f32,
     // v4.2 hysteresis thresholds
-    pub promote_threshold: f32,  // promote at >= this (0.75)
-    pub demote_threshold: f32,   // demote at < this (0.60)
+    pub promote_threshold: f32, // promote at >= this (0.75)
+    pub demote_threshold: f32,  // demote at < this (0.60)
     // v4.2 quarantine
-    pub quarantine_flip_threshold: u32,  // quarantine if flip_count >= this (3)
+    pub quarantine_flip_threshold: u32, // quarantine if flip_count >= this (3)
 }
 
 impl Default for AutonomyConfig {
@@ -175,12 +175,14 @@ impl AutonomyEngine {
     }
 
     pub fn register(&mut self, id: NodeId, confidence: f32, tier: Tier) {
-        self.records.insert(id, AtomRecord::new(id, confidence, tier));
+        self.records
+            .insert(id, AtomRecord::new(id, confidence, tier));
     }
 
     /// Register a seed node — immutable, Tier1, Stable
     pub fn register_seed(&mut self, id: NodeId, confidence: f32, tier: Tier) {
-        self.records.insert(id, AtomRecord::new_seed(id, confidence, tier));
+        self.records
+            .insert(id, AtomRecord::new_seed(id, confidence, tier));
     }
 
     pub fn confidence(&self, id: NodeId) -> Option<f32> {
@@ -234,16 +236,14 @@ impl AutonomyEngine {
         if !self.is_warmed_up() || self.assign_history.len() < 3 {
             return self.config.fallback_theta_assign;
         }
-        adaptive_threshold(&self.assign_history, self.config.k1)
-            .clamp(0.01, 0.99)
+        adaptive_threshold(&self.assign_history, self.config.k1).clamp(0.01, 0.99)
     }
 
     pub fn current_theta_merge(&self) -> f32 {
         if !self.is_warmed_up() || self.merge_history.len() < 3 {
             return self.config.fallback_theta_merge;
         }
-        adaptive_threshold(&self.merge_history, self.config.k2)
-            .clamp(0.01, 0.99)
+        adaptive_threshold(&self.merge_history, self.config.k2).clamp(0.01, 0.99)
     }
 
     pub fn energy_allows_update(&self, id: NodeId, proposed_confidence: f32) -> bool {
@@ -269,10 +269,8 @@ impl AutonomyEngine {
         recency: f32,
         contradiction_penalty: f32,
     ) -> f32 {
-        let score = 0.4 * strength
-                  + 0.3 * trust
-                  + 0.2 * recency
-                  + 0.1 * (1.0 - contradiction_penalty);
+        let score =
+            0.4 * strength + 0.3 * trust + 0.2 * recency + 0.1 * (1.0 - contradiction_penalty);
         score.clamp(0.0, 1.0)
     }
 
@@ -387,8 +385,7 @@ impl AutonomyEngine {
 
         let evidence = (freq * coherence).clamp(0.0, 1.0);
         let old = rec_read.confidence;
-        let proposed = ((1.0 - self.config.eta) * old + self.config.eta * evidence)
-            .clamp(0.0, 1.0);
+        let proposed = ((1.0 - self.config.eta) * old + self.config.eta * evidence).clamp(0.0, 1.0);
 
         if !self.energy_allows_update(id, proposed) {
             return ConfidenceUpdateResult::Skipped("energy constraint");
@@ -420,7 +417,8 @@ impl AutonomyEngine {
         let _ = self.transition_status(id);
 
         self.batch_delta += (proposed - old).abs();
-        self.changelog.push(format!("update:{}:{:.4}->{:.4}", id, old, proposed));
+        self.changelog
+            .push(format!("update:{}:{:.4}->{:.4}", id, old, proposed));
 
         ConfidenceUpdateResult::Updated {
             old,

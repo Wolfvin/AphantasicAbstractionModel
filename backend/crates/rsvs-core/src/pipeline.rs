@@ -12,20 +12,24 @@
 //!   - snapshot_v1: produce v4.2 format snapshot
 //!   - Seed bootstrap with new 24 atoms
 
+use crate::attention::{
+    is_groundable_to_seeds, text_to_sentences, AttentionConfig, CoocStats, EntityDetector,
+    RsvsAttention,
+};
+use crate::autonomy::{AutonomyConfig, AutonomyEngine, ConfidenceUpdateResult};
+use crate::events::{
+    EventBatch, RuntimeEdge, RuntimeEvent, RuntimeNode, RuntimeSnapshot, API_VERSION,
+    SCHEMA_VERSION,
+};
+use crate::graph::RsvsGraph;
+use crate::seed;
+use crate::sense::{IngestResult, SenseConfig, SenseManager};
+use crate::types::{
+    CompressionState, Edge, EdgeSource, Node, NodeId, NodeStatus, PolicyMeta, SemanticMeta, Tier,
+};
 use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::path::Path;
-use crate::types::{NodeId, Tier, Node, NodeStatus, Edge, EdgeSource,
-                   CompressionState, SemanticMeta, PolicyMeta};
-use crate::graph::RsvsGraph;
-use crate::seed;
-use crate::sense::{SenseManager, SenseConfig, IngestResult};
-use crate::attention::{
-    CoocStats, RsvsAttention, AttentionConfig, EntityDetector,
-    text_to_sentences, is_groundable_to_seeds,
-};
-use crate::autonomy::{AutonomyEngine, AutonomyConfig, ConfidenceUpdateResult};
-use crate::events::{RuntimeSnapshot, RuntimeNode, RuntimeEdge, RuntimeEvent, EventBatch, API_VERSION, SCHEMA_VERSION};
 
 // -----------------------------------------------------------------------
 // PipelineConfig — all tunable knobs in one place
@@ -33,9 +37,9 @@ use crate::events::{RuntimeSnapshot, RuntimeNode, RuntimeEdge, RuntimeEvent, Eve
 
 #[derive(Debug, Clone)]
 pub struct PipelineConfig {
-    pub attention:  AttentionConfig,
-    pub sense:      SenseConfig,
-    pub autonomy:   AutonomyConfig,
+    pub attention: AttentionConfig,
+    pub sense: SenseConfig,
+    pub autonomy: AutonomyConfig,
 
     /// N>= this to promote CANDIDATE_ID to node
     pub entity_promote_n: usize,
@@ -57,11 +61,14 @@ impl Default for PipelineConfig {
         }
         Self {
             attention,
-            sense:            SenseConfig::default(),
-            autonomy:         AutonomyConfig::default(),
+            sense: SenseConfig::default(),
+            autonomy: AutonomyConfig::default(),
             entity_promote_n: 3,
-            seed_labels:      seed::SEED_LABEL_LIST.iter().map(|s| s.to_string()).collect(),
-            current_domain:   1,
+            seed_labels: seed::SEED_LABEL_LIST
+                .iter()
+                .map(|s| s.to_string())
+                .collect(),
+            current_domain: 1,
         }
     }
 }
@@ -73,12 +80,12 @@ impl Default for PipelineConfig {
 #[derive(Debug, Default)]
 pub struct IngestStats {
     pub sentences_processed: usize,
-    pub atoms_promoted:      usize,
-    pub sense_assigned:      usize,
-    pub sense_created:       usize,
-    pub confidence_updated:  usize,
+    pub atoms_promoted: usize,
+    pub sense_assigned: usize,
+    pub sense_created: usize,
+    pub confidence_updated: usize,
     pub watchlist_additions: usize,
-    pub frozen_batches:      usize,
+    pub frozen_batches: usize,
 }
 
 // -----------------------------------------------------------------------
@@ -88,8 +95,8 @@ pub struct IngestStats {
 #[derive(Debug, Clone)]
 pub struct QueryResult {
     pub active_sense_idx: usize,
-    pub active_sense_n:   usize,
-    pub scored_atoms:     Vec<(String, f32)>,
+    pub active_sense_n: usize,
+    pub scored_atoms: Vec<(String, f32)>,
 }
 
 // -----------------------------------------------------------------------
@@ -98,10 +105,10 @@ pub struct QueryResult {
 
 #[derive(Debug, Clone)]
 pub struct AppraiseResult {
-    pub agree_pct:    f32,      // % of tokens found in graph
-    pub disagree_pct: f32,      // % of tokens NOT found
-    pub verdict:      String,   // "consistent", "partial", "novel"
-    pub evidence:     Vec<(String, f32)>,  // (token, confidence) for matched tokens
+    pub agree_pct: f32,               // % of tokens found in graph
+    pub disagree_pct: f32,            // % of tokens NOT found
+    pub verdict: String,              // "consistent", "partial", "novel"
+    pub evidence: Vec<(String, f32)>, // (token, confidence) for matched tokens
 }
 
 // -----------------------------------------------------------------------
@@ -110,8 +117,8 @@ pub struct AppraiseResult {
 
 #[derive(Debug, Clone)]
 pub struct RelateResult {
-    pub related_nodes: Vec<(NodeId, f32)>,  // (node_id, overlap_score)
-    pub related_edges: Vec<(NodeId, NodeId, f32)>,  // (from, to, weight)
+    pub related_nodes: Vec<(NodeId, f32)>, // (node_id, overlap_score)
+    pub related_edges: Vec<(NodeId, NodeId, f32)>, // (from, to, weight)
 }
 
 // -----------------------------------------------------------------------
@@ -119,8 +126,8 @@ pub struct RelateResult {
 // -----------------------------------------------------------------------
 
 pub struct Rsvs {
-    pub graph:    RsvsGraph,
-    pub senses:   HashMap<NodeId, SenseManager>,
+    pub graph: RsvsGraph,
+    pub senses: HashMap<NodeId, SenseManager>,
     pub autonomy: AutonomyEngine,
     pub stats_db: CoocStats,
     pub entities: EntityDetector,
@@ -143,9 +150,9 @@ pub struct Rsvs {
 impl Rsvs {
     /// Create a new RSVS instance and bootstrap seed nodes.
     pub fn new(config: PipelineConfig) -> Self {
-        let mut graph   = RsvsGraph::new();
+        let mut graph = RsvsGraph::new();
         let mut autonomy = AutonomyEngine::new(config.autonomy.clone());
-        let attention   = RsvsAttention::new(config.attention.clone());
+        let attention = RsvsAttention::new(config.attention.clone());
 
         // Bootstrap seed nodes (v4.2 format)
         let seed_map = seed::bootstrap(&mut graph);
@@ -190,12 +197,7 @@ impl Rsvs {
         format!("ingest_{:08}", self.ingest_counter)
     }
 
-    fn emit_event(
-        &mut self,
-        correlation_id: &str,
-        event_type: &str,
-        payload: serde_json::Value,
-    ) {
+    fn emit_event(&mut self, correlation_id: &str, event_type: &str, payload: serde_json::Value) {
         self.latest_seq += 1;
         let evt = RuntimeEvent {
             api_version: API_VERSION.to_string(),
@@ -218,7 +220,8 @@ impl Rsvs {
     pub fn consume_events_v1(&self, after_seq: Option<u64>, limit: usize) -> EventBatch {
         let after = after_seq.unwrap_or(0);
         let lim = limit.clamp(1, 5000);
-        let events = self.events
+        let events = self
+            .events
             .iter()
             .filter(|e| e.seq > after)
             .take(lim)
@@ -235,37 +238,44 @@ impl Rsvs {
 
     /// v4.2 snapshot with unified node model
     pub fn snapshot_v1(&self) -> RuntimeSnapshot {
-        let nodes = self.graph.nodes.values().map(|n| {
-            let sense = self.senses.get(&n.id);
-            RuntimeNode {
-                id: n.id,
-                label: n.label.clone(),
-                surface_label: n.surface_label.clone(),
-                kind: n.kind.clone(),
-                tier: match n.tier {
-                    Tier::Tier1 => 1,
-                    Tier::Tier2 => 2,
-                    Tier::Tier3 => 3,
-                },
-                confidence: self.autonomy.confidence(n.id).unwrap_or(n.confidence),
-                status: match self.autonomy.status(n.id).unwrap_or(&n.status) {
-                    NodeStatus::New => "new",
-                    NodeStatus::Candidate => "candidate",
-                    NodeStatus::Stable => "stable",
-                    NodeStatus::Deprecated => "deprecated",
-                    NodeStatus::Quarantine => "quarantine",
-                }.to_string(),
-                is_seed: n.is_seed,
-                is_locked: n.is_locked,
-                compression_state: match n.semantic.compression_state {
-                    CompressionState::Raw => "raw",
-                    CompressionState::Compressed => "compressed",
-                }.to_string(),
-                derived_from_node_ids: n.semantic.derived_from_node_ids.clone(),
-                sense_count: sense.map(|s| s.sense_count()).unwrap_or(0),
-                coherence: sense.and_then(|s| s.senses.first().map(|x| x.coherence)),
-            }
-        }).collect::<Vec<_>>();
+        let nodes = self
+            .graph
+            .nodes
+            .values()
+            .map(|n| {
+                let sense = self.senses.get(&n.id);
+                RuntimeNode {
+                    id: n.id,
+                    label: n.label.clone(),
+                    surface_label: n.surface_label.clone(),
+                    kind: n.kind.clone(),
+                    tier: match n.tier {
+                        Tier::Tier1 => 1,
+                        Tier::Tier2 => 2,
+                        Tier::Tier3 => 3,
+                    },
+                    confidence: self.autonomy.confidence(n.id).unwrap_or(n.confidence),
+                    status: match self.autonomy.status(n.id).unwrap_or(&n.status) {
+                        NodeStatus::New => "new",
+                        NodeStatus::Candidate => "candidate",
+                        NodeStatus::Stable => "stable",
+                        NodeStatus::Deprecated => "deprecated",
+                        NodeStatus::Quarantine => "quarantine",
+                    }
+                    .to_string(),
+                    is_seed: n.is_seed,
+                    is_locked: n.is_locked,
+                    compression_state: match n.semantic.compression_state {
+                        CompressionState::Raw => "raw",
+                        CompressionState::Compressed => "compressed",
+                    }
+                    .to_string(),
+                    derived_from_node_ids: n.semantic.derived_from_node_ids.clone(),
+                    sense_count: sense.map(|s| s.sense_count()).unwrap_or(0),
+                    coherence: sense.and_then(|s| s.senses.first().map(|x| x.coherence)),
+                }
+            })
+            .collect::<Vec<_>>();
 
         let mut edges = Vec::new();
         for (from, list) in &self.graph.edges {
@@ -275,7 +285,11 @@ impl Rsvs {
                     source: e.from,
                     target: e.to,
                     weight: e.weight,
-                    source_type: if e.source == EdgeSource::Bootstrap { "bootstrap".into() } else { "learned".into() },
+                    source_type: if e.source == EdgeSource::Bootstrap {
+                        "bootstrap".into()
+                    } else {
+                        "learned".into()
+                    },
                 });
             }
         }
@@ -308,7 +322,9 @@ impl Rsvs {
         );
 
         let sentences = text_to_sentences(text);
-        if sentences.is_empty() { return stats; }
+        if sentences.is_empty() {
+            return stats;
+        }
 
         // --- Step 1: Update co-occurrence statistics ---
         for tokens in &sentences {
@@ -318,7 +334,12 @@ impl Rsvs {
             for token in tokens {
                 let groundable = is_groundable_to_seeds(
                     token,
-                    &self.config.seed_labels.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
+                    &self
+                        .config
+                        .seed_labels
+                        .iter()
+                        .map(|s| s.as_str())
+                        .collect::<Vec<_>>(),
                 );
                 self.entities.record(token, groundable);
             }
@@ -327,43 +348,49 @@ impl Rsvs {
         // --- Step 2: Promote new entity candidates to nodes (v4.2 format) ---
         let candidates = self.entities.candidates(self.config.entity_promote_n);
         for token in &candidates {
-            if self.token_to_id.contains_key(token.as_str()) { continue; }
+            if self.token_to_id.contains_key(token.as_str()) {
+                continue;
+            }
 
-            let id = self.graph.insert_node(Node {
-                id: 0,
-                label: token.clone(),
-                surface_label: format!("{}@en", token),
+            let id = self
+                .graph
+                .insert_node(Node {
+                    id: 0,
+                    label: token.clone(),
+                    surface_label: format!("{}@en", token),
 
-                kind: "node".to_string(),
-                tier: Tier::Tier2,
-                confidence: 0.50,
-                status: NodeStatus::Candidate,
-                is_seed: false,
-                is_locked: false,
+                    kind: "node".to_string(),
+                    tier: Tier::Tier2,
+                    confidence: 0.50,
+                    status: NodeStatus::Candidate,
+                    is_seed: false,
+                    is_locked: false,
 
-                semantic: SemanticMeta {
-                    compression_state: CompressionState::Raw,
-                    derived_from_node_ids: vec![],
-                    compression_reason: None,
-                },
-                policy_meta: Some(PolicyMeta {
-                    policy_version: "4.2".to_string(),
-                    governance_score: 0.0,
-                    candidate_evidence_pool: 0.0,
-                    status_flip_count: 0,
-                    seen_fingerprints: vec![],
-                    last_seen_at: None,
-                }),
-                language_links: vec![],
+                    semantic: SemanticMeta {
+                        compression_state: CompressionState::Raw,
+                        derived_from_node_ids: vec![],
+                        compression_reason: None,
+                    },
+                    policy_meta: Some(PolicyMeta {
+                        policy_version: "4.2".to_string(),
+                        governance_score: 0.0,
+                        candidate_evidence_pool: 0.0,
+                        status_flip_count: 0,
+                        seen_fingerprints: vec![],
+                        last_seen_at: None,
+                    }),
+                    language_links: vec![],
 
-                atoms: vec![],
-                fingerprint: None,
-            }).unwrap();
+                    atoms: vec![],
+                    fingerprint: None,
+                })
+                .unwrap();
 
             self.autonomy.register(id, 0.50, Tier::Tier2);
             self.token_to_id.insert(token.clone(), id);
             self.atom_sets.insert(token.clone(), vec![id]);
-            self.senses.insert(id, SenseManager::new(self.config.sense.clone()));
+            self.senses
+                .insert(id, SenseManager::new(self.config.sense.clone()));
             stats.atoms_promoted += 1;
             self.emit_event(
                 &correlation_id,
@@ -391,58 +418,59 @@ impl Rsvs {
             self.total_contexts += 1;
             self.autonomy.tick_context();
 
-            let selected = self.attention.select(
-                tokens,
-                &self.stats_db,
-                &self.atom_sets,
-            );
+            let selected = self
+                .attention
+                .select(tokens, &self.stats_db, &self.atom_sets);
 
             for token in tokens {
                 let token_id = match self.token_to_id.get(token.as_str()) {
                     Some(&id) => id,
-                    None      => continue,
+                    None => continue,
                 };
 
                 let context: Vec<NodeId> = if let Some(cands) = selected.get(token) {
-                    cands.iter()
+                    cands
+                        .iter()
                         .filter_map(|c| self.token_to_id.get(c.token.as_str()).copied())
                         .collect()
                 } else {
-                    tokens.iter()
+                    tokens
+                        .iter()
                         .filter(|t| *t != token)
                         .filter_map(|t| self.token_to_id.get(t.as_str()).copied())
                         .collect()
                 };
 
-                if context.is_empty() { continue; }
+                if context.is_empty() {
+                    continue;
+                }
 
-                let sense_mgr = self.senses.entry(token_id)
+                let sense_mgr = self
+                    .senses
+                    .entry(token_id)
                     .or_insert_with(|| SenseManager::new(self.config.sense.clone()));
 
                 let ingest_result = sense_mgr.ingest(context.clone());
-                let mut sense_event: Option<serde_json::Value> = None;
-                match ingest_result {
+                let sense_event: Option<serde_json::Value> = match ingest_result {
                     IngestResult::Assigned(idx) => {
                         stats.sense_assigned += 1;
-                        sense_event = Some(serde_json::json!({
+                        Some(serde_json::json!({
                             "id": token_id,
                             "sense_idx": idx,
                             "action": "assigned"
-                        }));
+                        }))
                     }
-                    IngestResult::Created(idx)  => {
-                        stats.sense_created  += 1;
-                        sense_event = Some(serde_json::json!({
+                    IngestResult::Created(idx) => {
+                        stats.sense_created += 1;
+                        Some(serde_json::json!({
                             "id": token_id,
                             "sense_idx": idx,
                             "action": "created"
-                        }));
+                        }))
                     }
-                }
+                };
 
-                let active_coherence = sense_mgr.senses.first()
-                    .map(|s| s.coherence)
-                    .unwrap_or(0.5);
+                let active_coherence = sense_mgr.senses.first().map(|s| s.coherence).unwrap_or(0.5);
 
                 let freq = 1.0f32;
 
@@ -460,7 +488,7 @@ impl Rsvs {
                 if matches!(result, ConfidenceUpdateResult::Updated { .. }) {
                     stats.confidence_updated += 1;
                 }
-                if let Some(payload) = sense_event.take() {
+                if let Some(payload) = sense_event {
                     self.emit_event(&correlation_id, "sense_changed", payload);
                 }
                 let new_conf = self.autonomy.confidence(token_id).unwrap_or(old_conf);
@@ -509,7 +537,7 @@ impl Rsvs {
             }
 
             // Periodic sense maintenance
-            if self.total_contexts % 20 == 0 {
+            if self.total_contexts.is_multiple_of(20) {
                 for sense_mgr in self.senses.values_mut() {
                     sense_mgr.check_merge();
                     sense_mgr.purge_fragile();
@@ -557,28 +585,39 @@ impl Rsvs {
         for token in tokens {
             let token_id = match self.token_to_id.get(token.as_str()) {
                 Some(&id) => id,
-                None      => continue,
+                None => continue,
             };
 
             // Skip seed nodes — they stay Raw
             if let Some(node) = self.graph.get_node(token_id) {
-                if node.is_seed { continue; }
-                if node.semantic.compression_state == CompressionState::Compressed && !node.atoms.is_empty() {
+                if node.is_seed {
+                    continue;
+                }
+                if node.semantic.compression_state == CompressionState::Compressed
+                    && !node.atoms.is_empty()
+                {
                     continue; // already built
                 }
             }
 
             // Collect top co-occurring nodes from stats
-            let mut cooc_nodes: Vec<(NodeId, f32)> = self.token_to_id
+            let mut cooc_nodes: Vec<(NodeId, f32)> = self
+                .token_to_id
                 .iter()
                 .filter(|(t, _)| t.as_str() != token.as_str())
                 .filter_map(|(t, &id)| {
                     let c = self.stats_db.cooc(token, t);
-                    if c > 0.15 { Some((id, c)) } else { None }
+                    if c > 0.15 {
+                        Some((id, c))
+                    } else {
+                        None
+                    }
                 })
                 .collect();
 
-            if cooc_nodes.is_empty() { continue; }
+            if cooc_nodes.is_empty() {
+                continue;
+            }
 
             cooc_nodes.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
             cooc_nodes.truncate(8);
@@ -594,7 +633,8 @@ impl Rsvs {
                 if !atom_ids.is_empty() {
                     node.semantic.compression_state = CompressionState::Compressed;
                     node.semantic.derived_from_node_ids = atom_ids.clone();
-                    node.semantic.compression_reason = Some("co-occurrence aggregation".to_string());
+                    node.semantic.compression_reason =
+                        Some("co-occurrence aggregation".to_string());
                 }
 
                 for removed in old_atoms.iter().filter(|a| !atom_ids.contains(a)) {
@@ -618,7 +658,8 @@ impl Rsvs {
                     let mut is_new = false;
                     let mut old_weight = 0.0f32;
                     let edges = self.graph.edges.entry(*source_id).or_default();
-                    if let Some(existing) = edges.iter_mut()
+                    if let Some(existing) = edges
+                        .iter_mut()
                         .find(|e| e.to == token_id && e.source == EdgeSource::Learned)
                     {
                         old_weight = existing.weight;
@@ -666,39 +707,51 @@ impl Rsvs {
 
     pub fn query(&self, concept: &str, query_context: &str) -> Option<QueryResult> {
         let concept_id = *self.token_to_id.get(concept)?;
-        let sense_mgr  = self.senses.get(&concept_id)?;
+        let sense_mgr = self.senses.get(&concept_id)?;
 
         let query_tokens = crate::attention::tokenize(query_context);
-        let query_atoms: Vec<NodeId> = query_tokens.iter()
+        let query_atoms: Vec<NodeId> = query_tokens
+            .iter()
             .filter_map(|t| self.token_to_id.get(t.as_str()).copied())
             .collect();
 
-        let active_sense_idx = sense_mgr.lazy_lookup(&query_atoms)
-            .or_else(|| if sense_mgr.sense_count() > 0 { Some(0) } else { None })?;
+        let active_sense_idx = sense_mgr.lazy_lookup(&query_atoms).or_else(|| {
+            if sense_mgr.sense_count() > 0 {
+                Some(0)
+            } else {
+                None
+            }
+        })?;
 
         let sense = sense_mgr.get_sense(active_sense_idx)?;
 
         let tau = self.config.sense.tau_core;
         let core = sense.core(tau);
 
-        let mut scored: Vec<(String, f32)> = core.iter().filter_map(|&atom_id| {
-            let label = self.graph.get_node(atom_id)?.label.clone();
+        let mut scored: Vec<(String, f32)> = core
+            .iter()
+            .filter_map(|&atom_id| {
+                let label = self.graph.get_node(atom_id)?.label.clone();
 
-            let freq = sense.freq(atom_id);
+                let freq = sense.freq(atom_id);
 
-            let edge_score = self.graph.edges_from(atom_id).iter()
-                .filter(|e| query_atoms.contains(&e.to))
-                .map(|e| e.weight)
-                .fold(0.0f32, f32::max);
+                let edge_score = self
+                    .graph
+                    .edges_from(atom_id)
+                    .iter()
+                    .filter(|e| query_atoms.contains(&e.to))
+                    .map(|e| e.weight)
+                    .fold(0.0f32, f32::max);
 
-            let score = if edge_score > 0.0 {
-                freq * edge_score
-            } else {
-                freq
-            };
+                let score = if edge_score > 0.0 {
+                    freq * edge_score
+                } else {
+                    freq
+                };
 
-            Some((label, score))
-        }).collect();
+                Some((label, score))
+            })
+            .collect();
 
         scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
 
@@ -756,7 +809,8 @@ impl Rsvs {
             "partial"
         } else {
             "novel"
-        }.to_string();
+        }
+        .to_string();
 
         // Sort evidence by confidence descending
         evidence.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
@@ -779,8 +833,10 @@ impl Rsvs {
 
         // Find related nodes by Jaccard similarity
         let mut related_nodes: Vec<(NodeId, f32)> = Vec::new();
-        for (&other_id, _) in &self.graph.nodes {
-            if other_id == concept_id { continue; }
+        for &other_id in self.graph.nodes.keys() {
+            if other_id == concept_id {
+                continue;
+            }
             let jaccard = self.graph.jaccard_atom_sets(concept_id, other_id);
             if jaccard > 0.0 {
                 related_nodes.push((other_id, jaccard));
@@ -799,7 +855,9 @@ impl Rsvs {
 
         // Incoming edges to concept
         for (&from_id, edges) in &self.graph.edges {
-            if from_id == concept_id { continue; }
+            if from_id == concept_id {
+                continue;
+            }
             for e in edges {
                 if e.to == concept_id {
                     related_edges.push((e.from, e.to, e.weight));
@@ -810,7 +868,10 @@ impl Rsvs {
         // Also add edges from top related nodes
         for &(node_id, _) in &related_nodes {
             for e in self.graph.edges_from(node_id) {
-                if !related_edges.iter().any(|(f, t, _)| *f == e.from && *t == e.to) {
+                if !related_edges
+                    .iter()
+                    .any(|(f, t, _)| *f == e.from && *t == e.to)
+                {
                     related_edges.push((e.from, e.to, e.weight));
                 }
             }
@@ -831,26 +892,26 @@ impl Rsvs {
 
     pub fn status(&self) -> PipelineStatus {
         PipelineStatus {
-            total_nodes:      self.graph.node_count(),
-            total_atoms:      self.token_to_id.len(),
-            total_contexts:   self.total_contexts,
-            warmed_up:        self.autonomy.is_warmed_up(),
-            watchlist_count:  self.autonomy.watchlist_len(),
-            changelog_count:  self.autonomy.changelog_len(),
-            theta_assign:     self.autonomy.current_theta_assign(),
-            theta_merge:      self.autonomy.current_theta_merge(),
+            total_nodes: self.graph.node_count(),
+            total_atoms: self.token_to_id.len(),
+            total_contexts: self.total_contexts,
+            warmed_up: self.autonomy.is_warmed_up(),
+            watchlist_count: self.autonomy.watchlist_len(),
+            changelog_count: self.autonomy.changelog_len(),
+            theta_assign: self.autonomy.current_theta_assign(),
+            theta_merge: self.autonomy.current_theta_merge(),
         }
     }
 }
 
 #[derive(Debug)]
 pub struct PipelineStatus {
-    pub total_nodes:     usize,
-    pub total_atoms:     usize,
-    pub total_contexts:  usize,
-    pub warmed_up:       bool,
+    pub total_nodes: usize,
+    pub total_atoms: usize,
+    pub total_contexts: usize,
+    pub warmed_up: bool,
     pub watchlist_count: usize,
     pub changelog_count: usize,
-    pub theta_assign:    f32,
-    pub theta_merge:     f32,
+    pub theta_assign: f32,
+    pub theta_merge: f32,
 }

@@ -2,8 +2,8 @@
 
 export type NodeKind = 'atom' | 'composite';
 export type Tier = 1 | 2 | 3;
-export type NodeStatus = 'new' | 'stable' | 'decaying' | 'removed';
-export type EdgeStatus = 'new' | 'stable' | 'updated' | 'removing';
+export type NodeStatus = 'new' | 'stable' | 'decaying' | 'removed' | 'candidate' | 'deprecated' | 'quarantine';
+export type EdgeStatus = 'new' | 'stable' | 'updated' | 'removing' | 'deprecated';
 export type EdgeDirection = 'directed' | 'undirected';
 export type SourceType = 'bootstrap' | 'learned';
 export type AnimationPriority = 'low' | 'normal' | 'high';
@@ -61,6 +61,26 @@ export interface NodeProvenance {
   source_type: SourceType;
 }
 
+export interface CompressionState {
+  compressed: boolean;
+  original_count?: number;
+  merged_into?: number;
+}
+
+export interface PolicyMeta {
+  governance_score: number;
+  status_flip_count: number;
+  auto_promote: boolean;
+  max_tier: Tier;
+  min_confidence: number;
+}
+
+export interface LanguageLink {
+  lang: string;
+  label: string;
+  confidence: number;
+}
+
 export interface RSVSNode {
   id: number;
   label: string;
@@ -73,6 +93,13 @@ export interface RSVSNode {
   composition?: NodeComposition;
   render?: NodeRender;
   provenance?: NodeProvenance;
+  // v4.2 fields
+  is_seed?: boolean;
+  semantic?: string;
+  compression_state?: CompressionState;
+  derived_from_node_ids?: number[];
+  policy_meta?: PolicyMeta;
+  language_links?: LanguageLink[];
 }
 
 export interface EdgeMetrics {
@@ -89,6 +116,12 @@ export interface EdgeRender {
   pulse: number;
 }
 
+export interface EdgeEvidence {
+  source_node_ids: number[];
+  path: number[][];
+  strength: number;
+}
+
 export interface RSVSEdge {
   id: string;
   source: number;
@@ -99,6 +132,9 @@ export interface RSVSEdge {
   status: EdgeStatus;
   metrics?: EdgeMetrics;
   render?: EdgeRender;
+  // v4.2 fields
+  label?: string;
+  evidence?: EdgeEvidence[];
 }
 
 export interface AnimationHint {
@@ -170,6 +206,13 @@ export interface AnimationQueueItem {
   completed: boolean;
 }
 
+// ── Mode Result State ──
+
+export type ModeResult =
+  | { type: 'appraise'; data: AppraiseResult }
+  | { type: 'relate'; data: RelateResult }
+  | null;
+
 // 3D layout types
 export interface ForceNode extends RSVSNode {
   fx?: number;
@@ -178,4 +221,62 @@ export interface ForceNode extends RSVSNode {
   vx?: number;
   vy?: number;
   vz?: number;
+}
+
+// ── Appraise Result ──
+
+export type AppraiseVerdict = 'agree' | 'mixed' | 'disagree';
+
+export interface AppraiseStance {
+  agree: number;
+  disagree: number;
+  neutral: number;
+}
+
+export interface AppraiseEvidenceNode {
+  node_id: number;
+  label: string;
+  confidence: number;
+  role: 'support' | 'conflict' | 'neutral';
+}
+
+export interface EvidencePath {
+  path: number[];
+  weight: number;
+  label?: string;
+}
+
+export interface AppraiseResult {
+  verdict: AppraiseVerdict;
+  stance: AppraiseStance;
+  confidence: number;
+  rationale: string;
+  evidence_nodes: AppraiseEvidenceNode[];
+  conflict_nodes: AppraiseEvidenceNode[];
+  evidence_paths: EvidencePath[];
+  target_node_id?: number;
+}
+
+// ── Relate Result ──
+
+export interface RelateNode {
+  node_id: number;
+  label: string;
+  score: number;
+  tier: Tier;
+  kind: NodeKind;
+}
+
+export interface RelateEdge {
+  edge_id: string;
+  source: number;
+  target: number;
+  weight: number;
+  label?: string;
+}
+
+export interface RelateResult {
+  query_terms: string[];
+  related_nodes: RelateNode[];
+  related_edges: RelateEdge[];
 }

@@ -13,13 +13,13 @@ pub struct RuntimeNode {
     pub id: NodeId,
     pub label: String,
     pub surface_label: String,
-    pub kind: String,           // Always "node" in v4.2
+    pub kind: String, // Always "node" in v4.2
     pub tier: u8,
     pub confidence: f32,
-    pub status: String,         // NodeStatus as string
+    pub status: String, // NodeStatus as string
     pub is_seed: bool,
     pub is_locked: bool,
-    pub compression_state: String,  // "raw" or "compressed"
+    pub compression_state: String, // "raw" or "compressed"
     pub derived_from_node_ids: Vec<NodeId>,
     pub sense_count: usize,
     pub coherence: Option<f32>,

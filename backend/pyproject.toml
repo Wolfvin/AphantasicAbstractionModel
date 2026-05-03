@@ -4,9 +4,43 @@ build-backend = "maturin"
 
 [project]
 name = "rsvs"
-version = "0.5.0"
-description = "Recursive Symbolic Vector Space — Python bindings"
+version = "4.2.0"
+description = "Relational Symbolic Vocabulary System — cognitive symbolic engine with hard attention, multi-sense disambiguation, and autonomous tiered memory lifecycle"
+readme = "README.md"
+license = {text = "MIT"}
 requires-python = ">=3.9"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Rust",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Typing :: Typed",
+]
+keywords = ["knowledge-graph", "symbolic-ai", "attention", "cognitive-architecture"]
+
+[project.urls]
+Homepage = "https://github.com/Wolfvin/SymbolicPuzzle3D"
+Repository = "https://github.com/Wolfvin/SymbolicPuzzle3D"
+Issues = "https://github.com/Wolfvin/SymbolicPuzzle3D/issues"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "ruff>=0.4",
+    "mypy>=1.10",
+    "tempfile; python_version < '3.0'",
+]
+
+[project.scripts]
+rsvs = "rsvs.cli:main"
 
 [tool.maturin]
 manifest-path = "crates/rsvs-core/Cargo.toml"
@@ -14,5 +48,14 @@ python-source = "python"
 features = ["pyo3/extension-module"]
 module-name = "rsvs._rsvs"
 
-[project.scripts]
-rsvs = "rsvs.cli:main"
+[tool.ruff]
+target-version = "py39"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true

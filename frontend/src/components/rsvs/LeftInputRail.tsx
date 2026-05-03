@@ -36,7 +36,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
-import { useChatStore, useUIStore, useGraphStore, useTimelineStore } from '@/store/rsvsStore';
+import { useChatStore, useUIStore, useGraphStore, useTimelineStore, useModeResultStore } from '@/store/rsvsStore';
 import { generateChatMessages, generateTimelineEvents } from '@/lib/mockData';
 import { runModeToBackend } from '@/lib/backendBridge';
 import type { ChatMessage, MessageType } from '@/lib/types';
@@ -535,8 +535,12 @@ export default function LeftInputRail({
       }
 
       if (parsed.mode === 'appraise') {
-        const stance = (res.result as any)?.stance || {};
-        const verdict = (res.result as any)?.verdict || 'mixed';
+        const appraiseResult = (res.result as any) as import('@/lib/types').AppraiseResult | undefined;
+        if (appraiseResult?.verdict) {
+          useModeResultStore.getState().setAppraiseResult(appraiseResult);
+        }
+        const stance = appraiseResult?.stance || { agree: 0, disagree: 0, neutral: 0 };
+        const verdict = appraiseResult?.verdict || 'mixed';
         addMessage({
           id: `resp_${correlationId}_appraise`,
           type: 'system_ingest_status',
@@ -548,8 +552,12 @@ export default function LeftInputRail({
       }
 
       if (parsed.mode === 'relate') {
-        const relatedNodes = (res.result as any)?.related_nodes || [];
-        const relatedEdges = (res.result as any)?.related_edges || [];
+        const relateResult = (res.result as any) as import('@/lib/types').RelateResult | undefined;
+        if (relateResult?.related_nodes) {
+          useModeResultStore.getState().setRelateResult(relateResult);
+        }
+        const relatedNodes = relateResult?.related_nodes || [];
+        const relatedEdges = relateResult?.related_edges || [];
         addMessage({
           id: `resp_${correlationId}_relate`,
           type: 'system_ingest_status',

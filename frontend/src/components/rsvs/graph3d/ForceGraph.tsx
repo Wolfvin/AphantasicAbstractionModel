@@ -2,22 +2,50 @@
 
 import { useEffect, useRef } from 'react';
 import { useGraphStore } from '@/store/rsvsStore';
+import { computeNodeRenderProps, computeEdgeRenderProps } from '@/lib/nodeRendering';
 
 // ── Simulation Constants ──
-const REPULSION_CONSTANT = 500;
-const ATTRACTION_CONSTANT = 0.01;
-const CENTER_GRAVITY = 0.005;
-const DAMPING = 0.9;
+const REPULSION_CONSTANT = 600;
+const ATTRACTION_CONSTANT = 0.012;
+const CENTER_GRAVITY = 0.004;
+const DAMPING = 0.88;
 const MIN_DISTANCE = 1;
-const ENERGY_THRESHOLD = 0.01;
-const IDEAL_EDGE_LENGTH = 6;
+const ENERGY_THRESHOLD = 0.005;
+const IDEAL_EDGE_LENGTH = 8;
+const SEED_SPHERE_RADIUS = 5;
+const MAX_VELOCITY = 2.0;
 
 interface VelocityMap {
   [nodeId: number]: { vx: number; vy: number; vz: number };
 }
 
 /**
- * Simple n-body force-directed layout simulation.
+ * Position seed nodes on a sphere at the center of the graph.
+ * Uses golden angle distribution for even spacing on a sphere.
+ */
+function computeSeedPosition(index: number, total: number): { x: number; y: number; z: number } {
+  if (total <= 1) return { x: 0, y: 0, z: 0 };
+
+  // Golden angle distribution for even sphere coverage
+  const goldenAngle = Math.PI * (3 - Math.sqrt(5));
+  const theta = goldenAngle * index;
+  const phi = Math.acos(1 - (2 * (index + 0.5)) / total);
+
+  return {
+    x: SEED_SPHERE_RADIUS * Math.sin(phi) * Math.cos(theta),
+    y: SEED_SPHERE_RADIUS * Math.sin(phi) * Math.sin(theta),
+    z: SEED_SPHERE_RADIUS * Math.cos(phi),
+  };
+}
+
+/**
+ * Enhanced n-body force-directed layout simulation with:
+ * - Seed node sphere positioning at the center
+ * - Tier-weighted repulsion (higher tier = less repulsion)
+ * - Edge weight-based attraction
+ * - Computed visual properties from nodeRendering.ts
+ * - Velocity clamping for stability
+ *
  * Runs in a requestAnimationFrame loop and updates node positions in the store.
  */
 export function useForceLayout(): void {
@@ -27,12 +55,12 @@ export function useForceLayout(): void {
   const velocitiesRef = useRef<VelocityMap>({});
   const rafRef = useRef<number | null>(null);
   const tickFnRef = useRef<(() => void) | null>(null);
+  const prevNodeIdsRef = useRef<Set<number>>(new Set());
 
   const nodeCount = nodes.size;
   const edgeCount = edges.size;
 
   useEffect(() => {
-    // Build tick function
     tickFnRef.current = () => {
       const currentNodes = useGraphStore.getState().nodes;
       const currentEdges = useGraphStore.getState().edges;
@@ -47,31 +75,111 @@ export function useForceLayout(): void {
       }
 
       const velocities = velocitiesRef.current;
+      const prevNodeIds = prevNodeIdsRef.current;
+      const currentNodeIds = new Set(nodeList.map((n) => n.id));
 
-      // Initialize velocities for new nodes
+      // Detect new nodes and assign initial positions
+      const seedNodes = nodeList.filter((n) => n.is_seed);
+      const nonSeedNewNodes: number[] = [];
+
       for (const node of nodeList) {
         if (!velocities[node.id]) {
-          velocities[node.id] = {
-            vx: (Math.random() - 0.5) * 0.5,
-            vy: (Math.random() - 0.5) * 0.5,
-            vz: (Math.random() - 0.5) * 0.5,
-          };
+          // New node — initialize velocity and position
+          if (node.is_seed) {
+            const seedIndex = seedNodes.indexOf(node);
+            const seedPos = computeSeedPosition(seedIndex, seedNodes.length);
+            velocities[node.id] = { vx: 0, vy: 0, vz: 0 };
+
+            // Seed nodes start at their sphere position (unless already positioned)
+            if (!node.render?.position || (node.render.position.x === 0 && node.render.position.y === 0 && node.render.position.z === 0)) {
+              const renderProps = computeNodeRenderProps(node);
+              currentUpdateNode(node.id, {
+                render: {
+                  position: seedPos,
+                  size: renderProps.size,
+                  color: renderProps.color,
+                  glow: renderProps.glow,
+                },
+              });
+            }
+          } else {
+            // Non-seed nodes: start near a connected seed or at random offset from center
+            velocities[node.id] = {
+              vx: (Math.random() - 0.5) * 0.3,
+              vy: (Math.random() - 0.5) * 0.3,
+              vz: (Math.random() - 0.5) * 0.3,
+            };
+
+            // Try to position near a connected seed node
+            let placedNearSeed = false;
+            for (const edge of edgeList) {
+              const connectedId = edge.source === node.id ? edge.target : edge.target === node.id ? edge.source : null;
+              if (connectedId !== null) {
+                const connectedNode = currentNodes.get(connectedId);
+                if (connectedNode?.is_seed && connectedNode.render?.position) {
+                  const renderProps = computeNodeRenderProps(node);
+                  const offset = {
+                    x: (Math.random() - 0.5) * 4,
+                    y: (Math.random() - 0.5) * 4,
+                    z: (Math.random() - 0.5) * 4,
+                  };
+                  currentUpdateNode(node.id, {
+                    render: {
+                      position: {
+                        x: connectedNode.render.position.x + offset.x,
+                        y: connectedNode.render.position.y + offset.y,
+                        z: connectedNode.render.position.z + offset.z,
+                      },
+                      size: renderProps.size,
+                      color: renderProps.color,
+                      glow: renderProps.glow,
+                    },
+                  });
+                  placedNearSeed = true;
+                  break;
+                }
+              }
+            }
+
+            // Fallback: random position further from center
+            if (!placedNearSeed) {
+              const renderProps = computeNodeRenderProps(node);
+              const pos = node.render?.position;
+              if (!pos || (pos.x === 0 && pos.y === 0 && pos.z === 0)) {
+                currentUpdateNode(node.id, {
+                  render: {
+                    position: {
+                      x: (Math.random() - 0.5) * 20,
+                      y: (Math.random() - 0.5) * 15,
+                      z: (Math.random() - 0.5) * 20,
+                    },
+                    size: renderProps.size,
+                    color: renderProps.color,
+                    glow: renderProps.glow,
+                  },
+                });
+              }
+            }
+          }
+          nonSeedNewNodes.push(node.id);
         }
       }
 
       // Clean up velocities for removed nodes
       for (const id of Object.keys(velocities)) {
-        if (!currentNodes.has(Number(id))) {
+        if (!currentNodeIds.has(Number(id))) {
           delete velocities[Number(id)];
         }
       }
+      prevNodeIdsRef.current = currentNodeIds;
 
-      // For each pair, compute repulsion (Coulomb's law)
+      // Compute forces
       const forces: { [nodeId: number]: { fx: number; fy: number; fz: number } } = {};
       for (const node of nodeList) {
         forces[node.id] = { fx: 0, fy: 0, fz: 0 };
       }
 
+      // Repulsion (Coulomb's law) — tier-weighted: lower tier nodes repel more
       for (let i = 0; i < nodeList.length; i++) {
         const a = nodeList[i];
         const posA = a.render?.position ?? { x: 0, y: 0, z: 0 };
@@ -86,7 +194,10 @@ export function useForceLayout(): void {
           const distSq = Math.max(dx * dx + dy * dy + dz * dz, MIN_DISTANCE * MIN_DISTANCE);
           const dist = Math.sqrt(distSq);
 
-          const force = REPULSION_CONSTANT / distSq;
+          // Tier weight: Tier1 nodes are more "solid" and repel more
+          const tierMultiplierA = a.tier === 1 ? 1.3 : a.tier === 2 ? 1.0 : 0.7;
+          const tierMultiplierB = b.tier === 1 ? 1.3 : b.tier === 2 ? 1.0 : 0.7;
+          const force = REPULSION_CONSTANT * tierMultiplierA * tierMultiplierB / distSq;
           const fx = (force * dx) / dist;
           const fy = (force * dy) / dist;
           const fz = (force * dz) / dist;
@@ -100,7 +211,7 @@ export function useForceLayout(): void {
         }
       }
 
-      // Attraction along edges (Hooke's law)
+      // Attraction along edges (Hooke's law) — weight-based
       for (const edge of edgeList) {
         if (edge.source === edge.target) continue;
         const a = currentNodes.get(edge.source);
@@ -116,7 +227,8 @@ export function useForceLayout(): void {
         const dist = Math.max(Math.sqrt(dx * dx + dy * dy + dz * dz), MIN_DISTANCE);
 
         const displacement = dist - IDEAL_EDGE_LENGTH;
-        const f = ATTRACTION_CONSTANT * displacement * (0.5 + edge.weight * 0.5);
+        // Stronger attraction for higher-weight edges
+        const f = ATTRACTION_CONSTANT * displacement * (0.3 + edge.weight * 0.7);
         const fx = (f * dx) / dist;
         const fy = (f * dy) / dist;
         const fz = (f * dz) / dist;
@@ -129,12 +241,13 @@ export function useForceLayout(): void {
         forces[edge.target].fz -= fz;
       }
 
-      // Center gravity
+      // Center gravity — stronger for seed nodes
       for (const node of nodeList) {
         const pos = node.render?.position ?? { x: 0, y: 0, z: 0 };
-        forces[node.id].fx -= pos.x * CENTER_GRAVITY;
-        forces[node.id].fy -= pos.y * CENTER_GRAVITY;
-        forces[node.id].fz -= pos.z * CENTER_GRAVITY;
+        const gravityStrength = node.is_seed ? CENTER_GRAVITY * 1.5 : CENTER_GRAVITY;
+        forces[node.id].fx -= pos.x * gravityStrength;
+        forces[node.id].fy -= pos.y * gravityStrength;
+        forces[node.id].fz -= pos.z * gravityStrength;
       }
 
       // Update velocities with damping and apply forces
@@ -148,6 +261,15 @@ export function useForceLayout(): void {
         vel.vy = (vel.vy + forces[node.id].fy) * DAMPING;
         vel.vz = (vel.vz + forces[node.id].fz) * DAMPING;
 
+        // Clamp velocity for stability
+        const speed = Math.sqrt(vel.vx * vel.vx + vel.vy * vel.vy + vel.vz * vel.vz);
+        if (speed > MAX_VELOCITY) {
+          const scale = MAX_VELOCITY / speed;
+          vel.vx *= scale;
+          vel.vy *= scale;
+          vel.vz *= scale;
+        }
+
         totalKineticEnergy += vel.vx * vel.vx + vel.vy * vel.vy + vel.vz * vel.vz;
 
         const pos = node.render?.position ?? { x: 0, y: 0, z: 0 };
@@ -157,13 +279,17 @@ export function useForceLayout(): void {
           z: pos.z + vel.vz,
         };
 
+        // Compute render props from nodeRendering utility
+        const renderProps = computeNodeRenderProps(node);
+        const edgeRenderProps = computeEdgeRenderProps(node.confidence);
+
         currentUpdateNode(node.id, {
           render: {
             ...node.render,
             position: newPos,
-            size: node.render?.size ?? 1,
-            color: node.render?.color ?? '#00E5FF',
-            glow: node.render?.glow ?? 0,
+            size: renderProps.size,
+            color: renderProps.color,
+            glow: renderProps.glow,
           },
         });
       }

@@ -10,11 +10,11 @@
 //!
 //! v4.2: No NodeKind references. Uses unified node model.
 
+use crate::graph::jaccard_sets;
+use crate::types::NodeId;
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
-use crate::types::NodeId;
-use crate::graph::jaccard_sets;
 
 // -----------------------------------------------------------------------
 // Config
@@ -39,12 +39,12 @@ pub struct AttentionConfig {
 impl Default for AttentionConfig {
     fn default() -> Self {
         Self {
-            alpha:     0.4,
-            beta:      0.4,
-            gamma:     0.2,
-            top_k:     10,
+            alpha: 0.4,
+            beta: 0.4,
+            gamma: 0.2,
+            top_k: 10,
             min_score: 0.05,
-            min_cooc:  2,
+            min_cooc: 2,
         }
     }
 }
@@ -52,10 +52,20 @@ impl Default for AttentionConfig {
 impl AttentionConfig {
     /// Load attention config from a JSON file and override known keys.
     pub fn from_json_file(path: &Path) -> Result<Self, String> {
-        let content = fs::read_to_string(path)
-            .map_err(|e| format!("failed reading attention config '{}': {}", path.display(), e))?;
-        let value: serde_json::Value = serde_json::from_str(&content)
-            .map_err(|e| format!("invalid JSON in attention config '{}': {}", path.display(), e))?;
+        let content = fs::read_to_string(path).map_err(|e| {
+            format!(
+                "failed reading attention config '{}': {}",
+                path.display(),
+                e
+            )
+        })?;
+        let value: serde_json::Value = serde_json::from_str(&content).map_err(|e| {
+            format!(
+                "invalid JSON in attention config '{}': {}",
+                path.display(),
+                e
+            )
+        })?;
 
         let mut cfg = Self::default();
         if let Some(v) = value.get("alpha").and_then(|v| v.as_f64()) {
@@ -131,7 +141,9 @@ impl CoocStats {
     /// P(t) = count(t) / total_tokens
     pub fn p_token(&self, t: &str) -> f64 {
         let count = self.token_count.get(t).copied().unwrap_or(0);
-        if self.total_tokens == 0 { return 0.0; }
+        if self.total_tokens == 0 {
+            return 0.0;
+        }
         count as f64 / self.total_tokens as f64
     }
 
@@ -139,7 +151,9 @@ impl CoocStats {
     pub fn p_pair(&self, t: &str, c: &str) -> f64 {
         let key = ordered_pair(t, c);
         let count = self.pair_count.get(&key).copied().unwrap_or(0);
-        if self.total_sentences == 0 { return 0.0; }
+        if self.total_sentences == 0 {
+            return 0.0;
+        }
         count as f64 / self.total_sentences as f64
     }
 
@@ -147,31 +161,38 @@ impl CoocStats {
     pub fn cooc(&self, t: &str, c: &str) -> f32 {
         let pair_key = ordered_pair(t, c);
         let pair_c = self.pair_count.get(&pair_key).copied().unwrap_or(0);
-        let tok_c  = self.token_count.get(t).copied().unwrap_or(0);
-        if tok_c == 0 { return 0.0; }
+        let tok_c = self.token_count.get(t).copied().unwrap_or(0);
+        if tok_c == 0 {
+            return 0.0;
+        }
         pair_c as f32 / tok_c as f32
     }
 
     /// NPMI(t, c) = PMI / -log(P(t,c))
     pub fn npmi(&self, t: &str, c: &str) -> f32 {
-        let p_t  = self.p_token(t);
-        let p_c  = self.p_token(c);
+        let p_t = self.p_token(t);
+        let p_c = self.p_token(c);
         let p_tc = self.p_pair(t, c);
 
         if p_t == 0.0 || p_c == 0.0 || p_tc == 0.0 {
             return 0.0;
         }
 
-        let pmi  = (p_tc / (p_t * p_c)).ln();
+        let pmi = (p_tc / (p_t * p_c)).ln();
         let norm = -p_tc.ln();
 
-        if norm == 0.0 { return 0.0; }
+        if norm == 0.0 {
+            return 0.0;
+        }
 
         (pmi / norm).clamp(-1.0, 1.0) as f32
     }
 
     pub fn pair_cooc_count(&self, t: &str, c: &str) -> usize {
-        self.pair_count.get(&ordered_pair(t, c)).copied().unwrap_or(0)
+        self.pair_count
+            .get(&ordered_pair(t, c))
+            .copied()
+            .unwrap_or(0)
     }
 }
 
@@ -191,9 +212,9 @@ fn ordered_pair(a: &str, b: &str) -> (String, String) {
 pub struct ScoredCandidate {
     pub token: String,
     pub score: f32,
-    pub npmi:  f32,
+    pub npmi: f32,
     pub jaccard: f32,
-    pub cooc:  f32,
+    pub cooc: f32,
 }
 
 pub struct RsvsAttention {
@@ -219,24 +240,30 @@ impl RsvsAttention {
             let mut candidates: Vec<ScoredCandidate> = Vec::new();
 
             for c in tokens {
-                if c == t { continue; }
+                if c == t {
+                    continue;
+                }
                 if stats.pair_cooc_count(t, c) < self.config.min_cooc {
                     continue;
                 }
 
                 let atoms_c = atom_sets.get(c).map(|v| v.as_slice()).unwrap_or(&[]);
 
-                let npmi    = stats.npmi(t, c);
+                let npmi = stats.npmi(t, c);
                 let jaccard = jaccard_sets(atoms_t, atoms_c);
-                let cooc    = stats.cooc(t, c);
+                let cooc = stats.cooc(t, c);
 
                 let score = self.config.alpha * npmi
-                          + self.config.beta  * jaccard
-                          + self.config.gamma * cooc;
+                    + self.config.beta * jaccard
+                    + self.config.gamma * cooc;
 
                 if score >= self.config.min_score {
                     candidates.push(ScoredCandidate {
-                        token: c.clone(), score, npmi, jaccard, cooc,
+                        token: c.clone(),
+                        score,
+                        npmi,
+                        jaccard,
+                        cooc,
                     });
                 }
             }
@@ -259,16 +286,15 @@ impl RsvsAttention {
 
 /// Minimal English stopwords
 const STOPWORDS: &[&str] = &[
-    "a", "an", "the", "is", "are", "was", "were", "be", "been", "being",
-    "have", "has", "had", "do", "does", "did", "will", "would", "could",
-    "should", "may", "might", "shall", "can", "to", "of", "in", "on",
-    "at", "by", "for", "with", "from", "as", "or", "and", "but", "not",
-    "that", "this", "which", "who", "it", "its", "they", "their",
+    "a", "an", "the", "is", "are", "was", "were", "be", "been", "being", "have", "has", "had",
+    "do", "does", "did", "will", "would", "could", "should", "may", "might", "shall", "can", "to",
+    "of", "in", "on", "at", "by", "for", "with", "from", "as", "or", "and", "but", "not", "that",
+    "this", "which", "who", "it", "its", "they", "their",
 ];
 
 /// Split text into sentences
 pub fn split_sentences(text: &str) -> Vec<String> {
-    text.split(|c| c == '.' || c == '!' || c == '?')
+    text.split(['.', '!', '?'])
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())
         .collect()
@@ -326,8 +352,7 @@ impl EntityDetector {
         self.sentence_count
             .iter()
             .filter(|(token, &count)| {
-                count >= n_threshold
-                    && self.groundable.get(*token).copied().unwrap_or(false)
+                count >= n_threshold && self.groundable.get(*token).copied().unwrap_or(false)
             })
             .map(|(t, _)| t.clone())
             .collect()
@@ -345,11 +370,12 @@ pub fn is_groundable_to_seeds(token: &str, seed_labels: &[&str]) -> bool {
         }
     }
     const GROUNDABLE_HINTS: &[&str] = &[
-        "hard", "soft", "hot", "cold", "rough", "smooth", "heavy", "light",
-        "sharp", "round", "solid", "liquid", "fast", "slow", "large", "small",
-        "stone", "rock", "wood", "metal", "water", "fire", "earth", "air",
-        "animal", "plant", "human", "body", "hand", "eye", "sound", "color",
-        "heat", "pressure", "time", "force", "mass", "energy", "wave",
+        "hard", "soft", "hot", "cold", "rough", "smooth", "heavy", "light", "sharp", "round",
+        "solid", "liquid", "fast", "slow", "large", "small", "stone", "rock", "wood", "metal",
+        "water", "fire", "earth", "air", "animal", "plant", "human", "body", "hand", "eye",
+        "sound", "color", "heat", "pressure", "time", "force", "mass", "energy", "wave",
     ];
-    GROUNDABLE_HINTS.iter().any(|hint| token.contains(hint) || hint.contains(token))
+    GROUNDABLE_HINTS
+        .iter()
+        .any(|hint| token.contains(hint) || hint.contains(token))
 }

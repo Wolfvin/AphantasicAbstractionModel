@@ -5,17 +5,36 @@
 //! is_seed=true, is_locked=true, and cannot be removed.
 //! All nodes above the seed layer emerge from data.
 
-use std::collections::HashMap;
-use crate::types::{Node, NodeId, NodeStatus, Tier, CompressionState, SemanticMeta};
 use crate::graph::RsvsGraph;
+use crate::types::{CompressionState, Node, NodeId, NodeStatus, SemanticMeta, Tier};
+use std::collections::HashMap;
 
 /// Seed node definitions: label only (v4.2 — all seeds are equal, no layer distinction)
 const SEED_ATOMS: &[&str] = &[
-    "exists", "entity", "relation", "state", "change", "time",
-    "space", "cause", "effect", "context",
-    "signal", "pattern", "memory", "attention", "value",
-    "agent", "goal", "risk", "trust", "identity",
-    "language", "meaning", "action", "feedback",
+    "exists",
+    "entity",
+    "relation",
+    "state",
+    "change",
+    "time",
+    "space",
+    "cause",
+    "effect",
+    "context",
+    "signal",
+    "pattern",
+    "memory",
+    "attention",
+    "value",
+    "agent",
+    "goal",
+    "risk",
+    "trust",
+    "identity",
+    "language",
+    "meaning",
+    "action",
+    "feedback",
 ];
 
 /// Bootstrap the graph with all 24 seed nodes (v4.2 format).
@@ -59,12 +78,42 @@ pub fn bootstrap(graph: &mut RsvsGraph) -> HashMap<String, NodeId> {
     }
 
     assert_eq!(
-        label_map.len(), SEED_ATOMS.len(),
-        "Seed node count mismatch — expected {}", SEED_ATOMS.len()
+        label_map.len(),
+        SEED_ATOMS.len(),
+        "Seed node count mismatch — expected {}",
+        SEED_ATOMS.len()
     );
 
     label_map
 }
+
+/// Public list of seed atom labels — used by pipeline for grounding checks.
+pub const SEED_LABEL_LIST: &[&str] = &[
+    "exists",
+    "entity",
+    "relation",
+    "state",
+    "change",
+    "time",
+    "space",
+    "cause",
+    "effect",
+    "context",
+    "signal",
+    "pattern",
+    "memory",
+    "attention",
+    "value",
+    "agent",
+    "goal",
+    "risk",
+    "trust",
+    "identity",
+    "language",
+    "meaning",
+    "action",
+    "feedback",
+];
 
 #[cfg(test)]
 mod tests {
@@ -98,8 +147,11 @@ mod tests {
         let map = bootstrap(&mut graph);
         for id in map.values() {
             let node = graph.get_node(*id).unwrap();
-            assert!(node.surface_label.ends_with("@en"),
-                "surface_label '{}' should end with @en", node.surface_label);
+            assert!(
+                node.surface_label.ends_with("@en"),
+                "surface_label '{}' should end with @en",
+                node.surface_label
+            );
         }
     }
 
@@ -124,12 +176,3 @@ mod tests {
         }
     }
 }
-
-/// Public list of seed atom labels — used by pipeline for grounding checks.
-pub const SEED_LABEL_LIST: &[&str] = &[
-    "exists", "entity", "relation", "state", "change", "time",
-    "space", "cause", "effect", "context",
-    "signal", "pattern", "memory", "attention", "value",
-    "agent", "goal", "risk", "trust", "identity",
-    "language", "meaning", "action", "feedback",
-];

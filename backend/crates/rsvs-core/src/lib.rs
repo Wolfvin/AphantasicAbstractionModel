@@ -13,30 +13,31 @@
 //! v0.2: Multi-sense — SenseManager, coherence, lazy lookup, merge
 //! v0.1: DAG, integer IDs, circular ref, Jaccard, seed graph
 
-pub mod types;
-pub mod graph;
-pub mod seed;
-pub mod sense;
 pub mod attention;
 pub mod autonomy;
-pub mod pipeline;
-pub mod persist;
-pub mod events;
+#[cfg(feature = "python")]
 pub mod bindings;
+pub mod events;
+pub mod graph;
+pub mod persist;
+pub mod pipeline;
+pub mod seed;
+pub mod sense;
 pub mod tests;
+pub mod types;
 
-pub use types::*;
-pub use graph::{RsvsGraph, SimilarityResult, jaccard_sets};
-pub use sense::{Sense, SenseManager, SenseConfig, SenseStatus, IngestResult};
 pub use attention::{
-    AttentionConfig, CoocStats, RsvsAttention, EntityDetector,
-    text_to_sentences, tokenize, is_groundable_to_seeds,
+    is_groundable_to_seeds, text_to_sentences, tokenize, AttentionConfig, CoocStats,
+    EntityDetector, RsvsAttention,
 };
 pub use autonomy::{
-    AutonomyConfig, AutonomyEngine, AtomRecord, MemoryClass,
-    ConfidenceUpdateResult, RemovalDecision, StabilityStatus, WarmUpState,
-    StatusTransitionResult,
+    AtomRecord, AutonomyConfig, AutonomyEngine, ConfidenceUpdateResult, MemoryClass,
+    RemovalDecision, StabilityStatus, StatusTransitionResult, WarmUpState,
 };
-pub use pipeline::{Rsvs, PipelineConfig, IngestStats, QueryResult, PipelineStatus,
-                   AppraiseResult, RelateResult};
-pub use events::{API_VERSION, SCHEMA_VERSION, RuntimeEvent, RuntimeSnapshot, EventBatch};
+pub use events::{EventBatch, RuntimeEvent, RuntimeSnapshot, API_VERSION, SCHEMA_VERSION};
+pub use graph::{jaccard_sets, RsvsGraph, SimilarityResult};
+pub use pipeline::{
+    AppraiseResult, IngestStats, PipelineConfig, PipelineStatus, QueryResult, RelateResult, Rsvs,
+};
+pub use sense::{IngestResult, Sense, SenseConfig, SenseManager, SenseStatus};
+pub use types::*;

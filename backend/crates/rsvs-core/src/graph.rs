@@ -3,8 +3,8 @@
 //! v4.2: Unified node model. No more Atom/Composite distinction.
 //! expand() checks CompressionState to decide expansion strategy.
 
+use crate::types::{AtomSet, CompressionState, Edge, Node, NodeId};
 use std::collections::HashMap;
-use crate::types::{NodeId, Node, Edge, AtomSet, CompressionState};
 
 #[derive(Debug)]
 pub struct RsvsGraph {
@@ -19,6 +19,12 @@ pub struct RsvsGraph {
 
     /// Next available ID.
     pub(crate) next_id: NodeId,
+}
+
+impl Default for RsvsGraph {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl RsvsGraph {
@@ -110,7 +116,10 @@ impl RsvsGraph {
     }
 
     pub fn edges_from(&self, node_id: NodeId) -> &[Edge] {
-        self.edges.get(&node_id).map(|v| v.as_slice()).unwrap_or(&[])
+        self.edges
+            .get(&node_id)
+            .map(|v| v.as_slice())
+            .unwrap_or(&[])
     }
 
     pub fn node_count(&self) -> usize {
@@ -158,9 +167,9 @@ impl RsvsGraph {
         let atoms_a = self.expand(a);
         let atoms_b = self.expand(b);
 
-        let mut shared   = vec![];
-        let mut only_a   = vec![];
-        let mut only_b   = atoms_b.clone();
+        let mut shared = vec![];
+        let mut only_a = vec![];
+        let mut only_b = atoms_b.clone();
 
         for &atom in &atoms_a {
             if atoms_b.contains(&atom) {
@@ -173,7 +182,12 @@ impl RsvsGraph {
 
         let jaccard = jaccard_sets(&atoms_a, &atoms_b);
 
-        SimilarityResult { shared, only_a, only_b, jaccard }
+        SimilarityResult {
+            shared,
+            only_a,
+            only_b,
+            jaccard,
+        }
     }
 
     // ---------------------------------------------------------------
@@ -195,13 +209,17 @@ pub fn jaccard_sets(a: &[NodeId], b: &[NodeId]) -> f32 {
     }
     let intersection = a.iter().filter(|x| b.contains(x)).count();
     let union = a.len() + b.len() - intersection;
-    if union == 0 { 0.0 } else { intersection as f32 / union as f32 }
+    if union == 0 {
+        0.0
+    } else {
+        intersection as f32 / union as f32
+    }
 }
 
 #[derive(Debug)]
 pub struct SimilarityResult {
-    pub shared:  Vec<NodeId>,
-    pub only_a:  Vec<NodeId>,
-    pub only_b:  Vec<NodeId>,
+    pub shared: Vec<NodeId>,
+    pub only_a: Vec<NodeId>,
+    pub only_b: Vec<NodeId>,
     pub jaccard: f32,
 }
