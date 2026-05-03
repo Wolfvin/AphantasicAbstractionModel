@@ -1,5 +1,5 @@
-import type { ChatMessage, GraphSnapshot, RSVSEvent } from '@/lib/types';
-export type RSVSMode = 'ingest' | 'appraise' | 'relate';
+import type { ChatMessage, GraphSnapshot, RSVSEvent, ComposeResult } from '@/lib/types';
+export type RSVSMode = 'ingest' | 'appraise' | 'relate' | 'compose';
 
 export interface BackendIngestResponse {
   ok: boolean;
@@ -29,6 +29,7 @@ interface BackendRunEnvelope {
       edge_count: number;
       batch_id: string;
     };
+    compose?: ComposeResult;
   };
   messages: ChatMessage[];
   files?: {
@@ -94,6 +95,19 @@ export async function ingestToBackend(text: string, correlationId: string): Prom
     files: payload.files,
     error: payload.error,
   };
+}
+
+export async function composeToBackend(
+  label: string,
+  atomIds: number[],
+  lang: string,
+  correlationId: string,
+): Promise<BackendRunEnvelope> {
+  return runModeToBackend('compose', `${label} = ${atomIds.map(() => '+').join(' ')}`, correlationId, {
+    label,
+    atom_ids: atomIds,
+    lang,
+  });
 }
 
 export async function fetchLatestFromBackend(): Promise<BackendIngestResponse> {

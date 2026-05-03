@@ -15,9 +15,14 @@ const ATOM_LABELS = [
 ];
 
 const COMPOSITE_LABELS = [
-  'neural-graph', 'quantum-tensor', 'spectral-embedding', 'harmonic-resonance',
+  'raja', 'ratu', 'neural-graph', 'quantum-tensor', 'spectral-embedding', 'harmonic-resonance',
   'diffusion-manifold', 'attention-transformer', 'latent-projection',
   'energy-gradient', 'coherence-flux', 'topology-kernel',
+];
+
+const ATOM_LABELS_ID = [
+  'laki_laki', 'perempuan', 'tahta_tertinggi', 'kerajaan', 'kekuasaan',
+  'pemerintahan', 'negara', 'hukum', 'adat', 'budaya',
 ];
 
 const DOMAINS = ['nlp', 'vision', 'reasoning', 'memory', 'learning'];
@@ -72,10 +77,12 @@ function generateNode(tier?: Tier): RSVSNode {
   const id = generateNodeId();
   const t = tier || (randInt(1, 4) as Tier);
   const isComposite = Math.random() > 0.75; // 25% chance of being derived/composite
+  // Sometimes use Indonesian labels for atom nodes
+  const useIdLabels = Math.random() > 0.7;
 
   return {
     id,
-    label: isComposite ? pick(COMPOSITE_LABELS) : pick(ATOM_LABELS),
+    label: isComposite ? pick(COMPOSITE_LABELS) : (useIdLabels ? pick(ATOM_LABELS_ID) : pick(ATOM_LABELS)),
     kind: 'node',
     tier: t,
     confidence: rand(0.3, 1.0),
@@ -108,10 +115,15 @@ function generateNode(tier?: Tier): RSVSNode {
     },
     // v4.2 semantic metadata
     semantic: {
-      compression_state: Math.random() > 0.8 ? 'compressed' : 'raw',
+      compression_state: isComposite ? (Math.random() > 0.5 ? 'composed' : 'compressed') : 'raw',
       derived_from_node_ids: isComposite ? [randInt(100, 130), randInt(100, 130)] : [],
       compression_reason: isComposite && Math.random() > 0.5 ? 'semantic merge' : undefined,
     },
+    // Composition visualization fields
+    compression_state: isComposite ? (Math.random() > 0.5 ? 'composed' : 'compressed') : 'raw',
+    derived_from_node_ids: isComposite ? [randInt(100, 130), randInt(100, 130)] : [],
+    atoms: isComposite ? [randInt(100, 130), randInt(100, 130), randInt(100, 130)] : undefined,
+    compression_reason: isComposite && Math.random() > 0.5 ? 'semantic merge' : undefined,
     is_seed: Math.random() > 0.9, // ~10% chance seed
   };
 }
@@ -159,9 +171,11 @@ export function generateInitialSnapshot(count: number = 30): { nodes: RSVSNode[]
     node.render!.glow = rand(0.05, 0.3);
     // Link some member nodes to this composite
     const memberCount = randInt(2, 5);
+    const memberIds: number[] = [];
     for (let j = 0; j < memberCount; j++) {
       const member = nodes[randInt(0, count)];
       if (member) {
+        memberIds.push(member.id);
         node.composition!.atoms.push({ atom_id: member.id, weight: rand(0.3, 1.0) });
         const edge = generateEdge(member.id, node.id, 'learned');
         edge.status = 'stable';
@@ -169,6 +183,15 @@ export function generateInitialSnapshot(count: number = 30): { nodes: RSVSNode[]
         edges.push(edge);
       }
     }
+    // Set composition visualization fields
+    node.atoms = memberIds;
+    node.derived_from_node_ids = memberIds;
+    node.compression_state = 'composed';
+    node.semantic = {
+      compression_state: 'composed',
+      derived_from_node_ids: memberIds,
+      compression_reason: 'semantic merge',
+    };
     nodes.push(node);
   }
 

@@ -9,6 +9,7 @@ import { useGraphStore, useUIStore } from '@/store/rsvsStore';
 import { GraphNode } from './GraphNode';
 import { GraphEdge } from './GraphEdge';
 import { useForceLayout } from './ForceGraph';
+import { isCompositeNode, isAtomNode } from '@/lib/nodeRendering';
 
 // ── Scene Constants ──
 const BG_COLOR = '#0a0e1a';
@@ -155,9 +156,14 @@ function GraphContent() {
           edge.source === hoveredNodeId ||
           edge.target === hoveredNodeId;
 
+        // Detect composition edges: atom → composite or composite → atom
+        const isCompositionEdge =
+          (isAtomNode(sourceNode) && isCompositeNode(targetNode)) ||
+          (isCompositeNode(sourceNode) && isAtomNode(targetNode));
+
         return (
           <group key={edge.id} visible={isConnectedToHover || hoveredNodeId === null}>
-            <GraphEdge edge={edge} sourcePos={sourcePos} targetPos={targetPos} />
+            <GraphEdge edge={edge} sourcePos={sourcePos} targetPos={targetPos} isCompositionEdge={isCompositionEdge} />
           </group>
         );
       })}

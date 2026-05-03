@@ -1,12 +1,13 @@
 /* eslint-disable react-hooks/immutability */
 'use client';
 
-import React, { useRef, useMemo, useState, useCallback, useEffect } from 'react';
+import React, { useRef, useMemo, useState, useCallback } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Html, Billboard } from '@react-three/drei';
 import * as THREE from 'three';
-import type { RSVSNode, NodeStatus } from '@/lib/types';
-import { useUIStore } from '@/store/rsvsStore';
+import type { RSVSNode } from '@/lib/types';
+import { useGraphStore, useUIStore } from '@/store/rsvsStore';
+import { isCompositeNode, isAtomNode, getAtomCount } from '@/lib/nodeRendering';
 
 // ── Animation constants ──
 const SPAWN_DURATION_MS = 500;
@@ -39,16 +40,34 @@ const GraphNodeComponent: React.FC<GraphNodeProps> = ({
   const meshRef = useRef<THREE.Mesh>(null);
   const glowMeshRef = useRef<THREE.Mesh>(null);
   const torusRef = useRef<THREE.Mesh>(null);
+  const compositeHaloRef = useRef<THREE.Mesh>(null);
 
-  // Materials stored in refs (mutable for useFrame)
-  const baseMaterialRef = useRef<THREE.MeshStandardMaterial | null>(null);
-  const glowMaterialRef = useRef<THREE.MeshBasicMaterial | null>(null);
-  const selectionRingMaterialRef = useRef<THREE.MeshBasicMaterial | null>(null);
+  // Derived render properties
+  const nodeColor = node.render?.color ?? '#00E5FF';
+  const nodeSize = node.render?.size ?? 1;
+  const nodeGlow = node.render?.glow ?? 0;
+  const nodeStatus = node.status ?? 'stable';
+  const pos = node.render?.position ?? { x: 0, y: 0, z: 0 };
 
-  // Initialize materials once in useEffect
-  useEffect(() => {
-    if (baseMaterialRef.current == null) {
-      baseMaterialRef.current = new THREE.MeshStandardMaterial({
+  // Composition detection
+  const composite = isCompositeNode(node);
+  const atom = isAtomNode(node);
+  const atomCount = getAtomCount(node);
+
+  // Get atom IDs for tendril lines
+  const atomIds = useMemo(() => {
+    if (!composite) return [];
+    if (node.atoms && node.atoms.length > 0) return node.atoms;
+    if (node.derived_from_node_ids && node.derived_from_node_ids.length > 0) return node.derived_from_node_ids;
+    if (node.semantic?.derived_from_node_ids && node.semantic.derived_from_node_ids.length > 0) return node.semantic.derived_from_node_ids;
+    if (node.composition?.atoms) return node.composition.atoms.map(a => a.atom_id);
+    return [];
+  }, [composite, node.atoms, node.derived_from_node_ids, node.semantic?.derived_from_node_ids, node.composition?.atoms]);
+
+  // Materials created with useMemo (mutable for useFrame, but created once)
+  const baseMaterial = useMemo(
+    () =>
+      new THREE.MeshStandardMaterial({
         color: new THREE.Color(nodeColor),
         emissive: new THREE.Color(nodeColor),
         emissiveIntensity: 0.3,
@@ -56,27 +75,46 @@ const GraphNodeComponent: React.FC<GraphNodeProps> = ({
         roughness: 0.3,
         transparent: true,
         opacity: 0.95,
-      });
-    }
-    if (glowMaterialRef.current == null) {
-      glowMaterialRef.current = new THREE.MeshBasicMaterial({
+      }),
+    [nodeColor],
+  );
+
+  const glowMaterial = useMemo(
+    () =>
+      new THREE.MeshBasicMaterial({
         color: new THREE.Color(nodeColor),
         transparent: true,
         opacity: 0,
         blending: THREE.AdditiveBlending,
         depthWrite: false,
-      });
-    }
-    if (selectionRingMaterialRef.current == null) {
-      selectionRingMaterialRef.current = new THREE.MeshBasicMaterial({
+      }),
+    [nodeColor],
+  );
+
+  const selectionRingMaterial = useMemo(
+    () =>
+      new THREE.MeshBasicMaterial({
         color: new THREE.Color('#ffffff'),
         transparent: true,
         opacity: 0,
         blending: THREE.AdditiveBlending,
         depthWrite: false,
-      });
-    }
-  }, [nodeColor]);
+      }),
+    [],
+  );
+
+  const compositeHaloMaterial = useMemo(
+    () =>
+      new THREE.MeshBasicMaterial({
+        color: new THREE.Color(composite ? '#FF80AB' : '#00E5FF'),
+        transparent: true,
+        opacity: 0,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      }),
+    [composite],
+  );
 
   // Spawn animation tracking
   const spawnStartRef = useRef<number | null>(null);
@@ -86,26 +124,25 @@ const GraphNodeComponent: React.FC<GraphNodeProps> = ({
   const targetScaleRef = useRef(1);
   const currentScaleRef = useRef(0.01);
 
-  // Derived render properties
-  const nodeColor = node.render?.color ?? '#00E5FF';
-  const nodeSize = node.render?.size ?? 1;
-  const nodeGlow = node.render?.glow ?? 0;
-  const nodeStatus = node.status ?? 'stable';
-  const pos = node.render?.position ?? { x: 0, y: 0, z: 0 };
-
   // Shared geometry (memoized)
   const sphereGeometry = useMemo(
-    () => new THREE.SphereGeometry(1, 16, 16),
-    [],
+    () => new THREE.SphereGeometry(atom ? 0.7 : 1, 16, 16),
+    [atom],
   );
 
   const glowGeometry = useMemo(
-    () => new THREE.SphereGeometry(1, 16, 16),
-    [],
+    () => new THREE.SphereGeometry(atom ? 0.7 : 1, 16, 16),
+    [atom],
   );
 
   const torusGeometry = useMemo(
     () => new THREE.TorusGeometry(1, 0.06, 8, 32),
+    [],
+  );
+
+  // Composite halo geometry — torus for the ring effect
+  const haloGeometry = useMemo(
+    () => new THREE.TorusGeometry(1.5, 0.04, 8, 48),
     [],
   );
 
@@ -145,12 +182,27 @@ const GraphNodeComponent: React.FC<GraphNodeProps> = ({
     [onDoubleClick, node.id],
   );
 
+  // Build tendril positions for composite → atom connections
+  const nodes = useGraphStore((s) => s.nodes);
+
+  const tendrilData = useMemo(() => {
+    if (!composite || atomIds.length === 0) return [];
+    const result: { startPos: THREE.Vector3; endPos: THREE.Vector3; atomId: number }[] = [];
+    for (const aid of atomIds) {
+      const atomNode = nodes.get(aid);
+      if (!atomNode?.render?.position) continue;
+      result.push({
+        startPos: new THREE.Vector3(pos.x, pos.y, pos.z),
+        endPos: new THREE.Vector3(atomNode.render.position.x, atomNode.render.position.y, atomNode.render.position.z),
+        atomId: aid,
+      });
+    }
+    return result;
+  }, [composite, atomIds, nodes, pos.x, pos.y, pos.z]);
+
   // Per-frame animation
   useFrame((state, delta) => {
-    const baseMat = baseMaterialRef.current;
-    const glowMat = glowMaterialRef.current;
-    const ringMat = selectionRingMaterialRef.current;
-    if (!groupRef.current || !meshRef.current || !baseMat || !glowMat || !ringMat) return;
+    if (!groupRef.current || !meshRef.current) return;
 
     const time = state.clock.elapsedTime;
 
@@ -212,20 +264,20 @@ const GraphNodeComponent: React.FC<GraphNodeProps> = ({
     const baseEmissive = 0.3 + nodeGlow * 0.3;
 
     if (isHovered) {
-      baseMat.emissiveIntensity = lerp(
-        baseMat.emissiveIntensity,
+      baseMaterial.emissiveIntensity = lerp(
+        baseMaterial.emissiveIntensity,
         0.8,
         LERP_FACTOR,
       );
     } else if (isSelected) {
-      baseMat.emissiveIntensity = lerp(
-        baseMat.emissiveIntensity,
+      baseMaterial.emissiveIntensity = lerp(
+        baseMaterial.emissiveIntensity,
         0.6,
         LERP_FACTOR,
       );
     } else {
-      baseMat.emissiveIntensity = lerp(
-        baseMat.emissiveIntensity,
+      baseMaterial.emissiveIntensity = lerp(
+        baseMaterial.emissiveIntensity,
         baseEmissive,
         LERP_FACTOR,
       );
@@ -234,15 +286,17 @@ const GraphNodeComponent: React.FC<GraphNodeProps> = ({
     // Decaying: desaturate emissive (reduce intensity)
     if (nodeStatus === 'decaying') {
       const decayPulse = 0.15 + 0.15 * Math.abs(Math.sin(time * DECAY_FLICKER_SPEED));
-      baseMat.emissiveIntensity = Math.min(
-        baseMat.emissiveIntensity,
+      baseMaterial.emissiveIntensity = Math.min(
+        baseMaterial.emissiveIntensity,
         decayPulse,
       );
     }
 
     // ── Glow sphere ──
     if (glowMeshRef.current) {
-      const glowScale = 1.6 + (isSelected ? 0.4 : 0) + (isHovered ? 0.2 : 0);
+      const glowScale = atom
+        ? 1.3 + (isSelected ? 0.3 : 0) + (isHovered ? 0.15 : 0)
+        : 1.6 + (isSelected ? 0.4 : 0) + (isHovered ? 0.2 : 0);
       glowMeshRef.current.scale.setScalar(glowScale);
 
       const targetGlowOpacity = isSelected
@@ -251,12 +305,17 @@ const GraphNodeComponent: React.FC<GraphNodeProps> = ({
           ? 0.12
           : baseEmissive * 0.15;
 
-      glowMat.opacity = lerp(glowMat.opacity, targetGlowOpacity, LERP_FACTOR);
+      glowMaterial.opacity = lerp(glowMaterial.opacity, targetGlowOpacity, LERP_FACTOR);
 
       // Pulse the glow on new nodes
       if (nodeStatus === 'new') {
         const glowPulse = 0.08 + 0.08 * Math.sin(time * PULSE_SPEED * Math.PI * 2);
-        glowMat.opacity = lerp(glowMat.opacity, glowPulse, LERP_FACTOR);
+        glowMaterial.opacity = lerp(glowMaterial.opacity, glowPulse, LERP_FACTOR);
+      }
+
+      // Atom nodes: slightly brighter glow
+      if (atom) {
+        glowMaterial.opacity = Math.min(glowMaterial.opacity * 1.2, 0.25);
       }
     }
 
@@ -265,8 +324,8 @@ const GraphNodeComponent: React.FC<GraphNodeProps> = ({
       if (isSelected) {
         const ringScale = 1.8 + 0.1 * Math.sin(time * 3);
         torusRef.current.scale.setScalar(ringScale);
-        ringMat.opacity = lerp(
-          ringMat.opacity,
+        selectionRingMaterial.opacity = lerp(
+          selectionRingMaterial.opacity,
           0.6,
           LERP_FACTOR,
         );
@@ -274,29 +333,50 @@ const GraphNodeComponent: React.FC<GraphNodeProps> = ({
         torusRef.current.rotation.z += delta * 0.5;
         torusRef.current.rotation.x = Math.sin(time * 0.7) * 0.3;
       } else {
-        ringMat.opacity = lerp(
-          ringMat.opacity,
+        selectionRingMaterial.opacity = lerp(
+          selectionRingMaterial.opacity,
           0,
           LERP_FACTOR * 2,
         );
       }
     }
+
+    // ── Composite halo ──
+    if (compositeHaloRef.current) {
+      // Halo is visible on composites, and extra visible when selected/hovered
+      const haloTargetOpacity = isSelected || isHovered
+        ? 0.35 + 0.1 * Math.sin(time * 2)
+        : 0.15 + 0.05 * Math.sin(time * 1.5);
+
+      compositeHaloMaterial.opacity = lerp(compositeHaloMaterial.opacity, composite ? haloTargetOpacity : 0, LERP_FACTOR);
+
+      // Rotate the halo slowly
+      compositeHaloRef.current.rotation.z += delta * 0.3;
+      compositeHaloRef.current.rotation.x = Math.sin(time * 0.5) * 0.4;
+
+      // Scale based on atom count
+      const haloScale = 1.5 + Math.min(atomCount * 0.15, 0.8);
+      compositeHaloRef.current.scale.setScalar(haloScale);
+    }
   });
 
   // Determine label visibility
-  const showLabel = viewMode === 'analyze' || isSelected || isHovered;
+  const showLabel = viewMode === 'analyze' || isSelected || isHovered || composite;
 
   // Truncate long labels
   const displayLabel =
     node.label.length > 20 ? node.label.slice(0, 18) + '…' : node.label;
 
+  // Composite label prefix
+  const labelPrefix = composite ? '◆ ' : atom ? '● ' : '';
+
   return (
     <group ref={groupRef}>
-      {/* Main node sphere */}
+      {/* Main node sphere — smaller for atoms */}
       <mesh
         ref={meshRef}
         geometry={sphereGeometry}
-        material={baseMaterialRef.current}
+        material={baseMaterial}
         onClick={handleClick}
         onPointerOver={handlePointerOver}
         onPointerOut={handlePointerOut}
@@ -304,16 +384,32 @@ const GraphNodeComponent: React.FC<GraphNodeProps> = ({
       />
 
       {/* Inner glow sphere (additive) */}
-      <mesh ref={glowMeshRef} geometry={glowGeometry} material={glowMaterialRef.current} />
+      <mesh ref={glowMeshRef} geometry={glowGeometry} material={glowMaterial} />
 
       {/* Selection ring (torus) */}
-      <mesh ref={torusRef} geometry={torusGeometry} material={selectionRingMaterialRef.current} />
+      <mesh ref={torusRef} geometry={torusGeometry} material={selectionRingMaterial} />
+
+      {/* Composite halo ring — only visible for composites */}
+      {composite && (
+        <mesh ref={compositeHaloRef} geometry={haloGeometry} material={compositeHaloMaterial} />
+      )}
+
+      {/* Composition tendrils — thin lines from composite to its atoms when selected/hovered */}
+      {(isSelected || isHovered) && composite && tendrilData.map((t) => (
+        <TendrilLine
+          key={`tendril-${node.id}-${t.atomId}`}
+          startPos={t.startPos}
+          endPos={t.endPos}
+          color={nodeColor}
+          visible={isSelected || isHovered}
+        />
+      ))}
 
       {/* Label */}
       {showLabel && (
         <Billboard follow lockX={false} lockY lockZ={false}>
           <Html
-            position={[0, -1.6 * nodeSize, 0]}
+            position={[0, -(atom ? 1.2 : 1.6) * nodeSize, 0]}
             center
             distanceFactor={12}
             style={{
@@ -324,21 +420,21 @@ const GraphNodeComponent: React.FC<GraphNodeProps> = ({
             <div
               style={{
                 background: 'rgba(10, 14, 26, 0.85)',
-                border: `1px solid ${nodeColor}40`,
+                border: `1px solid ${composite ? '#FF80AB40' : atom ? '#69F0AE40' : `${nodeColor}40`}`,
                 borderRadius: '6px',
                 padding: '2px 8px',
-                color: nodeColor,
+                color: composite ? '#FF80AB' : atom ? '#69F0AE' : nodeColor,
                 fontSize: '11px',
                 fontFamily: 'monospace',
                 whiteSpace: 'nowrap',
                 textOverflow: 'ellipsis',
                 overflow: 'hidden',
-                maxWidth: '120px',
-                boxShadow: `0 0 8px ${nodeColor}20`,
+                maxWidth: '140px',
+                boxShadow: `0 0 8px ${composite ? '#FF80AB20' : atom ? '#69F0AE20' : `${nodeColor}20`}`,
                 backdropFilter: 'blur(4px)',
               }}
             >
-              {displayLabel}
+              {labelPrefix}{displayLabel}
             </div>
           </Html>
         </Billboard>
@@ -346,5 +442,47 @@ const GraphNodeComponent: React.FC<GraphNodeProps> = ({
     </group>
   );
 };
+
+// ── Tendril Line Component ──
+// Renders a thin glowing line from a composite node to one of its constituent atoms
+function TendrilLine({
+  startPos,
+  endPos,
+  color,
+  visible,
+}: {
+  startPos: THREE.Vector3;
+  endPos: THREE.Vector3;
+  color: string;
+  visible: boolean;
+}) {
+  const lineRef = useRef<THREE.Line>(null);
+
+  const material = useMemo(
+    () =>
+      new THREE.LineBasicMaterial({
+        color: new THREE.Color(color),
+        transparent: true,
+        opacity: 0,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      }),
+    [color],
+  );
+
+  const geometry = useMemo(() => {
+    return new THREE.BufferGeometry().setFromPoints([startPos, endPos]);
+  }, [startPos, endPos]);
+
+  useFrame((state) => {
+    const time = state.clock.elapsedTime;
+    const targetOpacity = visible ? 0.3 + 0.1 * Math.sin(time * 3) : 0;
+    material.opacity = lerp(material.opacity, targetOpacity, LERP_FACTOR);
+  });
+
+  return (
+    <primitive ref={lineRef} object={new THREE.Line(geometry, material)} />
+  );
+}
 
 export const GraphNode = React.memo(GraphNodeComponent);

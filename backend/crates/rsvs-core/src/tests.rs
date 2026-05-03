@@ -1603,3 +1603,382 @@ mod pipeline_tests {
         assert_eq!(loaded.config.entity_promote_n, rsvs.config.entity_promote_n);
     }
 }
+
+// -----------------------------------------------------------------------
+// Compose mechanism tests (RSVS v4.2)
+//
+// Covers: compose creates Compressed node, atom_sets sync,
+// composition edges, Jaccard similarity for shared atoms,
+// invalid atom handling, custom seeds.
+// -----------------------------------------------------------------------
+
+#[cfg(test)]
+mod compose_tests {
+    use crate::autonomy::AutonomyConfig;
+    use crate::error::RsvsError;
+    use crate::pipeline::{PipelineConfig, Rsvs};
+    use crate::sense::SenseConfig;
+    use crate::types::{CompressionState, EdgeSource};
+
+    /// Helper: create an Rsvs instance with low thresholds for testing.
+    fn make_rsvs() -> Rsvs {
+        Rsvs::new(PipelineConfig {
+            autonomy: AutonomyConfig {
+                n_warm: 5,
+                threshold_global_delta: 5.0,
+                ..AutonomyConfig::default()
+            },
+            sense: SenseConfig {
+                theta_assign: 0.10,
+                ..SenseConfig::default()
+            },
+            entity_promote_n: 2,
+            ..PipelineConfig::default()
+        })
+        .unwrap()
+    }
+
+    #[test]
+    fn test_compose_creates_compressed_node() {
+        let mut rsvs = make_rsvs();
+        // Ingest text to create atom nodes
+        rsvs.ingest_text("tahta tertinggi adalah simbol kekuasaan kerajaan")
+            .unwrap();
+        rsvs.ingest_text("laki laki adalah jenis kelamin")
+            .unwrap();
+        rsvs.ingest_text("kerajaan dipimpin oleh raja")
+            .unwrap();
+
+        // Collect some existing node IDs (seed nodes are always present)
+        let atom_ids: Vec<u32> = rsvs.token_to_id.values().copied().take(3).collect();
+
+        if atom_ids.len() >= 3 {
+            let raja_id = rsvs.compose("raja", atom_ids.clone(), Some("id")).unwrap();
+
+            // Verify it's a Compressed node
+            let node = rsvs.graph.get_node(raja_id).unwrap();
+            assert_eq!(
+                node.semantic.compression_state,
+                CompressionState::Compressed
+            );
+            assert_eq!(node.semantic.derived_from_node_ids, atom_ids);
+            assert!(node.semantic.compression_reason.is_some());
+            assert_eq!(node.atoms, atom_ids);
+        }
+    }
+
+    #[test]
+    fn test_compose_explicit() {
+        let mut rsvs = make_rsvs();
+        rsvs.ingest_text("tahta tertinggi adalah simbol kekuasaan")
+            .unwrap();
+        rsvs.ingest_text("laki laki adalah gender pria")
+            .unwrap();
+        rsvs.ingest_text("kerajaan adalah negara berdaulat")
+            .unwrap();
+        rsvs.ingest_text("perempuan adalah gender wanita")
+            .unwrap();
+
+        // Get IDs of atoms we want to compose
+        let atoms: Vec<u32> = rsvs.token_to_id.values().copied().take(3).collect();
+
+        if atoms.len() >= 3 {
+            // Create composite "raja" from 3 atoms
+            let raja_id = rsvs
+                .compose("raja", atoms.clone(), Some("id"))
+                .unwrap();
+
+            // Verify it's a Compressed node
+            let node = rsvs.graph.get_node(raja_id).unwrap();
+            assert_eq!(
+                node.semantic.compression_state,
+                CompressionState::Compressed
+            );
+            assert_eq!(node.semantic.derived_from_node_ids, atoms);
+            assert!(node.semantic.compression_reason.is_some());
+
+            // Verify atom_sets is updated
+            let raja_atoms = rsvs.atom_sets.get("raja").unwrap();
+            assert_eq!(*raja_atoms, atoms);
+        }
+    }
+
+    #[test]
+    fn test_compose_shared_atoms_jaccard() {
+        let mut rsvs = make_rsvs();
+        rsvs.ingest_text("tahta tertinggi adalah simbol")
+            .unwrap();
+        rsvs.ingest_text("laki laki adalah gender")
+            .unwrap();
+        rsvs.ingest_text("kerajaan adalah negara")
+            .unwrap();
+        rsvs.ingest_text("perempuan adalah gender wanita")
+            .unwrap();
+
+        // Collect atom IDs — take the first 4 distinct non-seed nodes if available,
+        // otherwise use seed nodes.
+        let all_ids: Vec<u32> = rsvs.token_to_id.values().copied().collect();
+        // Find non-seed nodes for more meaningful composition
+        let non_seed_ids: Vec<u32> = all_ids
+            .iter()
+            .filter(|&&id| {
+                rsvs.graph
+                    .get_node(id)
+                    .map(|n| !n.is_seed)
+                    .unwrap_or(false)
+            })
+            .copied()
+            .collect();
+
+        // Use non-seed IDs if we have enough, otherwise fall back to all IDs
+        let atoms: Vec<u32> = if non_seed_ids.len() >= 4 {
+            non_seed_ids
+        } else {
+            all_ids.into_iter().take(4).collect()
+        };
+
+        if atoms.len() >= 4 {
+            // raja = atoms[0] + atoms[1] + atoms[2]
+            let raja_atoms = vec![atoms[0], atoms[1], atoms[2]];
+            let raja_id = rsvs
+                .compose("raja", raja_atoms.clone(), Some("id"))
+                .unwrap();
+
+            // ratu = atoms[0] + atoms[3] + atoms[2]
+            let ratu_atoms = vec![atoms[0], atoms[3], atoms[2]];
+            let ratu_id = rsvs
+                .compose("ratu", ratu_atoms.clone(), Some("id"))
+                .unwrap();
+
+            // Jaccard similarity: shared = atoms[0] + atoms[2] = 2, only_a = atoms[1], only_b = atoms[3]
+            // Jaccard = 2/4 = 0.5
+            let sim = rsvs.graph.similarity(raja_id, ratu_id);
+            assert_eq!(sim.shared.len(), 2); // atoms[0] + atoms[2]
+            assert_eq!(sim.only_a.len(), 1); // atoms[1]
+            assert_eq!(sim.only_b.len(), 1); // atoms[3]
+            assert!((sim.jaccard - 0.5).abs() < 0.01); // 2/4 = 0.5
+        }
+    }
+
+    #[test]
+    fn test_compose_creates_composition_edges() {
+        let mut rsvs = make_rsvs();
+        rsvs.ingest_text("alpha beta gamma delta").unwrap();
+        rsvs.ingest_text("alpha adalah huruf").unwrap();
+
+        let atoms: Vec<u32> = rsvs.token_to_id.values().copied().take(3).collect();
+
+        if atoms.len() >= 3 {
+            let comp_id = rsvs
+                .compose("composite_test", atoms.clone(), None)
+                .unwrap();
+
+            // Should have edges from each atom to the composite
+            for &aid in &atoms {
+                let edges = rsvs.graph.edges_from(aid);
+                let has_edge = edges
+                    .iter()
+                    .any(|e| e.to == comp_id && e.source == EdgeSource::Composition);
+                assert!(
+                    has_edge,
+                    "Missing composition edge from atom {} to composite",
+                    aid
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_atom_sets_sync_after_compose() {
+        let mut rsvs = make_rsvs();
+        rsvs.ingest_text("satu dua tiga").unwrap();
+        rsvs.ingest_text("satu adalah angka").unwrap();
+
+        let atoms: Vec<u32> = rsvs.token_to_id.values().copied().take(2).collect();
+
+        if atoms.len() >= 2 {
+            rsvs.compose("komposisi", atoms.clone(), None).unwrap();
+
+            // atom_sets should be synced
+            let stored = rsvs.atom_sets.get("komposisi").unwrap();
+            assert_eq!(*stored, atoms);
+        }
+    }
+
+    #[test]
+    fn test_compose_nonexistent_atom_returns_error() {
+        let mut rsvs = make_rsvs();
+        // Try to compose with a non-existent atom ID
+        let result = rsvs.compose("invalid_composite", vec![99999], None);
+        assert!(
+            matches!(result, Err(RsvsError::NodeNotFound { .. })),
+            "Expected NodeNotFound error for non-existent atom"
+        );
+    }
+
+    #[test]
+    fn test_compose_updates_existing_label() {
+        let mut rsvs = make_rsvs();
+        rsvs.ingest_text("alpha beta gamma").unwrap();
+
+        let atoms1: Vec<u32> = rsvs.token_to_id.values().copied().take(2).collect();
+        let atoms2: Vec<u32> = rsvs.token_to_id.values().copied().take(3).collect();
+
+        if atoms1.len() >= 2 && atoms2.len() >= 3 {
+            // First composition
+            let id1 = rsvs.compose("concept", atoms1.clone(), None).unwrap();
+
+            // Second composition with same label should update existing node
+            let id2 = rsvs.compose("concept", atoms2.clone(), None).unwrap();
+
+            // Should return same node ID
+            assert_eq!(id1, id2);
+
+            // Node should have updated atoms
+            let node = rsvs.graph.get_node(id1).unwrap();
+            assert_eq!(node.atoms, atoms2);
+            assert_eq!(node.semantic.derived_from_node_ids, atoms2);
+        }
+    }
+
+    #[test]
+    fn test_custom_seeds() {
+        let custom = vec![
+            "laki_laki".to_string(),
+            "perempuan".to_string(),
+            "tahta".to_string(),
+        ];
+        let rsvs = Rsvs::new(PipelineConfig {
+            custom_seeds: Some(custom.clone()),
+            ..PipelineConfig::default()
+        })
+        .unwrap();
+
+        // Custom seeds should be registered
+        for seed in &custom {
+            assert!(
+                rsvs.token_to_id.contains_key(seed),
+                "Missing custom seed: {}",
+                seed
+            );
+        }
+    }
+
+    #[test]
+    fn test_compose_confidence_is_average_of_atoms() {
+        let mut rsvs = make_rsvs();
+        rsvs.ingest_text("alpha beta gamma delta epsilon").unwrap();
+
+        let atoms: Vec<u32> = rsvs
+            .token_to_id
+            .iter()
+            .filter(|(_, &id)| {
+                rsvs.graph
+                    .get_node(id)
+                    .map(|n| !n.is_seed)
+                    .unwrap_or(false)
+            })
+            .map(|(_, &id)| id)
+            .take(3)
+            .collect();
+
+        if atoms.len() >= 3 {
+            let comp_id = rsvs.compose("avg_test", atoms.clone(), None).unwrap();
+
+            // Calculate expected average confidence
+            let avg: f32 = atoms
+                .iter()
+                .filter_map(|&aid| rsvs.graph.get_node(aid).map(|n| n.confidence))
+                .sum::<f32>()
+                / atoms.len().max(1) as f32;
+
+            let node = rsvs.graph.get_node(comp_id).unwrap();
+            assert!(
+                (node.confidence - avg).abs() < 0.01,
+                "Expected confidence {}, got {}",
+                avg,
+                node.confidence
+            );
+        }
+    }
+
+    #[test]
+    fn test_compose_surface_label_with_lang() {
+        let mut rsvs = make_rsvs();
+        rsvs.ingest_text("alpha beta gamma").unwrap();
+
+        let atoms: Vec<u32> = rsvs.token_to_id.values().copied().take(2).collect();
+
+        if atoms.len() >= 2 {
+            let comp_id = rsvs.compose("raja", atoms, Some("id")).unwrap();
+            let node = rsvs.graph.get_node(comp_id).unwrap();
+            assert_eq!(node.surface_label, "raja@id");
+        }
+    }
+
+    #[test]
+    fn test_compose_surface_label_default_en() {
+        let mut rsvs = make_rsvs();
+        rsvs.ingest_text("alpha beta gamma").unwrap();
+
+        let atoms: Vec<u32> = rsvs.token_to_id.values().copied().take(2).collect();
+
+        if atoms.len() >= 2 {
+            let comp_id = rsvs.compose("king", atoms, None).unwrap();
+            let node = rsvs.graph.get_node(comp_id).unwrap();
+            assert_eq!(node.surface_label, "king@en");
+        }
+    }
+
+    #[test]
+    fn test_compose_registers_in_autonomy() {
+        let mut rsvs = make_rsvs();
+        rsvs.ingest_text("alpha beta gamma").unwrap();
+
+        let atoms: Vec<u32> = rsvs.token_to_id.values().copied().take(2).collect();
+
+        if atoms.len() >= 2 {
+            let comp_id = rsvs.compose("auton_test", atoms, None).unwrap();
+
+            // Should be registered in the autonomy engine
+            let conf = rsvs.autonomy.confidence(comp_id);
+            assert!(conf.is_some(), "Composed node should be registered in autonomy engine");
+        }
+    }
+
+    #[test]
+    fn test_compose_registers_in_senses() {
+        let mut rsvs = make_rsvs();
+        rsvs.ingest_text("alpha beta gamma").unwrap();
+
+        let atoms: Vec<u32> = rsvs.token_to_id.values().copied().take(2).collect();
+
+        if atoms.len() >= 2 {
+            let comp_id = rsvs.compose("sense_test", atoms, None).unwrap();
+
+            // Should have a sense manager
+            assert!(
+                rsvs.senses.contains_key(&comp_id),
+                "Composed node should have a sense manager"
+            );
+        }
+    }
+
+    #[test]
+    fn test_compose_token_to_id_registered() {
+        let mut rsvs = make_rsvs();
+        rsvs.ingest_text("alpha beta gamma").unwrap();
+
+        let atoms: Vec<u32> = rsvs.token_to_id.values().copied().take(2).collect();
+
+        if atoms.len() >= 2 {
+            rsvs.compose("lookup_test", atoms, None).unwrap();
+
+            // Should be findable via token_to_id
+            assert!(
+                rsvs.token_to_id.contains_key("lookup_test"),
+                "Composed node should be in token_to_id"
+            );
+        }
+    }
+}

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Any, List, Optional
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -104,6 +104,12 @@ class RelateRequest(BaseModel):
     target: str = Field(..., min_length=1)
 
 
+class ComposeRequest(BaseModel):
+    label: str = Field(..., min_length=1, description="Label for the composite node")
+    atom_ids: List[int] = Field(..., min_length=1, description="List of atom node IDs to compose from")
+    lang: Optional[str] = Field(None, description="Language code (e.g. 'id', 'en')")
+
+
 # --- Exception mapping ---
 
 _EXCEPTION_STATUS_MAP: dict[str, int] = {
@@ -168,7 +174,14 @@ async def similarity_endpoint(request: Request, req: SimilarityRequest) -> dict[
     try:
         rsvs: RsvsCoreProtocol = get_rsvs_instance()
         sim = rsvs.similarity(req.label_a, req.label_b)
-        return {"label_a": req.label_a, "label_b": req.label_b, "similarity": sim}
+        # Convert PySimResult to a JSON-serializable dict
+        sim_dict = {
+            "jaccard": sim.jaccard,
+            "shared": sim.shared,
+            "only_a": sim.only_a,
+            "only_b": sim.only_b,
+        }
+        return {"label_a": req.label_a, "label_b": req.label_b, "similarity": sim_dict}
     except RsvsError:
         raise
     except Exception as e:
@@ -197,6 +210,39 @@ async def relate_endpoint(request: Request, req: RelateRequest) -> dict[str, Any
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/compose", tags=["compose"])
+async def compose_node(request: ComposeRequest):
+    """
+    Create a composite node from explicit atom IDs.
+
+    This is the core compositional mechanism of RSVS: higher-level concepts
+    are built from lower-level atoms. For example:
+    - "raja" = tahta_tertinggi + laki_laki + kerajaan
+    - "ratu" = tahta_tertinggi + perempuan + kerajaan
+
+    The shared atoms (tahta_tertinggi, kerajaan) create a semantic
+    relationship between "raja" and "ratu" with Jaccard similarity = 0.5.
+    """
+    rsvs = get_rsvs_instance()
+    if rsvs is None:
+        raise RustCoreUnavailableError()
+
+    try:
+        node_id = rsvs.compose(request.label, request.atom_ids, request.lang)
+        snapshot = rsvs.snapshot_v1()
+        events = rsvs.consume_events_v1()
+        return {
+            "status": "ok",
+            "node_id": node_id,
+            "label": request.label,
+            "atom_ids": request.atom_ids,
+            "snapshot": snapshot,
+            "events": events,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @app.get("/snapshot")

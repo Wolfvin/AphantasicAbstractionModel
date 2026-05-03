@@ -61,7 +61,7 @@ export interface NodeProvenance {
   source_type: SourceType;
 }
 
-export type CompressionState = 'raw' | 'compressed';
+export type CompressionState = 'raw' | 'compressed' | 'composed';
 
 export interface PolicyMeta {
   governance_score: number;
@@ -100,6 +100,9 @@ export interface RSVSNode {
   derived_from_node_ids?: number[];
   policy_meta?: PolicyMeta;
   language_links?: LanguageLink[];
+  // Composition visualization fields
+  atoms?: number[];
+  compression_reason?: string;
 }
 
 export interface EdgeMetrics {
@@ -169,7 +172,7 @@ export interface GraphSnapshot {
   edges: RSVSEdge[];
 }
 
-export type MessageType = 'user_input' | 'system_ingest_status' | 'system_promoted_atoms' | 'system_warnings';
+export type MessageType = 'user_input' | 'system_ingest_status' | 'system_promoted_atoms' | 'system_warnings' | 'system_compose_result';
 
 export interface ChatMessage {
   id: string;
@@ -177,7 +180,7 @@ export interface ChatMessage {
   content: string;
   timestamp: string;
   correlation_id?: string;
-  mode?: 'ingest' | 'appraise' | 'relate';
+  mode?: 'ingest' | 'appraise' | 'relate' | 'compose';
 }
 
 export interface TimelineEvent {
@@ -208,9 +211,20 @@ export interface AnimationQueueItem {
 
 // ── Mode Result State ──
 
+export interface ComposeResult {
+  composite_node: RSVSNode;
+  atom_nodes: RSVSNode[];
+  jaccard_similarities: Array<{
+    composite_id: number;
+    composite_label: string;
+    similarity: number;
+  }>;
+}
+
 export type ModeResult =
   | { type: 'appraise'; data: AppraiseResult }
   | { type: 'relate'; data: RelateResult }
+  | { type: 'compose'; data: ComposeResult }
   | null;
 
 // 3D layout types

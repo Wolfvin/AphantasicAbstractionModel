@@ -385,6 +385,10 @@ impl Rsvs {
                         Some("co-occurrence aggregation".to_string());
                 }
 
+                // CRITICAL FIX (Bug 1): Sync atom_sets so the attention scorer's
+                // Jaccard component uses the updated atoms, not the initial [id].
+                self.atom_sets.insert(token.clone(), atom_ids.clone());
+
                 for removed in old_atoms.iter().filter(|a| !atom_ids.contains(a)) {
                     if let Some(list) = self.graph.edges.get_mut(removed) {
                         let before = list.len();

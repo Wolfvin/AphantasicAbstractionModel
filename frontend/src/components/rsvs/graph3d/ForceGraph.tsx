@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import { useGraphStore } from '@/store/rsvsStore';
-import { computeNodeRenderProps, computeEdgeRenderProps } from '@/lib/nodeRendering';
+import { computeNodeRenderProps, computeEdgeRenderProps, isCompositeNode, isAtomNode, getAtomCount } from '@/lib/nodeRendering';
 
 // ── Simulation Constants ──
 const REPULSION_CONSTANT = 600;
@@ -14,6 +14,10 @@ const ENERGY_THRESHOLD = 0.005;
 const IDEAL_EDGE_LENGTH = 8;
 const SEED_SPHERE_RADIUS = 5;
 const MAX_VELOCITY = 2.0;
+
+// Composition clustering: extra attraction between composites and their atoms
+const COMPOSITION_ATTRACTION_CONSTANT = 0.025;
+const COMPOSITION_IDEAL_DISTANCE = 4;
 
 interface VelocityMap {
   [nodeId: number]: { vx: number; vy: number; vz: number };
@@ -39,10 +43,27 @@ function computeSeedPosition(index: number, total: number): { x: number; y: numb
 }
 
 /**
+ * Get atom IDs for a node (from any of the composition fields).
+ */
+function getAtomIds(node: {
+  atoms?: number[];
+  derived_from_node_ids?: number[];
+  semantic?: { derived_from_node_ids?: number[] };
+  composition?: { atoms: Array<{ atom_id: number }>; related_composites: Array<{ composite_id: number }> };
+}): number[] {
+  if (node.atoms && node.atoms.length > 0) return node.atoms;
+  if (node.derived_from_node_ids && node.derived_from_node_ids.length > 0) return node.derived_from_node_ids;
+  if (node.semantic?.derived_from_node_ids && node.semantic.derived_from_node_ids.length > 0) return node.semantic.derived_from_node_ids;
+  if (node.composition?.atoms && node.composition.atoms.length > 0) return node.composition.atoms.map(a => a.atom_id);
+  return [];
+}
+
+/**
  * Enhanced n-body force-directed layout simulation with:
  * - Seed node sphere positioning at the center
  * - Tier-weighted repulsion (higher tier = less repulsion)
  * - Edge weight-based attraction
+ * - Composition-aware clustering: composites attract their atom nodes
  * - Computed visual properties from nodeRendering.ts
  * - Velocity clamping for stability
  *
@@ -137,6 +158,70 @@ export function useForceLayout(): void {
                   });
                   placedNearSeed = true;
                   break;
+                }
+              }
+            }
+
+            // Composition-aware: try to position new composites near their atom nodes
+            if (!placedNearSeed && isCompositeNode(node)) {
+              const atomIds = getAtomIds(node);
+              let avgX = 0, avgY = 0, avgZ = 0;
+              let count = 0;
+              for (const aid of atomIds) {
+                const atomNode = currentNodes.get(aid);
+                if (atomNode?.render?.position) {
+                  avgX += atomNode.render.position.x;
+                  avgY += atomNode.render.position.y;
+                  avgZ += atomNode.render.position.z;
+                  count++;
+                }
+              }
+              if (count > 0) {
+                const renderProps = computeNodeRenderProps(node);
+                currentUpdateNode(node.id, {
+                  render: {
+                    position: {
+                      x: avgX / count + (Math.random() - 0.5) * 2,
+                      y: avgY / count + (Math.random() - 0.5) * 2,
+                      z: avgZ / count + (Math.random() - 0.5) * 2,
+                    },
+                    size: renderProps.size,
+                    color: renderProps.color,
+                    glow: renderProps.glow,
+                  },
+                });
+                placedNearSeed = true;
+              }
+            }
+
+            // Composition-aware: try to position atom nodes near their composite
+            if (!placedNearSeed && isAtomNode(node)) {
+              // Find composites that reference this node as an atom
+              for (const otherNode of nodeList) {
+                if (isCompositeNode(otherNode) && otherNode.render?.position) {
+                  const otherAtomIds = getAtomIds(otherNode);
+                  if (otherAtomIds.includes(node.id)) {
+                    const renderProps = computeNodeRenderProps(node);
+                    const offset = {
+                      x: (Math.random() - 0.5) * 3,
+                      y: (Math.random() - 0.5) * 3,
+                      z: (Math.random() - 0.5) * 3,
+                    };
+                    currentUpdateNode(node.id, {
+                      render: {
+                        position: {
+                          x: otherNode.render.position.x + offset.x,
+                          y: otherNode.render.position.y + offset.y,
+                          z: otherNode.render.position.z + offset.z,
+                        },
+                        size: renderProps.size,
+                        color: renderProps.color,
+                        glow: renderProps.glow,
+                      },
+                    });
+                    placedNearSeed = true;
+                    break;
+                  }
                 }
               }
             }
@@ -239,6 +324,41 @@ export function useForceLayout(): void {
         forces[edge.target].fx -= fx;
         forces[edge.target].fy -= fy;
         forces[edge.target].fz -= fz;
+      }
+
+      // ── Composition attraction force ──
+      // Composites attract their constituent atoms closer (in addition to edge attraction)
+      for (const node of nodeList) {
+        if (!isCompositeNode(node)) continue;
+        const compositePos = node.render?.position;
+        if (!compositePos) continue;
+
+        const atomIds = getAtomIds(node);
+        for (const aid of atomIds) {
+          const atomNode = currentNodes.get(aid);
+          if (!atomNode?.render?.position) continue;
+
+          const atomPos = atomNode.render.position;
+          const dx = compositePos.x - atomPos.x;
+          const dy = compositePos.y - atomPos.y;
+          const dz = compositePos.z - atomPos.z;
+          const dist = Math.max(Math.sqrt(dx * dx + dy * dy + dz * dz), MIN_DISTANCE);
+
+          const displacement = dist - COMPOSITION_IDEAL_DISTANCE;
+          const f = COMPOSITION_ATTRACTION_CONSTANT * displacement;
+          const fx = (f * dx) / dist;
+          const fy = (f * dy) / dist;
+          const fz = (f * dz) / dist;
+
+          // Pull atom toward composite
+          forces[aid].fx += fx;
+          forces[aid].fy += fy;
+          forces[aid].fz += fz;
+          // Pull composite toward atom (weaker)
+          forces[node.id].fx -= fx * 0.3;
+          forces[node.id].fy -= fy * 0.3;
+          forces[node.id].fz -= fz * 0.3;
+        }
       }
 
       // Center gravity — stronger for seed nodes

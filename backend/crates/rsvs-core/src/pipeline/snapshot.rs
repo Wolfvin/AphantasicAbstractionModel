@@ -116,6 +116,8 @@ impl Rsvs {
                     weight: e.weight,
                     source_type: if e.source == EdgeSource::Bootstrap {
                         "bootstrap".into()
+                    } else if e.source == EdgeSource::Composition {
+                        "composition".into()
                     } else {
                         "learned".into()
                     },

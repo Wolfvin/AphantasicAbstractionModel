@@ -15,6 +15,7 @@ import type {
   Tier,
   AppraiseResult,
   RelateResult,
+  ComposeResult,
   ModeResult,
 } from '@/lib/types';
 
@@ -36,6 +37,9 @@ interface GraphState {
   pushEvent: (event: RSVSEvent) => void;
   loadSnapshot: (nodes: RSVSNode[], edges: RSVSEdge[]) => void;
   getNodeNeighbors: (id: number) => { nodes: RSVSNode[]; edges: RSVSEdge[] };
+  getAtomNodes: (nodeId: number) => RSVSNode[];
+  getCompositeNodesForAtom: (atomId: number) => RSVSNode[];
+  computeJaccardSimilarity: (nodeIdA: number, nodeIdB: number) => number;
 }
 
 export const useGraphStore = create<GraphState>((set, get) => ({
@@ -123,6 +127,88 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       }
     });
     return { nodes: neighborNodes, edges: neighborEdges };
+  },
+
+  /**
+   * Get the atom nodes for a given composite node.
+   * Returns the RSVSNode objects that this node is composed from.
+   */
+  getAtomNodes: (nodeId) => {
+    const { nodes } = get();
+    const node = nodes.get(nodeId);
+    if (!node) return [];
+
+    // Collect atom IDs from any source
+    const atomIds: number[] = [];
+    if (node.atoms && node.atoms.length > 0) {
+      atomIds.push(...node.atoms);
+    } else if (node.derived_from_node_ids && node.derived_from_node_ids.length > 0) {
+      atomIds.push(...node.derived_from_node_ids);
+    } else if (node.semantic?.derived_from_node_ids && node.semantic.derived_from_node_ids.length > 0) {
+      atomIds.push(...node.semantic.derived_from_node_ids);
+    } else if (node.composition?.atoms) {
+      atomIds.push(...node.composition.atoms.map(a => a.atom_id));
+    }
+
+    // Resolve to actual node objects
+    return atomIds
+      .map(id => nodes.get(id))
+      .filter((n): n is RSVSNode => n !== undefined);
+  },
+
+  /**
+   * Get composite nodes that reference a given atom node.
+   */
+  getCompositeNodesForAtom: (atomId) => {
+    const { nodes } = get();
+    const composites: RSVSNode[] = [];
+    nodes.forEach((node) => {
+      // Check various composition fields
+      if (node.atoms && node.atoms.includes(atomId)) {
+        composites.push(node);
+        return;
+      }
+      if (node.derived_from_node_ids && node.derived_from_node_ids.includes(atomId)) {
+        composites.push(node);
+        return;
+      }
+      if (node.semantic?.derived_from_node_ids && node.semantic.derived_from_node_ids.includes(atomId)) {
+        composites.push(node);
+        return;
+      }
+      if (node.composition?.atoms && node.composition.atoms.some(a => a.atom_id === atomId)) {
+        composites.push(node);
+        return;
+      }
+    });
+    return composites;
+  },
+
+  /**
+   * Compute Jaccard similarity between two composite nodes based on their shared atoms.
+   * J(A,B) = |A ∩ B| / |A ∪ B|
+   */
+  computeJaccardSimilarity: (nodeIdA, nodeIdB) => {
+    const getAtomIdSet = (nodeId: number): Set<number> => {
+      const node = get().nodes.get(nodeId);
+      if (!node) return new Set();
+      const ids: number[] = [];
+      if (node.atoms) ids.push(...node.atoms);
+      if (node.derived_from_node_ids) ids.push(...node.derived_from_node_ids);
+      if (node.semantic?.derived_from_node_ids) ids.push(...node.semantic.derived_from_node_ids);
+      if (node.composition?.atoms) ids.push(...node.composition.atoms.map(a => a.atom_id));
+      return new Set(ids);
+    };
+
+    const setA = getAtomIdSet(nodeIdA);
+    const setB = getAtomIdSet(nodeIdB);
+
+    if (setA.size === 0 && setB.size === 0) return 0;
+
+    const intersection = new Set([...setA].filter(x => setB.has(x)));
+    const union = new Set([...setA, ...setB]);
+
+    return union.size === 0 ? 0 : intersection.size / union.size;
   },
 }));
 
@@ -337,6 +423,7 @@ interface ModeResultState {
 
   setAppraiseResult: (result: AppraiseResult) => void;
   setRelateResult: (result: RelateResult) => void;
+  setComposeResult: (result: ComposeResult) => void;
   clearResult: () => void;
   setResultLoading: (loading: boolean) => void;
   setResultError: (error: string | null) => void;
@@ -352,6 +439,9 @@ export const useModeResultStore = create<ModeResultState>((set) => ({
 
   setRelateResult: (result) =>
     set({ currentResult: { type: 'relate', data: result }, isResultLoading: false, resultError: null }),
+
+  setComposeResult: (result) =>
+    set({ currentResult: { type: 'compose', data: result }, isResultLoading: false, resultError: null }),
 
   clearResult: () =>
     set({ currentResult: null, isResultLoading: false, resultError: null }),

@@ -42,6 +42,7 @@ def _project_node(
         "is_locked": bool(node.get("is_locked", False)),
         "compression_state": semantic.get("compression_state"),
         "derived_from_node_ids": semantic.get("derived_from_node_ids", []),
+        "atoms": semantic.get("atoms"),
     }
     if view == "detail":
         projected["derived_nodes"] = [
@@ -80,10 +81,13 @@ def _convert_rust_node(rn: dict[str, Any], correlation_id: str) -> dict[str, Any
     """
     compression_state = rn.get("compression_state", "raw")
     derived_ids = rn.get("derived_from_node_ids", [])
+    atoms = rn.get("atoms", None)  # Explicit atom IDs for composed nodes
 
     # Build compression_reason
     compression_reason: str | None = None
-    if compression_state == "compressed":
+    if compression_state == "composed":
+        compression_reason = rn.get("compression_reason") or "composition"
+    elif compression_state == "compressed":
         compression_reason = rn.get("compression_reason") or "co-occurrence aggregation"
     elif not derived_ids:
         compression_reason = "base_ingest_signal"
@@ -104,6 +108,7 @@ def _convert_rust_node(rn: dict[str, Any], correlation_id: str) -> dict[str, Any
         "semantic": {
             "compression_state": compression_state,
             "derived_from_node_ids": derived_ids,
+            "atoms": atoms,
             "compression_reason": compression_reason,
         },
         "policy_meta": {

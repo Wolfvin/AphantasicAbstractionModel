@@ -86,7 +86,7 @@ pub struct SavedEdge {
     pub to: u32,
     /// Edge weight.
     pub weight: f32,
-    /// Edge source ("bootstrap" or "learned").
+    /// Edge source ("bootstrap", "learned", or "composition").
     pub source: String,
 }
 
@@ -508,6 +508,8 @@ pub fn from_snapshot(snap: RsvsSnapshot) -> Rsvs {
     for se in &snap.edges {
         let source = if se.source == "bootstrap" {
             EdgeSource::Bootstrap
+        } else if se.source == "composition" {
+            EdgeSource::Composition
         } else {
             EdgeSource::Learned
         };
@@ -600,7 +602,17 @@ pub fn from_snapshot(snap: RsvsSnapshot) -> Rsvs {
     let token_to_id = snap.token_to_id;
     let mut atom_sets: HashMap<String, Vec<NodeId>> = HashMap::new();
     for (token, &id) in &token_to_id {
-        atom_sets.insert(token.clone(), vec![id]);
+        // BUG FIX: Use the actual node.atoms from the graph instead of
+        // always resetting to vec![id], which would zero out the
+        // attention scorer's Jaccard component after a load.
+        let atoms = graph
+            .get_node(id)
+            .map(|n| n.atoms.clone())
+            .unwrap_or_default();
+        atom_sets.insert(
+            token.clone(),
+            if atoms.is_empty() { vec![id] } else { atoms },
+        );
     }
 
     let attention = crate::attention::RsvsAttention::new(config.attention.clone());

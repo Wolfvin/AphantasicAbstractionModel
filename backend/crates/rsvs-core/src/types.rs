@@ -61,6 +61,8 @@ pub enum EdgeSource {
     Bootstrap,
     /// Created through learning from text ingestion.
     Learned,
+    /// Created by explicit composition (compose API).
+    Composition,
 }
 
 /// A language link between nodes.

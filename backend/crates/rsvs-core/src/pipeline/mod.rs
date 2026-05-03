@@ -12,6 +12,7 @@
 //!   - snapshot_v1: produce v4.2 format snapshot
 //!   - Seed bootstrap with new 24 atoms
 
+pub mod compose;
 pub mod ingest;
 pub mod modes;
 pub mod query;
@@ -57,6 +58,10 @@ pub struct PipelineConfig {
 
     /// Domain tag for current ingestion batch
     pub current_domain: usize,
+
+    /// Custom seed labels to use instead of the default 24 epistemological seeds.
+    /// When provided, these become the Layer 1 atoms for the domain.
+    pub custom_seeds: Option<Vec<String>>,
 }
 
 impl Default for PipelineConfig {
@@ -79,6 +84,7 @@ impl Default for PipelineConfig {
                 .map(|s| s.to_string())
                 .collect(),
             current_domain: 1,
+            custom_seeds: None,
         }
     }
 }
@@ -137,9 +143,12 @@ impl Rsvs {
         let mut autonomy = AutonomyEngine::new(config.autonomy.clone());
         let attention = RsvsAttention::new(config.attention.clone());
 
-        // Bootstrap seed nodes (v4.2 format)
-        let seed_map = seed::bootstrap(&mut graph)?;
+        // Bootstrap seed nodes (v4.2 format) — use custom seeds if provided
+        let seed_map = seed::bootstrap(&mut graph, config.custom_seeds.as_ref().map(|v| &v[..]))?;
         let mut token_to_id: HashMap<String, NodeId> = HashMap::new();
+
+        // Update seed_labels in config to match the actual seeds used
+        let effective_seed_labels: Vec<String> = seed_map.keys().cloned().collect();
 
         for (label, &id) in &seed_map {
             autonomy.register_seed(id, 1.0, Tier::Tier1);
@@ -156,6 +165,9 @@ impl Rsvs {
         for (label, &id) in &seed_map {
             atom_sets.insert(label.clone(), vec![id]);
         }
+
+        let mut config = config;
+        config.seed_labels = effective_seed_labels;
 
         Ok(Self {
             graph,

@@ -6,7 +6,9 @@ import { useFrame } from '@react-three/fiber';
 import { Line } from '@react-three/drei';
 import * as THREE from 'three';
 import { Line2, LineMaterial } from 'three-stdlib';
-import type { RSVSEdge, EdgeStatus } from '@/lib/types';
+import type { RSVSEdge } from '@/lib/types';
+import { useGraphStore } from '@/store/rsvsStore';
+import { isCompositeNode, isAtomNode } from '@/lib/nodeRendering';
 
 // ── Constants ──
 const LERP_FACTOR = 0.08;
@@ -15,22 +17,31 @@ const ARROW_SIZE = 0.25;
 const ARROW_CONE_RADIUS = 0.12;
 const ARROW_CONE_HEIGHT = 0.35;
 
+// Composition edge color — cyan/blue for composition edges
+const COMPOSITION_EDGE_COLOR = '#00BCD4';
+// Regular edge color fallback
+const REGULAR_EDGE_COLOR = '#1a3a5c';
+
 interface GraphEdgeProps {
   edge: RSVSEdge;
   sourcePos: THREE.Vector3;
   targetPos: THREE.Vector3;
+  isCompositionEdge?: boolean;
 }
 
 /**
  * A single edge rendered as a Line with optional arrow for directed edges.
+ * Composition edges (atom → composite) render differently: thinner, cyan, pulsing, dashed-style.
  */
 const GraphEdgeComponent: React.FC<GraphEdgeProps> = ({
   edge,
   sourcePos,
   targetPos,
+  isCompositionEdge = false,
 }) => {
   const lineRef = useRef<Line2>(null);
   const coneRef = useRef<THREE.Mesh>(null);
+  const dashLineRef = useRef<Line2>(null);
 
   // Spawn animation tracking
   const spawnStartRef = useRef<number | null>(null);
@@ -43,11 +54,19 @@ const GraphEdgeComponent: React.FC<GraphEdgeProps> = ({
   // Current animated opacity
   const currentOpacityRef = useRef(0);
 
-  // Derived render properties
-  const edgeColor = edge.render?.color ?? '#1a3a5c';
-  const edgeThickness = edge.render?.thickness ?? 1;
-  const baseOpacity = edge.render?.opacity ?? 0.6;
-  const pulseAmount = edge.render?.pulse ?? 0;
+  // Derived render properties — composition edges get their own color
+  const edgeColor = isCompositionEdge
+    ? COMPOSITION_EDGE_COLOR
+    : (edge.render?.color ?? REGULAR_EDGE_COLOR);
+  const edgeThickness = isCompositionEdge
+    ? Math.max(0.3, (edge.render?.thickness ?? 1) * 0.6)
+    : (edge.render?.thickness ?? 1);
+  const baseOpacity = isCompositionEdge
+    ? Math.max(0.15, (edge.render?.opacity ?? 0.6) * 0.5)
+    : (edge.render?.opacity ?? 0.6);
+  const pulseAmount = isCompositionEdge
+    ? Math.max(edge.render?.pulse ?? 0, 0.3)
+    : (edge.render?.pulse ?? 0);
   const edgeStatus = edge.status ?? 'stable';
   const isDirected = edge.direction === 'directed';
 
@@ -130,9 +149,10 @@ const GraphEdgeComponent: React.FC<GraphEdgeProps> = ({
     // ── Compute target opacity ──
     let targetOpacity = baseOpacity;
 
-    // Pulse animation
+    // Pulse animation — more pronounced for composition edges
     if (pulseAmount > 0) {
-      const pulse = 0.05 * pulseAmount * Math.sin(time * 2 * Math.PI);
+      const pulseStrength = isCompositionEdge ? 0.15 : 0.05;
+      const pulse = pulseStrength * pulseAmount * Math.sin(time * (isCompositionEdge ? 3 : 2) * Math.PI);
       targetOpacity += pulse;
     }
 
@@ -160,6 +180,17 @@ const GraphEdgeComponent: React.FC<GraphEdgeProps> = ({
       if (mat) {
         mat.opacity = Math.max(0, Math.min(1, currentOpacityRef.current));
         mat.transparent = true;
+      }
+    }
+
+    // ── Update composition dash line ──
+    if (dashLineRef.current && isCompositionEdge) {
+      const dashMat = dashLineRef.current.material as LineMaterial;
+      if (dashMat) {
+        dashMat.opacity = Math.max(0, Math.min(1, currentOpacityRef.current * 0.6));
+        dashMat.transparent = true;
+        // Update dash offset for animation
+        dashMat.dashOffset = -(time * 0.5);
       }
     }
 
@@ -195,8 +226,25 @@ const GraphEdgeComponent: React.FC<GraphEdgeProps> = ({
         blending={THREE.AdditiveBlending}
       />
 
-      {/* Arrow for directed edges */}
-      {isDirected && (
+      {/* Composition edge: dashed overlay for visual distinction */}
+      {isCompositionEdge && (
+        <Line
+          ref={dashLineRef}
+          points={linePoints}
+          color={edgeColor}
+          lineWidth={edgeThickness * 1.5}
+          transparent
+          opacity={baseOpacity * 0.6}
+          dashed
+          dashSize={0.5}
+          gapSize={0.3}
+          depthWrite={false}
+          blending={THREE.AdditiveBlending}
+        />
+      )}
+
+      {/* Arrow for directed edges — hidden for composition edges */}
+      {isDirected && !isCompositionEdge && (
         <mesh
           ref={coneRef}
           geometry={coneGeometry}
@@ -210,9 +258,9 @@ const GraphEdgeComponent: React.FC<GraphEdgeProps> = ({
       <Line
         points={linePoints}
         color={edgeColor}
-        lineWidth={edgeThickness * 2.5}
+        lineWidth={edgeThickness * (isCompositionEdge ? 3 : 2.5)}
         transparent
-        opacity={baseOpacity * 0.12}
+        opacity={baseOpacity * (isCompositionEdge ? 0.08 : 0.12)}
         depthWrite={false}
         blending={THREE.AdditiveBlending}
       />

@@ -50,6 +50,7 @@ __all__ = [
     "_run_ingest_rust",
     "_run_appraise_rust",
     "_run_relate_rust",
+    "_run_compose_rust",
     "_run_mode",
     "_read_latest_mode",
     "run_mode",
@@ -414,6 +415,80 @@ def _run_relate_rust(
 
 
 # ---------------------------------------------------------------------------
+# Mode: compose (Rust core)
+# ---------------------------------------------------------------------------
+
+
+def _run_compose_rust(
+    text: str,
+    correlation_id: str,
+    options: dict[str, Any] | None,
+) -> tuple[dict[str, Any], list[dict[str, Any]], dict[str, str]]:
+    """Compose via the Rust core: r.compose(label, atom_ids, lang)."""
+    r = _get_rsvs()
+    if r is None:
+        raise RustCoreUnavailableError("Rust core required for compose mode")
+
+    label = text  # In compose mode, text carries the label
+    atom_ids = (options or {}).get("atom_ids", [])
+    lang = (options or {}).get("lang")
+
+    if not atom_ids:
+        raise ValueError("atom_ids must be a non-empty list of integer node IDs")
+
+    node_id = r.compose(label, atom_ids, lang)
+
+    # Get snapshot and convert
+    snapshot_raw = json.loads(r.snapshot_v1())
+    snapshot = _build_bridge_snapshot(snapshot_raw, correlation_id)
+
+    # Get events and convert
+    events_raw = json.loads(r.consume_events_v1())
+    raw_events = events_raw.get("events", [])
+    events = [_convert_rust_event(e, correlation_id) for e in raw_events]
+
+    # Persist the Rust core state
+    _save_rsvs()
+
+    result = {
+        "mode": "compose",
+        "node_id": node_id,
+        "label": label,
+        "atom_ids": atom_ids,
+        "snapshot": snapshot,
+        "events": events,
+    }
+
+    messages = [
+        {
+            "id": make_id("msg"),
+            "type": "system_ingest_status",
+            "content": (
+                f"Composed node '{label}' (id={node_id}) from "
+                f"{len(atom_ids)} atoms [Rust core]."
+            ),
+            "timestamp": iso_now(),
+            "correlation_id": correlation_id,
+        }
+    ]
+
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    path = CONFIG.atom_dir / f"compose-{stamp}.json"
+    payload = {
+        "schema_version": SCHEMA_VERSION,
+        "mode": "compose",
+        "timestamp": iso_now(),
+        "correlation_id": correlation_id,
+        "input": label,
+        "atom_ids": atom_ids,
+        "lang": lang,
+        "result": result,
+    }
+    _write_json(path, payload)
+    return result, messages, {"compose": str(path)}
+
+
+# ---------------------------------------------------------------------------
 # Unified mode dispatch
 # ---------------------------------------------------------------------------
 
@@ -421,6 +496,7 @@ _MODE_HANDLERS = {
     "ingest": _run_ingest_rust,
     "appraise": _run_appraise_rust,
     "relate": _run_relate_rust,
+    "compose": _run_compose_rust,
 }
 
 

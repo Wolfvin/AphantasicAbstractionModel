@@ -132,6 +132,11 @@ impl RsvsGraph {
         self.nodes.get(&id)
     }
 
+    /// Look up a node by its integer ID with mutable access.
+    pub fn get_node_mut(&mut self, id: NodeId) -> Option<&mut Node> {
+        self.nodes.get_mut(&id)
+    }
+
     /// Look up a node ID by its label string.
     pub fn id_for_label(&self, label: &str) -> Option<NodeId> {
         self.label_to_id.get(label).copied()

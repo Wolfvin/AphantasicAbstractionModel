@@ -3,6 +3,8 @@
 //! Exposes the Rsvs pipeline to Python with a clean, Pythonic API.
 //! v4.2: Unified node model, appraise/relate methods, PyNodeInfo.
 
+#![allow(missing_docs)]
+
 use crate::error::RsvsError;
 use crate::events::{API_VERSION, SCHEMA_VERSION};
 use pyo3::exceptions::PyValueError;
@@ -123,6 +125,9 @@ pub struct PyNodeInfo {
     pub is_locked: bool,
     pub is_stable: bool,
     pub compression_state: String,
+    pub atoms: Vec<u32>,
+    pub derived_from_node_ids: Vec<u32>,
+    pub compression_reason: Option<String>,
 }
 
 #[pymethods]
@@ -435,6 +440,9 @@ impl PyRsvs {
             is_locked: node.is_locked,
             is_stable,
             compression_state: compression_str.to_string(),
+            atoms: node.atoms.clone(),
+            derived_from_node_ids: node.semantic.derived_from_node_ids.clone(),
+            compression_reason: node.semantic.compression_reason.clone(),
         })
     }
 
@@ -501,6 +509,16 @@ impl PyRsvs {
             })
             .cloned()
             .collect()
+    }
+
+    /// Create a composite node from explicit atom IDs.
+    #[pyo3(signature = (label, atom_ids, lang=None))]
+    fn compose(&mut self, label: &str, atom_ids: Vec<u32>, lang: Option<&str>) -> PyResult<u32> {
+        let id = self
+            .inner
+            .compose(label, atom_ids, lang)
+            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+        Ok(id)
     }
 
     /// Backward compat: alias for nodes()

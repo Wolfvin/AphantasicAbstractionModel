@@ -1,6 +1,9 @@
 //! Seed graph bootstrap (v4.2)
 //!
-//! Loads the 24 seed atoms into the graph at startup.
+//! Loads seed atoms into the graph at startup. By default, uses 24
+//! epistemological seeds, but callers can provide custom seed labels
+//! for domain-specific bootstrapping.
+//!
 //! These nodes have confidence=1.0, Tier=Tier1, status=Stable,
 //! is_seed=true, is_locked=true, and cannot be removed.
 //! All nodes above the seed layer emerge from data.
@@ -38,17 +41,30 @@ const SEED_ATOMS: &[&str] = &[
     "feedback",
 ];
 
-/// Bootstrap the graph with all 24 seed nodes (v4.2 format).
-/// Returns a map of label → NodeId for external reference.
+/// Bootstrap the graph with seed nodes (v4.2 format).
+///
+/// If `custom_seeds` is provided, those labels are used instead of the
+/// default 24 epistemological seeds. Returns a map of label → NodeId for
+/// external reference.
 ///
 /// # Errors
 ///
 /// Returns `RsvsError::SeedInvariant` if the number of successfully seeded
-/// nodes does not match the expected count (24).
-pub fn bootstrap(graph: &mut RsvsGraph) -> Result<HashMap<String, NodeId>, RsvsError> {
+/// nodes does not match the expected count.
+pub fn bootstrap(
+    graph: &mut RsvsGraph,
+    custom_seeds: Option<&[String]>,
+) -> Result<HashMap<String, NodeId>, RsvsError> {
+    let labels: Vec<&str> = if let Some(seeds) = custom_seeds {
+        seeds.iter().map(|s| s.as_str()).collect()
+    } else {
+        SEED_ATOMS.to_vec()
+    };
+    let expected_count = labels.len();
+
     let mut label_map = HashMap::new();
 
-    for label in SEED_ATOMS {
+    for label in &labels {
         let node = Node {
             id: 0, // will be assigned by insert_node
             label: label.to_string(),
@@ -77,10 +93,10 @@ pub fn bootstrap(graph: &mut RsvsGraph) -> Result<HashMap<String, NodeId>, RsvsE
         label_map.insert(label.to_string(), id);
     }
 
-    if label_map.len() != SEED_ATOMS.len() {
+    if label_map.len() != expected_count {
         return Err(RsvsError::SeedInvariant(format!(
             "Seed node count mismatch — expected {}, got {}",
-            SEED_ATOMS.len(),
+            expected_count,
             label_map.len()
         )));
     }
@@ -123,7 +139,7 @@ mod tests {
     #[test]
     fn seed_count_is_correct() {
         let mut graph = RsvsGraph::new();
-        let map = bootstrap(&mut graph).unwrap();
+        let map = bootstrap(&mut graph, None).unwrap();
         assert_eq!(map.len(), 24);
         assert_eq!(graph.node_count(), 24);
     }
@@ -131,7 +147,7 @@ mod tests {
     #[test]
     fn all_seed_nodes_are_tier1_and_stable() {
         let mut graph = RsvsGraph::new();
-        let map = bootstrap(&mut graph).unwrap();
+        let map = bootstrap(&mut graph, None).unwrap();
         for id in map.values() {
             let node = graph.get_node(*id).unwrap();
             assert_eq!(node.tier, Tier::Tier1);
@@ -145,7 +161,7 @@ mod tests {
     #[test]
     fn seed_nodes_have_surface_label_format() {
         let mut graph = RsvsGraph::new();
-        let map = bootstrap(&mut graph).unwrap();
+        let map = bootstrap(&mut graph, None).unwrap();
         for id in map.values() {
             let node = graph.get_node(*id).unwrap();
             assert!(
@@ -159,7 +175,7 @@ mod tests {
     #[test]
     fn seed_nodes_have_correct_labels() {
         let mut graph = RsvsGraph::new();
-        let map = bootstrap(&mut graph).unwrap();
+        let map = bootstrap(&mut graph, None).unwrap();
         assert!(map.contains_key("exists"));
         assert!(map.contains_key("entity"));
         assert!(map.contains_key("relation"));
@@ -169,7 +185,7 @@ mod tests {
     #[test]
     fn seed_nodes_are_raw_compression() {
         let mut graph = RsvsGraph::new();
-        let map = bootstrap(&mut graph).unwrap();
+        let map = bootstrap(&mut graph, None).unwrap();
         for id in map.values() {
             let node = graph.get_node(*id).unwrap();
             assert_eq!(node.semantic.compression_state, CompressionState::Raw);

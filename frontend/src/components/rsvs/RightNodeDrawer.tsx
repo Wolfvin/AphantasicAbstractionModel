@@ -6,6 +6,7 @@ import {
   X, Crosshair, Pin, GitCompare, Download, Brain,
   Link2, Activity, Eye, Sparkles, AlertTriangle,
   Shield, Layers, Globe, GitBranch, ArrowUpDown,
+  Atom, Hexagon,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -13,9 +14,10 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { useUIStore, useGraphStore, useModeResultStore } from '@/store/rsvsStore';
 import type { RSVSNode, Tier, PolicyMeta, LanguageLink } from '@/lib/types';
-import { getStatusColor } from '@/lib/nodeRendering';
+import { getStatusColor, isCompositeNode, isAtomNode, getAtomCount } from '@/lib/nodeRendering';
 import AppraisePanel from '@/components/rsvs/AppraisePanel';
 import RelatePanel from '@/components/rsvs/RelatePanel';
+import ComposePanel from '@/components/rsvs/ComposePanel';
 
 const TIER_COLORS: Record<Tier, string> = {
   1: '#00E5FF',
@@ -98,13 +100,18 @@ function WeightBar({ label, weight }: { label: string; weight: number }) {
 
 // ── v4.2 Compression State Section ──
 function CompressionStateSection({ state }: { state: string }) {
+  const label = state === 'composed' ? 'Composed' : state === 'compressed' ? 'Compressed' : 'Raw';
+  const color = state === 'composed' ? '#FF80AB' : state === 'compressed' ? '#B388FF' : '#69F0AE';
   return (
     <div className="mb-5">
       <div className="flex items-center gap-2 mb-2">
         <Layers className="w-3.5 h-3.5 text-[#FFB74D]" />
         <h3 className="text-xs font-semibold uppercase tracking-wider text-[#94a3b8]">Compression State</h3>
       </div>
-      <StatCard label="State" value={state === 'compressed' ? 'Compressed' : 'Raw'} />
+      <div className="bg-[#0d1520] rounded-lg p-3 text-center border border-[#1e293b]">
+        <div className="text-lg font-bold" style={{ color }}>{label}</div>
+        <div className="text-[10px] uppercase tracking-wider text-[#64748b]">State</div>
+      </div>
     </div>
   );
 }
@@ -192,6 +199,133 @@ function DerivedFromSection({ nodeIds, onSelectNode }: { nodeIds: number[]; onSe
   );
 }
 
+// ── Composition Section (new for compose visualization) ──
+function CompositionSection({ node, onSelectNode }: { node: RSVSNode; onSelectNode: (id: number) => void }) {
+  const nodes = useGraphStore((s) => s.nodes);
+  const getAtomNodes = useGraphStore((s) => s.getAtomNodes);
+  const getCompositeNodesForAtom = useGraphStore((s) => s.getCompositeNodesForAtom);
+  const computeJaccardSimilarity = useGraphStore((s) => s.computeJaccardSimilarity);
+
+  // Collect atom IDs from any source
+  const atomIds = useMemo(() => {
+    const ids: number[] = [];
+    if (node.atoms && node.atoms.length > 0) ids.push(...node.atoms);
+    else if (node.derived_from_node_ids && node.derived_from_node_ids.length > 0) ids.push(...node.derived_from_node_ids);
+    else if (node.semantic?.derived_from_node_ids && node.semantic.derived_from_node_ids.length > 0) ids.push(...node.semantic.derived_from_node_ids);
+    else if (node.composition?.atoms) ids.push(...node.composition.atoms.map(a => a.atom_id));
+    return ids;
+  }, [node]);
+
+  // Resolve atom nodes
+  const atomNodes = useMemo(() => {
+    return atomIds
+      .map(id => nodes.get(id))
+      .filter((n): n is RSVSNode => n !== undefined);
+  }, [atomIds, nodes]);
+
+  // Find composites that share atoms with this one (for Jaccard similarity)
+  const similarComposites = useMemo(() => {
+    if (atomIds.length === 0) return [];
+    const compositeIds = new Set<number>();
+    for (const aid of atomIds) {
+      const composites = getCompositeNodesForAtom(aid);
+      for (const c of composites) {
+        if (c.id !== node.id) compositeIds.add(c.id);
+      }
+    }
+    return Array.from(compositeIds)
+      .map(id => {
+        const cNode = nodes.get(id);
+        if (!cNode) return null;
+        const similarity = computeJaccardSimilarity(node.id, id);
+        return { node: cNode, similarity };
+      })
+      .filter((x): x is { node: RSVSNode; similarity: number } => x !== null && x.similarity > 0)
+      .sort((a, b) => b.similarity - a.similarity)
+      .slice(0, 5);
+  }, [atomIds, node.id, nodes, getCompositeNodesForAtom, computeJaccardSimilarity]);
+
+  return (
+    <div className="mb-5">
+      <div className="flex items-center gap-2 mb-3">
+        <Hexagon className="w-3.5 h-3.5 text-[#FF80AB]" />
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-[#94a3b8]">Composition</h3>
+        <Badge className="text-[9px] ml-auto bg-[#FF80AB15] text-[#FF80AB] border-[#FF80AB30] px-1.5 py-0">
+          {atomIds.length} atom{atomIds.length !== 1 ? 's' : ''}
+        </Badge>
+      </div>
+
+      {/* Atom list */}
+      {atomNodes.length > 0 ? (
+        <div className="space-y-1 mb-3">
+          {atomNodes.map((atomNode) => (
+            <button
+              key={atomNode.id}
+              type="button"
+              className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-[#1e293b]/50 transition-colors text-left group"
+              onClick={() => onSelectNode(atomNode.id)}
+            >
+              <Atom className="w-3 h-3 text-[#69F0AE] shrink-0" />
+              <span className="text-xs text-[#e2e8f0] font-mono truncate flex-1">{atomNode.label}</span>
+              <Badge
+                className="text-[9px] px-1 py-0 shrink-0"
+                style={{
+                  backgroundColor: `${TIER_COLORS[atomNode.tier]}15`,
+                  color: TIER_COLORS[atomNode.tier],
+                  borderColor: 'transparent',
+                }}
+              >
+                T{atomNode.tier}
+              </Badge>
+              <span className="text-[10px] text-[#64748b] font-mono shrink-0">
+                c={atomNode.confidence.toFixed(2)}
+              </span>
+              <GitBranch className="w-3 h-3 text-[#475569] group-hover:text-[#00E5FF] transition-colors shrink-0" />
+            </button>
+          ))}
+        </div>
+      ) : (
+        <p className="text-xs text-[#475569] italic mb-3">No atom data available</p>
+      )}
+
+      {/* Jaccard similarities */}
+      {similarComposites.length > 0 && (
+        <div>
+          <div className="text-[10px] uppercase tracking-wider text-[#80D8FF] mb-2 flex items-center gap-1.5">
+            <GitCompare className="w-3 h-3" />
+            Shared Atoms (Jaccard)
+          </div>
+          <div className="space-y-1">
+            {similarComposites.map(({ node: cNode, similarity }) => (
+              <button
+                key={cNode.id}
+                type="button"
+                className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-[#1e293b]/50 transition-colors text-left group"
+                onClick={() => onSelectNode(cNode.id)}
+              >
+                <Hexagon className="w-3 h-3 text-[#FF80AB] shrink-0" />
+                <span className="text-xs text-[#e2e8f0] font-mono truncate flex-1">{cNode.label}</span>
+                <div className="w-16 h-1.5 bg-[#0d1520] rounded-full overflow-hidden shrink-0">
+                  <motion.div
+                    className="h-full rounded-full bg-[#00BCD4]"
+                    initial={{ width: 0 }}
+                    animate={{ width: `${similarity * 100}%` }}
+                    transition={{ duration: 0.4 }}
+                  />
+                </div>
+                <span className="text-[10px] text-[#00BCD4] font-mono shrink-0 w-8 text-right">
+                  {similarity.toFixed(2)}
+                </span>
+                <GitBranch className="w-3 h-3 text-[#475569] group-hover:text-[#00E5FF] transition-colors shrink-0" />
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function RightNodeDrawer() {
   const selectedNodeId = useUIStore((s) => s.selectedNodeId);
   const isDrawerOpen = useUIStore((s) => s.isDrawerOpen);
@@ -233,6 +367,10 @@ export default function RightNodeDrawer() {
     return [...neighbors.edges].sort((a, b) => b.weight - a.weight).slice(0, 5);
   }, [neighbors.edges]);
 
+  // Detect composite/atom
+  const isComposite = node ? isCompositeNode(node) : false;
+  const isAtom = node ? isAtomNode(node) : false;
+
   return (
     <>
       {/* Backdrop overlay */}
@@ -266,7 +404,13 @@ export default function RightNodeDrawer() {
             <div className="px-5 pt-5 pb-3">
               <div className="flex items-start justify-between mb-3">
                 <div className="flex items-center gap-2 min-w-0">
-                  <Brain className="w-5 h-5 text-[#00E5FF] shrink-0" />
+                  {isComposite ? (
+                    <Hexagon className="w-5 h-5 text-[#FF80AB] shrink-0" />
+                  ) : isAtom ? (
+                    <Atom className="w-5 h-5 text-[#69F0AE] shrink-0" />
+                  ) : (
+                    <Brain className="w-5 h-5 text-[#00E5FF] shrink-0" />
+                  )}
                   <h2 className="text-lg font-bold text-[#e2e8f0] truncate">{node.label}</h2>
                 </div>
                 <Button
@@ -315,6 +459,16 @@ export default function RightNodeDrawer() {
                     }}
                   >
                     {(STATUS_STYLES[node.status] ?? STATUS_STYLES.new).label}
+                  </Badge>
+                )}
+                {isComposite && (
+                  <Badge className="text-[10px] bg-[#FF80AB15] text-[#FF80AB] border-[#FF80AB40]">
+                    ◆ Composite
+                  </Badge>
+                )}
+                {isAtom && (
+                  <Badge className="text-[10px] bg-[#69F0AE15] text-[#69F0AE] border-[#69F0AE40]">
+                    ● Atom
                   </Badge>
                 )}
                 {node.is_seed && (
@@ -389,8 +543,16 @@ export default function RightNodeDrawer() {
 
               <Separator className="bg-[#1e293b] mb-5" />
 
+              {/* Composition Section (for composite nodes) */}
+              {isComposite && (
+                <>
+                  <CompositionSection node={node} onSelectNode={handleSelectNode} />
+                  <Separator className="bg-[#1e293b] mb-5" />
+                </>
+              )}
+
               {/* v4.2: Compression State */}
-              {node.compression_state === 'compressed' && (
+              {(node.compression_state === 'compressed' || node.compression_state === 'composed') && (
                 <>
                   <CompressionStateSection state={node.compression_state} />
                   <Separator className="bg-[#1e293b] mb-5" />
@@ -421,8 +583,8 @@ export default function RightNodeDrawer() {
                 </>
               )}
 
-              {/* Composition */}
-              {node.composition && (
+              {/* Composition (legacy) */}
+              {node.composition && !isComposite && (
                 <div className="mb-5">
                   <div className="flex items-center gap-2 mb-3">
                     <Activity className="w-3.5 h-3.5 text-[#B388FF]" />
@@ -474,7 +636,7 @@ export default function RightNodeDrawer() {
                 )}
               </div>
 
-              {/* Mode Result Panels (Appraise / Relate) */}
+              {/* Mode Result Panels (Appraise / Relate / Compose) */}
               {modeResult && modeResult.type === 'appraise' && (
                 <>
                   <Separator className="bg-[#1e293b] mb-5" />
@@ -485,6 +647,12 @@ export default function RightNodeDrawer() {
                 <>
                   <Separator className="bg-[#1e293b] mb-5" />
                   <RelatePanel result={modeResult.data} />
+                </>
+              )}
+              {modeResult && modeResult.type === 'compose' && (
+                <>
+                  <Separator className="bg-[#1e293b] mb-5" />
+                  <ComposePanel result={modeResult.data} />
                 </>
               )}
 
