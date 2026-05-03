@@ -50,9 +50,7 @@ export function computeNodeRenderProps(node: {
 
   const size = node.is_seed
     ? 1.6
-    : node.kind === 'composite'
-      ? (TIER_SIZES[tier] ?? 0.7) * 1.3
-      : (TIER_SIZES[tier] ?? 0.7);
+    : (TIER_SIZES[tier] ?? 0.7);
 
   const color = STATUS_COLORS[status] ?? '#B388FF';
   const glow = Math.max(0.3, Math.min(0.9, confidence));

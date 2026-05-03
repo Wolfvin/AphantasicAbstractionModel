@@ -506,7 +506,8 @@ def run_eval(
         r = Rsvs.load(db_path)
     else:
         if not db_path:
-            tmp_path = tempfile.mktemp(suffix='.json')
+            tmp_fd, tmp_path = tempfile.mkstemp(suffix='.json')
+            os.close(tmp_fd)
         else:
             tmp_path = db_path
 
@@ -550,7 +551,8 @@ def run_eval(
 
     # 4. Adaptive threshold
     if compare_adaptive:
-        fixed_db = tempfile.mktemp(suffix='_fixed.json')
+        fixed_fd, fixed_db = tempfile.mkstemp(suffix='_fixed.json')
+        os.close(fixed_fd)
         try:
             b4 = benchmark_adaptive_threshold(r, fixed_db, domains)
         finally:

@@ -11,24 +11,38 @@ use crate::types::{NodeId, NodeStatus, Tier};
 /// Memory class of a node.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MemoryClass {
+    /// Long-term stable memory (Tier1, high confidence).
     Stable,
+    /// Short-term working memory (still being evaluated).
     Working,
 }
 
 /// Record for a single node in the autonomy engine.
 #[derive(Debug, Clone)]
 pub struct AtomRecord {
+    /// The node ID this record tracks.
     pub id: NodeId,
+    /// Current confidence score (0.0–1.0).
     pub confidence: f32,
+    /// Current autonomy tier.
     pub tier: Tier,
+    /// Current lifecycle status.
     pub status: NodeStatus,
+    /// Memory class (stable or working).
     pub memory: MemoryClass,
+    /// Number of domains this node has been observed in.
     pub domain_count: usize,
+    /// Set of mature nodes this node co-occurs with.
     pub cooccurring_mature: HashSet<NodeId>,
+    /// Number of times this node has been observed.
     pub observation_count: usize,
+    /// Whether this is a seed node (immutable).
     pub is_seed: bool,
+    /// Number of status flip-flops detected (for quarantine).
     pub status_flip_count: u32,
+    /// Governance score (0.0–1.0).
     pub governance_score: f32,
+    /// Pool of accumulated candidate evidence.
     pub candidate_evidence_pool: f32,
 }
 
@@ -70,23 +84,36 @@ impl AtomRecord {
 /// Configuration for the autonomy engine.
 #[derive(Debug, Clone)]
 pub struct AutonomyConfig {
+    /// EMA smoothing factor for confidence updates.
     pub eta: f32,
+    /// Confidence threshold for Tier1 classification.
     pub confidence_tier1: f32,
+    /// Confidence threshold for Tier2 classification.
     pub confidence_tier2: f32,
+    /// Confidence below which a node is considered for removal.
     pub tau_remove: f32,
+    /// Impact threshold above which removal requires approval.
     pub threshold_impact: usize,
+    /// Maximum total confidence delta per batch before freezing.
     pub threshold_global_delta: f32,
+    /// Number of contexts before warm-up is complete.
     pub n_warm: usize,
+    /// Fallback threshold for sense assignment during warm-up.
     pub fallback_theta_assign: f32,
+    /// Fallback threshold for sense merging during warm-up.
     pub fallback_theta_merge: f32,
+    /// Weighting factor for assign adaptive threshold (mean + k1*stddev).
     pub k1: f32,
+    /// Weighting factor for merge adaptive threshold (mean + k2*stddev).
     pub k2: f32,
+    /// Maximum single-step confidence drop allowed.
     pub max_drop_tolerance: f32,
-    // v4.2 hysteresis thresholds
-    pub promote_threshold: f32, // promote at >= this (0.75)
-    pub demote_threshold: f32,  // demote at < this (0.60)
-    // v4.2 quarantine
-    pub quarantine_flip_threshold: u32, // quarantine if flip_count >= this (3)
+    /// Hysteresis: promote at >= this value (default 0.75).
+    pub promote_threshold: f32,
+    /// Hysteresis: demote at < this value (default 0.60).
+    pub demote_threshold: f32,
+    /// Quarantine a node if flip_count >= this value (default 3).
+    pub quarantine_flip_threshold: u32,
 }
 
 impl Default for AutonomyConfig {
@@ -114,44 +141,79 @@ impl Default for AutonomyConfig {
 /// Warm-up state of the autonomy engine.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WarmUpState {
+    /// Warm-up is still in progress (fewer than `n_warm` contexts seen).
     Active,
+    /// Warm-up is complete; adaptive thresholds are active.
     Complete,
 }
 
 /// Result of a confidence update.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ConfidenceUpdateResult {
-    Updated { old: f32, new: f32, evidence: f32 },
+    /// Confidence was updated with old, new, and evidence values.
+    Updated {
+        /// Confidence before the update.
+        old: f32,
+        /// Confidence after the update.
+        new: f32,
+        /// Evidence value used for the update (freq * coherence).
+        evidence: f32,
+    },
+    /// Update was skipped with a reason.
     Skipped(&'static str),
 }
 
 /// Decision on whether to remove a node.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RemovalDecision {
+    /// Node should be removed (low confidence, low impact).
     Remove,
-    RequiresApproval { impact: usize },
+    /// Removal requires approval due to high impact.
+    RequiresApproval {
+        /// Number of nodes that would be affected.
+        impact: usize,
+    },
+    /// Node should be retained with a reason.
     Retain(&'static str),
 }
 
 /// Stability status after a batch update.
 #[derive(Debug, Clone, PartialEq)]
 pub enum StabilityStatus {
+    /// Batch is stable; confidence deltas within threshold.
     Stable,
-    Frozen { delta: f32, threshold: f32 },
+    /// Batch is frozen; total delta exceeded the threshold.
+    Frozen {
+        /// The total confidence delta observed.
+        delta: f32,
+        /// The threshold that was exceeded.
+        threshold: f32,
+    },
 }
 
-/// Result of a status transition attempt
+/// Result of a status transition attempt.
 #[derive(Debug, Clone, PartialEq)]
 pub enum StatusTransitionResult {
-    Transitioned { from: NodeStatus, to: NodeStatus },
+    /// Status was successfully transitioned.
+    Transitioned {
+        /// Previous status.
+        from: NodeStatus,
+        /// New status.
+        to: NodeStatus,
+    },
+    /// Transition was blocked with a reason.
     Blocked(&'static str),
 }
 
 /// The autonomy engine managing node confidence, tier classification, and status lifecycle.
 pub struct AutonomyEngine {
+    /// Configuration for the autonomy engine.
     pub config: AutonomyConfig,
+    /// Per-node records tracking confidence, tier, and status.
     pub records: HashMap<NodeId, AtomRecord>,
+    /// Current warm-up state.
     pub warmup: WarmUpState,
+    /// Whether the engine is currently frozen (batch delta exceeded).
     pub frozen: bool,
 
     contexts_seen: usize,

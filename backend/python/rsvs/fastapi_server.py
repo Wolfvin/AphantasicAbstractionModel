@@ -10,10 +10,19 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 from .exceptions import RsvsError, RustCoreUnavailableError
 from .modes import run_mode
+from .protocols import RsvsCoreProtocol
 from .rsvs_core import get_rsvs_instance
+
+
+# --- Rate limiter ---
+
+limiter = Limiter(key_func=get_remote_address)
 
 
 # --- Lifespan ---
@@ -37,12 +46,29 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# --- Request size limit middleware ---
+
+MAX_REQUEST_SIZE = 1_000_000  # 1MB
+
+
+@app.middleware("http")
+async def limit_request_size(request: Request, call_next):
+    if request.headers.get("content-length"):
+        if int(request.headers["content-length"]) > MAX_REQUEST_SIZE:
+            return JSONResponse(status_code=413, content={"error": "request_too_large"})
+    response = await call_next(request)
+    return response
 
 
 # --- Request/Response Models ---
@@ -101,9 +127,10 @@ async def rsvs_error_handler(request: Request, exc: RsvsError) -> JSONResponse:
 # --- Endpoints ---
 
 @app.post("/run")
-async def run_endpoint(req: RunRequest) -> dict[str, Any]:
+@limiter.limit("30/minute")
+async def run_endpoint(request: Request, req: RunRequest) -> dict[str, Any]:
     try:
-        rsvs = get_rsvs_instance()
+        rsvs: RsvsCoreProtocol = get_rsvs_instance()
         return run_mode(rsvs, req.mode, text=req.text, target=req.target, source=req.source)
     except RsvsError:
         raise
@@ -112,9 +139,10 @@ async def run_endpoint(req: RunRequest) -> dict[str, Any]:
 
 
 @app.post("/ingest")
-async def ingest_endpoint(req: IngestRequest) -> dict[str, Any]:
+@limiter.limit("30/minute")
+async def ingest_endpoint(request: Request, req: IngestRequest) -> dict[str, Any]:
     try:
-        rsvs = get_rsvs_instance()
+        rsvs: RsvsCoreProtocol = get_rsvs_instance()
         return run_mode(rsvs, "ingest", text=req.text, source=req.source)
     except RsvsError:
         raise
@@ -123,9 +151,10 @@ async def ingest_endpoint(req: IngestRequest) -> dict[str, Any]:
 
 
 @app.post("/query")
-async def query_endpoint(req: QueryRequest) -> dict[str, Any]:
+@limiter.limit("30/minute")
+async def query_endpoint(request: Request, req: QueryRequest) -> dict[str, Any]:
     try:
-        rsvs = get_rsvs_instance()
+        rsvs: RsvsCoreProtocol = get_rsvs_instance()
         return run_mode(rsvs, "query", text=req.text, top_k=req.top_k)
     except RsvsError:
         raise
@@ -134,9 +163,10 @@ async def query_endpoint(req: QueryRequest) -> dict[str, Any]:
 
 
 @app.post("/similarity")
-async def similarity_endpoint(req: SimilarityRequest) -> dict[str, Any]:
+@limiter.limit("30/minute")
+async def similarity_endpoint(request: Request, req: SimilarityRequest) -> dict[str, Any]:
     try:
-        rsvs = get_rsvs_instance()
+        rsvs: RsvsCoreProtocol = get_rsvs_instance()
         sim = rsvs.similarity(req.label_a, req.label_b)
         return {"label_a": req.label_a, "label_b": req.label_b, "similarity": sim}
     except RsvsError:
@@ -146,9 +176,10 @@ async def similarity_endpoint(req: SimilarityRequest) -> dict[str, Any]:
 
 
 @app.post("/appraise")
-async def appraise_endpoint(req: AppraiseRequest) -> dict[str, Any]:
+@limiter.limit("30/minute")
+async def appraise_endpoint(request: Request, req: AppraiseRequest) -> dict[str, Any]:
     try:
-        rsvs = get_rsvs_instance()
+        rsvs: RsvsCoreProtocol = get_rsvs_instance()
         return run_mode(rsvs, "appraise", text=req.target)
     except RsvsError:
         raise
@@ -157,9 +188,10 @@ async def appraise_endpoint(req: AppraiseRequest) -> dict[str, Any]:
 
 
 @app.post("/relate")
-async def relate_endpoint(req: RelateRequest) -> dict[str, Any]:
+@limiter.limit("30/minute")
+async def relate_endpoint(request: Request, req: RelateRequest) -> dict[str, Any]:
     try:
-        rsvs = get_rsvs_instance()
+        rsvs: RsvsCoreProtocol = get_rsvs_instance()
         return run_mode(rsvs, "relate", text=req.source, target=req.target)
     except RsvsError:
         raise
@@ -168,9 +200,10 @@ async def relate_endpoint(req: RelateRequest) -> dict[str, Any]:
 
 
 @app.get("/snapshot")
-async def snapshot_endpoint() -> dict[str, Any]:
+@limiter.limit("60/minute")
+async def snapshot_endpoint(request: Request) -> dict[str, Any]:
     try:
-        rsvs = get_rsvs_instance()
+        rsvs: RsvsCoreProtocol = get_rsvs_instance()
         return json.loads(rsvs.snapshot_v1())
     except RsvsError:
         raise
@@ -179,9 +212,10 @@ async def snapshot_endpoint() -> dict[str, Any]:
 
 
 @app.get("/events")
-async def events_endpoint() -> dict[str, Any]:
+@limiter.limit("60/minute")
+async def events_endpoint(request: Request) -> dict[str, Any]:
     try:
-        rsvs = get_rsvs_instance()
+        rsvs: RsvsCoreProtocol = get_rsvs_instance()
         return json.loads(rsvs.consume_events_v1())
     except RsvsError:
         raise
@@ -190,19 +224,28 @@ async def events_endpoint() -> dict[str, Any]:
 
 
 @app.get("/health")
-async def health() -> dict[str, str]:
+@limiter.limit("60/minute")
+async def health(request: Request) -> dict[str, str]:
     return {"status": "ok", "version": "4.2.0"}
 
 
 @app.get("/")
-async def root() -> dict[str, str]:
+@limiter.limit("60/minute")
+async def root(request: Request) -> dict[str, str]:
     return {"name": "RSVS", "version": "4.2.0", "docs": "/docs"}
 
 
 def main() -> None:
     """Run the FastAPI server with uvicorn."""
+    import os
     import uvicorn
-    uvicorn.run("rsvs.fastapi_server:app", host="0.0.0.0", port=8000, reload=True)
+    reload = os.environ.get("RSVS_DEV_RELOAD", "0") == "1"
+    uvicorn.run(
+        "rsvs.fastapi_server:app",
+        host=os.environ.get("RSVS_HOST", "0.0.0.0"),
+        port=int(os.environ.get("RSVS_PORT", "8000")),
+        reload=reload,
+    )
 
 
 if __name__ == "__main__":

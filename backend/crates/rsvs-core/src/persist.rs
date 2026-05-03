@@ -30,112 +30,179 @@ use crate::types::{
 /// Serializable mirror of a `Node` for JSON persistence.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SavedNode {
+    /// Unique integer node ID.
     pub id: u32,
+    /// Canonical label string.
     pub label: String,
+    /// Surface form with language tag.
     pub surface_label: String,
-    pub kind: String, // Always "node" in v4.2
+    /// Node kind — always "node" in v4.2.
+    pub kind: String,
+    /// Tier number (1, 2, or 3).
     pub tier: u8,
+    /// Confidence score.
     pub confidence: f32,
-    pub status: String, // NodeStatus as string
+    /// Lifecycle status as string.
+    pub status: String,
+    /// Whether this is a seed node.
     pub is_seed: bool,
+    /// Whether this node is locked.
     pub is_locked: bool,
-    pub compression_state: String, // "raw" | "compressed"
+    /// Compression state ("raw" or "compressed").
+    pub compression_state: String,
+    /// Node IDs this node was derived from.
     pub derived_from_node_ids: Vec<u32>,
+    /// Reason for compression, if any.
     pub compression_reason: Option<String>,
+    /// Policy metadata, if present.
     pub policy_meta: Option<SavedPolicyMeta>,
+    /// Atom set for similarity/attention.
     pub atoms: Vec<u32>,
 }
 
 /// Serializable mirror of `PolicyMeta` for JSON persistence.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SavedPolicyMeta {
+    /// Policy engine version.
     pub policy_version: String,
+    /// Governance score (0.0–1.0).
     pub governance_score: f32,
+    /// Accumulated candidate evidence pool.
     pub candidate_evidence_pool: f32,
+    /// Number of status flip-flops detected.
     pub status_flip_count: u32,
+    /// Content fingerprints already seen for dedup.
     pub seen_fingerprints: Vec<String>,
+    /// ISO timestamp of last observation.
     pub last_seen_at: Option<String>,
 }
 
 /// Serializable mirror of an `Edge` for JSON persistence.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SavedEdge {
+    /// Source node ID.
     pub from: u32,
+    /// Target node ID.
     pub to: u32,
+    /// Edge weight.
     pub weight: f32,
-    pub source: String, // "bootstrap" | "learned"
+    /// Edge source ("bootstrap" or "learned").
+    pub source: String,
 }
 
 /// Serializable mirror of a `Sense` for JSON persistence.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SavedSense {
+    /// Context atom sets assigned to this sense.
     pub contexts: Vec<Vec<u32>>,
+    /// Frequency counts per atom.
     pub freq_counts: HashMap<u32, usize>,
+    /// Sum of pairwise similarities.
     pub sum_sim: f64,
+    /// Number of pairs used in coherence.
     pub pair_count: usize,
+    /// Cached coherence value.
     pub coherence: f32,
-    pub status: String, // "fragile" | "mature"
+    /// Sense status ("fragile" or "mature").
+    pub status: String,
+    /// Contexts of inactivity since last assignment.
     pub inactivity: usize,
 }
 
 /// Serializable mirror of a `SenseManager` for JSON persistence.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SavedSenseManager {
+    /// The sense clusters.
     pub senses: Vec<SavedSense>,
+    /// Next sense ID to allocate.
     pub next_sense_id: usize,
+    /// Global context counter.
     pub global_context_count: usize,
 }
 
 /// Serializable mirror of an `AtomRecord` for JSON persistence.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SavedAtomRecord {
+    /// Node ID.
     pub id: u32,
+    /// Confidence score.
     pub confidence: f32,
+    /// Tier number.
     pub tier: u8,
-    pub status: String, // NodeStatus as string
-    pub memory: String, // "stable" | "working"
+    /// Status as string.
+    pub status: String,
+    /// Memory class ("stable" or "working").
+    pub memory: String,
+    /// Number of domains observed.
     pub domain_count: usize,
+    /// Co-occurring mature node IDs.
     pub cooccurring_mature: Vec<u32>,
+    /// Number of observations.
     pub observation_count: usize,
+    /// Whether this is a seed node.
     pub is_seed: bool,
+    /// Number of status flip-flops.
     pub status_flip_count: u32,
+    /// Governance score.
     pub governance_score: f32,
+    /// Candidate evidence pool.
     pub candidate_evidence_pool: f32,
 }
 
 /// Serializable mirror of `CoocStats` for JSON persistence.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SavedCoocStats {
+    /// Per-token count.
     pub token_count: HashMap<String, usize>,
-    pub pair_count: HashMap<String, usize>, // "a|b" → count
+    /// Pair count stored as "a|b" → count.
+    pub pair_count: HashMap<String, usize>,
+    /// Total tokens seen.
     pub total_tokens: usize,
+    /// Total sentences seen.
     pub total_sentences: usize,
 }
 
 /// Serializable mirror of `EntityDetector` for JSON persistence.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SavedEntityDetector {
+    /// Per-token sentence count.
     pub sentence_count: HashMap<String, usize>,
+    /// Per-token groundable flag.
     pub groundable: HashMap<String, bool>,
 }
 
 /// Top-level snapshot of the entire RSVS state (v4.2).
 #[derive(Serialize, Deserialize, Debug)]
 pub struct RsvsSnapshot {
+    /// Snapshot format version.
     pub version: String,
+    /// Total contexts processed.
     pub total_contexts: usize,
+    /// Token string to node ID mapping.
     pub token_to_id: HashMap<String, u32>,
+    /// Next node ID to allocate.
     pub next_node_id: u32,
+    /// All saved nodes.
     pub nodes: Vec<SavedNode>,
+    /// All saved edges.
     pub edges: Vec<SavedEdge>,
+    /// Per-node sense managers.
     pub sense_managers: HashMap<u32, SavedSenseManager>,
+    /// All atom records.
     pub atom_records: Vec<SavedAtomRecord>,
+    /// Co-occurrence statistics.
     pub cooc_stats: SavedCoocStats,
+    /// Entity detector state.
     pub entity_detector: SavedEntityDetector,
+    /// Entity promotion threshold.
     pub entity_promote_n: usize,
+    /// Sense assignment threshold.
     pub theta_assign: f32,
+    /// Number of warm-up contexts.
     pub n_warm: usize,
+    /// EMA smoothing factor.
     pub eta: f32,
+    /// Current domain tag.
     pub current_domain: usize,
 }
 

@@ -40,6 +40,11 @@ const SEED_ATOMS: &[&str] = &[
 
 /// Bootstrap the graph with all 24 seed nodes (v4.2 format).
 /// Returns a map of label → NodeId for external reference.
+///
+/// # Errors
+///
+/// Returns `RsvsError::SeedInvariant` if the number of successfully seeded
+/// nodes does not match the expected count (24).
 pub fn bootstrap(graph: &mut RsvsGraph) -> Result<HashMap<String, NodeId>, RsvsError> {
     let mut label_map = HashMap::new();
 
@@ -72,12 +77,13 @@ pub fn bootstrap(graph: &mut RsvsGraph) -> Result<HashMap<String, NodeId>, RsvsE
         label_map.insert(label.to_string(), id);
     }
 
-    assert_eq!(
-        label_map.len(),
-        SEED_ATOMS.len(),
-        "Seed node count mismatch — expected {}",
-        SEED_ATOMS.len()
-    );
+    if label_map.len() != SEED_ATOMS.len() {
+        return Err(RsvsError::SeedInvariant(format!(
+            "Seed node count mismatch — expected {}, got {}",
+            SEED_ATOMS.len(),
+            label_map.len()
+        )));
+    }
 
     Ok(label_map)
 }

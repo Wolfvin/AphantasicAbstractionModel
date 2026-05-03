@@ -17,7 +17,7 @@ services:
       - -c
       - |
         pip install --no-cache-dir /dist/wheels/*.whl || maturin develop --manifest-path crates/rsvs-core/Cargo.toml
-        cd /build && PYTHONPATH=python python3 -m rsvs.bridge_server
+        cd /build && PYTHONPATH=python python3 -m rsvs.fastapi_server
     ports:
       - "8000:8000"
     volumes:
@@ -26,6 +26,8 @@ services:
       - PYTHONUNBUFFERED=1
       - PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1
       - RSVS_ATOM_DIR=/app/data
+      - RSVS_BRIDGE_HOST=0.0.0.0
+      - RSVS_BRIDGE_PORT=8000
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -34,23 +36,21 @@ services:
       retries: 3
     restart: unless-stopped
 
-  # ── Frontend: Next.js dev server ───────────────────────────────────
+  # ── Frontend: Next.js production server ──────────────────────────────
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile.frontend
     image: symbolic-puzzle-3d/frontend:latest
     container_name: sp3d-frontend
-    command: npm run dev
+    command: ["node", "server.js"]
     ports:
       - "3000:3000"
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-      - rsvs-data:/app/data
     environment:
-      - NODE_ENV=development
+      - NODE_ENV=production
       - NEXT_PUBLIC_RSVS_BACKEND_URL=http://backend:8000
+      - HOSTNAME=0.0.0.0
+      - PORT=3000
     depends_on:
       backend:
         condition: service_healthy

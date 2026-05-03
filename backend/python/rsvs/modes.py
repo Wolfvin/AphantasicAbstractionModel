@@ -33,6 +33,7 @@ from .conversion import (
     _project_node,
 )
 from .exceptions import InvalidModeError, RustCoreUnavailableError
+from .protocols import RsvsCoreProtocol
 from .rsvs_core import (
     _get_last_ingest_seq,
     _get_rsvs,
@@ -456,7 +457,7 @@ def _run_mode(mode: str, text: str, correlation_id: str, options: dict[str, Any]
 
 
 def run_mode(
-    rsvs: Any,
+    rsvs: RsvsCoreProtocol,
     mode: str,
     *,
     text: str,

@@ -7,6 +7,7 @@ from typing import Any
 
 from .config import CONFIG, RSVS_STATE_PATH
 from .exceptions import RustCoreUnavailableError
+from .protocols import RsvsCoreProtocol
 
 
 # ---------------------------------------------------------------------------
@@ -14,7 +15,7 @@ from .exceptions import RustCoreUnavailableError
 # ---------------------------------------------------------------------------
 
 _RSVS_AVAILABLE = False
-_Rsvs = None  # type: ignore[assignment]
+_Rsvs: type[Any] | None = None
 
 try:
     from rsvs import Rsvs as _RsvsClass  # type: ignore[import]
@@ -29,11 +30,11 @@ except Exception:
 # ---------------------------------------------------------------------------
 
 _lock = threading.Lock()
-_instance: Any | None = None
+_instance: RsvsCoreProtocol | None = None
 _last_ingest_seq: int = 0  # track seq for event consumption
 
 
-def _create_instance() -> Any:
+def _create_instance() -> RsvsCoreProtocol | None:
     """Create or load an Rsvs instance. Must be called with _lock held."""
     if not _RSVS_AVAILABLE:
         return None
@@ -77,7 +78,7 @@ def is_rust_core_available() -> bool:
     return _RSVS_AVAILABLE
 
 
-def get_rsvs_instance() -> Any:
+def get_rsvs_instance() -> RsvsCoreProtocol:
     """Return the singleton Rsvs instance, creating or loading as needed.
 
     Thread-safe double-checked locking pattern.
@@ -98,7 +99,7 @@ def get_rsvs_instance() -> Any:
         return _instance
 
 
-def _get_rsvs() -> Any:
+def _get_rsvs() -> RsvsCoreProtocol | None:
     """Return the singleton Rsvs instance, or None if unavailable.
 
     Backward-compatible accessor used by bridge_server.py.
@@ -140,6 +141,6 @@ def _set_last_ingest_seq(seq: int) -> None:
     _last_ingest_seq = seq
 
 
-def require_rust_core() -> Any:
+def require_rust_core() -> RsvsCoreProtocol:
     """Return the Rsvs instance or raise RustCoreUnavailableError."""
     return get_rsvs_instance()

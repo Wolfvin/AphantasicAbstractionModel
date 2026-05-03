@@ -11,7 +11,7 @@ echo "🚀 Starting SymbolicPuzzle3D services…"
 # ── Start Python bridge server in the background ──
 echo "→ Starting Python bridge server on :8000"
 cd /app/backend/python
-python3 -m rsvs.bridge_server &
+python3 -m rsvs.fastapi_server &
 BRIDGE_PID=$!
 
 # ── Start Next.js frontend ──

@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import type { RelateResult, RelateNode, RelateEdge, Tier, NodeKind } from '@/lib/types';
+import type { RelateResult, RelateNode, RelateEdge, Tier } from '@/lib/types';
 import { useUIStore } from '@/store/rsvsStore';
 
 // ── Tier / Kind Styling ──
@@ -20,15 +20,12 @@ const TIER_COLORS: Record<Tier, string> = {
   3: '#FF5252',
 };
 
-const KIND_STYLES: Record<NodeKind, { color: string; label: string }> = {
-  atom: { color: '#69F0AE', label: 'Atom' },
-  composite: { color: '#B388FF', label: 'Composite' },
-};
+const KIND_STYLE = { color: '#69F0AE', label: 'Node' };
 
 // ── Related Node Row ──
 function RelatedNodeRow({ node, onSelectNode }: { node: RelateNode; onSelectNode: (id: number) => void }) {
   const tierColor = TIER_COLORS[node.tier] ?? '#64748b';
-  const kindStyle = KIND_STYLES[node.kind] ?? KIND_STYLES.atom;
+  const kindStyle = KIND_STYLE;
 
   return (
     <button

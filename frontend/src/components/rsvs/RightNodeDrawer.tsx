@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { useUIStore, useGraphStore, useModeResultStore } from '@/store/rsvsStore';
-import type { RSVSNode, Tier, PolicyMeta, CompressionState, LanguageLink } from '@/lib/types';
+import type { RSVSNode, Tier, PolicyMeta, LanguageLink } from '@/lib/types';
 import { getStatusColor } from '@/lib/nodeRendering';
 import AppraisePanel from '@/components/rsvs/AppraisePanel';
 import RelatePanel from '@/components/rsvs/RelatePanel';
@@ -97,24 +97,14 @@ function WeightBar({ label, weight }: { label: string; weight: number }) {
 }
 
 // ── v4.2 Compression State Section ──
-function CompressionStateSection({ state }: { state: CompressionState }) {
+function CompressionStateSection({ state }: { state: string }) {
   return (
     <div className="mb-5">
       <div className="flex items-center gap-2 mb-2">
         <Layers className="w-3.5 h-3.5 text-[#FFB74D]" />
         <h3 className="text-xs font-semibold uppercase tracking-wider text-[#94a3b8]">Compression State</h3>
       </div>
-      <div className="grid grid-cols-2 gap-2">
-        <StatCard label="Compressed" value={state.compressed ? 'Yes' : 'No'} />
-        {state.original_count != null && (
-          <StatCard label="Original Count" value={state.original_count} />
-        )}
-      </div>
-      {state.merged_into != null && (
-        <div className="mt-2 text-[10px] text-[#64748b] font-mono">
-          Merged into node #{state.merged_into}
-        </div>
-      )}
+      <StatCard label="State" value={state === 'compressed' ? 'Compressed' : 'Raw'} />
     </div>
   );
 }
@@ -297,12 +287,12 @@ export default function RightNodeDrawer() {
                 <Badge
                   className="text-[10px] font-semibold"
                   style={{
-                    backgroundColor: node.kind === 'atom' ? '#0d3b66' : '#3b0d5e',
-                    color: node.kind === 'atom' ? '#69F0AE' : '#CE93D8',
+                    backgroundColor: '#0d3b66',
+                    color: '#69F0AE',
                     borderColor: 'transparent',
                   }}
                 >
-                  {node.kind === 'atom' ? <Sparkles className="w-3 h-3 mr-1" /> : <Link2 className="w-3 h-3 mr-1" />}
+                  <Sparkles className="w-3 h-3 mr-1" />
                   {node.kind.toUpperCase()}
                 </Badge>
                 <Badge
@@ -345,7 +335,8 @@ export default function RightNodeDrawer() {
               {/* Semantic tag (v4.2) */}
               {node.semantic && (
                 <div className="text-[10px] text-[#80D8FF] font-mono mt-1">
-                  semantic: {node.semantic}
+                  semantic: {node.semantic.compression_state}
+                  {node.semantic.derived_from_node_ids.length > 0 && ` · derived from [${node.semantic.derived_from_node_ids.join(', ')}]`}
                 </div>
               )}
             </div>
@@ -399,7 +390,7 @@ export default function RightNodeDrawer() {
               <Separator className="bg-[#1e293b] mb-5" />
 
               {/* v4.2: Compression State */}
-              {node.compression_state && node.compression_state.compressed && (
+              {node.compression_state === 'compressed' && (
                 <>
                   <CompressionStateSection state={node.compression_state} />
                   <Separator className="bg-[#1e293b] mb-5" />
@@ -436,11 +427,11 @@ export default function RightNodeDrawer() {
                   <div className="flex items-center gap-2 mb-3">
                     <Activity className="w-3.5 h-3.5 text-[#B388FF]" />
                     <h3 className="text-xs font-semibold uppercase tracking-wider text-[#94a3b8]">
-                      {node.kind === 'composite' ? 'Member Atoms' : 'Related Composites'}
+                      {node.kind === 'node' ? 'Related Composites' : 'Member Nodes'}
                     </h3>
                   </div>
-                  {(node.kind === 'composite' ? node.composition.atoms : node.composition.related_composites).map((item, i) => {
-                    const id = 'atom_id' in item ? item.atom_id : item.composite_id;
+                  {node.composition.related_composites.map((item, i) => {
+                    const id: number = 'atom_id' in item ? item.atom_id : item.composite_id;
                     const label = `#${id}`;
                     return (
                       <div

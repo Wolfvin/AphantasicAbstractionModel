@@ -304,7 +304,7 @@ impl SenseManager {
                 let score = w_sim * sim + w_coh * gain;
                 (i, score)
             })
-            .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+            .max_by(|a, b| a.1.total_cmp(&b.1));
 
         let (best_idx, best_score) = best.unwrap(); // safe: candidate_indices non-empty
 
@@ -343,7 +343,7 @@ impl SenseManager {
                 let score = jaccard_sets(context, &core);
                 (i, score)
             })
-            .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap())
+            .max_by(|a, b| a.1.total_cmp(&b.1))
             .map(|(i, _)| i)
     }
 

@@ -112,7 +112,7 @@ export default function GraphHUD() {
             </div>
             <div className="flex items-center gap-2 text-[10px] text-[#94a3b8]">
               <div className="w-2.5 h-2.5 rounded-md" style={{ backgroundColor: '#B388FF' }} />
-              Composite
+              Seed node
             </div>
             <div className="flex items-center gap-2 text-[10px] text-[#94a3b8]">
               <div className="w-5 h-0.5 rounded-full" style={{ backgroundColor: '#89D7FF', opacity: 0.7 }} />

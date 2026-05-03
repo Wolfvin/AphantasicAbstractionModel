@@ -3,7 +3,7 @@
 
 import type {
   RSVSNode, RSVSEdge, RSVSEvent, ChatMessage, TimelineEvent,
-  NodeKind, Tier, SourceType, NodeStatus, EdgeStatus,
+  Tier, SourceType, NodeStatus, EdgeStatus,
 } from '@/lib/types';
 
 const ATOM_LABELS = [
@@ -68,15 +68,15 @@ const COMPOSITE_COLORS = [
   '#B388FF', '#69F0AE', '#FF80AB', '#80D8FF', '#FFD740',
 ];
 
-function generateNode(kind: NodeKind = 'atom', tier?: Tier): RSVSNode {
+function generateNode(tier?: Tier): RSVSNode {
   const id = generateNodeId();
   const t = tier || (randInt(1, 4) as Tier);
-  const isAtom = kind === 'atom';
+  const isComposite = Math.random() > 0.75; // 25% chance of being derived/composite
 
   return {
     id,
-    label: isAtom ? pick(ATOM_LABELS) : pick(COMPOSITE_LABELS),
-    kind,
+    label: isComposite ? pick(COMPOSITE_LABELS) : pick(ATOM_LABELS),
+    kind: 'node',
     tier: t,
     confidence: rand(0.3, 1.0),
     status: 'new' as NodeStatus,
@@ -97,8 +97,8 @@ function generateNode(kind: NodeKind = 'atom', tier?: Tier): RSVSNode {
     },
     render: {
       position: generatePosition(),
-      size: isAtom ? rand(0.5, 1.2) : rand(1.2, 2.0),
-      color: isAtom ? TIER_COLORS[t] : pick(COMPOSITE_COLORS),
+      size: isComposite ? rand(1.2, 2.0) : rand(0.5, 1.2),
+      color: isComposite ? pick(COMPOSITE_COLORS) : TIER_COLORS[t],
       glow: rand(0.1, 0.6),
     },
     provenance: {
@@ -106,6 +106,13 @@ function generateNode(kind: NodeKind = 'atom', tier?: Tier): RSVSNode {
       source_domain: pick(DOMAINS),
       source_type: (Math.random() > 0.3 ? 'learned' : 'bootstrap') as SourceType,
     },
+    // v4.2 semantic metadata
+    semantic: {
+      compression_state: Math.random() > 0.8 ? 'compressed' : 'raw',
+      derived_from_node_ids: isComposite ? [randInt(100, 130), randInt(100, 130)] : [],
+      compression_reason: isComposite && Math.random() > 0.5 ? 'semantic merge' : undefined,
+    },
+    is_seed: Math.random() > 0.9, // ~10% chance seed
   };
 }
 
@@ -137,26 +144,26 @@ export function generateInitialSnapshot(count: number = 30): { nodes: RSVSNode[]
   const nodes: RSVSNode[] = [];
   const edges: RSVSEdge[] = [];
 
-  // Generate atoms
+  // Generate nodes
   for (let i = 0; i < count; i++) {
-    const node = generateNode('atom');
+    const node = generateNode();
     node.status = 'stable';
     node.render!.glow = rand(0.05, 0.3);
     nodes.push(node);
   }
 
-  // Generate composites
+  // Generate composite-like nodes with composition links
   for (let i = 0; i < Math.floor(count * 0.2); i++) {
-    const node = generateNode('composite');
+    const node = generateNode();
     node.status = 'stable';
     node.render!.glow = rand(0.05, 0.3);
-    // Link some atoms to this composite
+    // Link some member nodes to this composite
     const memberCount = randInt(2, 5);
     for (let j = 0; j < memberCount; j++) {
-      const atom = nodes[randInt(0, count)];
-      if (atom) {
-        node.composition!.atoms.push({ atom_id: atom.id, weight: rand(0.3, 1.0) });
-        const edge = generateEdge(atom.id, node.id, 'learned');
+      const member = nodes[randInt(0, count)];
+      if (member) {
+        node.composition!.atoms.push({ atom_id: member.id, weight: rand(0.3, 1.0) });
+        const edge = generateEdge(member.id, node.id, 'learned');
         edge.status = 'stable';
         edge.render!.opacity = rand(0.3, 0.7);
         edges.push(edge);

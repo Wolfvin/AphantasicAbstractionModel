@@ -48,7 +48,7 @@ pip install -e ".[dev]"    # Install dev dependencies
 pytest tests/ -v           # Python test suite
 
 # 4. Start the bridge server
-python -m rsvs.bridge_server
+python -m rsvs.fastapi_server
 
 # 5. Start the frontend (new terminal)
 cd frontend
@@ -66,7 +66,7 @@ cargo run --bin rsvs-smoke
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `RSVS_BRIDGE_HOST` | `127.0.0.1` | Bridge server bind address |
-| `RSVS_BRIDGE_PORT` | `8787` | Bridge server bind port |
+| `RSVS_BRIDGE_PORT` | `8000` | Bridge server bind port |
 | `RSVS_ATOM_OUTPUT_DIR` | `../atom` | Artifact output directory |
 | `RSVS_ATTENTION_CONFIG` | — | Path to JSON config for attention weights override |
 
@@ -113,7 +113,8 @@ RSVS is a three-tier system. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) fo
 
 | Module | File | Responsibility |
 |--------|------|---------------|
-| bridge_server | `bridge_server.py` | HTTP handler |
+| fastapi_server | `fastapi_server.py` | FastAPI HTTP server (async, OpenAPI) |
+| bridge_server | `bridge_server.py` | *(Deprecated)* Legacy HTTP handler |
 | modes | `modes.py` | Mode dispatch (ingest/appraise/relate) |
 | validation | `validation.py` | Schema validation |
 | conversion | `conversion.py` | Format conversion |

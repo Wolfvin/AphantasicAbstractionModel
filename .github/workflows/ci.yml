@@ -17,7 +17,7 @@ env:
 jobs:
   # ────────────────────────────── Rust ──────────────────────────────
   rust:
-    name: Rust – fmt · clippy · test
+    name: Rust – fmt · clippy · test · coverage
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -58,9 +58,23 @@ jobs:
       - name: Run tests
         run: cargo test --workspace
 
+      - name: Install tarpaulin
+        run: cargo install cargo-tarpaulin --locked
+
+      - name: Generate coverage report
+        run: cargo tarpaulin --workspace --out Xml --skip-clean
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: backend/cobertura.xml
+          flags: rust
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
+
   # ────────────────────────────── Python ──────────────────────────────
   python:
-    name: Python – ruff · pytest
+    name: Python – ruff · pytest · coverage
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -94,7 +108,7 @@ jobs:
       - name: Install Python dev dependencies
         run: |
           pip install --upgrade pip
-          pip install maturin ruff pytest pytest-cov mypy
+          pip install maturin ruff pytest pytest-cov pytest-asyncio httpx mypy
 
       - name: Build Rust extension (maturin develop)
         run: |
@@ -104,12 +118,20 @@ jobs:
       - name: Ruff lint
         run: ruff check python/
 
-      - name: Run pytest
-        run: PYTHONPATH=python python -m pytest python/tests -v --tb=short
+      - name: Run pytest with coverage
+        run: PYTHONPATH=python python -m pytest python/tests -v --tb=short --cov=rsvs --cov-report=xml:coverage.xml
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: backend/coverage.xml
+          flags: python
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
 
   # ────────────────────────────── Frontend ──────────────────────────────
   frontend:
-    name: Frontend – lint · build
+    name: Frontend – lint · build · test · coverage
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -135,21 +157,71 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Run tests (Vitest)
+        run: npm test -- --coverage
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          directory: frontend/coverage
+          flags: frontend
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+  # ────────────────────────────── Benchmarks ──────────────────────────────
+  benchmark:
+    name: Rust – benchmarks
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo artefacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            backend/target/
+          key: cargo-bench-${{ runner.os }}-${{ hashFiles('backend/Cargo.lock') }}
+          restore-keys: cargo-bench-${{ runner.os }}-
+
+      - name: Run benchmarks
+        run: cargo bench --workspace -- --save-baseline ci-baseline
+
+      - name: Store benchmark results
+        uses: actions/upload-artifact@v4
+        with:
+          name: criterion-benchmarks
+          path: backend/target/criterion/
+          retention-days: 30
+
   # ────────────────────────────── Gate ──────────────────────────────
   ci-passed:
     name: CI Passed
     if: always()
     runs-on: ubuntu-latest
-    needs: [rust, python, frontend]
+    needs: [rust, python, frontend, benchmark]
     steps:
       - name: Check all jobs succeeded
         run: |
-          echo "rust:     ${{ needs.rust.result }}"
-          echo "python:   ${{ needs.python.result }}"
-          echo "frontend: ${{ needs.frontend.result }}"
+          echo "rust:       ${{ needs.rust.result }}"
+          echo "python:     ${{ needs.python.result }}"
+          echo "frontend:   ${{ needs.frontend.result }}"
+          echo "benchmark:  ${{ needs.benchmark.result }}"
           if [[ "${{ needs.rust.result }}" == "success" && \
                 "${{ needs.python.result }}" == "success" && \
-                "${{ needs.frontend.result }}" == "success" ]]; then
+                "${{ needs.frontend.result }}" == "success" && \
+                ("${{ needs.benchmark.result }}" == "success" || "${{ needs.benchmark.result }}" == "cancelled") ]]; then
             echo "All CI jobs passed!"
             exit 0
           else

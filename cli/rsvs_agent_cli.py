@@ -17,11 +17,11 @@ from urllib import error, parse, request
 
 VALID_MODES = ("ingest", "appraise", "relate")
 VALID_VIEWS = ("compact", "detail")
-DEFAULT_BASE_URL = os.environ.get("RSVS_BRIDGE_URL", "http://127.0.0.1:8787")
+DEFAULT_BASE_URL = os.environ.get("RSVS_BRIDGE_URL", "http://127.0.0.1:8000")
 DEFAULT_ATOM_DIR = Path(
     os.environ.get(
         "RSVS_ATOM_DIR",
-        "/home/raymond/workspace/projets/skills_and_mcp/RSVS/atom",
+        "./atom",
     )
 )
 

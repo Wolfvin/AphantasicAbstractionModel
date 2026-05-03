@@ -43,7 +43,7 @@ RSVS is a three-tier system: a **Rust core** for computation, a **Python bridge*
 │  └───────────────────────────┬─────────────────────────────────┘ │
 └──────────────────────────────┼───────────────────────────────────┘
                                │
-                    HTTP (port 8787)
+                    HTTP (port 8000)
                     POST /run, GET /latest
                     GET /health, GET /status
                                │
@@ -51,7 +51,7 @@ RSVS is a three-tier system: a **Rust core** for computation, a **Python bridge*
 │                    Python Bridge (rsvs)                           │
 │                                                                   │
 │  ┌────────────────┐  ┌────────────────┐  ┌────────────────────┐ │
-│  │bridge_server.py│  │   modes.py     │  │  validation.py     │ │
+│  │fastapi_server │  │   modes.py     │  │  validation.py     │ │
 │  │  (HTTP layer)  │──│  (dispatch)    │  │  (schema checks)   │ │
 │  └────────────────┘  └───────┬────────┘  └────────────────────┘ │
 │                              │                                     │
@@ -104,7 +104,7 @@ graph TB
     end
 
     subgraph Bridge["Python Bridge"]
-        BS[bridge_server.py]
+        BS[fastapi_server.py]
         MO[modes.py]
         VL[validation.py]
         CV[conversion.py]
@@ -772,7 +772,7 @@ Old schema payloads are **rejected**, not fallback-parsed. There is no backward 
 
 ```mermaid
 graph TB
-    HTTP[HTTP Request] --> BS[bridge_server.py]
+    HTTP[HTTP Request] --> BS[fastapi_server.py]
     BS --> MO[modes.py]
     MO --> RC[rsvs_core.py]
     RC -->|PyO3| Rust[Rust Core]
@@ -787,7 +787,8 @@ graph TB
 
 | Module | Responsibility |
 |--------|---------------|
-| `bridge_server.py` | HTTP handler (`GET /health`, `GET /latest`, `GET /status`, `POST /run`, `POST /ingest`) |
+| `fastapi_server.py` | FastAPI HTTP server (async, OpenAPI docs at `/docs`) |
+| `bridge_server.py` | *(Deprecated)* Legacy HTTP handler — use `fastapi_server.py` instead |
 | `config.py` | Configuration constants, API/Schema versions, ISO timestamps |
 | `modes.py` | Mode dispatch (`ingest`, `appraise`, `relate`) |
 | `validation.py` | Schema validation, view normalization |

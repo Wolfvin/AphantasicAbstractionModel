@@ -7,10 +7,12 @@
 **A cognitive symbolic engine with hard attention, multi-sense disambiguation, and autonomous tiered memory lifecycle.**
 
 [![CI](https://img.shields.io/github/actions/workflow/status/Wolfvin/SymbolicPuzzle3D/ci.yml?branch=main&style=flat-square&logo=github)](https://github.com/Wolfvin/SymbolicPuzzle3D/actions)
+[![Security](https://img.shields.io/github/actions/workflow/status/Wolfvin/SymbolicPuzzle3D/security.yml?branch=main&style=flat-square&label=security&logo=github)](https://github.com/Wolfvin/SymbolicPuzzle3D/actions)
 [![Rust](https://img.shields.io/badge/Rust-1.75+-orange?style=flat-square&logo=rust)](https://www.rust-lang.org/)
 [![Python](https://img.shields.io/badge/Python-3.12+-blue?style=flat-square&logo=python)](https://python.org)
 [![crates.io](https://img.shields.io/crates/v/rsvs-core?style=flat-square&logo=rust)](https://crates.io/crates/rsvs-core)
 [![PyPI](https://img.shields.io/pypi/v/rsvs?style=flat-square&logo=pypi)](https://pypi.org/project/rsvs/)
+[![Codecov](https://img.shields.io/codecov/c/github/Wolfvin/SymbolicPuzzle3D?style=flat-square&logo=codecov)](https://codecov.io/gh/Wolfvin/SymbolicPuzzle3D)
 [![License](https://img.shields.io/badge/License-MIT%2FApache--2.0-green?style=flat-square)](LICENSE)
 [![Schema](https://img.shields.io/badge/Schema-v4.2-purple?style=flat-square)]()
 
@@ -75,7 +77,7 @@ Traditional knowledge graphs use **softmax attention** — dense, opaque, and no
 │                Python Bridge (HTTP Server)                    │
 │                                                               │
 │  ┌────────────┐ ┌────────────┐ ┌───────────┐ ┌──────────┐  │
-│  │ bridge_    │ │  modes.py  │ │validation │ │conversion│  │
+│  │ fastapi_   │ │  modes.py  │ │validation │ │conversion│  │
 │  │ server.py  │ │ (dispatch) │ │   .py     │ │  .py     │  │
 │  └────────────┘ └─────┬──────┘ └───────────┘ └──────────┘  │
 │                       │         ┌───────────┐ ┌──────────┐  │

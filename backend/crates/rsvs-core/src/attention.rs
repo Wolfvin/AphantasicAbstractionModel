@@ -10,6 +10,7 @@
 //!
 //! v4.2: No NodeKind references. Uses unified node model.
 
+use crate::error::RsvsError;
 use crate::graph::jaccard_sets;
 use crate::types::NodeId;
 use std::collections::HashMap;
@@ -52,20 +53,22 @@ impl Default for AttentionConfig {
 
 impl AttentionConfig {
     /// Load attention config from a JSON file and override known keys.
-    pub fn from_json_file(path: &Path) -> Result<Self, String> {
+    ///
+    /// Returns `RsvsError::Pipeline` if the file cannot be read or parsed.
+    pub fn from_json_file(path: &Path) -> Result<Self, RsvsError> {
         let content = fs::read_to_string(path).map_err(|e| {
-            format!(
+            RsvsError::Pipeline(format!(
                 "failed reading attention config '{}': {}",
                 path.display(),
                 e
-            )
+            ))
         })?;
         let value: serde_json::Value = serde_json::from_str(&content).map_err(|e| {
-            format!(
+            RsvsError::Pipeline(format!(
                 "invalid JSON in attention config '{}': {}",
                 path.display(),
                 e
-            )
+            ))
         })?;
 
         let mut cfg = Self::default();
@@ -295,7 +298,7 @@ impl RsvsAttention {
                 }
             }
 
-            candidates.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap());
+            candidates.sort_by(|a, b| b.score.total_cmp(&a.score));
             candidates.truncate(self.config.top_k);
 
             if !candidates.is_empty() {

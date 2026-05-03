@@ -269,7 +269,7 @@ interface FilterStoreState {
 const defaultFilters: FilterState = {
   tiers: [1, 2, 3],
   confidenceRange: [0, 1],
-  nodeKinds: ['atom', 'composite'],
+  nodeKinds: ['node'],
   sourceBatch: null,
   recentActivity: null,
 };

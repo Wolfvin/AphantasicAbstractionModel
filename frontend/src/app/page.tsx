@@ -2,35 +2,56 @@
 
 import React, { useEffect, useCallback, useState, useRef, Suspense } from 'react';
 import dynamic from 'next/dynamic';
+import { Skeleton } from '@/components/ui/skeleton';
 import LeftInputRail from '@/components/rsvs/LeftInputRail';
-import RightNodeDrawer from '@/components/rsvs/RightNodeDrawer';
-import TimelineBar from '@/components/rsvs/TimelineBar';
 import GraphHUD from '@/components/rsvs/GraphHUD';
-import { useUIStore, useGraphStore, useAnimationStore, useTimelineStore, useChatStore } from '@/store/rsvsStore';
+import { useUIStore, useGraphStore, useAnimationStore, useTimelineStore, useChatStore, useModeResultStore } from '@/store/rsvsStore';
 import { fetchLatestFromBackend } from '@/lib/backendBridge';
 // Mock data is only used as a fallback when the backend is unreachable.
 // In production, the backend is the sole data source.
-import { generateTimelineEvents } from '@/lib/mockData';
+import { generateTimelineEvents } from '@/lib/timelineHelpers';
 
-// Dynamic import for Three.js canvas (SSR-incompatible)
+// Dynamic imports for heavy components (lazy loaded for performance)
 const GraphScene3D = dynamic(
   () => import('@/components/rsvs/graph3d/GraphScene3D'),
   {
     ssr: false,
-    loading: () => (
-      <div className="flex-1 flex items-center justify-center bg-[#060a12]">
-        <div className="text-center">
-          <div className="w-16 h-16 mx-auto mb-4 rounded-full border-2 border-[#00E5FF30] border-t-[#00E5FF] animate-spin" />
-          <p className="text-sm text-[#64748b] font-mono">Initializing 3D engine...</p>
-        </div>
-      </div>
-    ),
+    loading: () => <GraphSkeleton />,
   }
 );
 
+const RightNodeDrawer = dynamic(() => import('@/components/rsvs/RightNodeDrawer'));
+const TimelineBar = dynamic(() => import('@/components/rsvs/TimelineBar'));
+
+// ── Skeleton loading components ──
+function GraphSkeleton() {
+  return (
+    <div className="flex-1 flex items-center justify-center bg-[#060a12]" aria-label="Loading 3D graph" role="status">
+      <div className="text-center">
+        <div className="w-16 h-16 mx-auto mb-4 rounded-full border-2 border-[#00E5FF30] border-t-[#00E5FF] animate-spin" />
+        <p className="text-sm text-[#64748b] font-mono">Initializing 3D engine...</p>
+      </div>
+    </div>
+  );
+}
+
+function RailSkeleton() {
+  return (
+    <div className="h-full w-[300px] bg-[#0d1117] border-r border-[#1b2332] p-4 space-y-4" role="status" aria-label="Loading input panel">
+      <Skeleton className="h-8 w-32" />
+      <div className="space-y-3">
+        <Skeleton className="h-16 w-full rounded-xl" />
+        <Skeleton className="h-4 w-3/4" />
+        <Skeleton className="h-4 w-1/2" />
+      </div>
+      <Skeleton className="h-20 w-full rounded-xl" />
+    </div>
+  );
+}
+
 function LoadingGraph() {
   return (
-    <div className="flex-1 flex items-center justify-center rsvs-bg rsvs-grid relative">
+    <div className="flex-1 flex items-center justify-center rsvs-bg rsvs-grid relative" aria-label="Loading graph" role="status">
       {/* Animated loading rings */}
       <div className="relative">
         <div className="w-32 h-32 rounded-full border border-[#00E5FF15] animate-ping" style={{ animationDuration: '3s' }} />
@@ -138,6 +159,7 @@ function SearchDialog() {
                 placeholder="Search nodes by ID or label..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
+                aria-label="Search nodes by ID or label"
               />
               <kbd className="text-[10px] text-[#475569] bg-[#1e293b] px-1.5 py-0.5 rounded font-mono">ESC</kbd>
             </div>
@@ -193,6 +215,8 @@ export default function RSVSApp() {
   const resetTimeline = useTimelineStore((s) => s.resetTimeline);
   const addMessage = useChatStore((s) => s.addMessage);
 
+  const [isBackendLoading, setIsBackendLoading] = useState(true);
+
   // Detect reduced motion preference
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -206,6 +230,7 @@ export default function RSVSApp() {
 
   useEffect(() => {
     let cancelled = false;
+    setIsBackendLoading(true);
     (async () => {
       try {
         const latest = await fetchLatestFromBackend();
@@ -220,6 +245,8 @@ export default function RSVSApp() {
         (latest.messages || []).forEach((msg) => addMessage(msg));
       } catch {
         // No latest artifact or backend not reachable on initial load.
+      } finally {
+        if (!cancelled) setIsBackendLoading(false);
       }
     })();
     return () => {
@@ -230,7 +257,7 @@ export default function RSVSApp() {
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden rsvs-bg">
       {/* Main 3-column layout */}
-      <div className="flex-1 flex overflow-hidden relative">
+      <div className="flex-1 flex overflow-hidden relative" role="main">
         {/* Left Rail */}
         <div
           className="shrink-0 z-30 transition-all duration-300 ease-out"
@@ -247,12 +274,18 @@ export default function RSVSApp() {
         </div>
 
         {/* Center Stage — 3D Graph */}
-        <div className="flex-1 relative min-w-0">
-          <Suspense fallback={<LoadingGraph />}>
-            <GraphScene3D />
-          </Suspense>
+        <div className="flex-1 relative min-w-0" aria-label="3D graph visualization">
+          {isBackendLoading ? (
+            <LoadingGraph />
+          ) : (
+            <Suspense fallback={<GraphSkeleton />}>
+              <GraphScene3D />
+            </Suspense>
+          )}
           <GraphHUD />
           <EmptyState />
+          {/* Mode result live region for accessibility */}
+          <div aria-live="polite" className="sr-only" />
         </div>
 
         {/* Right Drawer (rendered by RightNodeDrawer component, overlays) */}

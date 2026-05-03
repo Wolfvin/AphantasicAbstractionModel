@@ -1,20 +1,18 @@
 # RSVS CLI for Agents
 
-Location: `/home/raymond/workspace/projets/skills_and_mcp/RSVS/cli`
-
-CLI ini dibuat untuk agent/operator agar bisa pakai RSVS tanpa buka UI.
+CLI tool for agents/operators to use RSVS without the UI.
 
 ## Quick Start
 
 ```bash
-cd /home/raymond/workspace/projets/skills_and_mcp/RSVS/backend
-make bridge-run
+cd backend
+python -m rsvs.fastapi_server
 ```
 
-Di terminal lain:
+In another terminal:
 
 ```bash
-cd /home/raymond/workspace/projets/skills_and_mcp/RSVS/cli
+cd cli
 python3 rsvs_agent_cli.py health
 python3 rsvs_agent_cli.py run --mode ingest --text "water flows through porous stone" --summary
 python3 rsvs_agent_cli.py run --mode appraise --text "water is solid" --summary
@@ -27,36 +25,36 @@ python3 rsvs_agent_cli.py atom-show appraise
 ## Commands
 
 - `health`
-  - Cek koneksi ke backend bridge (`/health`).
+  - Check connection to backend bridge (`/health`).
 
 - `run`
-  - Jalankan mode utama ke endpoint `/run`.
-  - Opsi:
+  - Execute a mode via the `/run` endpoint.
+  - Options:
     - `--mode ingest|appraise|relate`
     - `--text "..."`
     - `--file /path/input.txt`
     - `--correlation-id custom_id`
-    - `--top-k 10` (untuk mode `relate`)
+    - `--top-k 10` (for `relate` mode)
     - `--view compact|detail` (default `compact`)
     - `--summary`
 
 - `ingest`
-  - Alias kompatibilitas untuk `run --mode ingest`.
+  - Compatibility alias for `run --mode ingest`.
 
 - `latest`
-  - Ambil latest output.
-  - Opsi:
+  - Retrieve latest output.
+  - Options:
     - `--mode ingest|appraise|relate`
     - `--view compact|detail` (default `compact`)
     - `--summary`
 
 - `atom-ls`
-  - List artefak terbaru di folder `atom/`.
-  - Opsi:
+  - List recent artifacts in the `atom/` directory.
+  - Options:
     - `--limit 5`
 
 - `atom-show`
-  - Tampilkan konten artefak terbaru.
+  - Display artifact content.
   - `atom-show snapshot`
   - `atom-show events --tail 50`
   - `atom-show report`
@@ -71,9 +69,5 @@ python3 rsvs_agent_cli.py atom-show appraise
 - `relate-*.json`
 
 ## Environment
-- `RSVS_BRIDGE_URL` (default `http://127.0.0.1:8787`)
-- `RSVS_ATOM_DIR` (default `/home/raymond/workspace/projets/skills_and_mcp/RSVS/atom`)
-
-## Additional Spec
-See:
-`/home/raymond/workspace/projets/skills_and_mcp/RSVS/docs/audit/root/MODES_SPEC_V1.md`
+- `RSVS_BRIDGE_URL` (default `http://127.0.0.1:8000`)
+- `RSVS_ATOM_DIR` (default `./atom`)

@@ -19,7 +19,7 @@ function makeNode(overrides: Partial<RSVSNode> = {}): RSVSNode {
   return {
     id: 1,
     label: 'test-node',
-    kind: 'atom',
+    kind: 'node',
     tier: 1,
     confidence: 0.8,
     status: 'stable',

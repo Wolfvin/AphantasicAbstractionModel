@@ -160,6 +160,27 @@ pub struct Node {
     pub fingerprint: Option<Fingerprint>,
 }
 
+impl Default for Node {
+    fn default() -> Self {
+        Self {
+            id: 0,
+            label: String::new(),
+            surface_label: String::new(),
+            kind: "node".to_string(),
+            tier: Tier::Tier3,
+            confidence: 0.0,
+            status: NodeStatus::New,
+            is_seed: false,
+            is_locked: false,
+            semantic: SemanticMeta::default(),
+            policy_meta: None,
+            language_links: Vec::new(),
+            atoms: Vec::new(),
+            fingerprint: None,
+        }
+    }
+}
+
 /// Content-addressable fingerprint for perceptual grounding.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Fingerprint {
@@ -175,7 +196,7 @@ impl Fingerprint {
         data.hash(&mut hasher);
         Self {
             hash: hasher.finish(),
-            algorithm: "fxhash".into(),
+            algorithm: "siphash".into(),
         }
     }
 

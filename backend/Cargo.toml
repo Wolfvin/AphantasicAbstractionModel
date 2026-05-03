@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/rsvs-core"]
+members = ["crates/rsvs-core", "tests/integration"]
 resolver = "2"
 
 [workspace.package]

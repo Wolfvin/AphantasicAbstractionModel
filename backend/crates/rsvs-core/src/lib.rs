@@ -1,5 +1,4 @@
 #![deny(missing_docs)]
-#![doc = include_str!("../README.md")]
 
 //! RSVS Core — v4.2
 //!
@@ -17,21 +16,16 @@
 //! v0.1: DAG, integer IDs, circular ref, Jaccard, seed graph
 
 pub mod attention;
-#[allow(missing_docs)]
 pub mod autonomy;
 #[cfg(feature = "python")]
 pub mod bindings;
 pub mod error;
-#[allow(missing_docs)]
 pub mod events;
 pub mod graph;
-#[allow(missing_docs)]
 pub mod persist;
-#[allow(missing_docs)]
 pub mod pipeline;
 pub mod seed;
 pub mod sense;
-#[allow(missing_docs)]
 pub mod tests;
 pub mod types;
 

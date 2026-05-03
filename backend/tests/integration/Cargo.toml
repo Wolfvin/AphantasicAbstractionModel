@@ -1,0 +1,12 @@
+[package]
+name = "rsvs-integration-tests"
+version = "4.2.0"
+edition = "2021"
+description = "Integration tests for the RSVS pipeline"
+
+[dependencies]
+rsvs = { path = "../../crates/rsvs-core" }
+
+[[test]]
+name = "integration"
+path = "main.rs"

@@ -1,6 +1,6 @@
 // RSVS Core Type Definitions
 
-export type NodeKind = 'atom' | 'composite';
+export type NodeKind = 'node';
 export type Tier = 1 | 2 | 3;
 export type NodeStatus = 'new' | 'stable' | 'decaying' | 'removed' | 'candidate' | 'deprecated' | 'quarantine';
 export type EdgeStatus = 'new' | 'stable' | 'updated' | 'removing' | 'deprecated';
@@ -61,11 +61,7 @@ export interface NodeProvenance {
   source_type: SourceType;
 }
 
-export interface CompressionState {
-  compressed: boolean;
-  original_count?: number;
-  merged_into?: number;
-}
+export type CompressionState = 'raw' | 'compressed';
 
 export interface PolicyMeta {
   governance_score: number;
@@ -95,7 +91,11 @@ export interface RSVSNode {
   provenance?: NodeProvenance;
   // v4.2 fields
   is_seed?: boolean;
-  semantic?: string;
+  semantic?: {
+    compression_state: CompressionState;
+    derived_from_node_ids: number[];
+    compression_reason?: string;
+  };
   compression_state?: CompressionState;
   derived_from_node_ids?: number[];
   policy_meta?: PolicyMeta;

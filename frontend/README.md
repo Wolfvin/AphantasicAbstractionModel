@@ -35,7 +35,7 @@ Copy `.env.example` to `.env.local` and configure:
 |----------|---------|-------------|
 | `NEXT_PUBLIC_API_URL` | `http://localhost:8000` | Backend REST API base URL |
 | `NEXT_PUBLIC_WS_URL` | `ws://localhost:8000` | Backend WebSocket URL |
-| `NEXT_PUBLIC_RSVS_BACKEND_URL` | `http://127.0.0.1:8787` | RSVS bridge server URL |
+| `NEXT_PUBLIC_RSVS_BACKEND_URL` | `http://127.0.0.1:8000` | RSVS bridge server URL |
 
 ## Testing
 
