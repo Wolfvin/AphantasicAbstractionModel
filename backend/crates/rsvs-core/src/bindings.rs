@@ -974,6 +974,15 @@ impl PyRsvs {
         self.inner.autonomy.pending_removals()
     }
 
+    /// v6.3: Return entity candidates based on learned centrality + diversity scoring.
+    ///
+    /// These are tokens that appear structurally significant in the attention graph
+    /// but have not yet been promoted to nodes. Returns a list of (label, entity_score).
+    #[pyo3(signature = (top_k=10))]
+    fn entity_candidates(&self, top_k: usize) -> Vec<(String, f32)> {
+        self.inner.entity_candidates(top_k)
+    }
+
     /// Backward compat: alias for nodes()
     #[pyo3(signature = (include_seeds=false))]
     fn atoms(&self, include_seeds: bool) -> Vec<String> {

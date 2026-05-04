@@ -20,6 +20,54 @@ use crate::types::{
 };
 
 impl Rsvs {
+    /// Validate composition constraints from v1.0 (v6.3):
+    /// - tau_compress: all components must have freq >= threshold in their sense
+    /// - tau_overlap: component set must have enough overlap with known nodes
+    fn validate_composition_constraints(
+        &self,
+        compositions: &[CompositionRef],
+    ) -> Result<(), RsvsError> {
+        let tau_compress = self.config.sense.induction.tau_compress;
+        let tau_overlap = self.config.sense.induction.tau_overlap;
+
+        // Check tau_compress: freq of each comp.node_id in its own sense
+        for comp in compositions {
+            if let Some(sm) = self.senses.get(&comp.node_id) {
+                if let Some(sense) = sm.get_sense(comp.sense_id as usize) {
+                    let freq = sense.freq(comp.node_id);
+                    if freq < tau_compress {
+                        return Err(RsvsError::CompositionRejected {
+                            reason: format!(
+                                "Component {} has freq {:.2} in sense {} < tau_compress {:.2}",
+                                comp.node_id, freq, comp.sense_id, tau_compress
+                            ),
+                        });
+                    }
+                }
+            }
+        }
+
+        // Check tau_overlap: how many comp node_ids are known nodes with senses
+        let comp_ids: Vec<NodeId> = compositions.iter().map(|c| c.node_id).collect();
+        if comp_ids.len() >= 2 {
+            let known_count = comp_ids
+                .iter()
+                .filter(|&&id| self.senses.contains_key(&id))
+                .count();
+            let overlap_ratio = known_count as f32 / comp_ids.len() as f32;
+            if overlap_ratio < tau_overlap {
+                return Err(RsvsError::CompositionRejected {
+                    reason: format!(
+                        "Overlap ratio {:.2} < tau_overlap {:.2} — not enough components are known nodes",
+                        overlap_ratio, tau_overlap
+                    ),
+                });
+            }
+        }
+
+        Ok(())
+    }
+
     /// Create a compositional node from explicit composition references (v6.0).
     ///
     /// This is the core compositional mechanism: higher-level concepts
@@ -57,6 +105,9 @@ impl Rsvs {
             }
         }
 
+        // 1b. Validate composition constraints (tau_compress, tau_overlap)
+        self.validate_composition_constraints(&compositions)?;
+
         // 2. Compute layer from composition targets
         let comp_node_ids: Vec<NodeId> = compositions.iter().map(|c| c.node_id).collect();
         let layer = self.compute_layer(&comp_node_ids);
@@ -71,12 +122,13 @@ impl Rsvs {
                 node.semantic.compression_reason = Some("explicit composition".to_string());
                 node.atoms = comp_node_ids.clone();
             }
-            // Update sense compositions
+            // Update sense compositions (v6.3: use lazy refactor)
             if let Some(sm) = self.senses.get_mut(&existing_id) {
                 if sm.senses.is_empty() {
                     sm.create_compositional_sense(compositions.clone(), layer);
                 } else {
-                    sm.set_compositions(0, compositions.clone(), layer);
+                    // Lazy refactor: stage first, flush at next safe checkpoint
+                    sm.stage_compositions(0, compositions.clone(), layer);
                 }
             }
             // Sync atom_sets
@@ -122,6 +174,7 @@ impl Rsvs {
                 to: node_id,
                 weight: 1.0,
                 source: EdgeSource::Composition,
+                last_reinforced_batch: 0, // Composition edges never decay
             };
             self.graph.insert_edge(edge)?;
         }

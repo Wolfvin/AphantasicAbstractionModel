@@ -66,6 +66,17 @@ pub struct SenseInductionConfig {
     /// Minimum confidence for a composition target to be included
     /// in a newly induced sense.
     pub composition_min_confidence: f32,
+
+    /// v6.3: Minimum frequency of each composition component in its own sense.
+    /// Compositions where any component has freq < tau_compress in its active
+    /// sense are rejected — prevents compressing weak/infrequent atoms.
+    /// Default: 0.3
+    pub tau_compress: f32,
+
+    /// v6.3: Minimum overlap ratio between proposed compositions and known nodes.
+    /// Prevents compositions from atoms that are not well-represented in the graph.
+    /// Default: 0.8
+    pub tau_overlap: f32,
 }
 
 impl Default for SenseInductionConfig {
@@ -75,6 +86,8 @@ impl Default for SenseInductionConfig {
             entropy_threshold: 0.5,
             max_senses_per_id: 8,
             composition_min_confidence: 0.3,
+            tau_compress: 0.3,
+            tau_overlap: 0.8,
         }
     }
 }
@@ -318,6 +331,12 @@ pub struct Sense {
     /// Used by frontend for tooltips and by Appraise/Relate for
     /// more descriptive verdicts (e.g., "agree via kondisi X").
     pub condition_label: Option<String>,
+
+    /// v6.3: Pending compositions waiting for lazy refactor.
+    /// Filled when compose() is called on an existing node.
+    /// Flushed to `compositions` on next core() recompute or check_merge().
+    /// None = no pending compression.
+    pub pending_compression: Option<Vec<CompositionRef>>,
 }
 
 impl Sense {
@@ -342,6 +361,7 @@ impl Sense {
             inactivity: 0,
             grounding: GroundingEvidence::new(),
             condition_label: None,
+            pending_compression: None,
         }
     }
 
@@ -389,6 +409,7 @@ impl Sense {
             inactivity: 0,
             grounding: GroundingEvidence::new(),
             condition_label: None,
+            pending_compression: None,
         }
     }
 
@@ -1079,6 +1100,30 @@ impl SenseManager {
         }
     }
 
+    /// v6.3: Stage compositions for lazy refactor — not immediately applied.
+    /// Will be flushed to compositions when flush_pending_compression() is called.
+    pub fn stage_compositions(&mut self, sense_idx: usize, new_compositions: Vec<CompositionRef>, layer: u32) {
+        if let Some(sense) = self.senses.get_mut(sense_idx) {
+            sense.pending_compression = Some(new_compositions);
+            sense.layer = layer;
+            // Do NOT change sense.compositions yet — lazy refactor
+        }
+    }
+
+    /// v6.3: Flush all pending compressions to compositions.
+    /// Called at safe checkpoints (check_merge, core recompute).
+    /// Returns true if any compression was flushed.
+    pub fn flush_pending_compressions(&mut self) -> bool {
+        let mut flushed = false;
+        for sense in &mut self.senses {
+            if let Some(pending) = sense.pending_compression.take() {
+                sense.compositions = pending;
+                flushed = true;
+            }
+        }
+        flushed
+    }
+
     /// Create a new sense with explicit compositions (used by compose API).
     ///
     /// Returns the index of the new sense.
@@ -1159,6 +1204,9 @@ impl SenseManager {
 
     /// Check all mature sense pairs and merge if MergeScore >= theta_merge.
     pub fn check_merge(&mut self) -> Vec<(usize, usize)> {
+        // v6.3: Flush pending compressions before merge check
+        self.flush_pending_compressions();
+
         let mut merged_pairs = Vec::new();
         let n = self.senses.len();
         if n < 2 {

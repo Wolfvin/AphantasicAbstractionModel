@@ -43,6 +43,13 @@ pub enum RsvsError {
     /// A pipeline execution error.
     #[error("pipeline error: {0}")]
     Pipeline(String),
+
+    /// A composition was rejected due to constraint violations (v6.3).
+    #[error("composition rejected: {reason}")]
+    CompositionRejected {
+        /// Detailed reason for the rejection.
+        reason: String,
+    },
 }
 
 #[cfg(feature = "python")]

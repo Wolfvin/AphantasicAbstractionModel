@@ -373,6 +373,16 @@ fn traverse_recursive(
         return (current_depth, HaltReason::Stability);
     }
 
+    // v6.3: Check information gain — if IG is too small, traversal adds no useful info
+    if config.epsilon_ig > 0.0 {
+        let h_before = compute_score_entropy(prev_scores);
+        let h_after = compute_score_entropy(&current_scores);
+        let ig = (h_before - h_after).abs();
+        if ig < config.epsilon_ig && current_depth > 0 {
+            return (current_depth, HaltReason::InformationGain);
+        }
+    }
+
     // Check confidence: max score >= halt_confidence
     let max_score = current_scores.values().copied().fold(0.0f32, f32::max);
     if max_score >= config.halt_confidence {
@@ -413,4 +423,29 @@ fn compute_score_delta(
     }
 
     max_delta
+}
+
+/// v6.3: Compute Shannon entropy from a score map.
+///
+/// H = -Σ p_i × log2(p_i) where p_i = score_i / Σ scores
+/// Higher entropy = more diverse score distribution.
+fn compute_score_entropy(scores: &HashMap<NodeId, f32>) -> f32 {
+    if scores.is_empty() {
+        return 0.0;
+    }
+    let total: f32 = scores.values().copied().sum();
+    if total == 0.0 {
+        return 0.0;
+    }
+    scores
+        .values()
+        .map(|&s| {
+            let p = s / total;
+            if p > 0.0 {
+                -p * p.log2()
+            } else {
+                0.0
+            }
+        })
+        .sum()
 }

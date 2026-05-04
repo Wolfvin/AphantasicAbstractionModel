@@ -36,6 +36,15 @@ pub struct AttentionConfig {
     pub min_score: f32,
     /// Minimum co-occurrence count to include a pair
     pub min_cooc: usize,
+    /// v6.3: Decay factor applied to learned edge weight per batch of inactivity.
+    /// weight_new = weight_old × edge_decay_factor^(batches_inactive)
+    /// Default: 0.98 (slow decay — 50 batches ≈ weight halved)
+    /// Set to 1.0 to disable decay entirely.
+    pub edge_decay_factor: f32,
+    /// v6.3: Number of batches of inactivity before decay begins.
+    /// Edges reinforced within this window are untouched.
+    /// Default: 10
+    pub edge_decay_grace_period: usize,
 }
 
 impl Default for AttentionConfig {
@@ -47,6 +56,8 @@ impl Default for AttentionConfig {
             top_k: 10,
             min_score: 0.05,
             min_cooc: 2,
+            edge_decay_factor: 0.98,
+            edge_decay_grace_period: 10,
         }
     }
 }
@@ -95,6 +106,74 @@ impl AttentionConfig {
 }
 
 // -----------------------------------------------------------------------
+// v6.3: Per-domain attention weights
+// -----------------------------------------------------------------------
+
+/// Per-domain attention weights that override the global defaults (v6.3).
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct DomainAttentionConfig {
+    /// Domain identifier.
+    pub domain_id: usize,
+    /// Weight for NPMI term in this domain.
+    pub alpha: f32,
+    /// Weight for Jaccard term in this domain.
+    pub beta: f32,
+    /// Weight for co-occurrence term in this domain.
+    pub gamma: f32,
+    /// Number of batches this domain has been observed — used for confidence.
+    pub observation_count: usize,
+}
+
+impl DomainAttentionConfig {
+    /// Create a new per-domain config with automatic normalization.
+    pub fn new(domain_id: usize, alpha: f32, beta: f32, gamma: f32) -> Self {
+        let total = alpha + beta + gamma;
+        Self {
+            domain_id,
+            alpha: alpha / total,
+            beta: beta / total,
+            gamma: gamma / total,
+            observation_count: 0,
+        }
+    }
+
+    /// Gradient-free nudge: if coherence improved, nudge weights toward
+    /// the component that was dominant. Step size is small (0.01) for stability.
+    pub fn nudge(
+        &mut self,
+        coherence_delta: f32,
+        dominant_component: AttentionComponent,
+        step_size: f32,
+    ) {
+        if coherence_delta <= 0.0 {
+            return; // No improvement — don't change weights
+        }
+        match dominant_component {
+            AttentionComponent::Npmi => self.alpha += step_size,
+            AttentionComponent::Jaccard => self.beta += step_size,
+            AttentionComponent::Cooc => self.gamma += step_size,
+        }
+        // Re-normalize
+        let total = self.alpha + self.beta + self.gamma;
+        self.alpha /= total;
+        self.beta /= total;
+        self.gamma /= total;
+        self.observation_count += 1;
+    }
+}
+
+/// Which attention component was dominant in last batch (for nudging).
+#[derive(Debug, Clone)]
+pub enum AttentionComponent {
+    /// NPMI was dominant.
+    Npmi,
+    /// Jaccard was dominant.
+    Jaccard,
+    /// Co-occurrence was dominant.
+    Cooc,
+}
+
+// -----------------------------------------------------------------------
 // Statistics store — tracks counts needed for NPMI and cooc
 // -----------------------------------------------------------------------
 
@@ -118,6 +197,11 @@ impl CoocStats {
     /// Create a new empty statistics store.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Get a reference to the internal token count map.
+    pub fn token_counts(&self) -> &HashMap<String, usize> {
+        &self.token_count
     }
 
     /// Ingest one sentence — update all counts.
@@ -200,6 +284,51 @@ impl CoocStats {
             .get(&ordered_pair(t, c))
             .copied()
             .unwrap_or(0)
+    }
+
+    /// v6.3: Compute centrality score for token t.
+    /// C(t) = how many unique tokens co-occur with t as a target / total_pairs.
+    /// Tokens that are often targeted by others (high centrality) are good entity candidates.
+    pub fn centrality(&self, t: &str) -> f32 {
+        let count = self.pair_count.iter()
+            .filter(|((_, b), _)| b == t)
+            .map(|(_, c)| *c)
+            .sum::<usize>();
+        let total = self.total_pairs().max(1) as f32;
+        count as f32 / total
+    }
+
+    /// v6.3: Compute diversity score for token t.
+    /// D(t) = entropy of outgoing attention distribution.
+    /// Tokens that attend to many different targets have high diversity.
+    pub fn diversity(&self, t: &str) -> f32 {
+        let outgoing: Vec<usize> = self.pair_count.iter()
+            .filter(|((a, _), _)| a == t)
+            .map(|(_, &c)| c)
+            .collect();
+
+        if outgoing.is_empty() { return 0.0; }
+
+        let total: usize = outgoing.iter().sum();
+        if total == 0 { return 0.0; }
+
+        // Shannon entropy
+        outgoing.iter()
+            .map(|&c| {
+                let p = c as f32 / total as f32;
+                if p > 0.0 { -p * p.log2() } else { 0.0 }
+            })
+            .sum::<f32>()
+    }
+
+    /// v6.3: Entity score: E(t) = alpha_e * centrality + beta_e * diversity
+    pub fn entity_score(&self, t: &str, alpha_e: f32, beta_e: f32) -> f32 {
+        alpha_e * self.centrality(t) + beta_e * self.diversity(t)
+    }
+
+    /// Total number of co-occurrence pairs across all tokens.
+    fn total_pairs(&self) -> usize {
+        self.pair_count.values().sum()
     }
 }
 

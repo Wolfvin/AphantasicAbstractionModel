@@ -1368,6 +1368,7 @@ mod graph_tests {
             to: 999,
             weight: 0.5,
             source: EdgeSource::Learned,
+            last_reinforced_batch: 0,
         });
         assert!(matches!(result, Err(RsvsError::NodeNotFound { .. })));
     }
@@ -1416,6 +1417,7 @@ mod graph_tests {
             to: n2,
             weight: 0.8,
             source: EdgeSource::Learned,
+            last_reinforced_batch: 0,
         });
         assert!(result.is_ok());
         assert_eq!(g.edge_count(), 1);

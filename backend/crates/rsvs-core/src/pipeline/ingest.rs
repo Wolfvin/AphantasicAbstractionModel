@@ -358,6 +358,14 @@ impl Rsvs {
         stats.watchlist_additions = self.autonomy.watchlist_len();
         // v6.1: Flag inactive atoms and record count
         stats.atoms_flagged_inactive = self.autonomy.flag_inactive_atoms(self.autonomy.context_counter);
+
+        // v6.3: Edge weight decay — apply after each ingest batch
+        self.batch_counter += 1;
+        let _edges_decayed = self.graph.decay_edge_weights(
+            self.batch_counter,
+            self.config.attention.edge_decay_factor,
+            self.config.attention.edge_decay_grace_period,
+        );
         self.emit_event(
             &correlation_id,
             "ingest_completed",
@@ -475,6 +483,7 @@ impl Rsvs {
                             to: token_id,
                             weight: *weight,
                             source: EdgeSource::Learned,
+                            last_reinforced_batch: self.batch_counter,
                         });
                         is_new = true;
                     }

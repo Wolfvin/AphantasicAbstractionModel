@@ -463,6 +463,13 @@ async def compose_node(request: Request, body: ComposeRequest, _auth: None = Dep
         )
 
     try:
+        # Count senses before compose to determine new sense index for condition_label
+        sense_count_before = 0
+        try:
+            sense_count_before = len(rsvs.senses(req.label))
+        except Exception:
+            pass
+
         if req.compositions:
             # v6.0: compose with (label, sense_id) pairs
             compositions_tuples = [(c.label, c.sense_id) for c in req.compositions]
@@ -476,9 +483,13 @@ async def compose_node(request: Request, body: ComposeRequest, _auth: None = Dep
             composed_type = "atom_ids"
 
         # v6.2: Set condition label if provided
+        # Fix: determine the correct sense index (not hardcoded 0)
         if req.condition_label:
             try:
-                rsvs.set_sense_label(req.label, 0, req.condition_label)
+                sense_count_after = len(rsvs.senses(req.label))
+                # New sense is at last index if count increased, else index 0
+                target_idx = sense_count_after - 1 if sense_count_after > sense_count_before else 0
+                rsvs.set_sense_label(req.label, target_idx, req.condition_label)
             except Exception:
                 pass  # Non-critical annotation — don't fail the compose
 
@@ -497,6 +508,8 @@ async def compose_node(request: Request, body: ComposeRequest, _auth: None = Dep
     except RsvsError:
         raise
     except Exception as e:
+        if "CompositionRejected" in str(e):
+            raise HTTPException(status_code=422, detail=str(e))
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -662,6 +675,35 @@ async def pending_removals_endpoint(request: Request, _auth: None = Depends(_ver
         rsvs: RsvsCoreProtocol = get_rsvs_instance()
         pending = rsvs.pending_removals()
         return {"ok": True, "pending_removals": pending}
+    except RsvsError:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/entity-candidates", tags=["autonomy"])
+@limiter.limit("10/minute")
+async def entity_candidates_endpoint(
+    request: Request,
+    top_k: int = Query(default=10, ge=1, le=100),
+    _auth: None = Depends(_verify_api_key),
+) -> dict[str, Any]:
+    """v6.3: Return entity candidates based on learned centrality + diversity scoring.
+
+    These tokens appear structurally significant in the attention graph
+    but have not yet been promoted to nodes. This is a suggestion
+    mechanism — promotion must be done explicitly via /compose or /ingest.
+    """
+    try:
+        rsvs: RsvsCoreProtocol = get_rsvs_instance()
+        candidates = rsvs.entity_candidates(top_k)
+        return {
+            "ok": True,
+            "candidates": [
+                {"label": label, "entity_score": score}
+                for label, score in candidates
+            ],
+        }
     except RsvsError:
         raise
     except Exception as e:

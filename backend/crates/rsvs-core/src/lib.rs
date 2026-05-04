@@ -39,8 +39,8 @@ pub mod transformer_bridge;
 pub mod types;
 
 pub use attention::{
-    is_groundable_to_seeds, text_to_sentences, tokenize, AttentionConfig, CoocStats,
-    EntityDetector, RsvsAttention,
+    is_groundable_to_seeds, text_to_sentences, tokenize, AttentionComponent, AttentionConfig,
+    CoocStats, DomainAttentionConfig, EntityDetector, RsvsAttention,
 };
 pub use autonomy::{
     AtomRecord, AutonomyConfig, AutonomyEngine, ConfidenceUpdateResult, MemoryClass,

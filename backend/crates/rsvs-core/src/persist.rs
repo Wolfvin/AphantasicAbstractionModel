@@ -262,6 +262,8 @@ pub struct SavedTraversalConfig {
     pub halt_epsilon: f32,
     pub halt_confidence: f32,
     pub tau_relevance: f32,
+    #[serde(default)]
+    pub epsilon_ig: f32,
 }
 
 impl Default for SavedTraversalConfig {
@@ -273,6 +275,7 @@ impl Default for SavedTraversalConfig {
             halt_epsilon: tc.halt_epsilon,
             halt_confidence: tc.halt_confidence,
             tau_relevance: tc.tau_relevance,
+            epsilon_ig: tc.epsilon_ig,
         }
     }
 }
@@ -285,6 +288,7 @@ impl From<&crate::types::TraversalConfig> for SavedTraversalConfig {
             halt_epsilon: tc.halt_epsilon,
             halt_confidence: tc.halt_confidence,
             tau_relevance: tc.tau_relevance,
+            epsilon_ig: tc.epsilon_ig,
         }
     }
 }
@@ -297,6 +301,7 @@ impl From<&SavedTraversalConfig> for crate::types::TraversalConfig {
             halt_epsilon: stc.halt_epsilon,
             halt_confidence: stc.halt_confidence,
             tau_relevance: stc.tau_relevance,
+            epsilon_ig: stc.epsilon_ig,
         }
     }
 }
@@ -611,6 +616,7 @@ pub fn from_snapshot(snap: RsvsSnapshot) -> Rsvs {
             to: se.to,
             weight: se.weight,
             source,
+            last_reinforced_batch: 0, // Loaded edges are treated as never reinforced
         });
     }
 
@@ -740,5 +746,7 @@ pub fn from_snapshot(snap: RsvsSnapshot) -> Rsvs {
         ingest_counter: 0,
         event_retention: 10_000,
         events: std::collections::VecDeque::new(),
+        batch_counter: 0,
+        domain_configs: HashMap::new(),
     }
 }

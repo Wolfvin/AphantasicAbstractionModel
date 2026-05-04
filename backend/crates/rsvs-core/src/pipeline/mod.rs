@@ -67,6 +67,17 @@ pub struct PipelineConfig {
     /// Controls how context-aware queries recursively expand CompositionRef trees.
     /// Default is TraversalConfig::default().
     pub traversal: TraversalConfig,
+
+    /// v6.3: Threshold for learned entity promotion via E(i) = α×C + β×D.
+    /// Tokens with entity_score > tau_entity_learned are candidates for promotion.
+    /// Default: 0.15 (start conservative — needs empirical tuning).
+    pub tau_entity_learned: f32,
+
+    /// v6.3: Weight for centrality in entity score.
+    pub alpha_entity: f32,
+
+    /// v6.3: Weight for diversity in entity score.
+    pub beta_entity: f32,
 }
 
 impl Default for PipelineConfig {
@@ -91,6 +102,9 @@ impl Default for PipelineConfig {
             current_domain: 1,
             custom_seeds: None,
             traversal: TraversalConfig::default(),
+            tau_entity_learned: 0.15,
+            alpha_entity: 0.5,
+            beta_entity: 0.5,
         }
     }
 }
@@ -136,6 +150,10 @@ pub struct Rsvs {
     pub event_retention: usize,
     /// In-memory event stream.
     pub events: VecDeque<crate::events::RuntimeEvent>,
+    /// v6.3: Batch counter for edge weight decay tracking.
+    pub batch_counter: usize,
+    /// v6.3: Per-domain attention config. Falls back to global config if domain not found.
+    pub domain_configs: HashMap<usize, crate::attention::DomainAttentionConfig>,
 }
 
 impl Rsvs {
@@ -182,6 +200,8 @@ impl Rsvs {
             ingest_counter: 0,
             event_retention: 10_000,
             events: VecDeque::new(),
+            batch_counter: 0,
+            domain_configs: HashMap::new(),
         })
     }
 
@@ -235,6 +255,46 @@ impl Rsvs {
             .unwrap_or(0);
 
         max_layer + 1
+    }
+
+    /// v6.3: Get the active attention config for the current domain.
+    /// Falls back to global config if domain has insufficient observations.
+    pub fn active_attention_config(&self) -> crate::attention::AttentionConfig {
+        if let Some(dc) = self.domain_configs.get(&self.config.current_domain) {
+            if dc.observation_count >= 5 {
+                let mut cfg = self.config.attention.clone();
+                cfg.alpha = dc.alpha;
+                cfg.beta = dc.beta;
+                cfg.gamma = dc.gamma;
+                return cfg;
+            }
+        }
+        self.config.attention.clone()
+    }
+
+    /// v6.3: Return tokens that are entity candidates based on learned scoring.
+    /// These are tokens that have high centrality (often targeted by attention)
+    /// and high diversity (attend to many different concepts) but haven't been
+    /// promoted to nodes yet.
+    pub fn entity_candidates(&self, top_k: usize) -> Vec<(String, f32)> {
+        let alpha_e = self.config.alpha_entity;
+        let beta_e = self.config.beta_entity;
+        let tau = self.config.tau_entity_learned;
+
+        let mut candidates: Vec<(String, f32)> = self.stats_db
+            .token_counts()
+            .keys()
+            .filter(|t| !self.token_to_id.contains_key(t.as_str()))
+            .map(|t| {
+                let score = self.stats_db.entity_score(t, alpha_e, beta_e);
+                (t.clone(), score)
+            })
+            .filter(|(_, score)| *score >= tau)
+            .collect();
+
+        candidates.sort_by(|a, b| b.1.total_cmp(&a.1));
+        candidates.truncate(top_k);
+        candidates
     }
 
     /// Get the active sense for a node in a given context.

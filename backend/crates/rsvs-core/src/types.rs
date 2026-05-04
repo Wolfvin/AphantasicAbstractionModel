@@ -285,6 +285,11 @@ pub struct Edge {
     pub weight: f32,
     /// Whether this edge was created by bootstrap or learned.
     pub source: EdgeSource,
+    /// v6.3: Batch number when this edge was last reinforced.
+    /// Used for inactivity-based weight decay.
+    /// Set to 0 for bootstrap edges (never decays — they're structural).
+    #[serde(default)]
+    pub last_reinforced_batch: usize,
 }
 
 // ---------------------------------------------------------------------------
@@ -326,6 +331,11 @@ pub struct TraversalConfig {
     pub halt_confidence: f32,
     /// Relevance gating: only expand nodes with similarity(node, query_context) >= tau_relevance.
     pub tau_relevance: f32,
+    /// v6.3: Minimum information gain per traversal depth.
+    /// If IG(k) < epsilon_ig, traversal halts — going deeper adds no useful info.
+    /// Set to 0.0 to disable IG halting (rely on stability + confidence only).
+    /// Default: 0.01
+    pub epsilon_ig: f32,
 }
 
 impl Default for TraversalConfig {
@@ -336,6 +346,7 @@ impl Default for TraversalConfig {
             halt_epsilon: 0.001,
             halt_confidence: 0.90,
             tau_relevance: 0.10,
+            epsilon_ig: 0.01,
         }
     }
 }
@@ -353,6 +364,8 @@ pub enum HaltReason {
     LeafReached,
     /// Relevance gating: no children passed tau_relevance.
     RelevanceGate,
+    /// v6.3: Information gain too small — traversal adds no useful information.
+    InformationGain,
 }
 
 /// Result of a context-aware traversal query (v6.1).

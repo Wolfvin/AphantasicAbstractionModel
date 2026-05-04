@@ -12,7 +12,7 @@
 
 use crate::error::RsvsError;
 use crate::sense::SenseManager;
-use crate::types::{AtomSet, CompositionRef, CompressionState, Edge, Node, NodeId};
+use crate::types::{AtomSet, CompositionRef, CompressionState, Edge, EdgeSource, Node, NodeId, SenseId};
 use std::collections::{HashMap, HashSet};
 
 #[derive(Debug)]
@@ -323,6 +323,80 @@ impl RsvsGraph {
         jaccard_sets(&atoms_a, &atoms_b)
     }
 
+    /// v6.3: Apply inactivity-based decay to all learned edges.
+    ///
+    /// Called once per batch (from pipeline after ingest completes).
+    /// Bootstrap edges (last_reinforced_batch == 0) and Composition edges
+    /// are not decayed — only learned edges can weaken.
+    ///
+    /// Formula: weight_new = weight_old × decay_factor^(current_batch - last_reinforced)
+    pub fn decay_edge_weights(
+        &mut self,
+        current_batch: usize,
+        decay_factor: f32,
+        grace_period: usize,
+    ) -> usize {
+        let mut decayed = 0;
+        if (decay_factor - 1.0).abs() < 1e-6 {
+            return 0; // Decay disabled (factor ≈ 1.0)
+        }
+        for edges in self.edges.values_mut() {
+            for edge in edges.iter_mut() {
+                // Don't decay bootstrap or composition edges
+                if edge.last_reinforced_batch == 0 {
+                    continue;
+                }
+                if matches!(edge.source, EdgeSource::Bootstrap | EdgeSource::Composition) {
+                    continue;
+                }
+
+                let inactive_batches = current_batch.saturating_sub(edge.last_reinforced_batch);
+
+                if inactive_batches <= grace_period {
+                    continue; // Still within grace period
+                }
+
+                let batches_to_decay = inactive_batches - grace_period;
+                let decay = decay_factor.powi(batches_to_decay as i32);
+                edge.weight = (edge.weight * decay).clamp(0.01, 1.0);
+                // Floor 0.01 — never zero, but can be very weak
+                decayed += 1;
+            }
+        }
+        decayed
+    }
+
+    /// v6.3: Reinforce an edge (called when attention selects this pair again).
+    /// Resets the inactivity counter and applies EMA weight update.
+    pub fn reinforce_edge(
+        &mut self,
+        from: NodeId,
+        to: NodeId,
+        evidence: f32,
+        current_batch: usize,
+        eta: f32,
+    ) {
+        if let Some(edges) = self.edges.get_mut(&from) {
+            for edge in edges.iter_mut() {
+                if edge.to == to {
+                    // EMA update: weight_new = (1 - eta) * old + eta * evidence
+                    edge.weight = ((1.0 - eta) * edge.weight + eta * evidence).clamp(0.0, 1.0);
+                    edge.last_reinforced_batch = current_batch;
+                    return;
+                }
+            }
+        }
+        // Edge doesn't exist — insert new
+        let edge = Edge {
+            from,
+            to,
+            weight: evidence,
+            source: EdgeSource::Learned,
+            last_reinforced_batch: current_batch,
+        };
+        let _ = self.insert_edge(edge);
+    }
+
     /// v6.2: Context-weighted similarity between two nodes.
     ///
     /// Unlike `structural_similarity()` which compares compositions structurally
@@ -389,6 +463,48 @@ impl RsvsGraph {
 
         let denom = norm_a.sqrt() * norm_b.sqrt();
         if denom == 0.0 { 0.0 } else { (dot / denom).clamp(0.0, 1.0) }
+    }
+
+    /// v6.3: Re-score nodes in relate result based on cross-activation coherence.
+    ///
+    /// For each candidate node, compute how many other already-activated nodes
+    /// share compositions with it. Nodes that are more coherent with the
+    /// activated set get a score boost.
+    ///
+    /// This is a single-pass operation (no iterative feedback loop).
+    /// `boost_factor` controls how much each shared composition adds to the score.
+    pub fn cross_activation_rescore(
+        candidates: &mut Vec<(NodeId, f32)>,
+        activated_senses: &HashMap<NodeId, SenseId>,
+        all_senses: &HashMap<NodeId, SenseManager>,
+        boost_factor: f32,
+    ) {
+        // Collect all compositions from activated senses
+        let activated_comps: HashSet<CompositionRef> = activated_senses.iter()
+            .filter_map(|(id, &sid)| {
+                let sm = all_senses.get(id)?;
+                let sense = sm.get_sense(sid as usize)?;
+                Some(sense.compositions.clone())
+            })
+            .flatten()
+            .collect();
+
+        // Rescore candidates based on overlap with activated compositions
+        for (node_id, score) in candidates.iter_mut() {
+            if let Some(sm) = all_senses.get(node_id) {
+                if let Some(&active_idx) = activated_senses.get(node_id) {
+                    if let Some(sense) = sm.get_sense(active_idx as usize) {
+                        let shared = sense.compositions.iter()
+                            .filter(|c| activated_comps.contains(c))
+                            .count();
+                        let coherence_boost = shared as f32 * boost_factor;
+                        *score += coherence_boost;
+                    }
+                }
+            }
+        }
+        // Re-sort after rescore
+        candidates.sort_by(|a, b| b.1.total_cmp(&a.1));
     }
 }
 
