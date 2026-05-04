@@ -1,6 +1,6 @@
 #![warn(missing_docs)]
 
-//! RSVS Core — v6.3.1 Compositional Architecture — Hardened P0-P3
+//! RSVS Core — v6.4 Losion Cross-Pollination — P0-P3 Full Implementation
 //!
 //! v6.1 builds on v6.0 with:
 //! - `TraversalConfig`: Controls recursive composition expansion during queries
@@ -27,16 +27,23 @@ pub mod attention;
 pub mod autonomy;
 #[cfg(feature = "python")]
 pub mod bindings;
+pub mod composition_index;
+pub mod consolidation;
 pub mod error;
 pub mod events;
 pub mod graph;
+pub mod matryoshka;
+pub mod mcts;
 pub mod persist;
 pub mod pipeline;
+pub mod reflection;
 pub mod seed;
 pub mod sense;
 pub mod tests;
+pub mod thinking;
 pub mod transformer_bridge;
 pub mod types;
+pub mod neurosym;
 
 pub use attention::{
     is_groundable_to_seeds, text_to_sentences, tokenize, AttentionComponent, AttentionConfig,
@@ -46,18 +53,24 @@ pub use autonomy::{
     AtomRecord, AutonomyConfig, AutonomyEngine, ConfidenceUpdateResult, MemoryClass,
     RemovalDecision, StabilityStatus, StatusTransitionResult, WarmUpState, count_impact,
 };
+pub use composition_index::CompositionIndex;
+pub use consolidation::ConsolidationEngine;
 pub use error::RsvsError;
 pub use events::{EventBatch, RuntimeEvent, RuntimeSnapshot, API_VERSION, SCHEMA_VERSION};
 pub use graph::{
     jaccard_sets, RsvsGraph, SimilarityResult, StructuralSimResult, SubstitutionResult,
 };
+pub use matryoshka::MatryoshkaTraversal;
+pub use mcts::MCTSTraversal;
 pub use pipeline::{
     AppraiseResult, IngestStats, PipelineConfig, PipelineStatus, QueryResult, RelateResult, Rsvs,
     traverse_query,
 };
+pub use reflection::SenseReflection;
 pub use sense::{
     GroundingEvidence, GroundingVerdict, IngestResult, Sense, SenseConfig, SenseInductionConfig,
     SenseManager, SenseStatus,
 };
+pub use thinking::{ThinkingMode, ThinkingToggle, ThinkingToggleConfig, ComplexitySignal};
 pub use transformer_bridge::{TransformerBridge, TransformerBridgeConfig};
 pub use types::*;

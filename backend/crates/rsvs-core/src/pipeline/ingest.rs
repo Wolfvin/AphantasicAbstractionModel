@@ -450,6 +450,55 @@ impl Rsvs {
                 self.domain_configs.insert(domain, dc);
             }
         }
+
+        // v6.4: Periodic consolidation — runs at safe checkpoints
+        // Consolidation is more thorough than regular maintenance:
+        // - Cross-node sense merging
+        // - Dead sense removal (stricter)
+        // - Edge pruning
+        // - Atom record compaction
+        if self.consolidation.should_run(self.batch_counter) {
+            let consolidation_result = self.consolidation.consolidate(
+                &mut self.graph,
+                &mut self.senses,
+                &mut self.autonomy,
+            );
+            self.emit_event(
+                &correlation_id,
+                "consolidation_completed",
+                serde_json::json!({
+                    "senses_merged": consolidation_result.senses_merged,
+                    "senses_removed": consolidation_result.senses_removed,
+                    "edges_pruned": consolidation_result.edges_pruned,
+                    "atoms_compacted": consolidation_result.atoms_compacted,
+                }),
+            );
+        }
+
+        // v6.4: Periodic sense reflection — self-evaluation loop
+        // Runs every 100 contexts (less frequent than consolidation)
+        if self.total_contexts > 0 && self.total_contexts % 100 == 0 {
+            let actions = self.reflection.reflect(&self.senses, &self.config.sense);
+            let applied = self.reflection.apply_actions(
+                &mut self.senses,
+                &actions,
+                &self.config.sense,
+            );
+            if applied > 0 {
+                self.emit_event(
+                    &correlation_id,
+                    "reflection_applied",
+                    serde_json::json!({
+                        "actions_total": actions.len(),
+                        "actions_applied": applied,
+                    }),
+                );
+            }
+        }
+
+        // v6.4: Update composition index after ingest
+        // Rebuild is safe at this point since the graph is stable
+        self.composition_index.rebuild(&self.senses);
         self.emit_event(
             &correlation_id,
             "ingest_completed",

@@ -113,11 +113,17 @@ impl Default for PipelineConfig {
 // Rsvs — the main system struct (v6.0)
 // -----------------------------------------------------------------------
 
-/// The main RSVS system struct (v6.0 — Compositional).
+/// The main RSVS system struct (v6.4 — Losion Cross-Pollination).
 ///
 /// Holds the knowledge graph, sense managers (with compositions),
 /// autonomy engine, co-occurrence statistics, entity detector, and
 /// attention scorer.
+///
+/// v6.4 additions:
+/// - `composition_index`: O(1) reverse lookup for CompositionRef → dependents
+/// - `thinking_toggle`: Adaptive complexity toggle for traversal
+/// - `consolidation`: Periodic consolidation engine
+/// - `reflection`: Sense self-evaluation loop
 pub struct Rsvs {
     /// The knowledge graph.
     pub graph: RsvsGraph,
@@ -154,6 +160,14 @@ pub struct Rsvs {
     pub batch_counter: usize,
     /// v6.3: Per-domain attention config. Falls back to global config if domain not found.
     pub domain_configs: HashMap<usize, crate::attention::DomainAttentionConfig>,
+    /// v6.4: Composition reverse index for O(1) lookup.
+    pub composition_index: crate::composition_index::CompositionIndex,
+    /// v6.4: Adaptive complexity toggle for traversal.
+    pub thinking_toggle: crate::thinking::ThinkingToggle,
+    /// v6.4: Periodic consolidation engine.
+    pub consolidation: crate::consolidation::ConsolidationEngine,
+    /// v6.4: Sense self-evaluation reflection engine.
+    pub reflection: crate::reflection::SenseReflection,
 }
 
 impl Rsvs {
@@ -202,6 +216,16 @@ impl Rsvs {
             events: VecDeque::new(),
             batch_counter: 0,
             domain_configs: HashMap::new(),
+            composition_index: crate::composition_index::CompositionIndex::new(),
+            thinking_toggle: crate::thinking::ThinkingToggle::new(
+                crate::thinking::ThinkingToggleConfig::default(),
+            ),
+            consolidation: crate::consolidation::ConsolidationEngine::new(
+                crate::consolidation::ConsolidationConfig::default(),
+            ),
+            reflection: crate::reflection::SenseReflection::new(
+                crate::reflection::ReflectionConfig::default(),
+            ),
         })
     }
 
@@ -326,12 +350,17 @@ impl Rsvs {
 
     /// Context-aware query that uses depth-controlled lazy traversal.
     ///
+    /// v6.4: Now uses ThinkingToggle to automatically adjust traversal depth
+    /// based on query complexity. Simple queries get shallow traversal,
+    /// complex queries get deep traversal.
+    ///
     /// This is the v6.1 query endpoint (Point 4) that:
     /// 1. Resolves label to NodeId
     /// 2. Uses lazy_lookup to select active sense based on context
-    /// 3. Computes P(a|S,q) per atom using freq_map
-    /// 4. Optionally recurses into compositions based on TraversalConfig
-    /// 5. Returns ContextQueryResult
+    /// 3. Uses ThinkingToggle to classify complexity and adjust traversal
+    /// 4. Computes P(a|S,q) per atom using freq_map
+    /// 5. Optionally recurses into compositions based on TraversalConfig
+    /// 6. Returns ContextQueryResult
     ///
     /// # Arguments
     ///
@@ -365,15 +394,29 @@ impl Rsvs {
         }
 
         // 3. Use provided config or fall back to pipeline config
-        let traversal_config = config.cloned().unwrap_or_else(|| self.config.traversal.clone());
+        let base_config = config.cloned().unwrap_or_else(|| self.config.traversal.clone());
 
-        // 4. Call the traversal engine
+        // 4. v6.4: Use ThinkingToggle to adjust traversal based on complexity
+        let signal = crate::thinking::ComplexitySignal {
+            n_context_atoms: context_ids.len(),
+            n_senses: self.senses.get(&start_node).map(|sm| sm.senses.len()).unwrap_or(0),
+            target_layer: self.graph.get_node(start_node).map(|n| n.semantic.layer).unwrap_or(0),
+            is_compositional: self.senses.get(&start_node)
+                .and_then(|sm| sm.senses.first())
+                .map(|s| s.is_compositional())
+                .unwrap_or(false),
+            domain_complexity: 0.0,
+        };
+        let mode = self.thinking_toggle.classify(&signal);
+        let adjusted_config = self.thinking_toggle.adjust_traversal(&mode, &base_config);
+
+        // 5. Call the traversal engine with adjusted config
         Some(traverse::traverse(
             &self.graph,
             &self.senses,
             start_node,
             &context_ids,
-            &traversal_config,
+            &adjusted_config,
             &self.token_to_id,
         ))
     }

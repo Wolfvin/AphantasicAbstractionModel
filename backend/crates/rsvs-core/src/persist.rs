@@ -748,5 +748,15 @@ pub fn from_snapshot(snap: RsvsSnapshot) -> Rsvs {
         events: std::collections::VecDeque::new(),
         batch_counter: 0,
         domain_configs: HashMap::new(),
+        composition_index: crate::composition_index::CompositionIndex::new(),
+        thinking_toggle: crate::thinking::ThinkingToggle::new(
+            crate::thinking::ThinkingToggleConfig::default(),
+        ),
+        consolidation: crate::consolidation::ConsolidationEngine::new(
+            crate::consolidation::ConsolidationConfig::default(),
+        ),
+        reflection: crate::reflection::SenseReflection::new(
+            crate::reflection::ReflectionConfig::default(),
+        ),
     }
 }

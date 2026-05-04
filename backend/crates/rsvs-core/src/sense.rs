@@ -1260,7 +1260,8 @@ impl SenseManager {
     }
 
     /// Merge sense j into sense i. Removes sense j.
-    fn merge_senses(&mut self, keep: usize, remove: usize) {
+    /// v6.4: Made public for ConsolidationEngine access.
+    pub fn merge_senses(&mut self, keep: usize, remove: usize) {
         let contexts_remove = self.senses[remove].contexts.clone();
         let sum_cross: f64 = self.senses[keep]
             .contexts

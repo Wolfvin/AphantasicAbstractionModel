@@ -1,6 +1,12 @@
-//! Autonomy engine for RSVS v6.1
+//! Autonomy engine for RSVS v6.4
 //!
 //! Keeps confidence/tier/memory lifecycle deterministic and testable.
+//! v6.4: Replaces crude TTL ×0.5 decay with Ebbinghaus forgetting curve.
+//!   effective_confidence = confidence × e^(-λ×elapsed/T) × (1 + κ×ln(1+access_count))
+//!   where λ = ebbinghaus_decay_rate, T = inactivity_ttl, κ = ebbinghaus_reinforce_factor
+//!   This replaces the old flag_inactive_atoms() ×0.5 blunt approach with a
+//!   psychologically-grounded exponential decay that respects reinforcement history.
+//!
 //! v6.1: Adds inactivity TTL tracking — atoms that haven't been seen
 //! recently get their confidence aggressively decayed and moved to Tier3.
 //!
@@ -58,9 +64,16 @@ pub struct AtomRecord {
     /// v6.1: Inactivity time-to-live — number of contexts this atom
     /// can be absent before it's considered stale.
     /// When `current_context - last_seen_context >= inactivity_ttl`,
-    /// the atom is flagged for aggressive confidence decay.
+    /// the atom is flagged for Ebbinghaus forgetting decay.
     /// Default is 50 contexts.
     pub inactivity_ttl: usize,
+
+    /// v6.4: Number of times this atom has been accessed/reinforced.
+    /// Used in Ebbinghaus forgetting formula: each reinforcement slows
+    /// the decay rate via the (1 + κ×ln(1+access_count)) term.
+    /// More frequently accessed atoms decay more slowly — mirroring
+    /// the spacing effect from cognitive psychology.
+    pub access_count: usize,
     /// v6.2: Counter of contexts since last promotion.
     /// Used by `maybe_graduate()` to transition Working → Stable memory
     /// after enough observations. Resets to 0 on promotion.
@@ -92,6 +105,7 @@ impl AtomRecord {
             last_seen_context: 0,
             inactivity_ttl: 50,
             context_count_since_promote: 0,
+            access_count: 0,
         }
     }
 
@@ -165,6 +179,20 @@ pub struct AutonomyConfig {
     /// v6.2: Number of contexts in Working memory before graduation to Stable.
     /// Default: 10
     pub threshold_mature: usize,
+
+    /// v6.4: Ebbinghaus exponential decay rate (λ) — controls how fast
+    /// confidence decays with inactivity. Higher = faster forgetting.
+    /// Formula: effective = confidence × e^(-λ×elapsed/inactivity_ttl)
+    /// Default: 2.0 — after one full TTL of inactivity, confidence is
+    /// reduced to ~13.5% (e^-2 ≈ 0.135). After half a TTL, ~36.8%.
+    pub ebbinghaus_decay_rate: f32,
+
+    /// v6.4: Ebbinghaus reinforcement factor (κ) — how much each access
+    /// slows down forgetting. Formula: (1 + κ×ln(1+access_count))
+    /// Default: 0.2 — each access adds ~0.2×ln(N+1) slowdown.
+    /// A node accessed 10 times gets a ×1.46 boost (0.2 × ln(11)).
+    /// A node accessed 100 times gets a ×1.92 boost (0.2 × ln(101)).
+    pub ebbinghaus_reinforce_factor: f32,
 }
 
 impl Default for AutonomyConfig {
@@ -188,6 +216,8 @@ impl Default for AutonomyConfig {
             eta_working: 0.30,
             eta_stable: 0.10,
             threshold_mature: 10,
+            ebbinghaus_decay_rate: 2.0,
+            ebbinghaus_reinforce_factor: 0.2,
         }
     }
 }
@@ -578,6 +608,8 @@ impl AutonomyEngine {
         };
         rec.confidence = proposed;
         rec.observation_count += 1;
+        // v6.4: Increment access count for Ebbinghaus reinforcement factor
+        rec.access_count += 1;
         if domain > 0 {
             rec.domain_count = rec.domain_count.max(domain);
         }
@@ -745,34 +777,66 @@ impl AutonomyEngine {
     // v6.1: Inactivity TTL — flag and decay stale atoms
     // ---------------------------------------------------------------
 
-    /// Flag atoms that have exceeded their inactivity TTL.
+    /// v6.4: Apply Ebbinghaus forgetting curve to stale atoms.
     ///
-    /// For each atom where `current_context - last_seen_context >= inactivity_ttl`,
-    /// aggressively decay confidence by multiplying by 0.5 and move to Tier3.
-    /// Seed nodes are exempt from inactivity decay.
+    /// Replaces the crude ×0.5 decay with a psychologically-grounded
+    /// exponential forgetting curve inspired by Losion's Episodic Memory:
     ///
-    /// Returns the number of atoms flagged as inactive.
+    ///   effective_confidence = confidence × e^(-λ×elapsed/T) × (1 + κ×ln(1+access_count))
     ///
-    /// # Examples
-    /// ```ignore
-    /// let flagged = engine.flag_inactive_atoms(engine.context_counter);
-    /// ```
+    /// Where:
+    /// - λ (ebbinghaus_decay_rate) = how fast forgetting happens (default 2.0)
+    /// - T (inactivity_ttl) = the reference time span
+    /// - κ (ebbinghaus_reinforce_factor) = how much reinforcement slows decay (default 0.2)
+    /// - elapsed = current_context - last_seen_context
+    /// - access_count = how many times this atom has been reinforced
+    ///
+    /// Key properties (vs old ×0.5 approach):
+    /// - **Gradual decay**: confidence decays smoothly, not a hard step
+    /// - **Reinforcement effect**: frequently accessed atoms decay slower
+    ///   (mirrors the spacing effect from cognitive psychology)
+    /// - **Time-proportional**: longer inactivity → more decay, but asymptotic
+    ///   (never reaches zero — there's always some residual memory)
+    ///
+    /// Seed nodes are exempt from forgetting. Atoms with elapsed < TTL/4
+    /// are also exempt (grace period — recently seen nodes are fine).
+    ///
+    /// Returns the number of atoms that had their confidence adjusted.
     pub fn flag_inactive_atoms(&mut self, current_context: usize) -> usize {
         let mut flagged = 0;
+        let lambda = self.config.ebbinghaus_decay_rate;
+        let kappa = self.config.ebbinghaus_reinforce_factor;
+
         for rec in self.records.values_mut() {
             // Seed nodes never expire
             if rec.is_seed {
                 continue;
             }
             let elapsed = current_context.saturating_sub(rec.last_seen_context);
-            if elapsed >= rec.inactivity_ttl {
-                // Aggressively decay confidence
-                rec.confidence = (rec.confidence * 0.5).clamp(0.0, 1.0);
-                // Move to Tier3
+            let ttl = rec.inactivity_ttl.max(1);
+
+            // Grace period: don't decay atoms seen within 25% of their TTL
+            if elapsed < ttl / 4 {
+                continue;
+            }
+
+            // Ebbinghaus forgetting: effective = conf × e^(-λ×elapsed/T) × (1 + κ×ln(1+access))
+            let time_decay = (-lambda * (elapsed as f32 / ttl as f32)).exp();
+            let reinforce_factor = 1.0 + kappa * (1.0 + rec.access_count as f32).ln();
+            let effective = rec.confidence * time_decay * reinforce_factor;
+
+            // Only update if effective is lower than current (never boost via forgetting)
+            if effective < rec.confidence {
+                rec.confidence = effective.clamp(0.01, 1.0); // Floor at 0.01 — never fully forgotten
+            }
+
+            // Move to Tier3 if significantly decayed (below tier2 threshold)
+            if rec.confidence < self.config.confidence_tier2 {
                 rec.tier = Tier::Tier3;
                 rec.memory = MemoryClass::Working;
-                flagged += 1;
             }
+
+            flagged += 1;
         }
         flagged
     }
