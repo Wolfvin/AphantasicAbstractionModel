@@ -198,6 +198,12 @@ pub struct SenseConfig {
     pub grounding_min: f32,
     /// Configuration for sense induction (Problem 1).
     pub induction: SenseInductionConfig,
+    /// v6.2: Scale factor for adaptive w_sim.
+    /// Controls how quickly w_sim increases as the number of senses grows.
+    /// Formula: w_sim = (0.5 + 0.1 × tanh(|senses| / w_sim_scale)).clamp(0.5, 0.85)
+    /// Smaller values = w_sim rises faster (more conservative sense creation).
+    /// Default: 10.0 (w_sim starts rising significantly after ~10 senses)
+    pub w_sim_scale: f32,
 }
 
 impl Default for SenseConfig {
@@ -218,6 +224,7 @@ impl Default for SenseConfig {
             grounding_penalty: 0.10,
             grounding_min: 0.2,
             induction: SenseInductionConfig::default(),
+            w_sim_scale: 10.0,
         }
     }
 }
@@ -304,6 +311,13 @@ pub struct Sense {
     /// Replaces the simple `grounding_score: f32` from v5.0.
     /// Use `grounding.score()` to get the computed grounding score.
     pub grounding: GroundingEvidence,
+    /// v6.2: Optional condition label for this sense.
+    ///
+    /// Purely annotation — does NOT affect any logic.
+    /// Examples: "via_api.partial_burn", "via_pembusukan", "konteks_formal"
+    /// Used by frontend for tooltips and by Appraise/Relate for
+    /// more descriptive verdicts (e.g., "agree via kondisi X").
+    pub condition_label: Option<String>,
 }
 
 impl Sense {
@@ -327,6 +341,7 @@ impl Sense {
             status: SenseStatus::Fragile,
             inactivity: 0,
             grounding: GroundingEvidence::new(),
+            condition_label: None,
         }
     }
 
@@ -373,6 +388,7 @@ impl Sense {
             status: SenseStatus::Fragile,
             inactivity: 0,
             grounding: GroundingEvidence::new(),
+            condition_label: None,
         }
     }
 
@@ -773,6 +789,10 @@ pub struct SenseManager {
     pub(crate) next_sense_id: SenseId,
     /// Global context counter.
     pub global_context_count: usize,
+    /// v6.2: Global atom frequency map for stopword detection.
+    /// Tracks how many contexts each atom appears in across all senses.
+    /// Used by `is_stopword_atom()` to filter ubiquitous atoms from candidate pruning.
+    pub global_atom_freq: HashMap<NodeId, usize>,
 }
 
 impl SenseManager {
@@ -783,7 +803,23 @@ impl SenseManager {
             config,
             next_sense_id: 0,
             global_context_count: 0,
+            global_atom_freq: HashMap::new(),
         }
+    }
+
+    /// v6.2: Check if an atom is a "stopword atom" — i.e., appears in too many
+    /// contexts to be discriminative for candidate pruning.
+    ///
+    /// An atom is a stopword if its global frequency ratio exceeds `gamma_stopword`.
+    /// Atoms like `exists`, `do`, `one` that appear almost everywhere add noise
+    /// to the candidate pruning process and should be excluded.
+    pub fn is_stopword_atom(&self, atom: NodeId) -> bool {
+        let total = self.global_context_count as f32;
+        if total == 0.0 {
+            return false;
+        }
+        let freq = self.global_atom_freq.get(&atom).copied().unwrap_or(0) as f32;
+        (freq / total) > self.config.gamma_stopword
     }
 
     // -------------------------------------------------------------------
@@ -797,6 +833,11 @@ impl SenseManager {
     /// via `induce_sense()`.
     pub fn ingest(&mut self, context: AtomSet) -> IngestResult {
         self.global_context_count += 1;
+
+        // v6.2: Update global atom frequency for stopword detection
+        for &atom in &context {
+            *self.global_atom_freq.entry(atom).or_insert(0) += 1;
+        }
 
         for s in &mut self.senses {
             s.inactivity += 1;
@@ -827,6 +868,9 @@ impl SenseManager {
                 let core_for_prune = s.core(prune_tau);
                 let overlap = core_for_prune
                     .iter()
+                    // v6.2: Skip stopword atoms — atoms that appear in too many
+                    // contexts are not discriminative for candidate pruning.
+                    .filter(|&&a| !self.is_stopword_atom(a))
                     .filter(|&&a| context.contains(&a))
                     .count();
                 overlap >= m
@@ -840,8 +884,15 @@ impl SenseManager {
             candidates
         };
 
-        let w_sim = self.config.w_sim;
-        let w_coh = self.config.w_coh;
+        // v6.2: Adaptive w_sim — increases as the number of senses grows.
+        // For nodes with many senses, the system is more conservative about
+        // assigning to existing senses, which prevents sense proliferation for
+        // mature, widely-used nodes.
+        // Formula: w_sim = (0.5 + 0.1 × tanh(|senses| / w_sim_scale)).clamp(0.5, 0.85)
+        let n = self.senses.len() as f32;
+        let scale = self.config.w_sim_scale;
+        let w_sim = (0.5 + 0.1 * (n / scale).tanh()).clamp(0.5, 0.85);
+        let w_coh = 1.0 - w_sim;
 
         let best = candidate_indices
             .iter()
@@ -978,24 +1029,30 @@ impl SenseManager {
             }
 
             // Check induction score before creating a new sense
-            if let Some(best_sense) = self.senses.first() {
-                let induction_score =
-                    best_sense.induction_score(&compositions, &context, &self.config.induction);
-                if induction_score < self.config.induction.min_composition_divergence {
-                    // Not divergent enough — assign to best existing
-                    let best = self
-                        .senses
-                        .iter()
-                        .enumerate()
-                        .map(|(i, s)| {
-                            let sim = jaccard_sets(&context, &s.core(self.config.tau_core));
-                            (i, sim)
-                        })
-                        .max_by(|a, b| a.1.total_cmp(&b.1));
-                    if let Some((best_idx, _)) = best {
-                        self.senses[best_idx].assign(context);
-                        return IngestResult::Assigned(best_idx);
-                    }
+            // v6.2 FIX: Check ALL senses, not just the first one.
+            // The old code only checked self.senses.first(), which caused
+            // sense proliferation when the first sense was very different
+            // but a later sense was very similar to the proposed compositions.
+            let min_induction = self
+                .senses
+                .iter()
+                .map(|s| s.induction_score(&compositions, &context, &self.config.induction))
+                .fold(f32::MAX, f32::min);
+
+            if min_induction < self.config.induction.min_composition_divergence {
+                // At least one sense is similar enough — assign to the most similar
+                let best = self
+                    .senses
+                    .iter()
+                    .enumerate()
+                    .map(|(i, s)| {
+                        let sim = jaccard_sets(&context, &s.core(self.config.tau_core));
+                        (i, sim)
+                    })
+                    .max_by(|a, b| a.1.total_cmp(&b.1));
+                if let Some((best_idx, _)) = best {
+                    self.senses[best_idx].assign(context);
+                    return IngestResult::Assigned(best_idx);
                 }
             }
         }

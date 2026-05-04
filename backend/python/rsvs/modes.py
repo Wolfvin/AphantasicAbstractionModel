@@ -57,6 +57,7 @@ __all__ = [
     "_run_substitution_analysis_rust",
     "_run_grounding_info_rust",
     "_run_context_query_rust",
+    "_run_context_similarity_rust",
     "_run_mode",
     "_read_latest_mode",
     "run_mode",
@@ -851,6 +852,73 @@ def _run_context_query_rust(
     return result_dict, messages, {"context_query": str(path)}
 
 
+# ---------------------------------------------------------------------------
+# Mode: context_similarity (Rust core) — v6.2
+# ---------------------------------------------------------------------------
+
+
+def _run_context_similarity_rust(
+    text: str,
+    correlation_id: str,
+    options: dict[str, Any] | None,
+) -> tuple[dict[str, Any], list[dict[str, Any]], dict[str, str]]:
+    """Context-weighted similarity via the Rust core (v6.2).
+
+    Uses P(a|S,q) scoring to weigh compositions by relevance to context,
+    producing a context-aware similarity score between two concepts.
+    """
+    r = _get_rsvs()
+    if r is None:
+        raise RustCoreUnavailableError("Rust core required for context_similarity mode")
+
+    options = options or {}
+    label_a = options.get("concept_a", text)
+    label_b = options.get("concept_b", "")
+    context = options.get("context", [])
+    if isinstance(context, str):
+        context = [context]
+
+    if not label_b:
+        raise ValueError("Parameter 'concept_b' is required for context similarity")
+
+    score = r.context_similarity(label_a, label_b, context)
+
+    result = {
+        "concept_a": label_a,
+        "concept_b": label_b,
+        "context": context,
+        "context_weighted_similarity": score,
+    }
+
+    messages = [
+        {
+            "id": make_id("msg"),
+            "type": "system_context_similarity",
+            "content": (
+                f"Context similarity '{label_a}' vs '{label_b}' "
+                f"with context {context}: "
+                f"score={score:.3f if score is not None else 'N/A'} "
+                f"[Rust core]."
+            ),
+            "timestamp": iso_now(),
+            "correlation_id": correlation_id,
+        }
+    ]
+
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    path = CONFIG.atom_dir / f"context-similarity-{stamp}.json"
+    payload = {
+        "schema_version": SCHEMA_VERSION,
+        "mode": "context_similarity",
+        "timestamp": iso_now(),
+        "correlation_id": correlation_id,
+        "input": f"{label_a} vs {label_b} (context: {context})",
+        "result": result,
+    }
+    _write_json(path, payload)
+    return result, messages, {"context_similarity": str(path)}
+
+
 _MODE_HANDLERS = {
     "ingest": _run_ingest_rust,
     "appraise": _run_appraise_rust,
@@ -860,6 +928,7 @@ _MODE_HANDLERS = {
     "substitution_analysis": _run_substitution_analysis_rust,
     "grounding_info": _run_grounding_info_rust,
     "context_query": _run_context_query_rust,
+    "context_similarity": _run_context_similarity_rust,
 }
 
 

@@ -322,6 +322,72 @@ impl RsvsGraph {
         let atoms_b = self.expand(b);
         jaccard_sets(&atoms_a, &atoms_b)
     }
+
+    /// v6.2: Context-weighted similarity between two nodes.
+    ///
+    /// Unlike `structural_similarity()` which compares compositions structurally
+    /// (shared vs differing), this method weighs each composition based on its
+    /// relevance to the `context_atoms`. This produces a context-aware similarity
+    /// score that reflects how similar two nodes are WITHIN a given context.
+    ///
+    /// Formula: sim(A, B | q) = cosine_similarity(score_vec_A, score_vec_B)
+    /// where score_vec[comp] = P(a|S,q) = freq_map[a] × edge_weight(a→q)
+    ///
+    /// Example: "batu" and "tulang" may have low structural similarity in general,
+    /// but if context_atoms includes "kekerasan", both have high scores for the
+    /// "hard" atom, producing a high context-weighted similarity.
+    ///
+    /// This method is the foundation for context-aware Appraise and Relate modes.
+    pub fn context_weighted_similarity(
+        &self,
+        senses_a: &SenseManager,
+        senses_b: &SenseManager,
+        context_atoms: &[NodeId],
+    ) -> f32 {
+        // Select active sense for each node based on context
+        let sense_a = match senses_a.lazy_lookup(context_atoms) {
+            Some(idx) => &senses_a.senses[idx],
+            None => return 0.0,
+        };
+        let sense_b = match senses_b.lazy_lookup(context_atoms) {
+            Some(idx) => &senses_b.senses[idx],
+            None => return 0.0,
+        };
+
+        // Collect all unique CompositionRefs from both senses
+        let all_comps: HashSet<&CompositionRef> = sense_a.compositions.iter()
+            .chain(sense_b.compositions.iter())
+            .collect();
+
+        if all_comps.is_empty() {
+            return 0.0;
+        }
+
+        // Compute edge_weight per composition — proximity to context
+        // Simple heuristic: if the composition's node_id is in context_atoms → 1.0,
+        // otherwise → 0.1 (low relevance but not zero, to avoid division by zero)
+        let context_set: HashSet<NodeId> = context_atoms.iter().copied().collect();
+        let edge_weight = |comp: &CompositionRef| -> f32 {
+            if context_set.contains(&comp.node_id) { 1.0 } else { 0.1 }
+        };
+
+        // Compute cosine similarity between score vectors
+        let mut dot = 0.0f32;
+        let mut norm_a = 0.0f32;
+        let mut norm_b = 0.0f32;
+
+        for comp in &all_comps {
+            let ew = edge_weight(comp);
+            let score_a = sense_a.p_a_given_s_q(comp, ew);
+            let score_b = sense_b.p_a_given_s_q(comp, ew);
+            dot += score_a * score_b;
+            norm_a += score_a * score_a;
+            norm_b += score_b * score_b;
+        }
+
+        let denom = norm_a.sqrt() * norm_b.sqrt();
+        if denom == 0.0 { 0.0 } else { (dot / denom).clamp(0.0, 1.0) }
+    }
 }
 
 /// Jaccard similarity between two atom sets.

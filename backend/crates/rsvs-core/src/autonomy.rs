@@ -61,6 +61,10 @@ pub struct AtomRecord {
     /// the atom is flagged for aggressive confidence decay.
     /// Default is 50 contexts.
     pub inactivity_ttl: usize,
+    /// v6.2: Counter of contexts since last promotion.
+    /// Used by `maybe_graduate()` to transition Working → Stable memory
+    /// after enough observations. Resets to 0 on promotion.
+    pub context_count_since_promote: usize,
 }
 
 impl AtomRecord {
@@ -87,6 +91,22 @@ impl AtomRecord {
             candidate_evidence_pool: 0.0,
             last_seen_context: 0,
             inactivity_ttl: 50,
+            context_count_since_promote: 0,
+        }
+    }
+
+    /// v6.2: Attempt to graduate from Working to Stable memory.
+    ///
+    /// An atom in Working memory becomes Stable after observing
+    /// `threshold_mature` contexts since its last promotion. This ensures
+    /// that only atoms with sustained evidence become part of long-term
+    /// memory, while recent additions remain responsive to new evidence.
+    pub fn maybe_graduate(&mut self, threshold_mature: usize) {
+        if self.memory == MemoryClass::Working {
+            self.context_count_since_promote += 1;
+            if self.context_count_since_promote >= threshold_mature {
+                self.memory = MemoryClass::Stable;
+            }
         }
     }
 
@@ -134,6 +154,17 @@ pub struct AutonomyConfig {
     pub demote_threshold: f32,
     /// Quarantine a node if flip_count >= this value (default 3).
     pub quarantine_flip_threshold: u32,
+    /// v6.2: EMA smoothing factor for Working memory atoms.
+    /// Higher value = faster update = more responsive to new evidence.
+    /// Default: 0.30 (3x faster than Stable)
+    pub eta_working: f32,
+    /// v6.2: EMA smoothing factor for Stable memory atoms.
+    /// Lower value = slower update = more resistant to outliers.
+    /// Default: 0.10 (same as previous global eta)
+    pub eta_stable: f32,
+    /// v6.2: Number of contexts in Working memory before graduation to Stable.
+    /// Default: 10
+    pub threshold_mature: usize,
 }
 
 impl Default for AutonomyConfig {
@@ -154,6 +185,9 @@ impl Default for AutonomyConfig {
             promote_threshold: 0.75,
             demote_threshold: 0.60,
             quarantine_flip_threshold: 3,
+            eta_working: 0.30,
+            eta_stable: 0.10,
+            threshold_mature: 10,
         }
     }
 }
@@ -508,7 +542,17 @@ impl AutonomyEngine {
 
         let evidence = (freq * coherence).clamp(0.0, 1.0);
         let old = rec_read.confidence;
-        let proposed = ((1.0 - self.config.eta) * old + self.config.eta * evidence).clamp(0.0, 1.0);
+
+        // v6.2: Use different eta based on memory type.
+        // Working memory atoms update faster (eta_working), Stable atoms
+        // update slower (eta_stable). This ensures:
+        // - New atoms quickly reflect evidence (responsive)
+        // - Mature atoms resist outlier fluctuations (stable)
+        let eta = match rec_read.memory {
+            MemoryClass::Working => self.config.eta_working,
+            MemoryClass::Stable => self.config.eta_stable,
+        };
+        let proposed = ((1.0 - eta) * old + eta * evidence).clamp(0.0, 1.0);
 
         if !self.energy_allows_update(id, proposed) {
             return ConfidenceUpdateResult::Skipped("energy constraint");
@@ -525,6 +569,8 @@ impl AutonomyEngine {
         rec.cooccurring_mature.extend(co_ids.iter().copied());
         // v6.1: Update last_seen_context to mark this atom as recently active
         rec.last_seen_context = self.context_counter;
+        // v6.2: Attempt graduation from Working → Stable
+        rec.maybe_graduate(self.config.threshold_mature);
         let _ = rec;
 
         let _ = self.reclassify(id);
@@ -591,6 +637,33 @@ impl AutonomyEngine {
         }
 
         RemovalDecision::Retain("confidence above threshold")
+    }
+
+    /// v6.2: Decide whether a node should be removed, computing impact automatically.
+    ///
+    /// Unlike `should_remove()` which requires the caller to compute `impact`,
+    /// this method counts the impact from the given sense data before making
+    /// the decision. Impact = number of CompositionRef entries across all senses
+    /// that still point to this node.
+    ///
+    /// This fixes the bug where `impact` was always passed as 0, meaning
+    /// `RequiresApproval` was never triggered.
+    pub fn should_remove_with_impact(
+        &mut self,
+        id: NodeId,
+        all_senses: &HashMap<NodeId, crate::sense::SenseManager>,
+    ) -> RemovalDecision {
+        let impact = count_impact(id, all_senses);
+        self.should_remove(id, impact)
+    }
+
+    /// v6.2: Get the list of nodes that require approval before removal.
+    ///
+    /// Returns node IDs that are on the watchlist — nodes flagged by
+    /// `should_remove()` as `RequiresApproval` because they have high impact
+    /// (many dependents in the graph).
+    pub fn pending_removals(&self) -> Vec<NodeId> {
+        self.watchlist.iter().copied().collect()
     }
 
     /// Begin a new batch of confidence updates.
@@ -702,4 +775,27 @@ fn adaptive_threshold(values: &[f32], k: f32) -> f32 {
         .sum::<f32>()
         / n;
     mean + k * var.sqrt()
+}
+
+// -----------------------------------------------------------------------
+// v6.2: Impact counting — how many CompositionRefs point to a node
+// -----------------------------------------------------------------------
+
+/// Count how many CompositionRef entries in the entire graph still point to
+/// the given node. This is the "impact score" — the higher it is, the more
+/// dangerous it is to remove this node because many other senses depend on it.
+///
+/// This function is used by `should_remove_with_impact()` to automatically
+/// compute impact before making a removal decision. Previously, `impact` was
+/// always passed as 0, which meant `RequiresApproval` was never triggered.
+pub fn count_impact(
+    node_id: NodeId,
+    all_senses: &HashMap<NodeId, crate::sense::SenseManager>,
+) -> usize {
+    all_senses
+        .values()
+        .flat_map(|sm| sm.senses.iter())
+        .flat_map(|s| s.compositions.iter())
+        .filter(|c| c.node_id == node_id)
+        .count()
 }

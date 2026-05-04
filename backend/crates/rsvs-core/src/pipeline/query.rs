@@ -137,4 +137,37 @@ impl Rsvs {
         let sm_b = self.senses.get(&id_b)?;
         self.graph.substitution_analysis(id_a, id_b, sm_a, sm_b)
     }
+
+    /// v6.2: Context-weighted similarity between two concepts.
+    ///
+    /// Unlike `structural_similarity()` which compares compositions structurally
+    /// (shared vs differing), this method weighs each composition based on its
+    /// relevance to the `context` labels. This produces a context-aware similarity
+    /// score that reflects how similar two concepts are WITHIN a given context.
+    ///
+    /// Formula: sim(A, B | q) = cosine_similarity(score_vec_A, score_vec_B)
+    /// where score_vec[comp] = P(a|S,q) = freq_map[a] × edge_weight(a→q)
+    ///
+    /// Example: "batu" and "tulang" may have low structural similarity in general,
+    /// but if context is ["kekerasan"], both score high for "hard" atom →
+    /// context_weighted_similarity is high.
+    pub fn context_similarity(
+        &self,
+        a: &str,
+        b: &str,
+        context: &[&str],
+    ) -> Option<f32> {
+        let id_a = *self.token_to_id.get(a)?;
+        let id_b = *self.token_to_id.get(b)?;
+        let sm_a = self.senses.get(&id_a)?;
+        let sm_b = self.senses.get(&id_b)?;
+
+        // Resolve context labels to node IDs
+        let context_ids: Vec<NodeId> = context
+            .iter()
+            .filter_map(|t| self.token_to_id.get(*t).copied())
+            .collect();
+
+        Some(self.graph.context_weighted_similarity(sm_a, sm_b, &context_ids))
+    }
 }

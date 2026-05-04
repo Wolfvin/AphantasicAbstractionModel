@@ -63,8 +63,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="RSVS — Relational Symbolic Vocabulary System",
-    version="6.1.0",
-    description="Hard-attention symbolic knowledge engine with Rust core (v6.1 context-query + compositional architecture + grounding)",
+    version="6.2.0",
+    description="Hard-attention symbolic knowledge engine with Rust core (v6.2 context-similarity + adaptive weights + impact counting + condition labels)",
     lifespan=lifespan,
 )
 
@@ -111,7 +111,7 @@ class IngestRequest(BaseModel):
 
 
 class RunRequest(BaseModel):
-    mode: str = Field(..., description="Mode: ingest | query | appraise | relate | compose | structural_similarity | substitution_analysis")
+    mode: str = Field(..., description="Mode: ingest | query | appraise | relate | compose | structural_similarity | substitution_analysis | context_similarity")
     text: str = Field(..., min_length=1, max_length=100_000, description="Input text (max 100K characters)")
     target: str | None = Field(None, max_length=500)
     source: str | None = Field(None, max_length=500)
@@ -153,6 +153,7 @@ class ComposeRequest(BaseModel):
         description="List of atom node IDs to compose from (backward compat). Mutually exclusive with compositions.",
     )
     lang: Optional[str] = Field(None, description="Language code (e.g. 'id', 'en')")
+    condition_label: Optional[str] = Field(None, max_length=100, description="v6.2: Optional condition label for the new sense (e.g. 'via_api.partial_burn')")
 
 
 class NodeInfoRequest(BaseModel):
@@ -171,6 +172,13 @@ class ContextQueryRequest(BaseModel):
     gamma: Optional[float] = Field(None, ge=0.001, le=1.0, description="Stability halting threshold")
     halt_confidence: Optional[float] = Field(None, ge=0.0, le=1.0, description="Confidence halting threshold")
     tau_relevance: Optional[float] = Field(None, ge=0.0, le=1.0, description="Relevance gating threshold")
+
+
+class ContextSimilarityRequest(BaseModel):
+    """v6.2: Request for context-weighted similarity between two concepts."""
+    concept_a: str = Field(..., min_length=1, max_length=200, description="First concept label (e.g. 'batu')")
+    concept_b: str = Field(..., min_length=1, max_length=200, description="Second concept label (e.g. 'tulang')")
+    context: list[str] = Field(default_factory=list, max_length=50, description="Context atom labels (e.g. ['kekerasan'])")
 
 
 # --- Exception mapping ---
@@ -467,6 +475,13 @@ async def compose_node(request: Request, body: ComposeRequest, _auth: None = Dep
             composed_from = req.atom_ids
             composed_type = "atom_ids"
 
+        # v6.2: Set condition label if provided
+        if req.condition_label:
+            try:
+                rsvs.set_sense_label(req.label, 0, req.condition_label)
+            except Exception:
+                pass  # Non-critical annotation — don't fail the compose
+
         snapshot = rsvs.snapshot_v1()
         events = rsvs.consume_events_v1()
         return {
@@ -563,6 +578,42 @@ async def context_query_endpoint(request: Request, req: ContextQueryRequest, _au
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/context-similarity", tags=["similarity"])
+@limiter.limit("30/minute")
+async def context_similarity_endpoint(
+    request: Request,
+    req: ContextSimilarityRequest,
+    _auth: None = Depends(_verify_api_key),
+) -> dict[str, Any]:
+    """v6.2: Context-weighted similarity between two concepts.
+
+    Unlike structural similarity which compares compositions equally,
+    this endpoint weighs each composition based on its relevance to
+    the provided context. Two concepts may have low structural similarity
+    but high context-weighted similarity when the context highlights
+    their shared aspects.
+
+    Example: context_similarity("batu", "tulang", ["kekerasan"]) → high
+    because both score high for "hard" in the context of "kekerasan".
+    """
+    try:
+        rsvs: RsvsCoreProtocol = get_rsvs_instance()
+        score = rsvs.context_similarity(req.concept_a, req.concept_b, req.context)
+        if score is None:
+            return {"ok": True, "concept_a": req.concept_a, "concept_b": req.concept_b, "context": req.context, "context_weighted_similarity": None}
+        return {
+            "ok": True,
+            "concept_a": req.concept_a,
+            "concept_b": req.concept_b,
+            "context": req.context,
+            "context_weighted_similarity": score,
+        }
+    except RsvsError:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/snapshot")
 @limiter.limit("60/minute")
 async def snapshot_endpoint(request: Request, _auth: None = Depends(_verify_api_key)) -> dict[str, Any]:
@@ -590,13 +641,31 @@ async def events_endpoint(request: Request, _auth: None = Depends(_verify_api_ke
 @app.get("/health")
 @limiter.limit("60/minute")
 async def health(request: Request) -> dict[str, str]:
-    return {"status": "ok", "version": "6.1.0"}
+    return {"status": "ok", "version": "6.2.0"}
 
 
 @app.get("/")
 @limiter.limit("60/minute")
 async def root(request: Request) -> dict[str, str]:
-    return {"name": "RSVS", "version": "6.1.0", "docs": "/docs"}
+    return {"name": "RSVS", "version": "6.2.0", "docs": "/docs"}
+
+
+@app.get("/autonomy/pending-removals", tags=["autonomy"])
+@limiter.limit("30/minute")
+async def pending_removals_endpoint(request: Request, _auth: None = Depends(_verify_api_key)) -> dict[str, Any]:
+    """v6.2: Get list of nodes that require approval before removal.
+
+    Nodes on this list have low confidence but high impact (many dependents),
+    so they cannot be automatically removed. Manual review is required.
+    """
+    try:
+        rsvs: RsvsCoreProtocol = get_rsvs_instance()
+        pending = rsvs.pending_removals()
+        return {"ok": True, "pending_removals": pending}
+    except RsvsError:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 def main() -> None:

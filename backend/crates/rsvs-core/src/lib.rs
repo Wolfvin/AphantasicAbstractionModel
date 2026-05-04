@@ -44,7 +44,7 @@ pub use attention::{
 };
 pub use autonomy::{
     AtomRecord, AutonomyConfig, AutonomyEngine, ConfidenceUpdateResult, MemoryClass,
-    RemovalDecision, StabilityStatus, StatusTransitionResult, WarmUpState,
+    RemovalDecision, StabilityStatus, StatusTransitionResult, WarmUpState, count_impact,
 };
 pub use error::RsvsError;
 pub use events::{EventBatch, RuntimeEvent, RuntimeSnapshot, API_VERSION, SCHEMA_VERSION};

@@ -435,6 +435,8 @@ pub struct PySenseInfo {
     pub grounding_score: f32,
     pub grounding_evidence: PyGroundingEvidence,
     pub compositions: Vec<(String, u32)>,
+    /// v6.2: Optional condition label annotation.
+    pub condition_label: Option<String>,
 }
 
 #[pymethods]
@@ -690,6 +692,19 @@ impl PyRsvs {
         })
     }
 
+    /// v6.2: Context-weighted similarity between two concepts.
+    ///
+    /// Unlike structural_similarity which compares compositions structurally,
+    /// this method weighs each composition based on its relevance to the
+    /// provided context labels. Returns a float score in [0.0, 1.0].
+    ///
+    /// Example: context_similarity("batu", "tulang", ["kekerasan"]) may be high
+    /// because both score high for "hard" in the context of "kekerasan".
+    fn context_similarity(&self, a: &str, b: &str, context: Vec<String>) -> Option<f32> {
+        let context_refs: Vec<&str> = context.iter().map(|s| s.as_str()).collect();
+        self.inner.context_similarity(a, b, &context_refs)
+    }
+
     /// Appraise text against the graph.
     fn appraise(&self, text: &str) -> PyAppraiseResult {
         let r = self.inner.appraise(text);
@@ -853,6 +868,7 @@ impl PyRsvs {
                     grounding_score: s.grounding.score(),
                     grounding_evidence: PyGroundingEvidence::from(&s.grounding),
                     compositions: comp_labels,
+                    condition_label: s.condition_label.clone(),
                 }
             })
             .collect())
@@ -920,6 +936,42 @@ impl PyRsvs {
             .compose_from_ids(label, atom_ids, lang)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
         Ok(id)
+    }
+
+    /// v6.2: Set the condition label for a specific sense.
+    ///
+    /// This is a purely annotation operation — it does not affect any logic.
+    /// Condition labels are used by the frontend for tooltips and by
+    /// Appraise/Relate for more descriptive verdicts.
+    ///
+    /// Example: set_sense_label("kayu", 1, Some("via_api.partial_burn".to_string()))
+    fn set_sense_label(
+        &mut self,
+        node_label: &str,
+        sense_idx: usize,
+        label: Option<String>,
+    ) -> PyResult<()> {
+        let id = self
+            .inner
+            .token_to_id
+            .get(node_label)
+            .copied()
+            .ok_or_else(|| PyValueError::new_err(format!("Node '{}' not found", node_label)))?;
+        if let Some(sm) = self.inner.senses.get_mut(&id) {
+            if let Some(sense) = sm.get_sense_mut(sense_idx) {
+                sense.condition_label = label;
+                return Ok(());
+            }
+        }
+        Err(PyValueError::new_err("Sense not found"))
+    }
+
+    /// v6.2: Get the list of node IDs that require approval before removal.
+    ///
+    /// These nodes have low confidence but high impact (many dependents
+    /// in the graph), so they cannot be automatically removed.
+    fn pending_removals(&self) -> Vec<u32> {
+        self.inner.autonomy.pending_removals()
     }
 
     /// Backward compat: alias for nodes()
