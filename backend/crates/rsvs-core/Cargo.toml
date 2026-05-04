@@ -1,6 +1,6 @@
 [package]
 name = "rsvs"
-version = "6.2.0"
+version = "6.5.0"
 edition = "2021"
 description = "Relational Symbolic Vocabulary System — compositional symbolic engine with structural meaning"
 license = "MIT OR Apache-2.0"

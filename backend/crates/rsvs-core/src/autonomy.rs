@@ -777,7 +777,7 @@ impl AutonomyEngine {
     // v6.1: Inactivity TTL — flag and decay stale atoms
     // ---------------------------------------------------------------
 
-    /// v6.4: Apply Ebbinghaus forgetting curve to stale atoms.
+    /// v6.5: Apply Ebbinghaus forgetting curve to stale atoms.
     ///
     /// Replaces the crude ×0.5 decay with a psychologically-grounded
     /// exponential forgetting curve inspired by Losion's Episodic Memory:
@@ -800,6 +800,10 @@ impl AutonomyEngine {
     ///
     /// Seed nodes are exempt from forgetting. Atoms with elapsed < TTL/4
     /// are also exempt (grace period — recently seen nodes are fine).
+    ///
+    /// v6.5: Now correctly counts only atoms whose confidence was actually
+    /// adjusted (not all past grace period). This fixes the inflated
+    /// `atoms_flagged_inactive` stat.
     ///
     /// Returns the number of atoms that had their confidence adjusted.
     pub fn flag_inactive_atoms(&mut self, current_context: usize) -> usize {
@@ -828,6 +832,7 @@ impl AutonomyEngine {
             // Only update if effective is lower than current (never boost via forgetting)
             if effective < rec.confidence {
                 rec.confidence = effective.clamp(0.01, 1.0); // Floor at 0.01 — never fully forgotten
+                flagged += 1; // v6.5: Only count actually adjusted atoms
             }
 
             // Move to Tier3 if significantly decayed (below tier2 threshold)
@@ -835,8 +840,6 @@ impl AutonomyEngine {
                 rec.tier = Tier::Tier3;
                 rec.memory = MemoryClass::Working;
             }
-
-            flagged += 1;
         }
         flagged
     }

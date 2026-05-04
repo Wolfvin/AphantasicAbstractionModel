@@ -1,6 +1,6 @@
 #![warn(missing_docs)]
 
-//! RSVS Core — v6.4 Losion Cross-Pollination — P0-P3 Full Implementation
+//! RSVS Core — v6.5 Losion Cross-Pollination — Bug Fixes + Persistence + API Completeness
 //!
 //! v6.1 builds on v6.0 with:
 //! - `TraversalConfig`: Controls recursive composition expansion during queries

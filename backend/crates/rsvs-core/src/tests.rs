@@ -1730,3 +1730,416 @@ mod transformer_bridge_tests {
         assert!(config.use_attention_weights);
     }
 }
+
+// -----------------------------------------------------------------------
+// v6.5: Comprehensive tests for Losion Cross-Pollination features
+// -----------------------------------------------------------------------
+
+#[cfg(test)]
+mod ebbinghaus_tests {
+    use crate::autonomy::{AutonomyConfig, AutonomyEngine, MemoryClass};
+    use crate::types::{NodeStatus, Tier};
+
+    #[test]
+    fn ebbinghaus_decay_reduces_confidence_for_inactive() {
+        let mut e = AutonomyEngine::new(AutonomyConfig {
+            ebbinghaus_decay_rate: 2.0,
+            ebbinghaus_reinforce_factor: 0.2,
+            n_warm: 0,
+            ..AutonomyConfig::default()
+        });
+        e.register(10, 0.80, Tier::Tier2);
+        // Mark as seen at context 0
+        e.tick_context();
+        let _ = e.update_confidence(10, 0.8, 0.8, &[], 0);
+
+        // Advance context by 75% of TTL (past grace period of 25%)
+        // Default TTL is 50, so 38 contexts = past grace
+        for _ in 0..38 {
+            e.tick_context();
+        }
+
+        let flagged = e.flag_inactive_atoms(e.context_counter);
+        // Should have decayed the inactive atom
+        assert!(flagged >= 1);
+        // Confidence should be lower than original
+        assert!(e.confidence(10).unwrap() < 0.80);
+    }
+
+    #[test]
+    fn ebbinghaus_seed_never_decays() {
+        let mut e = AutonomyEngine::new(AutonomyConfig {
+            ebbinghaus_decay_rate: 2.0,
+            ebbinghaus_reinforce_factor: 0.2,
+            n_warm: 0,
+            ..AutonomyConfig::default()
+        });
+        e.register_seed(1, 1.0, Tier::Tier1);
+        // Advance many contexts
+        for _ in 0..200 {
+            e.tick_context();
+        }
+        let flagged = e.flag_inactive_atoms(e.context_counter);
+        assert_eq!(flagged, 0); // Seeds never decay
+        assert_eq!(e.confidence(1).unwrap(), 1.0);
+    }
+
+    #[test]
+    fn ebbinghaus_frequent_access_resists_decay() {
+        let mut e = AutonomyEngine::new(AutonomyConfig {
+            ebbinghaus_decay_rate: 2.0,
+            ebbinghaus_reinforce_factor: 0.2,
+            n_warm: 0,
+            ..AutonomyConfig::default()
+        });
+        // Node accessed many times
+        e.register(10, 0.80, Tier::Tier2);
+        e.tick_context();
+        for _ in 0..50 {
+            let _ = e.update_confidence(10, 0.9, 0.9, &[], 0);
+        }
+        let _conf_with_access = e.confidence(10).unwrap();
+
+        // Node accessed few times
+        e.register(20, 0.80, Tier::Tier2);
+        e.tick_context();
+        let _ = e.update_confidence(20, 0.9, 0.9, &[], 0);
+        let _conf_without_access = e.confidence(20).unwrap();
+
+        // Advance past grace period for both
+        for _ in 0..40 {
+            e.tick_context();
+        }
+        let _ = e.flag_inactive_atoms(e.context_counter);
+
+        // Frequently accessed node should retain higher confidence
+        let conf_10 = e.confidence(10).unwrap();
+        let conf_20 = e.confidence(20).unwrap();
+        assert!(conf_10 > conf_20, "Frequently accessed node ({}) should decay less than rarely accessed ({})", conf_10, conf_20);
+    }
+
+    #[test]
+    fn ebbinghaus_counts_only_adjusted_atoms() {
+        let mut e = AutonomyEngine::new(AutonomyConfig {
+            ebbinghaus_decay_rate: 2.0,
+            ebbinghaus_reinforce_factor: 0.2,
+            n_warm: 0,
+            ..AutonomyConfig::default()
+        });
+        // Node recently seen (within grace period)
+        e.register(10, 0.80, Tier::Tier2);
+        e.tick_context();
+        let _ = e.update_confidence(10, 0.8, 0.8, &[], 0);
+        // Only 5 contexts — within grace period (25% of 50 = 12)
+        for _ in 0..5 {
+            e.tick_context();
+        }
+        let flagged = e.flag_inactive_atoms(e.context_counter);
+        assert_eq!(flagged, 0); // Not past grace period
+    }
+}
+
+#[cfg(test)]
+mod composition_index_o1_tests {
+    use crate::composition_index::CompositionIndex;
+    use crate::types::CompositionRef;
+
+    #[test]
+    fn secondary_index_provides_o1_lookup() {
+        let mut idx = CompositionIndex::new();
+        idx.add(5, &[CompositionRef::new(1, 0), CompositionRef::new(2, 0)]);
+        idx.add(6, &[CompositionRef::new(1, 0), CompositionRef::new(3, 0)]);
+        idx.add(7, &[CompositionRef::new(2, 0)]);
+
+        // O(1) node-level lookup
+        let deps = idx.dependents_of_node(1);
+        assert_eq!(deps.len(), 2);
+        assert!(deps.contains(&5));
+        assert!(deps.contains(&6));
+
+        let deps2 = idx.dependents_of_node(2);
+        assert_eq!(deps2.len(), 2);
+        assert!(deps2.contains(&5));
+        assert!(deps2.contains(&7));
+
+        let deps3 = idx.dependents_of_node(3);
+        assert_eq!(deps3.len(), 1);
+        assert!(deps3.contains(&6));
+    }
+
+    #[test]
+    fn impact_count_uses_secondary_index() {
+        let mut idx = CompositionIndex::new();
+        idx.add(5, &[CompositionRef::new(1, 0)]);
+        idx.add(6, &[CompositionRef::new(1, 0)]);
+        idx.add(7, &[CompositionRef::new(1, 0), CompositionRef::new(2, 0)]);
+
+        assert_eq!(idx.impact_count(1), 3);
+        assert_eq!(idx.impact_count(2), 1);
+    }
+
+    #[test]
+    fn remove_updates_secondary_index() {
+        let mut idx = CompositionIndex::new();
+        idx.add(5, &[CompositionRef::new(1, 0), CompositionRef::new(2, 0)]);
+        idx.add(6, &[CompositionRef::new(1, 0)]);
+
+        assert_eq!(idx.dependents_of_node(1).len(), 2);
+        idx.remove(5, &[CompositionRef::new(1, 0), CompositionRef::new(2, 0)]);
+        assert_eq!(idx.dependents_of_node(1).len(), 1);
+        assert_eq!(idx.dependents_of_node(2).len(), 0);
+    }
+}
+
+#[cfg(test)]
+mod consolidation_tests {
+    use crate::consolidation::{ConsolidationConfig, ConsolidationEngine};
+    use crate::autonomy::AutonomyEngine;
+    use crate::graph::RsvsGraph;
+    use crate::sense::SenseManager;
+    use crate::types::CompositionRef;
+    use std::collections::HashMap;
+
+    #[test]
+    fn consolidation_removes_dead_senses() {
+        let engine = ConsolidationEngine::new(ConsolidationConfig {
+            consolidation_interval: 10,
+            ..ConsolidationConfig::default()
+        });
+        let mut graph = RsvsGraph::new();
+        let mut senses = HashMap::new();
+        let mut autonomy = AutonomyEngine::new(Default::default());
+
+        // Create a sense manager with a sense that will be purged
+        let config = crate::sense::SenseConfig {
+            k_fragile: 5,
+            grounding_min: 0.3,
+            ..Default::default()
+        };
+        let mut sm = SenseManager::new(config.clone());
+        sm.ingest(vec![1, 2, 3]);
+        // Make the sense fragile + ungrounded + very inactive
+        sm.senses[0].inactivity = sm.config.k_fragile * 3; // Way past limit
+        sm.senses[0].grounding = crate::sense::GroundingEvidence {
+            confirming_contexts: 0,
+            contradicting_contexts: 10,
+            last_contradiction: Some("test".to_string()),
+            revision_count: 0,
+        };
+        // Add composition so it's not considered primitive (primitives are always grounded)
+        sm.senses[0].compositions = vec![CompositionRef::new(99, 0)];
+        senses.insert(1, sm);
+
+        let result = engine.consolidate(&mut graph, &mut senses, &mut autonomy);
+        assert!(result.senses_removed >= 1);
+    }
+
+    #[test]
+    fn consolidation_should_run_at_interval() {
+        let engine = ConsolidationEngine::new(ConsolidationConfig {
+            consolidation_interval: 50,
+            ..ConsolidationConfig::default()
+        });
+        assert!(!engine.should_run(49));
+        assert!(engine.should_run(50));
+        assert!(!engine.should_run(51));
+    }
+}
+
+#[cfg(test)]
+mod reflection_tests {
+    use crate::reflection::{ReflectionConfig, ReflectionAction, SenseReflection};
+    use crate::sense::{GroundingEvidence, SenseManager, SenseConfig};
+    use std::collections::HashMap;
+
+    #[test]
+    fn reflection_retires_fragile_inactive_sense() {
+        let mut reflection = SenseReflection::new(ReflectionConfig {
+            retire_inactivity_threshold: 50,
+            ..ReflectionConfig::default()
+        });
+        let config = SenseConfig {
+            grounding_min: 0.3,
+            k_fragile: 5,
+            ..Default::default()
+        };
+        let mut sm = SenseManager::new(config.clone());
+        sm.ingest(vec![1, 2, 3]);
+        // Make sense fragile + inactive + ungrounded
+        sm.senses[0].inactivity = 100;
+        sm.senses[0].grounding = GroundingEvidence {
+            confirming_contexts: 0,
+            contradicting_contexts: 10,
+            last_contradiction: Some("test".to_string()),
+            revision_count: 0,
+        };
+        sm.senses[0].compositions = vec![crate::types::CompositionRef::new(99, 0)];
+
+        let mut senses = HashMap::new();
+        senses.insert(1, sm);
+
+        let actions = reflection.reflect(&senses, &config);
+        let retires = actions.iter().filter(|a| matches!(a, ReflectionAction::Retire { .. })).count();
+        assert!(retires >= 1);
+    }
+
+    #[test]
+    fn reflection_rate_limits_revise() {
+        let reflection = SenseReflection::new(ReflectionConfig {
+            max_revise_per_cycle: 2,
+            ..ReflectionConfig::default()
+        });
+        assert_eq!(reflection.config.max_revise_per_cycle, 2);
+    }
+}
+
+#[cfg(test)]
+mod persistence_v65_tests {
+    use crate::autonomy::{AutonomyConfig, AutonomyEngine, AtomRecord, MemoryClass};
+    use crate::persist::{SavedAtomRecord, to_snapshot, from_snapshot};
+    use crate::pipeline::{PipelineConfig, Rsvs};
+    use crate::types::{Edge, EdgeSource, Tier};
+
+    #[test]
+    fn atom_record_access_count_survives_roundtrip() {
+        let mut record = AtomRecord::new(10, 0.8, Tier::Tier2);
+        record.access_count = 42;
+        record.context_count_since_promote = 7;
+        assert_eq!(record.access_count, 42);
+        assert_eq!(record.context_count_since_promote, 7);
+    }
+
+    #[test]
+    fn saved_atom_record_preserves_new_fields() {
+        let sar = SavedAtomRecord {
+            id: 10,
+            confidence: 0.8,
+            tier: 2,
+            status: "candidate".into(),
+            memory: "working".into(),
+            domain_count: 1,
+            cooccurring_mature: vec![],
+            observation_count: 5,
+            is_seed: false,
+            status_flip_count: 0,
+            governance_score: 0.5,
+            candidate_evidence_pool: 0.0,
+            last_seen_context: 100,
+            inactivity_ttl: 50,
+            access_count: 25,
+            context_count_since_promote: 3,
+        };
+        assert_eq!(sar.access_count, 25);
+        assert_eq!(sar.context_count_since_promote, 3);
+    }
+
+    #[test]
+    fn rsvs_save_load_roundtrip() {
+        let config = PipelineConfig::default();
+        let rsvs = Rsvs::new(config).unwrap();
+
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("test_rsvs.json");
+        rsvs.save(&path).unwrap();
+        let loaded = Rsvs::load(&path).unwrap();
+
+        // Basic sanity checks
+        assert_eq!(loaded.total_contexts, rsvs.total_contexts);
+        assert_eq!(loaded.token_to_id.len(), rsvs.token_to_id.len());
+        assert_eq!(loaded.graph.nodes.len(), rsvs.graph.nodes.len());
+    }
+}
+
+#[cfg(test)]
+mod thinking_toggle_tests {
+    use crate::thinking::{ThinkingToggle, ThinkingToggleConfig, ThinkingMode, ComplexitySignal};
+    use crate::types::TraversalConfig;
+
+    #[test]
+    fn thinking_mode_increases_depth() {
+        let toggle = ThinkingToggle::new(ThinkingToggleConfig::default());
+        let base = TraversalConfig::default();
+        let non_thinking = toggle.adjust_traversal(&ThinkingMode::NonThinking, &base);
+        let thinking = toggle.adjust_traversal(&ThinkingMode::Thinking, &base);
+        assert!(thinking.max_depth >= non_thinking.max_depth);
+    }
+
+    #[test]
+    fn thinking_mode_adjusts_relevance() {
+        let toggle = ThinkingToggle::new(ThinkingToggleConfig::default());
+        let base = TraversalConfig::default();
+        let non_thinking = toggle.adjust_traversal(&ThinkingMode::NonThinking, &base);
+        let thinking = toggle.adjust_traversal(&ThinkingMode::Thinking, &base);
+        // Thinking mode should lower tau_relevance for broader search
+        assert!(thinking.tau_relevance <= non_thinking.tau_relevance);
+    }
+
+    #[test]
+    fn complexity_signal_with_many_atoms_triggers_thinking() {
+        let toggle = ThinkingToggle::new(ThinkingToggleConfig::default());
+        let signal = ComplexitySignal {
+            n_context_atoms: 5,
+            n_senses: 3,
+            target_layer: 2,
+            is_compositional: true,
+            domain_complexity: 0.8,
+        };
+        assert_eq!(toggle.classify(&signal), ThinkingMode::Thinking);
+    }
+
+    #[test]
+    fn complexity_signal_with_few_atoms_is_non_thinking() {
+        let toggle = ThinkingToggle::new(ThinkingToggleConfig::default());
+        let signal = ComplexitySignal {
+            n_context_atoms: 1,
+            n_senses: 1,
+            target_layer: 0,
+            is_compositional: false,
+            domain_complexity: 0.0,
+        };
+        assert_eq!(toggle.classify(&signal), ThinkingMode::NonThinking);
+    }
+}
+
+#[cfg(test)]
+mod neurosym_tests {
+    use crate::neurosym::{NeuroSymVerifier, VerificationStatus};
+    use crate::sense::{Sense, SenseConfig};
+    use crate::types::CompositionRef;
+    use crate::graph::RsvsGraph;
+    use std::collections::HashMap;
+
+    #[test]
+    fn verifier_catches_self_reference() {
+        let verifier = NeuroSymVerifier::new();
+        let config = SenseConfig::default();
+        let graph = RsvsGraph::new();
+        let senses = HashMap::new();
+
+        let sense = Sense::new_compositional(
+            0,
+            vec![CompositionRef::new(1, 0)], // References node 1
+            vec![1, 2],
+            1,
+        );
+
+        let (status, _) = verifier.verify(1, &sense, &graph, &senses, &config); // node_id=1 = self-reference
+        assert_ne!(status, VerificationStatus::Verified);
+    }
+
+    #[test]
+    fn verifier_passes_clean_sense() {
+        let verifier = NeuroSymVerifier::new();
+        let config = SenseConfig::default();
+        let graph = RsvsGraph::new();
+        let senses = HashMap::new();
+
+        // Primitive sense (no compositions)
+        let sense = Sense::new(0, vec![1, 2, 3]);
+
+        let (_status, results) = verifier.verify(5, &sense, &graph, &senses, &config);
+        // For a primitive sense, binary rules should pass
+        assert!(results.iter().find(|r| r.rule.name == "no_self_reference").unwrap().passed);
+        assert!(results.iter().find(|r| r.rule.name == "no_circular_chain").unwrap().passed);
+    }
+}

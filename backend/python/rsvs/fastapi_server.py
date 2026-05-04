@@ -63,8 +63,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="RSVS — Relational Symbolic Vocabulary System",
-    version="6.3.1",
-    description="Hard-attention symbolic knowledge engine with Rust core (v6.3.1 — hardened P0-P3: condition label fix, tau constraints, edge reinforcement + decay, adaptive domain attention)",
+    version="6.5.0",
+    description="Hard-attention symbolic knowledge engine with Rust core (v6.5 — Losion Cross-Pollination: Ebbinghaus forgetting, MCTS traversal, ThinkingToggle, CompositionIndex, SenseReflection, Consolidation, NeuroSym verification, Matryoshka traversal)",
     lifespan=lifespan,
 )
 
@@ -662,13 +662,13 @@ async def events_endpoint(request: Request, _auth: None = Depends(_verify_api_ke
 @app.get("/health")
 @limiter.limit("60/minute")
 async def health(request: Request) -> dict[str, str]:
-    return {"status": "ok", "version": "6.3.1"}
+    return {"status": "ok", "version": "6.5.0"}
 
 
 @app.get("/")
 @limiter.limit("60/minute")
 async def root(request: Request) -> dict[str, str]:
-    return {"name": "RSVS", "version": "6.3.1", "docs": "/docs"}
+    return {"name": "RSVS", "version": "6.5.0", "docs": "/docs"}
 
 
 @app.get("/autonomy/pending-removals", tags=["autonomy"])
@@ -751,6 +751,229 @@ async def set_domain_attention_endpoint(
             "beta": req.beta,
             "gamma": req.gamma,
             "message": "Domain attention weights set (auto-normalized). Takes effect after 5 observations.",
+        }
+    except RsvsError:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ---------------------------------------------------------------------------
+# v6.5: New endpoints for Losion Cross-Pollination features
+# ---------------------------------------------------------------------------
+
+class ThinkingModeRequest(BaseModel):
+    """v6.5: Set or query the ThinkingToggle mode."""
+    mode: str = Field("auto", description="Mode: 'auto', 'thinking', or 'non_thinking'")
+
+
+class MCTSQueryRequest(BaseModel):
+    """v6.5: MCTS-style traversal query."""
+    concept: str = Field(..., min_length=1, max_length=500, description="Concept label to query")
+    context_atoms: List[str] = Field(default_factory=list, description="Context atom labels")
+    max_simulations: int = Field(10, ge=1, le=100, description="Number of MCTS simulations")
+    max_depth: int = Field(4, ge=1, le=10, description="Max depth per simulation")
+
+
+class ConsolidateRequest(BaseModel):
+    """v6.5: Trigger manual consolidation."""
+    force: bool = Field(False, description="Force consolidation regardless of interval")
+
+
+class VerifyRequest(BaseModel):
+    """v6.5: Neuro-symbolic verification of a node's compositions."""
+    label: str = Field(..., min_length=1, max_length=500, description="Node label to verify")
+    max_iterations: int = Field(3, ge=1, le=10, description="Max verification-revision iterations")
+
+
+@app.post("/thinking-mode", tags=["thinking"])
+@limiter.limit("30/minute")
+async def thinking_mode_endpoint(
+    request: Request,
+    req: ThinkingModeRequest,
+    _auth: None = Depends(_verify_api_key),
+) -> dict[str, Any]:
+    """v6.5: Set or query the ThinkingToggle mode.
+
+    Controls whether queries use shallow (NON_THINKING) or deep (THINKING)
+    traversal. In 'auto' mode, the system classifies each query's complexity
+    and selects the appropriate mode automatically.
+    """
+    try:
+        rsvs: RsvsCoreProtocol = get_rsvs_instance()
+        force_mode = {"auto": -1, "non_thinking": 0, "thinking": 1}.get(req.mode, -1)
+        rsvs.set_thinking_mode(force_mode)
+        return {
+            "ok": True,
+            "mode": req.mode,
+            "force_mode_code": force_mode,
+        }
+    except RsvsError:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/mcts-query", tags=["query"])
+@limiter.limit("10/minute")
+async def mcts_query_endpoint(
+    request: Request,
+    req: MCTSQueryRequest,
+    _auth: None = Depends(_verify_api_key),
+) -> dict[str, Any]:
+    """v6.5: MCTS-style traversal query for complex disambiguation.
+
+    Uses Monte Carlo Tree Search with UCB1 selection and structural
+    value evaluation (grounding × coherence) for deeper exploration
+    of compositional structures. Best for multi-sense, high-layer queries.
+    """
+    try:
+        rsvs: RsvsCoreProtocol = get_rsvs_instance()
+        result = rsvs.mcts_query(
+            req.concept,
+            req.context_atoms,
+            req.max_simulations,
+            req.max_depth,
+        )
+        if result is None:
+            return {"ok": True, "result": None}
+        return {
+            "ok": True,
+            "concept": req.concept,
+            "result": {
+                "active_sense_idx": getattr(result, "active_sense_idx", None),
+                "total_senses": getattr(result, "total_senses", 0),
+                "scored_atoms": list(getattr(result, "scored_atoms", [])),
+                "depth_reached": getattr(result, "depth_reached", 0),
+                "halt_reason": getattr(result, "halt_reason", "unknown"),
+                "simulations_run": getattr(result, "simulations_run", 0),
+                "best_path": list(getattr(result, "best_path", [])),
+            },
+        }
+    except RsvsError:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/consolidate", tags=["maintenance"])
+@limiter.limit("5/minute")
+async def consolidate_endpoint(
+    request: Request,
+    req: ConsolidateRequest,
+    _auth: None = Depends(_verify_api_key),
+) -> dict[str, Any]:
+    """v6.5: Trigger manual consolidation of the knowledge graph.
+
+    Consolidation performs thorough cleanup:
+    - Remove dead senses (fragile + ungrounded + very inactive)
+    - Merge similar senses across nodes (Jaccard ≥ 0.8)
+    - Prune weak edges (weight below threshold after decay)
+    - Compact atom records (remove nodes below tau_remove)
+
+    Normally runs automatically at intervals, but this endpoint
+    allows manual triggering for maintenance.
+    """
+    try:
+        rsvs: RsvsCoreProtocol = get_rsvs_instance()
+        result = rsvs.consolidate(req.force)
+        return {
+            "ok": True,
+            "senses_merged": getattr(result, "senses_merged", 0),
+            "senses_removed": getattr(result, "senses_removed", 0),
+            "edges_pruned": getattr(result, "edges_pruned", 0),
+            "atoms_compacted": getattr(result, "atoms_compacted", 0),
+        }
+    except RsvsError:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/verify", tags=["verification"])
+@limiter.limit("10/minute")
+async def verify_endpoint(
+    request: Request,
+    req: VerifyRequest,
+    _auth: None = Depends(_verify_api_key),
+) -> dict[str, Any]:
+    """v6.5: Neuro-symbolic verification of a node's compositions.
+
+    Verifies that a node's compositional senses satisfy structural invariants:
+    - No self-reference
+    - Layer consistency (compositions reference lower layers)
+    - Grounding threshold (targets are grounded)
+    - Frequency threshold (targets have sufficient freq)
+    - No circular chains
+
+    Returns verification status and per-rule results.
+    """
+    try:
+        rsvs: RsvsCoreProtocol = get_rsvs_instance()
+        result = rsvs.verify(req.label, req.max_iterations)
+        return {
+            "ok": True,
+            "label": req.label,
+            "status": getattr(result, "status", "unknown"),
+            "rules_checked": getattr(result, "rules_checked", 0),
+            "rules_passed": getattr(result, "rules_passed", 0),
+            "rules_failed": getattr(result, "rules_failed", 0),
+            "iterations": getattr(result, "iterations", 0),
+        }
+    except RsvsError:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/composition-index/stats", tags=["index"])
+@limiter.limit("30/minute")
+async def composition_index_stats_endpoint(
+    request: Request,
+    _auth: None = Depends(_verify_api_key),
+) -> dict[str, Any]:
+    """v6.5: Get statistics about the composition reverse index.
+
+    Returns counts of indexed composition references, which is useful
+    for monitoring the O(1) reverse lookup system's size.
+    """
+    try:
+        rsvs: RsvsCoreProtocol = get_rsvs_instance()
+        stats = rsvs.composition_index_stats()
+        return {
+            "ok": True,
+            "total_entries": getattr(stats, "total_entries", 0),
+            "total_dependencies": getattr(stats, "total_dependencies", 0),
+        }
+    except RsvsError:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/reflection", tags=["maintenance"])
+@limiter.limit("5/minute")
+async def reflection_endpoint(
+    request: Request,
+    _auth: None = Depends(_verify_api_key),
+) -> dict[str, Any]:
+    """v6.5: Trigger a sense reflection cycle.
+
+    Reflection evaluates each sense and produces actions:
+    - CONFIRM: sense is well-grounded
+    - REVIEW: sense has some contradictions (monitor)
+    - REVISE: sense needs composition pruning
+    - RETIRE: sense is fragile + ungrounded + inactive
+
+    Returns the number of actions produced and applied.
+    """
+    try:
+        rsvs: RsvsCoreProtocol = get_rsvs_instance()
+        result = rsvs.run_reflection()
+        return {
+            "ok": True,
+            "actions_total": getattr(result, "actions_total", 0),
+            "actions_applied": getattr(result, "actions_applied", 0),
         }
     except RsvsError:
         raise

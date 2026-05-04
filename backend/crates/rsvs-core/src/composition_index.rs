@@ -45,6 +45,11 @@ pub struct CompositionIndex {
     /// Maps NodeId → set of NodeIds it depends on (forward index).
     /// Used for cascade detection: if I remove node X, what forward edges break?
     node_to_dependencies: HashMap<NodeId, HashSet<NodeId>>,
+
+    /// v6.5: Secondary index for O(1) node-level lookup.
+    /// Maps NodeId → set of NodeIds whose senses reference ANY sense of this node.
+    /// Fixes the O(K) scan in dependents_of_node() — now true O(1).
+    node_to_dependents: HashMap<NodeId, HashSet<NodeId>>,
 }
 
 impl CompositionIndex {
@@ -69,6 +74,11 @@ impl CompositionIndex {
                 .entry(node_id)
                 .or_default()
                 .insert(comp.node_id);
+            // v6.5: Maintain secondary node-level index
+            self.node_to_dependents
+                .entry(comp.node_id)
+                .or_default()
+                .insert(node_id);
         }
     }
 
@@ -82,8 +92,16 @@ impl CompositionIndex {
                     self.ref_to_dependents.remove(comp);
                 }
             }
+            // v6.5: Update secondary node-level index
+            if let Some(node_deps) = self.node_to_dependents.get_mut(&comp.node_id) {
+                node_deps.remove(&node_id);
+                if node_deps.is_empty() {
+                    self.node_to_dependents.remove(&comp.node_id);
+                }
+            }
         }
         self.node_to_dependencies.remove(&node_id);
+        self.node_to_dependents.remove(&node_id);
     }
 
     /// O(1) lookup: which nodes have senses that reference a specific (node_id, sense_id)?
@@ -97,14 +115,12 @@ impl CompositionIndex {
 
     /// O(1) lookup: which nodes have senses that reference ANY sense of node_id?
     /// Returns the union of all dependents across all senses of the given node.
+    /// v6.5: Now uses secondary index for true O(1) lookup instead of O(K) scan.
     pub fn dependents_of_node(&self, node_id: NodeId) -> HashSet<NodeId> {
-        let mut result = HashSet::new();
-        for (comp, dependents) in &self.ref_to_dependents {
-            if comp.node_id == node_id {
-                result.extend(dependents);
-            }
-        }
-        result
+        self.node_to_dependents
+            .get(&node_id)
+            .cloned()
+            .unwrap_or_default()
     }
 
     /// O(1) impact count: how many sense compositions reference this node?
@@ -126,6 +142,7 @@ impl CompositionIndex {
     pub fn rebuild(&mut self, all_senses: &HashMap<NodeId, crate::sense::SenseManager>) {
         self.ref_to_dependents.clear();
         self.node_to_dependencies.clear();
+        self.node_to_dependents.clear();
         for (&node_id, sm) in all_senses {
             for sense in &sm.senses {
                 self.add(node_id, &sense.compositions);

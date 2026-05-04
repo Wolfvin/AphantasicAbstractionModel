@@ -271,12 +271,16 @@ impl MCTSTraversal {
 
     /// Run a single simulation from the given node.
     /// Returns (value, path) where value is the quality of the simulation.
+    ///
+    /// v6.5: Fixed — now actually uses the graph and context for simulation
+    /// instead of ignoring them. The simulation expands unexplored children
+    /// from the graph and evaluates them using grounding × coherence.
     fn simulate(
         &self,
         root: &MCTSNode,
-        _graph: &RsvsGraph,
+        graph: &RsvsGraph,
         senses: &HashMap<NodeId, SenseManager>,
-        _context: &AtomSet,
+        context: &AtomSet,
         _config: &TraversalConfig,
         _depth: usize,
     ) -> (f32, Vec<usize>) {
@@ -287,11 +291,87 @@ impl MCTSTraversal {
         visited.insert(current_node.node_id);
 
         for _ in 0..self.config.max_depth {
+            // If no pre-expanded children, simulate via graph expansion
             if current_node.children.is_empty() {
-                break; // Leaf reached
+                // v6.5: Expand from graph — use edges as expansion candidates
+                let edge_targets: Vec<NodeId> = graph
+                    .edges_from(current_node.node_id)
+                    .iter()
+                    .filter(|e| !visited.contains(&e.to))
+                    .map(|e| e.to)
+                    .collect();
+
+                // Also check context atoms as expansion candidates
+                let context_candidates: Vec<NodeId> = context
+                    .iter()
+                    .filter(|&&id| id != current_node.node_id && !visited.contains(&id))
+                    .cloned()
+                    .collect();
+
+                // Combine: prefer context matches, then edges
+                let mut all_candidates = context_candidates;
+                for id in edge_targets {
+                    if !all_candidates.contains(&id) {
+                        all_candidates.push(id);
+                    }
+                }
+
+                if all_candidates.is_empty() {
+                    break; // Leaf reached
+                }
+
+                // Select the best candidate by value
+                let best = all_candidates
+                    .iter()
+                    .filter_map(|&target_id| {
+                        let sense_idx = senses
+                            .get(&target_id)
+                            .and_then(|sm| sm.lazy_lookup(context))
+                            .unwrap_or(0);
+                        let val = self.evaluate_node(target_id, sense_idx, senses);
+                        Some((target_id, sense_idx, val))
+                    })
+                    .max_by(|a, b| a.2.partial_cmp(&b.2).unwrap_or(std::cmp::Ordering::Equal))
+                    .unwrap_or((all_candidates[0], 0, 0.0));
+
+                let child_value = best.2;
+                value = value.max(child_value);
+
+                // Backtracking check
+                if child_value < self.config.min_value {
+                    value *= self.config.backtrack_threshold;
+                    break;
+                }
+
+                // Cycle detection
+                if visited.contains(&best.0) {
+                    break;
+                }
+                visited.insert(best.0);
+
+                // v6.5: Try to continue simulation through pre-expanded children
+                // of the best candidate. If the candidate has children in the
+                // MCTS tree, we can continue; otherwise we stop here but the
+                // value has been captured.
+                let found_child = current_node.children.iter().find(|c| c.comp.node_id == best.0);
+                if let Some(child) = found_child {
+                    if let Some(ref child_node) = child.node {
+                        // We can continue the simulation through this expanded child
+                        let idx = current_node.children.iter().position(|c| c.comp.node_id == best.0).unwrap_or(0);
+                        path.push(idx);
+                        current_node = child_node;
+                    } else {
+                        // Child exists but not expanded — value captured, stop
+                        break;
+                    }
+                } else {
+                    // No pre-expanded child for this candidate — value captured, stop
+                    break;
+                }
+                continue;
             }
 
-            // Select child using UCB1
+            // Select child using UCB1 (for pre-expanded children)
             let best_idx = self.select_child(&current_node);
             path.push(best_idx);
 
@@ -306,11 +386,11 @@ impl MCTSTraversal {
 
             // Compute value: grounding × coherence
             let child_value = self.evaluate_node(target_id, child.comp.sense_id as usize, senses);
-            value = value.max(child_value); // Take the max value found
+            value = value.max(child_value);
 
             // Backtracking: if value drops too much, abandon this path
             if child_value < self.config.min_value {
-                value *= self.config.backtrack_threshold; // Penalize
+                value *= self.config.backtrack_threshold;
                 break;
             }
 

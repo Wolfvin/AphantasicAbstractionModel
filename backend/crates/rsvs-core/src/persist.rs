@@ -67,6 +67,9 @@ pub struct SavedEdge {
     pub to: u32,
     pub weight: f32,
     pub source: String,
+    /// v6.5: Batch number when this edge was last reinforced.
+    #[serde(default)]
+    pub last_reinforced_batch: usize,
 }
 
 /// Serializable mirror of a `CompositionRef` for JSON persistence.
@@ -192,6 +195,14 @@ pub struct SavedAtomRecord {
     /// Missing in v6.0 snapshots — defaults to 50.
     #[serde(default = "default_inactivity_ttl")]
     pub inactivity_ttl: usize,
+    /// v6.5: Number of times this atom has been accessed/reinforced.
+    /// Missing in earlier snapshots — defaults to 0.
+    #[serde(default)]
+    pub access_count: usize,
+    /// v6.5: Counter of contexts since last promotion.
+    /// Missing in earlier snapshots — defaults to 0.
+    #[serde(default)]
+    pub context_count_since_promote: usize,
 }
 
 /// Serializable mirror of `CoocStats` for JSON persistence.
@@ -417,6 +428,7 @@ pub fn to_snapshot(rsvs: &Rsvs) -> RsvsSnapshot {
                 to: e.to,
                 weight: e.weight,
                 source: format!("{:?}", e.source).to_lowercase(),
+                last_reinforced_batch: e.last_reinforced_batch,
             });
         }
     }
@@ -489,6 +501,8 @@ pub fn to_snapshot(rsvs: &Rsvs) -> RsvsSnapshot {
             candidate_evidence_pool: r.candidate_evidence_pool,
             last_seen_context: r.last_seen_context,
             inactivity_ttl: r.inactivity_ttl,
+            access_count: r.access_count,
+            context_count_since_promote: r.context_count_since_promote,
         })
         .collect();
 
@@ -512,7 +526,7 @@ pub fn to_snapshot(rsvs: &Rsvs) -> RsvsSnapshot {
     };
 
     RsvsSnapshot {
-        version: "6.1".to_string(),
+        version: "6.5".to_string(),
         total_contexts: rsvs.total_contexts,
         token_to_id: rsvs.token_to_id.clone(),
         next_node_id: rsvs.graph.next_id,
@@ -616,7 +630,7 @@ pub fn from_snapshot(snap: RsvsSnapshot) -> Rsvs {
             to: se.to,
             weight: se.weight,
             source,
-            last_reinforced_batch: 0, // Loaded edges are treated as never reinforced
+            last_reinforced_batch: se.last_reinforced_batch, // v6.5: Preserve reinforcement info
         });
     }
 
@@ -695,6 +709,8 @@ pub fn from_snapshot(snap: RsvsSnapshot) -> Rsvs {
         record.candidate_evidence_pool = sar.candidate_evidence_pool;
         record.last_seen_context = sar.last_seen_context;
         record.inactivity_ttl = sar.inactivity_ttl;
+        record.access_count = sar.access_count;
+        record.context_count_since_promote = sar.context_count_since_promote;
         autonomy.records.insert(sar.id, record);
     }
 
