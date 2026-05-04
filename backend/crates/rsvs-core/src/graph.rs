@@ -509,11 +509,16 @@ impl RsvsGraph {
 }
 
 /// Jaccard similarity between two atom sets.
+///
+/// v7.0: Optimized from O(n×m) to O(n+m) using HashSet for the second set.
+/// Previously used `b.contains(x)` which is O(m) per call on a Vec,
+/// making the total O(n×m). Now converts `b` to a HashSet once for O(1) lookups.
 pub fn jaccard_sets(a: &[NodeId], b: &[NodeId]) -> f32 {
     if a.is_empty() && b.is_empty() {
         return 0.0;
     }
-    let intersection = a.iter().filter(|x| b.contains(x)).count();
+    let set_b: HashSet<NodeId> = b.iter().copied().collect();
+    let intersection = a.iter().filter(|x| set_b.contains(x)).count();
     let union = a.len() + b.len() - intersection;
     if union == 0 {
         0.0

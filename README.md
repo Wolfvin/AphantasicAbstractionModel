@@ -10,7 +10,7 @@
 [![Python](https://img.shields.io/badge/Python-3.12+-blue?style=flat-square&logo=python)](https://python.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-3178C6?style=flat-square&logo=typescript)](https://www.typescriptlang.org/)
 [![License](https://img.shields.io/badge/License-MIT%2FApache--2.0-green?style=flat-square)](LICENSE)
-[![Schema](https://img.shields.io/badge/Schema-v5.0-purple?style=flat-square)]()
+[![Schema](https://img.shields.io/badge/Schema-v7.0-purple?style=flat-square)]()
 
 [Quick Start](#-quick-start) · [Key Insight](#-the-key-insight) · [Architecture](#-architecture-at-a-glance) · [Features](#-core-features) · [API](#-api-reference) · [Contributing](CONTRIBUTING.md)
 

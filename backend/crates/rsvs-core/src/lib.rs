@@ -1,6 +1,6 @@
 #![warn(missing_docs)]
 
-//! RSVS Core — v6.5 Losion Cross-Pollination — Bug Fixes + Persistence + API Completeness
+//! RSVS Core — v7.0 Deep Losion Integration — Paradigm Router + Spreading Activation + DEPS Recovery
 //!
 //! v6.1 builds on v6.0 with:
 //! - `TraversalConfig`: Controls recursive composition expansion during queries
@@ -44,6 +44,9 @@ pub mod thinking;
 pub mod transformer_bridge;
 pub mod types;
 pub mod neurosym;
+pub mod paradigm;
+pub mod spreading;
+pub mod deps;
 
 pub use attention::{
     is_groundable_to_seeds, text_to_sentences, tokenize, AttentionComponent, AttentionConfig,
@@ -73,4 +76,7 @@ pub use sense::{
 };
 pub use thinking::{ThinkingMode, ThinkingToggle, ThinkingToggleConfig, ComplexitySignal};
 pub use transformer_bridge::{TransformerBridge, TransformerBridgeConfig};
+pub use paradigm::{ParadigmRouter, ParadigmRouterConfig, TraversalParadigm};
+pub use spreading::{SpreadingActivation, SpreadingActivationConfig, ActivationResult};
+pub use deps::{DEPSPlanner, DEPSResult, RecoveryPlan, RecoveryAction, FailureType};
 pub use types::*;

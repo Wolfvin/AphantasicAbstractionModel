@@ -526,7 +526,7 @@ pub fn to_snapshot(rsvs: &Rsvs) -> RsvsSnapshot {
     };
 
     RsvsSnapshot {
-        version: "6.5".to_string(),
+        version: "7.0".to_string(),
         total_contexts: rsvs.total_contexts,
         token_to_id: rsvs.token_to_id.clone(),
         next_node_id: rsvs.graph.next_id,
@@ -774,5 +774,12 @@ pub fn from_snapshot(snap: RsvsSnapshot) -> Rsvs {
         reflection: crate::reflection::SenseReflection::new(
             crate::reflection::ReflectionConfig::default(),
         ),
+        paradigm_router: crate::paradigm::ParadigmRouter::new(
+            crate::paradigm::ParadigmRouterConfig::default(),
+        ),
+        spreading_activation: crate::spreading::SpreadingActivation::new(
+            crate::spreading::SpreadingActivationConfig::default(),
+        ),
+        deps_planner: crate::deps::DEPSPlanner::new(),
     }
 }

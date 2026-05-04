@@ -5,6 +5,59 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [7.0.0] - 2026-05-04
+
+### Added
+
+- **ParadigmRouter** — Adaptive traversal paradigm selection (Direct → Shallow → Standard → Deep → MCTS)
+  - Routes queries to the lightest traversal strategy that will succeed
+  - Confidence-based baseline routing with structural complexity adjustment
+  - Per-domain calibration: learns which paradigms work for which domains
+  - Inspired by Losion's ParadigmRouter (DIRECT → CoT → ReAct → RAG → MCTS)
+
+- **SpreadingActivation** — Network activation through composition edges
+  - Activates related nodes through structural meaning connections
+  - Energy decays per hop (configurable decay factor, default 0.5)
+  - Additive accumulation: multiple paths reinforce activation
+  - Targeted spread with grounding-adjusted initial energy
+  - Inspired by Losion's EpisodicMemory spreading activation
+
+- **DEPSPlanner** — Structured failure recovery (Describe-Explain-Plan-Select)
+  - DESCRIBE: Classify failure type (SelfReference, CircularChain, TargetNotFound, etc.)
+  - EXPLAIN: Generate human-readable root cause analysis
+  - PLAN: Generate multiple recovery plans with estimated success rates
+  - SELECT: Choose best plan based on 60% success_rate + 40% simplicity
+  - Inspired by Losion's DEPS failure recovery system
+
+### Changed
+
+- **jaccard_sets()** optimized from O(n×m) to O(n+m) using HashSet for the second set
+  - Previously used `b.contains(x)` on Vec which is O(m) per call
+  - Now converts to HashSet once for O(1) lookups
+  - This is a hot path for attention scoring and sense assignment
+
+- Version bumped to v7.0.0 (major: new public modules with API surface)
+- Schema badge updated from v5.0 to v7.0 in README
+
+### Fixed
+
+- Schema version badge in README was showing v5.0 instead of current version
+
+## [6.5.0] - 2026-05-03
+
+### Added
+
+- Bug fixes, O(1) composition index, persistence improvements, API completeness, 20 new tests
+
+## [6.4.0] - 2026-05-02
+
+### Added
+
+- Losion Cross-Pollination P0-P3 full implementation
+- ThinkingToggle, CompositionIndex, ConsolidationEngine, SenseReflection
+- MCTS traversal, Matryoshka traversal, Neuro-symbolic verification
+- Ebbinghaus forgetting curve for sense lifecycle
+
 ## [4.2.0] - 2025-05-03
 
 ### Added

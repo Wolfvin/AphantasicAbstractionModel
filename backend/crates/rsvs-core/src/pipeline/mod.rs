@@ -113,11 +113,16 @@ impl Default for PipelineConfig {
 // Rsvs — the main system struct (v6.0)
 // -----------------------------------------------------------------------
 
-/// The main RSVS system struct (v6.4 — Losion Cross-Pollination).
+/// The main RSVS system struct (v7.0 — Deep Losion Integration).
 ///
 /// Holds the knowledge graph, sense managers (with compositions),
 /// autonomy engine, co-occurrence statistics, entity detector, and
 /// attention scorer.
+///
+/// v7.0 additions:
+/// - `paradigm_router`: Adaptive traversal paradigm selection
+/// - `spreading_activation`: Network activation through composition edges
+/// - `deps_planner`: Structured failure recovery (Describe-Explain-Plan-Select)
 ///
 /// v6.4 additions:
 /// - `composition_index`: O(1) reverse lookup for CompositionRef → dependents
@@ -168,6 +173,12 @@ pub struct Rsvs {
     pub consolidation: crate::consolidation::ConsolidationEngine,
     /// v6.4: Sense self-evaluation reflection engine.
     pub reflection: crate::reflection::SenseReflection,
+    /// v7.0: Paradigm router — adaptive traversal paradigm selection.
+    pub paradigm_router: crate::paradigm::ParadigmRouter,
+    /// v7.0: Spreading activation engine — network activation through compositions.
+    pub spreading_activation: crate::spreading::SpreadingActivation,
+    /// v7.0: DEPS planner — structured failure recovery.
+    pub deps_planner: crate::deps::DEPSPlanner,
 }
 
 impl Rsvs {
@@ -226,6 +237,13 @@ impl Rsvs {
             reflection: crate::reflection::SenseReflection::new(
                 crate::reflection::ReflectionConfig::default(),
             ),
+            paradigm_router: crate::paradigm::ParadigmRouter::new(
+                crate::paradigm::ParadigmRouterConfig::default(),
+            ),
+            spreading_activation: crate::spreading::SpreadingActivation::new(
+                crate::spreading::SpreadingActivationConfig::default(),
+            ),
+            deps_planner: crate::deps::DEPSPlanner::new(),
         })
     }
 
