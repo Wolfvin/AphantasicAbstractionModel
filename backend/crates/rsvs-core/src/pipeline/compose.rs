@@ -20,9 +20,12 @@ use crate::types::{
 };
 
 impl Rsvs {
-    /// Validate composition constraints from v1.0 (v6.3):
-    /// - tau_compress: all components must have freq >= threshold in their sense
-    /// - tau_overlap: component set must have enough overlap with known nodes
+    /// Validate composition constraints (v6.3 → v6.3.1 hardened):
+    /// - tau_compress: all components must have freq >= threshold in their sense.
+    ///   Seed nodes (layer 0, is_seed=true) and nodes with empty contexts are exempt —
+    ///   they have no meaningful freq_counts yet, so the check would always fail.
+    /// - tau_overlap: component set must have enough overlap with known nodes.
+    ///   At least 2 compositions required for overlap check.
     fn validate_composition_constraints(
         &self,
         compositions: &[CompositionRef],
@@ -30,15 +33,27 @@ impl Rsvs {
         let tau_compress = self.config.sense.induction.tau_compress;
         let tau_overlap = self.config.sense.induction.tau_overlap;
 
-        // Check tau_compress: freq of each comp.node_id in its own sense
+        // Check tau_compress: freq of each comp.node_id in its referenced sense
         for comp in compositions {
+            // Exempt seed nodes — they have no meaningful freq_counts
+            let is_seed = self.graph.get_node(comp.node_id)
+                .map(|n| n.is_seed)
+                .unwrap_or(false);
+            if is_seed {
+                continue;
+            }
+
             if let Some(sm) = self.senses.get(&comp.node_id) {
                 if let Some(sense) = sm.get_sense(comp.sense_id as usize) {
+                    // Exempt senses with no contexts — newly created or primitive
+                    if sense.context_count() == 0 {
+                        continue;
+                    }
                     let freq = sense.freq(comp.node_id);
                     if freq < tau_compress {
                         return Err(RsvsError::CompositionRejected {
                             reason: format!(
-                                "Component {} has freq {:.2} in sense {} < tau_compress {:.2}",
+                                "Component {} has freq {:.3} in sense {} < tau_compress {:.3}",
                                 comp.node_id, freq, comp.sense_id, tau_compress
                             ),
                         });
@@ -58,7 +73,7 @@ impl Rsvs {
             if overlap_ratio < tau_overlap {
                 return Err(RsvsError::CompositionRejected {
                     reason: format!(
-                        "Overlap ratio {:.2} < tau_overlap {:.2} — not enough components are known nodes",
+                        "Overlap ratio {:.3} < tau_overlap {:.3} — not enough components are known nodes",
                         overlap_ratio, tau_overlap
                     ),
                 });

@@ -63,8 +63,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="RSVS — Relational Symbolic Vocabulary System",
-    version="6.2.0",
-    description="Hard-attention symbolic knowledge engine with Rust core (v6.2 context-similarity + adaptive weights + impact counting + condition labels)",
+    version="6.3.1",
+    description="Hard-attention symbolic knowledge engine with Rust core (v6.3.1 — hardened P0-P3: condition label fix, tau constraints, edge reinforcement + decay, adaptive domain attention)",
     lifespan=lifespan,
 )
 
@@ -179,6 +179,14 @@ class ContextSimilarityRequest(BaseModel):
     concept_a: str = Field(..., min_length=1, max_length=200, description="First concept label (e.g. 'batu')")
     concept_b: str = Field(..., min_length=1, max_length=200, description="Second concept label (e.g. 'tulang')")
     context: list[str] = Field(default_factory=list, max_length=50, description="Context atom labels (e.g. ['kekerasan'])")
+
+
+class SetDomainAttentionRequest(BaseModel):
+    """v6.3.1: Set per-domain attention weights for adaptive α/β/γ."""
+    domain_id: int = Field(..., ge=0, description="Domain identifier")
+    alpha: float = Field(..., ge=0.0, le=1.0, description="Weight for NPMI term (will be normalized)")
+    beta: float = Field(..., ge=0.0, le=1.0, description="Weight for Jaccard term (will be normalized)")
+    gamma: float = Field(..., ge=0.0, le=1.0, description="Weight for co-occurrence term (will be normalized)")
 
 
 # --- Exception mapping ---
@@ -654,13 +662,13 @@ async def events_endpoint(request: Request, _auth: None = Depends(_verify_api_ke
 @app.get("/health")
 @limiter.limit("60/minute")
 async def health(request: Request) -> dict[str, str]:
-    return {"status": "ok", "version": "6.2.0"}
+    return {"status": "ok", "version": "6.3.1"}
 
 
 @app.get("/")
 @limiter.limit("60/minute")
 async def root(request: Request) -> dict[str, str]:
-    return {"name": "RSVS", "version": "6.2.0", "docs": "/docs"}
+    return {"name": "RSVS", "version": "6.3.1", "docs": "/docs"}
 
 
 @app.get("/autonomy/pending-removals", tags=["autonomy"])
@@ -703,6 +711,46 @@ async def entity_candidates_endpoint(
                 {"label": label, "entity_score": score}
                 for label, score in candidates
             ],
+        }
+    except RsvsError:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/set-domain-attention", tags=["domain"])
+@limiter.limit("10/minute")
+async def set_domain_attention_endpoint(
+    request: Request,
+    req: SetDomainAttentionRequest,
+    _auth: None = Depends(_verify_api_key),
+) -> dict[str, Any]:
+    """v6.3.1: Set per-domain attention weights (α, β, γ).
+
+    Creates or updates the attention weight configuration for a specific domain.
+    After at least 5 ingest observations, these domain-specific weights override
+    the global attention config when ingesting text tagged with that domain.
+
+    The weights are automatically normalized to sum to 1.0.
+
+    **When to use:**
+    - Domain A is mostly about spatial relationships → set β (Jaccard) higher
+    - Domain B is about co-occurrence patterns → set γ (Cooc) higher
+    - Domain C requires strong statistical significance → set α (NPMI) higher
+
+    **Adaptive nudging:** The system also auto-nudges domain weights during ingest
+    based on coherence improvements. This endpoint sets the initial/override values.
+    """
+    try:
+        rsvs: RsvsCoreProtocol = get_rsvs_instance()
+        rsvs.set_domain_attention(req.domain_id, req.alpha, req.beta, req.gamma)
+        return {
+            "ok": True,
+            "domain_id": req.domain_id,
+            "alpha": req.alpha,
+            "beta": req.beta,
+            "gamma": req.gamma,
+            "message": "Domain attention weights set (auto-normalized). Takes effect after 5 observations.",
         }
     except RsvsError:
         raise

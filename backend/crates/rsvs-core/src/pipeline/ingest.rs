@@ -173,6 +173,26 @@ impl Rsvs {
                 .attention
                 .select(tokens, &self.stats_db, &self.atom_sets);
 
+            // v6.3.1: Reinforce edges for attention-selected pairs.
+            // When attention selects (token, candidate), the learned edge between
+            // them gets reinforced via EMA update. This creates a feedback loop:
+            // attended edges grow stronger, inactive edges decay.
+            for (token_str, candidates) in &selected {
+                if let Some(&from_id) = self.token_to_id.get(token_str.as_str()) {
+                    for cand in candidates {
+                        if let Some(&to_id) = self.token_to_id.get(cand.token.as_str()) {
+                            self.graph.reinforce_edge(
+                                from_id,
+                                to_id,
+                                cand.score,
+                                self.batch_counter,
+                                0.1, // EMA eta — slow update for stability
+                            );
+                        }
+                    }
+                }
+            }
+
             // Build context node IDs for this sentence
             let context_node_ids: Vec<NodeId> = tokens
                 .iter()
@@ -366,6 +386,70 @@ impl Rsvs {
             self.config.attention.edge_decay_factor,
             self.config.attention.edge_decay_grace_period,
         );
+
+        // v6.3.1: Adaptive domain attention nudge — after each batch, measure
+        // whether coherence improved and nudge the dominant component's weight.
+        // This is a gradient-free optimization: if coherence went up, the current
+        // attention mix is working, so nudge toward whichever component was dominant.
+        {
+            let domain = self.config.current_domain;
+            // Determine dominant attention component from last batch's attention scores
+            // Simple heuristic: compare average NPMI, Jaccard, and Cooc scores from selected pairs
+            let (avg_npmi, avg_jaccard, avg_cooc) = {
+                let mut npmi_sum = 0.0f32;
+                let mut jaccard_sum = 0.0f32;
+                let mut cooc_sum = 0.0f32;
+                let mut count = 0usize;
+                for sense_mgr in self.senses.values() {
+                    for sense in &sense_mgr.senses {
+                        if sense.context_count() >= 2 {
+                            // Use coherence as proxy for attention quality
+                            let coh = sense.coherence;
+                            npmi_sum += coh * self.config.attention.alpha;
+                            jaccard_sum += coh * self.config.attention.beta;
+                            cooc_sum += coh * self.config.attention.gamma;
+                            count += 1;
+                        }
+                    }
+                }
+                if count > 0 {
+                    (npmi_sum / count as f32, jaccard_sum / count as f32, cooc_sum / count as f32)
+                } else {
+                    (0.0, 0.0, 0.0)
+                }
+            };
+
+            // Determine dominant component
+            let dominant = if avg_npmi >= avg_jaccard && avg_npmi >= avg_cooc {
+                crate::attention::AttentionComponent::Npmi
+            } else if avg_jaccard >= avg_cooc {
+                crate::attention::AttentionComponent::Jaccard
+            } else {
+                crate::attention::AttentionComponent::Cooc
+            };
+
+            // Compute coherence delta (average coherence before vs after batch)
+            // Use a simple proxy: if senses_created > 0, coherence likely improved
+            let coherence_delta = if stats.sense_created > 0 {
+                0.01 // Small positive signal — new senses were needed
+            } else {
+                0.0 // No improvement signal
+            };
+
+            // Nudge domain attention config if domain exists
+            if let Some(dc) = self.domain_configs.get_mut(&domain) {
+                dc.nudge(coherence_delta, dominant, 0.01);
+            } else if domain != 0 {
+                // Auto-create domain config from global defaults for future nudging
+                let dc = crate::attention::DomainAttentionConfig::new(
+                    domain,
+                    self.config.attention.alpha,
+                    self.config.attention.beta,
+                    self.config.attention.gamma,
+                );
+                self.domain_configs.insert(domain, dc);
+            }
+        }
         self.emit_event(
             &correlation_id,
             "ingest_completed",

@@ -591,7 +591,7 @@ impl PyRsvs {
         max_depth: Option<usize>,
         gamma: Option<f32>,
         halt_confidence: Option<f32>,
-        tau_relevance: Option<usize>,
+        tau_relevance: Option<f32>,
     ) -> Option<PyContextQueryResult> {
         let default_config = &self.inner.config.traversal;
         let config = crate::types::TraversalConfig {
@@ -599,7 +599,8 @@ impl PyRsvs {
             gamma: gamma.unwrap_or(default_config.gamma),
             halt_epsilon: default_config.halt_epsilon,
             halt_confidence: halt_confidence.unwrap_or(default_config.halt_confidence),
-            tau_relevance: tau_relevance.unwrap_or(default_config.tau_relevance) as f32,
+            tau_relevance: tau_relevance.unwrap_or(default_config.tau_relevance),
+            epsilon_ig: default_config.epsilon_ig,
         };
 
         let context_refs: Vec<&str> = context_atoms.iter().map(|s| s.as_str()).collect();
@@ -729,6 +730,35 @@ impl PyRsvs {
     /// Set the current domain tag.
     fn set_domain(&mut self, domain_id: usize) {
         self.inner.config.current_domain = domain_id;
+    }
+
+    /// v6.3.1: Set per-domain attention weights (alpha, beta, gamma).
+    ///
+    /// Creates or updates a DomainAttentionConfig for the given domain_id.
+    /// The weights are automatically normalized to sum to 1.0.
+    /// After at least 5 observations, these weights override the global
+    /// attention config for that domain.
+    ///
+    /// # Arguments
+    /// * `domain_id` - The domain identifier
+    /// * `alpha` - Weight for NPMI term (will be normalized)
+    /// * `beta` - Weight for Jaccard term (will be normalized)
+    /// * `gamma` - Weight for co-occurrence term (will be normalized)
+    fn set_domain_attention(
+        &mut self,
+        domain_id: usize,
+        alpha: f32,
+        beta: f32,
+        gamma: f32,
+    ) {
+        let dc = crate::attention::DomainAttentionConfig::new(domain_id, alpha, beta, gamma);
+        // Preserve existing observation count if domain already tracked
+        let obs = self.inner.domain_configs.get(&domain_id)
+            .map(|c| c.observation_count)
+            .unwrap_or(0);
+        let mut dc = dc;
+        dc.observation_count = obs;
+        self.inner.domain_configs.insert(domain_id, dc);
     }
 
     /// Stable runtime snapshot for UI/subscribers.
