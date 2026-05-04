@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [7.0.1] - 2026-05-05
+
+### Fixed
+
+- **CRITICAL**: Added missing PyO3 bindings for `mcts_query`, `run_reflection`, `consolidate`, `set_thinking_mode`, `verify`, and `spreading_activation` — previously these would crash with AttributeError when called from Python
+- **CRITICAL**: Fixed `deps.rs` `FailureType` not deriving `Hash` — prevented HashMap usage at compile time
+- **CRITICAL**: Fixed non-exhaustive match patterns in `deps.rs` — `classify_error` and `explain_error` now cover all `RsvsError` variants
+- Replaced `unwrap()` in `mcts.rs` `extract_path()` with safe `if let Some` pattern
+- Wired `NeuroSymVerifier` into `compose()` pipeline — compositions are now verified for self-reference and circular chains before creation
+- Wired `DEPSPlanner` into `compose()` pipeline — failed compositions now include DEPS recovery hints in error messages
+- Added `detect_composition_cycle()` method to `Rsvs` for transitive cycle detection
+
+### Added
+
+- New PyO3 binding classes: `PyMCTSResult`, `PyConsolidationResult`, `PyReflectionResult`
+- New PyO3 methods: `mcts_query()`, `run_reflection()`, `consolidate()`, `set_thinking_mode()`, `verify()`, `spreading_activation()`
+- All v7.0 module classes registered in `_rsvs` Python module
+
+### Changed
+
+- Bindings version comment updated from v6.0 to v7.0
+- 175 tests passing (up from 113 in v6.2.0)
+
 ## [7.0.0] - 2026-05-04
 
 ### Added

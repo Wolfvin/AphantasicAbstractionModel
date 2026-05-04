@@ -362,6 +362,46 @@ impl Rsvs {
         Some((0, sm.senses[0].id))
     }
 
+    /// v7.0: Detect if a composition from `start_node` would create a cycle
+    /// that leads back to a node with the given `target_label`.
+    ///
+    /// This is used by the compose() method to prevent circular composition chains.
+    /// A cycle exists if following the composition references from `start_node`
+    /// leads back to any node that matches the target label.
+    pub fn detect_composition_cycle(&self, start_node: NodeId, target_label: &str) -> bool {
+        let target_id = self.token_to_id.get(target_label).copied();
+        let mut visited = std::collections::HashSet::new();
+        visited.insert(start_node);
+        let mut stack = vec![start_node];
+
+        while let Some(current) = stack.pop() {
+            // Check if current node is the target
+            if target_id == Some(current) {
+                return true;
+            }
+
+            // Expand compositions of current node
+            if let Some(sm) = self.senses.get(&current) {
+                for sense in &sm.senses {
+                    for comp in &sense.compositions {
+                        if visited.contains(&comp.node_id) {
+                            continue;
+                        }
+                        // Check if this composition target matches the target label
+                        if let Some(n) = self.graph.get_node(comp.node_id) {
+                            if n.label == target_label {
+                                return true;
+                            }
+                        }
+                        visited.insert(comp.node_id);
+                        stack.push(comp.node_id);
+                    }
+                }
+            }
+        }
+        false
+    }
+
     // -------------------------------------------------------------------
     // v6.1: Context-Aware Query Endpoint
     // -------------------------------------------------------------------

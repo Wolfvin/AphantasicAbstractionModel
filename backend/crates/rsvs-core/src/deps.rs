@@ -25,7 +25,7 @@ use crate::types::{NodeId, CompositionRef};
 // -----------------------------------------------------------------------
 
 /// Classification of operation failures in RSVS.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum FailureType {
     /// Composition references itself (self-reference rule violation).
     SelfReference,
@@ -335,6 +335,11 @@ impl DEPSPlanner {
             RsvsError::CircularRef { .. } => FailureType::CircularChain,
             RsvsError::NodeNotFound { .. } => FailureType::TargetNotFound,
             RsvsError::Pipeline(_) => FailureType::General,
+            RsvsError::Graph(_) => FailureType::General,
+            RsvsError::SeedInvariant(_) => FailureType::General,
+            RsvsError::Persistence(_) => FailureType::General,
+            RsvsError::Validation(_) => FailureType::General,
+            RsvsError::CompositionRejected { .. } => FailureType::General,
         }
     }
 
@@ -352,6 +357,21 @@ impl DEPSPlanner {
             }
             RsvsError::Pipeline(msg) => {
                 format!("Pipeline error for node {}: {}", node_id, msg)
+            }
+            RsvsError::Graph(msg) => {
+                format!("Graph error for node {}: {}", node_id, msg)
+            }
+            RsvsError::SeedInvariant(msg) => {
+                format!("Seed invariant violation near node {}: {}", node_id, msg)
+            }
+            RsvsError::Persistence(msg) => {
+                format!("Persistence error for node {}: {}", node_id, msg)
+            }
+            RsvsError::Validation(msg) => {
+                format!("Validation error for node {}: {}", node_id, msg)
+            }
+            RsvsError::CompositionRejected { reason } => {
+                format!("Composition rejected for node {}: {}", node_id, reason)
             }
         }
     }

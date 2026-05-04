@@ -1,8 +1,9 @@
-//! PyO3 bindings — RSVS v6.0 Compositional Architecture
+//! PyO3 bindings — RSVS v7.0 Deep Losion Integration
 //!
 //! Exposes the Rsvs pipeline to Python with a clean, Pythonic API.
-//! v6.0: Compositional architecture — CompositionRef, layer, grounding evidence,
-//! structural_similarity, substitution_analysis, TransformerBridge.
+//! v7.0: Full API — all v6.x features plus MCTS query, reflection, consolidation,
+//! thinking mode, paradigm router, spreading activation, neurosym verification,
+//! DEPS recovery, and entity candidates.
 
 #![allow(missing_docs)]
 
@@ -16,6 +17,9 @@ use crate::autonomy::AutonomyConfig;
 use crate::pipeline::{PipelineConfig, Rsvs};
 use crate::sense::{GroundingEvidence, SenseConfig, SenseInductionConfig};
 use crate::transformer_bridge::TransformerBridgeConfig;
+use crate::mcts::MCTSConfig;
+use crate::consolidation::ConsolidationConfig;
+use crate::reflection::ReflectionConfig;
 
 // -----------------------------------------------------------------------
 // Python-visible data classes (v6.0)
@@ -293,6 +297,88 @@ impl PyRelateResult {
                 Some((label, *score))
             })
             .collect()
+    }
+}
+
+/// Result of an MCTS traversal query (v7.0).
+#[pyclass(get_all)]
+#[derive(Clone, Debug)]
+pub struct PyMCTSResult {
+    /// Active sense index selected for the queried node.
+    pub active_sense_idx: usize,
+    /// Total number of senses for the node.
+    pub total_senses: usize,
+    /// Scored atoms: (label, score).
+    pub scored_atoms: Vec<(String, f32)>,
+    /// Compositional depth reached during traversal.
+    pub depth_reached: usize,
+    /// Which halting criterion stopped the traversal.
+    pub halt_reason: String,
+    /// Number of MCTS simulations run.
+    pub simulations_run: usize,
+    /// Best path found: (node_label, sense_idx) pairs.
+    pub best_path: Vec<(String, usize)>,
+    /// Layer of the active sense.
+    pub layer: u32,
+    /// Grounding score of the active sense.
+    pub grounding_score: f32,
+}
+
+#[pymethods]
+impl PyMCTSResult {
+    fn __repr__(&self) -> String {
+        format!(
+            "MCTSResult(sense={}, sims={}, depth={}, halt={}, path_len={})",
+            self.active_sense_idx,
+            self.simulations_run,
+            self.depth_reached,
+            self.halt_reason,
+            self.best_path.len()
+        )
+    }
+}
+
+/// Result of a consolidation cycle (v7.0).
+#[pyclass(get_all)]
+#[derive(Clone, Debug)]
+pub struct PyConsolidationResult {
+    /// Number of senses merged.
+    pub senses_merged: usize,
+    /// Number of senses removed.
+    pub senses_removed: usize,
+    /// Number of edges pruned.
+    pub edges_pruned: usize,
+    /// Number of atom records compacted.
+    pub atoms_compacted: usize,
+}
+
+#[pymethods]
+impl PyConsolidationResult {
+    fn __repr__(&self) -> String {
+        format!(
+            "ConsolidationResult(merged={}, removed={}, pruned={}, compacted={})",
+            self.senses_merged, self.senses_removed, self.edges_pruned, self.atoms_compacted
+        )
+    }
+}
+
+/// Result of a reflection cycle (v7.0).
+#[pyclass(get_all)]
+#[derive(Clone, Debug)]
+pub struct PyReflectionResult {
+    /// Total actions produced by reflection.
+    pub actions_total: usize,
+    /// Number of actions actually applied (REVISE + RETIRE).
+    pub actions_applied: usize,
+}
+
+#[pymethods]
+impl PyReflectionResult {
+    fn __repr__(&self) -> String {
+        format!(
+            "ReflectionResult(total={}, applied={})",
+            self.actions_total, self.actions_applied
+        )
     }
 }
 
@@ -1068,6 +1154,266 @@ impl PyRsvs {
         Ok(PyRsvs { inner })
     }
 
+    // -------------------------------------------------------------------
+    // v7.0: MCTS query, Reflection, Consolidation, Thinking Mode
+    // -------------------------------------------------------------------
+
+    /// v7.0: MCTS-style traversal query for complex disambiguation.
+    ///
+    /// Uses Monte Carlo Tree Search with UCB1 selection and structural
+    /// value evaluation (grounding × coherence) for deeper exploration
+    /// of compositional structures. Best for multi-sense, high-layer queries.
+    ///
+    /// # Arguments
+    /// * `concept` - The concept label to query
+    /// * `context_atoms` - Context atom labels to disambiguate the query
+    /// * `max_simulations` - Number of MCTS simulations (default: 10)
+    /// * `max_depth` - Maximum depth per simulation (default: 4)
+    #[pyo3(signature = (concept, context_atoms, max_simulations=None, max_depth=None))]
+    fn mcts_query(
+        &self,
+        concept: &str,
+        context_atoms: Vec<String>,
+        max_simulations: Option<usize>,
+        max_depth: Option<usize>,
+    ) -> Option<PyMCTSResult> {
+        let start_node = *self.inner.token_to_id.get(concept)?;
+
+        let context_ids: crate::types::AtomSet = context_atoms
+            .iter()
+            .filter_map(|label| self.inner.token_to_id.get(label.as_str()).copied())
+            .collect();
+
+        if context_ids.is_empty() {
+            return None;
+        }
+
+        let mcts_config = MCTSConfig {
+            max_simulations: max_simulations.unwrap_or(10),
+            max_depth: max_depth.unwrap_or(4),
+            ..MCTSConfig::default()
+        };
+
+        let mcts = crate::mcts::MCTSTraversal::new(mcts_config);
+        let traversal_config = &self.inner.config.traversal;
+
+        let result = mcts.traverse(
+            &self.inner.graph,
+            &self.inner.senses,
+            start_node,
+            &context_ids,
+            traversal_config,
+        );
+
+        let label_for = |id: u32| -> String {
+            self.inner
+                .graph
+                .get_node(id)
+                .map(|n| n.label.clone())
+                .unwrap_or_else(|| format!("#{}", id))
+        };
+
+        Some(PyMCTSResult {
+            active_sense_idx: result.context_query_result.active_sense_idx,
+            total_senses: result.context_query_result.total_senses,
+            scored_atoms: result.context_query_result.scored_atoms,
+            depth_reached: result.context_query_result.depth_reached,
+            halt_reason: format!("{:?}", result.context_query_result.halt_reason),
+            simulations_run: result.simulations_run,
+            best_path: result.best_path
+                .iter()
+                .map(|(id, sense_idx)| (label_for(*id), *sense_idx))
+                .collect(),
+            layer: result.context_query_result.layer,
+            grounding_score: result.context_query_result.grounding_score,
+        })
+    }
+
+    /// v7.0: Run a sense reflection cycle.
+    ///
+    /// Evaluates each sense and produces actions:
+    /// - CONFIRM: sense is well-grounded, no action needed
+    /// - REVIEW: sense has some contradictions, monitor closely
+    /// - REVISE: sense needs composition pruning
+    /// - RETIRE: sense is fragile + ungrounded + inactive, safe to delete
+    ///
+    /// Returns the total number of actions and how many were applied.
+    fn run_reflection(&mut self) -> PyReflectionResult {
+        let actions = self.inner.reflection.reflect(
+            &self.inner.senses,
+            &self.inner.config.sense,
+        );
+        let actions_total = actions.len();
+        let actions_applied = self.inner.reflection.apply_actions(
+            &mut self.inner.senses,
+            &actions,
+            &self.inner.config.sense,
+        );
+        PyReflectionResult {
+            actions_total,
+            actions_applied,
+        }
+    }
+
+    /// v7.0: Run a consolidation cycle on the knowledge graph.
+    ///
+    /// Consolidation performs thorough cleanup:
+    /// - Remove dead senses (fragile + ungrounded + very inactive)
+    /// - Merge similar senses across nodes (Jaccard >= 0.8)
+    /// - Prune weak edges (weight below threshold after decay)
+    /// - Compact atom records (remove nodes below tau_remove)
+    ///
+    /// # Arguments
+    /// * `force` - Force consolidation regardless of interval
+    #[pyo3(signature = (force=false))]
+    fn consolidate(&mut self, force: bool) -> PyConsolidationResult {
+        if !force && !self.inner.consolidation.should_run(self.inner.batch_counter) {
+            return PyConsolidationResult {
+                senses_merged: 0,
+                senses_removed: 0,
+                edges_pruned: 0,
+                atoms_compacted: 0,
+            };
+        }
+
+        let result = self.inner.consolidation.consolidate(
+            &mut self.inner.graph,
+            &mut self.inner.senses,
+            &mut self.inner.autonomy,
+        );
+
+        PyConsolidationResult {
+            senses_merged: result.senses_merged,
+            senses_removed: result.senses_removed,
+            edges_pruned: result.edges_pruned,
+            atoms_compacted: result.atoms_compacted,
+        }
+    }
+
+    /// v7.0: Set the ThinkingToggle mode.
+    ///
+    /// Controls whether queries use shallow (NON_THINKING) or deep (THINKING)
+    /// traversal. In 'auto' mode (-1), the system classifies each query's
+    /// complexity and selects the appropriate mode automatically.
+    ///
+    /// # Arguments
+    /// * `force_mode` - -1 for auto, 0 for NON_THINKING, 1 for THINKING
+    fn set_thinking_mode(&mut self, force_mode: i8) {
+        self.inner.thinking_toggle.config.force_mode = force_mode;
+    }
+
+    /// v7.0: Neuro-symbolic verification of a node's compositions.
+    ///
+    /// Verifies that a sense's compositions satisfy structural invariants:
+    /// - No self-reference
+    /// - Layer consistency
+    /// - Grounding threshold
+    /// - Frequency threshold
+    /// - No circular chains
+    ///
+    /// Returns the verification status and number of failed rules.
+    ///
+    /// # Arguments
+    /// * `label` - Node label to verify
+    /// * `max_iterations` - Max verification-revision iterations (default: 3)
+    #[pyo3(signature = (label, max_iterations=None))]
+    fn verify(
+        &self,
+        label: &str,
+        max_iterations: Option<usize>,
+    ) -> PyResult<Option<String>> {
+        let &id = self
+            .inner
+            .token_to_id
+            .get(label)
+            .ok_or_else(|| PyValueError::new_err(format!("Node '{}' not found", label)))?;
+
+        let sm = self.inner.senses.get(&id)
+            .ok_or_else(|| PyValueError::new_err(format!("No senses for '{}'", label)))?;
+
+        let mut verifier = crate::neurosym::NeuroSymVerifier::new();
+        if let Some(iters) = max_iterations {
+            verifier.max_iterations = iters;
+        }
+
+        // Verify each sense and collect results
+        let mut results = Vec::new();
+        for (idx, sense) in sm.senses.iter().enumerate() {
+            let (status, rule_results) = verifier.verify(
+                id, sense,
+                &self.inner.graph,
+                &self.inner.senses,
+                &self.inner.config.sense,
+            );
+            let failed = rule_results.iter().filter(|r| !r.passed).count();
+            results.push(serde_json::json!({
+                "sense_idx": idx,
+                "status": format!("{:?}", status),
+                "rules_total": rule_results.len(),
+                "rules_failed": failed,
+                "feedback": rule_results.iter()
+                    .filter(|r| r.feedback.is_some())
+                    .map(|r| r.feedback.clone().unwrap())
+                    .collect::<Vec<_>>()
+            }));
+        }
+
+        Ok(Some(serde_json::to_string(&results)
+            .map_err(|e| PyValueError::new_err(format!("Serialization failed: {}", e)))?))
+    }
+
+    /// v7.0: Spreading activation query from seed nodes.
+    ///
+    /// Activates related nodes through composition edges with
+    /// energy decay per hop. Returns ranked list of activated nodes.
+    ///
+    /// # Arguments
+    /// * `seed_labels` - Labels of seed nodes to start activation from
+    /// * `initial_energy` - Initial energy for seed nodes (default: 1.0)
+    /// * `max_hops` - Maximum hops from seed (default: 3)
+    #[pyo3(signature = (seed_labels, initial_energy=None, max_hops=None))]
+    fn spreading_activation(
+        &self,
+        seed_labels: Vec<String>,
+        initial_energy: Option<f32>,
+        max_hops: Option<usize>,
+    ) -> Vec<(String, f32)> {
+        let seeds: Vec<u32> = seed_labels
+            .iter()
+            .filter_map(|l| self.inner.token_to_id.get(l.as_str()).copied())
+            .collect();
+
+        if seeds.is_empty() {
+            return Vec::new();
+        }
+
+        let config = crate::spreading::SpreadingActivationConfig {
+            max_hops: max_hops.unwrap_or(3),
+            ..crate::spreading::SpreadingActivationConfig::default()
+        };
+
+        let sa = crate::spreading::SpreadingActivation::new(config);
+        let result = sa.spread(
+            &seeds,
+            initial_energy.unwrap_or(1.0),
+            &self.inner.senses,
+            &self.inner.composition_index,
+        );
+
+        let label_for = |id: u32| -> String {
+            self.inner
+                .graph
+                .get_node(id)
+                .map(|n| n.label.clone())
+                .unwrap_or_else(|| format!("#{}", id))
+        };
+
+        result.activated
+            .iter()
+            .map(|(id, energy)| (label_for(*id), *energy))
+            .collect()
+    }
+
     fn __repr__(&self) -> String {
         let s = self.inner.status();
         format!(
@@ -1093,5 +1439,9 @@ fn _rsvs(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyGroundingEvidence>()?;
     m.add_class::<PyTransformerBridgeConfig>()?;
     m.add_class::<PyContextQueryResult>()?;
+    // v7.0 additions
+    m.add_class::<PyMCTSResult>()?;
+    m.add_class::<PyConsolidationResult>()?;
+    m.add_class::<PyReflectionResult>()?;
     Ok(())
 }

@@ -123,6 +123,53 @@ impl Rsvs {
         // 1b. Validate composition constraints (tau_compress, tau_overlap)
         self.validate_composition_constraints(&compositions)?;
 
+        // 1c. v7.0: Neuro-symbolic verification of compositions
+        // Check for self-reference and circular chains before creating the node.
+        // We use a temporary NodeId (0) for the check — self-reference is
+        // detected by checking if any composition references a node that
+        // would create a cycle.
+        for comp in &compositions {
+            // Self-reference: compositions must not reference the same label
+            if let Some(&existing_id) = self.token_to_id.get(label) {
+                if comp.node_id == existing_id {
+                    // Use DEPS planner to generate recovery plan
+                    let deps_result = self.deps_planner.analyze(
+                        &RsvsError::CircularRef { from: existing_id, to: existing_id },
+                        existing_id,
+                    );
+                    let recovery_hint = deps_result.recommended
+                        .as_ref()
+                        .map(|p| p.description.clone())
+                        .unwrap_or_default();
+                    return Err(RsvsError::CompositionRejected {
+                        reason: format!(
+                            "Self-reference detected: composition references node '{}' (id={}). Recovery: {}",
+                            label, existing_id, recovery_hint
+                        ),
+                    });
+                }
+            }
+            // Circular chain: check transitive closure
+            if self.detect_composition_cycle(comp.node_id, label) {
+                if let Some(&existing_id) = self.token_to_id.get(label) {
+                    let deps_result = self.deps_planner.analyze(
+                        &RsvsError::CircularRef { from: comp.node_id, to: existing_id },
+                        existing_id,
+                    );
+                    let recovery_hint = deps_result.recommended
+                        .as_ref()
+                        .map(|p| p.description.clone())
+                        .unwrap_or_default();
+                    return Err(RsvsError::CompositionRejected {
+                        reason: format!(
+                            "Circular composition chain detected via node {}. Recovery: {}",
+                            comp.node_id, recovery_hint
+                        ),
+                    });
+                }
+            }
+        }
+
         // 2. Compute layer from composition targets
         let comp_node_ids: Vec<NodeId> = compositions.iter().map(|c| c.node_id).collect();
         let layer = self.compute_layer(&comp_node_ids);

@@ -175,11 +175,14 @@ impl MCTSTraversal {
         let mut current = &root;
         while !current.children.is_empty() {
             // Select the most-visited child (robust choice)
-            let best_child = current
+            let best_child = match current
                 .children
                 .iter()
                 .max_by(|a, b| a.visits.cmp(&b.visits))
-                .unwrap();
+            {
+                Some(child) => child,
+                None => break, // No children despite is_empty check — safety exit
+            };
 
             let target_id = best_child.comp.node_id;
             let target_sense = best_child.comp.sense_id as usize;
