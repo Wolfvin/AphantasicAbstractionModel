@@ -1144,9 +1144,15 @@ mod autonomy_tests {
 
     #[test]
     fn energy_blocks_large_drop() {
+        // For Working memory (Tier2), tolerance is scaled: 0.20 * (0.30/0.10) = 0.60
+        // So a drop of 0.30 is ALLOWED for Working memory.
+        // Test with Stable memory instead, which uses the base tolerance of 0.20.
         let mut e = engine();
-        e.register(10, 0.60, Tier::Tier2);
-        assert!(!e.energy_allows_update(10, 0.30));
+        e.register(10, 0.60, Tier::Tier1);
+        // Force to Stable memory (Tier1 + high confidence)
+        e.records.get_mut(&10).unwrap().confidence = 0.99;
+        e.records.get_mut(&10).unwrap().memory = MemoryClass::Stable;
+        assert!(!e.energy_allows_update(10, 0.60 - 0.30)); // drop=0.30 > tolerance=0.20
     }
 
     #[test]

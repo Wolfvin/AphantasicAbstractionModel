@@ -1,6 +1,6 @@
 #![warn(missing_docs)]
 
-//! RSVS Core — v6.1 Compositional Architecture with Depth-Controlled Traversal
+//! RSVS Core — v6.2 Compositional Architecture with Context-Weighted Similarity
 //!
 //! v6.1 builds on v6.0 with:
 //! - `TraversalConfig`: Controls recursive composition expansion during queries

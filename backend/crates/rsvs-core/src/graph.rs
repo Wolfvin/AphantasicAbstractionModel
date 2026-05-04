@@ -344,12 +344,14 @@ impl RsvsGraph {
         senses_b: &SenseManager,
         context_atoms: &[NodeId],
     ) -> f32 {
+        // Convert slice to Vec for lazy_lookup compatibility (AtomSet = Vec<NodeId>)
+        let context_vec: AtomSet = context_atoms.to_vec();
         // Select active sense for each node based on context
-        let sense_a = match senses_a.lazy_lookup(context_atoms) {
+        let sense_a = match senses_a.lazy_lookup(&context_vec) {
             Some(idx) => &senses_a.senses[idx],
             None => return 0.0,
         };
-        let sense_b = match senses_b.lazy_lookup(context_atoms) {
+        let sense_b = match senses_b.lazy_lookup(&context_vec) {
             Some(idx) => &senses_b.senses[idx],
             None => return 0.0,
         };

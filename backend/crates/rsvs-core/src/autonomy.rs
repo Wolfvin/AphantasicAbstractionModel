@@ -392,6 +392,11 @@ impl AutonomyEngine {
     }
 
     /// Check whether an energy constraint allows the proposed confidence update.
+    ///
+    /// v6.2: The tolerance is scaled by the node's eta ratio. Working memory
+    /// atoms use `eta_working` (higher), which naturally produces larger
+    /// single-step drops. To avoid blocking legitimate fast updates, the
+    /// drop tolerance is scaled by `eta / eta_stable` for Working memory atoms.
     pub fn energy_allows_update(&self, id: NodeId, proposed_confidence: f32) -> bool {
         let Some(rec) = self.records.get(&id) else {
             return true;
@@ -399,7 +404,17 @@ impl AutonomyEngine {
         if proposed_confidence >= rec.confidence {
             return true;
         }
-        (rec.confidence - proposed_confidence) <= self.config.max_drop_tolerance
+        let drop = rec.confidence - proposed_confidence;
+        // Scale tolerance for Working memory: allow proportionally larger drops
+        let tolerance = match rec.memory {
+            MemoryClass::Working => {
+                let eta = self.config.eta_working;
+                let eta_base = self.config.eta_stable.max(0.01);
+                self.config.max_drop_tolerance * (eta / eta_base)
+            }
+            MemoryClass::Stable => self.config.max_drop_tolerance,
+        };
+        drop <= tolerance
     }
 
     // ---------------------------------------------------------------
