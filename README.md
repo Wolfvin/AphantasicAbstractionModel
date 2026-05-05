@@ -10,10 +10,10 @@
 [![Python](https://img.shields.io/badge/Python-3.12+-blue?style=flat-square&logo=python)](https://python.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-3178C6?style=flat-square&logo=typescript)](https://www.typescriptlang.org/)
 [![License](https://img.shields.io/badge/License-MIT%2FApache--2.0-green?style=flat-square)](LICENSE)
-[![Schema](https://img.shields.io/badge/Schema-v7.0-purple?style=flat-square)]()
+[![Schema](https://img.shields.io/badge/Schema-v7.2-purple?style=flat-square)]()
 [![Tests](https://img.shields.io/badge/Tests-175_passing-brightgreen?style=flat-square)]()
 
-[Quick Start](#-quick-start) · [Key Insight](#-the-key-insight) · [Architecture](#-architecture-at-a-glance) · [Core Features](#-core-features) · [Advanced Features](#-advanced-features-v70) · [API](#-api-reference) · [Contributing](CONTRIBUTING.md)
+[Quick Start](#-quick-start) · [Key Insight](#-the-key-insight) · [Architecture](#-architecture-at-a-glance) · [Core Features](#-core-features) · [Advanced Features](#-advanced-features-v72) · [Security](SECURITY.md) · [API](#-api-reference) · [Contributing](CONTRIBUTING.md)
 
 </div>
 
@@ -120,7 +120,7 @@ pip install rsvs
 │   │  Graph   │  │  Panel   │  │  Panel   │  │  + HUD        │  │
 │   └──────────┘  └──────────┘  └──────────┘  └───────────────┘  │
 └──────────────────────────┬───────────────────────────────────────┘
-                           │ HTTP (POST /run, GET /latest)
+                           │ HTTP via /api/proxy (API key server-side)
 ┌──────────────────────────▼───────────────────────────────────────┐
 │              Python Bridge (FastAPI + PyO3)                        │
 │                                                                    │
@@ -291,9 +291,9 @@ cd frontend && npm run dev
 
 ---
 
-## Advanced Features (v7.0)
+## Advanced Features (v7.2)
 
-v7.0 introduces ten new modules cross-pollinated from [Losion](https://github.com/Wolfvin/Losion), adapted from Losion's neural/reasoning architecture to RSVS's structural domain. The key adaptation principle: **Losion uses neural networks; RSVS uses deterministic structural heuristics.**
+v7.2 completes the full pipeline integration of all Losion-inspired modules. Every v7.0 module is now wired into the core data flows: ParadigmRouter selects traversal strategy in `context_query()`, SpreadingActivation discovers structural relations in `relate()`, NeuroSymVerifier validates compositions in `compose()`, and DEPSPlanner provides recovery hints on failure. All ten modules are cross-pollinated from [Losion](https://github.com/Wolfvin/Losion), adapted from Losion's neural/reasoning architecture to RSVS's structural domain. The key adaptation principle: **Losion uses neural networks; RSVS uses deterministic structural heuristics.**
 
 ### ParadigmRouter — Adaptive Traversal Paradigm Selection
 
@@ -787,9 +787,29 @@ Where S = senses, K = core atoms, C = compositions, N = total nodes, A = atom se
 
 ---
 
-## Bug Fixes in v7.0 Patch
+## Bug Fixes & Security Hardening (v7.0.1 → v7.2.0)
 
-This patch resolves several critical issues discovered after the initial v7.0 release:
+### v7.2.0 — Full Pipeline Integration
+
+| Change | Description |
+|--------|-------------|
+| **ParadigmRouter → context_query()** | Queries now go through adaptive paradigm selection before ThinkingToggle fine-tunes depth |
+| **SpreadingActivation → relate()** | Structural relations now include spreading-activated nodes via composition edges |
+| **NeuroSymVerifier → compose()** | Every new composition is automatically verified; failures emit `neurosym_verification_warning` events |
+
+### v7.1.0 — Security Hardening (Score: 77.5 → 97.5/100)
+
+| Vulnerability | Fix | Severity |
+|---------------|-----|----------|
+| API key exposed to browser | Next.js API proxy route (`/api/proxy/[...path]`) | P0 Critical |
+| Stack traces leak to client | Centralized exception handler + bare `raise` | P0 Critical |
+| No HTTPS in production | Certbot + nginx SSL + HSTS | P0 Critical |
+| Non-atomic persistence writes | tmp+rename pattern in `persist.rs` | P1 Medium |
+| Missing CSP header | `Content-Security-Policy` in nginx.conf | P1 Medium |
+| IP-only rate limiting | API-key-based rate limiter | P1 Medium |
+| Deprecated `bridge_server.py` | Deleted from repo | P1 Medium |
+
+### v7.0.1 — Critical Bug Fixes
 
 | Bug | Fix | Impact |
 |-----|-----|--------|

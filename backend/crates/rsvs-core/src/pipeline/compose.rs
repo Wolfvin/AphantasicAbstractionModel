@@ -254,6 +254,39 @@ impl Rsvs {
         sm.create_compositional_sense(compositions, layer);
         self.senses.insert(node_id, sm);
 
+        // 7. v7.2: Neuro-symbolic verification of the new composition
+        //    Verify structural invariants after creation — if verification
+        //    fails critically, log a warning but do NOT roll back (the node
+        //    was already created). The user can explicitly verify and revise.
+        if let Some(sm) = self.senses.get(&node_id) {
+            if let Some(sense) = sm.senses.first() {
+                let verifier = crate::neurosym::NeuroSymVerifier::new();
+                let (status, results) = verifier.verify(
+                    node_id,
+                    sense,
+                    &self.graph,
+                    &self.senses,
+                    &self.config.sense,
+                );
+                let failed_rules: Vec<&str> = results
+                    .iter()
+                    .filter(|r| !r.passed)
+                    .map(|r| r.rule.name.as_str())
+                    .collect();
+                if !failed_rules.is_empty() {
+                    self.emit_event(
+                        &format!("compose_{}", node_id),
+                        "neurosym_verification_warning",
+                        serde_json::json!({
+                            "label": label,
+                            "status": format!("{:?}", status),
+                            "failed_rules": failed_rules,
+                        }),
+                    );
+                }
+            }
+        }
+
         Ok(node_id)
     }
 

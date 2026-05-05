@@ -408,17 +408,19 @@ impl Rsvs {
 
     /// Context-aware query that uses depth-controlled lazy traversal.
     ///
-    /// v6.4: Now uses ThinkingToggle to automatically adjust traversal depth
-    /// based on query complexity. Simple queries get shallow traversal,
-    /// complex queries get deep traversal.
+    /// v7.2: Now uses ParadigmRouter for adaptive paradigm selection BEFORE
+    /// ThinkingToggle fine-tunes depth. The router picks the lightest strategy
+    /// (Direct → Shallow → Standard → Deep → MCTS) that will likely succeed,
+    /// and the toggle adjusts within that paradigm.
     ///
     /// This is the v6.1 query endpoint (Point 4) that:
     /// 1. Resolves label to NodeId
     /// 2. Uses lazy_lookup to select active sense based on context
-    /// 3. Uses ThinkingToggle to classify complexity and adjust traversal
-    /// 4. Computes P(a|S,q) per atom using freq_map
-    /// 5. Optionally recurses into compositions based on TraversalConfig
-    /// 6. Returns ContextQueryResult
+    /// 3. Uses ParadigmRouter to select optimal traversal strategy
+    /// 4. Uses ThinkingToggle to fine-tune depth within the paradigm
+    /// 5. Computes P(a|S,q) per atom using freq_map
+    /// 6. Optionally recurses into compositions based on TraversalConfig
+    /// 7. Returns ContextQueryResult
     ///
     /// # Arguments
     ///
@@ -454,7 +456,7 @@ impl Rsvs {
         // 3. Use provided config or fall back to pipeline config
         let base_config = config.cloned().unwrap_or_else(|| self.config.traversal.clone());
 
-        // 4. v6.4: Use ThinkingToggle to adjust traversal based on complexity
+        // 4. v7.2: Build complexity signal for both router and toggle
         let signal = crate::thinking::ComplexitySignal {
             n_context_atoms: context_ids.len(),
             n_senses: self.senses.get(&start_node).map(|sm| sm.senses.len()).unwrap_or(0),
@@ -465,10 +467,22 @@ impl Rsvs {
                 .unwrap_or(false),
             domain_complexity: 0.0,
         };
-        let mode = self.thinking_toggle.classify(&signal);
-        let adjusted_config = self.thinking_toggle.adjust_traversal(&mode, &base_config);
 
-        // 5. Call the traversal engine with adjusted config
+        // 5. v7.2: Use ParadigmRouter to select optimal traversal strategy
+        //    The router picks the lightest paradigm that will likely succeed,
+        //    avoiding over-computation for simple queries.
+        let confidence = self.senses.get(&start_node)
+            .and_then(|sm| sm.senses.first())
+            .map(|s| s.grounding.score())
+            .unwrap_or(0.5);
+        let paradigm = self.paradigm_router.route(confidence, &signal, self.config.current_domain);
+        let paradigm_config = self.paradigm_router.to_traversal_config(paradigm, &base_config);
+
+        // 6. v6.4: Use ThinkingToggle to fine-tune within the paradigm
+        let mode = self.thinking_toggle.classify(&signal);
+        let adjusted_config = self.thinking_toggle.adjust_traversal(&mode, &paradigm_config);
+
+        // 7. Call the traversal engine with paradigm-adjusted config
         Some(traverse::traverse(
             &self.graph,
             &self.senses,

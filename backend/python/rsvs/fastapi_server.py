@@ -78,8 +78,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="RSVS — Relational Symbolic Vocabulary System",
-    version="7.1.0",
-    description="Hard-attention symbolic knowledge engine with Rust core (v7.1 — Security hardening: API key proxy, centralized error handling, HTTPS, atomic persist)",
+    version="7.2.0",
+    description="Hard-attention symbolic knowledge engine with Rust core (v7.2 — Security hardening: API key proxy, centralized error handling, HTTPS, atomic persist)",
     lifespan=lifespan,
 )
 
@@ -691,13 +691,13 @@ async def events_endpoint(request: Request, _auth: None = Depends(_verify_api_ke
 @app.get("/health")
 @limiter.limit("60/minute")
 async def health(request: Request) -> dict[str, str]:
-    return {"status": "ok", "version": "7.1.0"}
+    return {"status": "ok", "version": "7.2.0"}
 
 
 @app.get("/")
 @limiter.limit("60/minute")
 async def root(request: Request) -> dict[str, str]:
-    return {"name": "RSVS", "version": "7.1.0", "docs": "/docs"}
+    return {"name": "RSVS", "version": "7.2.0", "docs": "/docs"}
 
 
 @app.get("/autonomy/pending-removals", tags=["autonomy"])

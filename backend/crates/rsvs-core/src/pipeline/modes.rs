@@ -88,6 +88,13 @@ impl Rsvs {
 
     /// Find nodes and edges related to the given concept.
     ///
+    /// v7.2: Now uses SpreadingActivation for structural relation discovery.
+    /// Spreading activation follows composition edges (structural meaning
+    /// connections) to find related nodes that pure Jaccard overlap misses.
+    /// This is the structural equivalent of semantic priming in cognitive
+    /// science — activating "raja" spreads energy to "tahta_tertinggi",
+    /// "kerajaan", and then onward to their composition neighbors.
+    ///
     /// v6.0: Also includes structural relations based on composition overlap.
     pub fn relate(&self, concept: &str) -> Option<RelateResult> {
         let concept_id = *self.token_to_id.get(concept)?;
@@ -111,8 +118,20 @@ impl Rsvs {
         related_nodes.sort_by(|a, b| b.1.total_cmp(&a.1));
         related_nodes.truncate(20);
 
-        // v6.0: Find structural relations based on composition overlap
+        // v7.2: Use SpreadingActivation for structural relation discovery
+        // Spreading follows composition edges (structural meaning), not just
+        // co-occurrence. This captures indirect relationships that Jaccard misses.
+        let activation_result = self.spreading_activation.targeted_spread(
+            concept_id,
+            1.0,
+            &self.senses,
+            &self.composition_index,
+        );
+
+        // Merge spreading-activated nodes into structural relations
         let mut structural_relations: Vec<(NodeId, f32)> = Vec::new();
+
+        // v6.0: Direct structural similarity from composition overlap
         if let Some(sm_concept) = self.senses.get(&concept_id) {
             for (&other_id, sm_other) in &self.senses {
                 if other_id == concept_id {
@@ -125,9 +144,24 @@ impl Rsvs {
                     structural_relations.push((other_id, sim.structural_similarity));
                 }
             }
-            structural_relations.sort_by(|a, b| b.1.total_cmp(&a.1));
-            structural_relations.truncate(20);
         }
+
+        // v7.2: Add spreading-activated nodes that aren't already in structural_relations
+        let existing_structural: std::collections::HashSet<NodeId> =
+            structural_relations.iter().map(|(id, _)| *id).collect();
+        for (node_id, energy) in &activation_result.activated {
+            if *node_id == concept_id || existing_structural.contains(node_id) {
+                continue;
+            }
+            // Normalize energy to [0, 1] range for compatibility with structural_similarity
+            let normalized = (*energy).min(1.0);
+            if normalized > 0.01 {
+                structural_relations.push((*node_id, normalized));
+            }
+        }
+
+        structural_relations.sort_by(|a, b| b.1.total_cmp(&a.1));
+        structural_relations.truncate(20);
 
         // Find related edges involving this concept
         let mut related_edges: Vec<(NodeId, NodeId, f32)> = Vec::new();

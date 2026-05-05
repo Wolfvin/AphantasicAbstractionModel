@@ -1,7 +1,7 @@
 # ──────────────────────────────────────────────────────────────────────
 #  SymbolicPuzzle3D — Docker Compose
 #  Nginx (reverse proxy) + Backend (Rust + Python bridge) + Frontend (Next.js)
-#  v7.1: Added HTTPS/Certbot support, server-side API key, atomic persist
+#  v7.2: Added HTTPS/Certbot support, server-side API key, atomic persist
 # ──────────────────────────────────────────────────────────────────────
 
 services:

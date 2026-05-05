@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [7.2.0] - 2026-05-05
+
+### Added
+
+- **ParadigmRouter wired into context_query()**: Queries now go through adaptive paradigm selection (Direct → Shallow → Standard → Deep → MCTS) before ThinkingToggle fine-tunes depth. This prevents over-computation for simple queries and ensures complex queries get the right strategy.
+- **SpreadingActivation wired into relate()**: The relate endpoint now uses spreading activation through composition edges to discover structurally related nodes that pure Jaccard overlap misses. This is the structural equivalent of semantic priming in cognitive science.
+- **NeuroSymVerifier wired into compose()**: After creating a new compositional node, the system automatically verifies structural invariants (no self-reference, layer consistency, grounding, frequency, no circular chains). Failed rules emit `neurosym_verification_warning` events for monitoring and debugging.
+
+### Security (v7.1.0 — included in this release)
+
+- **P0: API key proxy**: `NEXT_PUBLIC_RSVS_API_KEY` removed from frontend. All backend calls now go through `/api/proxy/[...path]` Next.js API route, which injects the API key server-side. The browser never sees the key.
+- **P0: Centralized error handling**: All `detail=str(e)` patterns removed from FastAPI server. A global `@app.exception_handler(Exception)` returns generic `{"error": "internal_error"}` to clients while logging full details server-side. Custom `RsvsError` handler returns only the error class name.
+- **P0: HTTPS support**: Certbot service added to docker-compose.yml with SSL volumes and ACME challenge path. HTTPS server block in nginx.conf with TLS 1.2/1.3, HSTS, and security headers (commented out until certificates are obtained).
+- **P1: Atomic persistence**: `persist.rs` now writes to `.tmp` file first, then `std::fs::rename` for atomic swap. On crash, the state file is always either the old or new version — never a partial write.
+- **P1: CSP header**: `Content-Security-Policy` header added to nginx.conf with `default-src 'self'`, script/connect/img/style source restrictions.
+- **P1: API-key-based rate limiting**: Rate limiter now keys by `X-API-Key` header when present, falling back to IP. This prevents proxy-rotation bypass of rate limits.
+- **P1: Deprecated bridge_server.py removed**: Old `bridge_server.py` deleted from repo. All test references updated to `fastapi_server`.
+
+## [7.1.0] - 2026-05-05
+
+### Security
+
+- API key proxy route (Next.js) — browser never sees `RSVS_API_KEY`
+- Centralized exception handler — no stack trace leakage
+- HTTPS/Certbot support in Docker Compose + nginx
+- Atomic file writes in `persist.rs` (tmp + rename)
+- CSP header in nginx.conf
+- API-key-based rate limiting (not IP-only)
+- Removed deprecated `bridge_server.py`
+
 ## [7.0.1] - 2026-05-05
 
 ### Fixed

@@ -1,6 +1,6 @@
 [package]
 name = "rsvs-integration-tests"
-version = "4.2.0"
+version = "7.2.0"
 edition = "2021"
 description = "Integration tests for the RSVS pipeline"
 
