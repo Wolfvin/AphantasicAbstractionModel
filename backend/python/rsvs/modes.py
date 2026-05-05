@@ -457,8 +457,9 @@ def _run_compose_rust(
     if r is None:
         raise RustCoreUnavailableError("Rust core required for compose mode")
 
-    label = text  # In compose mode, text carries the label
     options = options or {}
+    # Prefer explicit label from options (set by frontend); fall back to text
+    label = options.get("label") or text
 
     lang = options.get("lang")
     compositions = options.get("compositions")  # list of [label, sense_id] pairs

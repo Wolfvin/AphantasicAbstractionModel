@@ -2,6 +2,16 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const BACKEND_URL = process.env.RSVS_BACKEND_URL || 'http://localhost:8000';
 const API_KEY = process.env.RSVS_API_KEY || '';
+const SESSION_COOKIE = 'rsvs_session';
+
+/**
+ * Allowed frontend origins for CSRF protection.
+ * In production, set RSVS_ALLOWED_ORIGINS to a comma-separated list.
+ * Defaults to localhost:3000 for development.
+ */
+const ALLOWED_ORIGINS = (
+  process.env.RSVS_ALLOWED_ORIGINS || 'http://localhost:3000'
+).split(',').map((o: string) => o.trim().replace(/\/+$/, ''));
 
 /**
  * Allowlist of backend endpoints that the proxy will forward to.
@@ -28,10 +38,39 @@ function validatePath(pathSegments: string[]): string | null {
   return pathSegments.join('/');
 }
 
+/**
+ * Validate that the request has a session cookie and a valid Origin/Referer.
+ * This prevents random HTTP clients from "borrowing" the server-side API key
+ * through the proxy without having visited the frontend first.
+ */
+function validateAuth(request: NextRequest): NextResponse | null {
+  // 1. Session cookie must exist (set by middleware on first page visit)
+  const session = request.cookies.get(SESSION_COOKIE)?.value;
+  if (!session) {
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  }
+
+  // 2. CSRF: Origin or Referer must match an allowed origin
+  const origin = request.headers.get('origin');
+  const referer = request.headers.get('referer');
+  const source = origin || (referer ? new URL(referer).origin : '');
+
+  // For same-origin requests (no Origin header in same-site navigation),
+  // the cookie presence is sufficient. Origin is sent on POST/fetch calls.
+  if (source && !ALLOWED_ORIGINS.includes(source)) {
+    return NextResponse.json({ error: 'forbidden_origin' }, { status: 403 });
+  }
+
+  return null; // Auth OK
+}
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ path: string[] }> }
 ) {
+  const authError = validateAuth(request);
+  if (authError) return authError;
+
   const { path: pathSegments } = await params;
   const backendPath = validatePath(pathSegments);
   if (!backendPath) {
@@ -64,6 +103,9 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ path: string[] }> }
 ) {
+  const authError = validateAuth(request);
+  if (authError) return authError;
+
   const { path: pathSegments } = await params;
   const backendPath = validatePath(pathSegments);
   if (!backendPath) {

@@ -113,7 +113,7 @@ export async function composeToBackend(
   lang: string,
   correlationId: string,
 ): Promise<BackendRunEnvelope> {
-  return runModeToBackend('compose', `${label} = ${atomIds.map(() => '+').join(' ')}`, correlationId, {
+  return runModeToBackend('compose', label, correlationId, {
     label,
     atom_ids: atomIds,
     lang,
@@ -130,7 +130,7 @@ export async function composeWithCompositions(
   lang: string,
   correlationId: string,
 ): Promise<BackendRunEnvelope> {
-  return runModeToBackend('compose', `${label} = ${compositions.map(c => c.label).join(' + ')}`, correlationId, {
+  return runModeToBackend('compose', label, correlationId, {
     label,
     compositions,
     lang,
