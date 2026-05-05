@@ -890,6 +890,7 @@ def _run_context_similarity_rust(
         "context_weighted_similarity": score,
     }
 
+    score_text = f"{score:.3f}" if score is not None else "N/A"
     messages = [
         {
             "id": make_id("msg"),
@@ -897,7 +898,7 @@ def _run_context_similarity_rust(
             "content": (
                 f"Context similarity '{label_a}' vs '{label_b}' "
                 f"with context {context}: "
-                f"score={score:.3f if score is not None else 'N/A'} "
+                f"score={score_text} "
                 f"[Rust core]."
             ),
             "timestamp": iso_now(),

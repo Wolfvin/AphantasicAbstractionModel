@@ -3,12 +3,41 @@ import { NextRequest, NextResponse } from 'next/server';
 const BACKEND_URL = process.env.RSVS_BACKEND_URL || 'http://localhost:8000';
 const API_KEY = process.env.RSVS_API_KEY || '';
 
+/**
+ * Allowlist of backend endpoints that the proxy will forward to.
+ * Any path not in this set is rejected with 403 to prevent
+ * unauthenticated access to sensitive backend operations.
+ */
+const ALLOWED_ENDPOINTS = new Set([
+  'run',
+  'ingest',
+  'query',
+  'snapshot',
+  'events',
+  'structural-similarity',
+  'substitution-analysis',
+  'context-query',
+  'context-similarity',
+  'health',
+]);
+
+function validatePath(pathSegments: string[]): string | null {
+  if (pathSegments.length === 0) return null;
+  const endpoint = pathSegments[0];
+  if (!ALLOWED_ENDPOINTS.has(endpoint)) return null;
+  return pathSegments.join('/');
+}
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ path: string[] }> }
 ) {
   const { path: pathSegments } = await params;
-  const backendPath = pathSegments.join('/');
+  const backendPath = validatePath(pathSegments);
+  if (!backendPath) {
+    return NextResponse.json({ error: 'forbidden_path' }, { status: 403 });
+  }
+
   const body = await request.json();
 
   const headers: Record<string, string> = {
@@ -36,7 +65,11 @@ export async function GET(
   { params }: { params: Promise<{ path: string[] }> }
 ) {
   const { path: pathSegments } = await params;
-  const backendPath = pathSegments.join('/');
+  const backendPath = validatePath(pathSegments);
+  if (!backendPath) {
+    return NextResponse.json({ error: 'forbidden_path' }, { status: 403 });
+  }
+
   const searchParams = request.nextUrl.search;
 
   const headers: Record<string, string> = {};

@@ -111,9 +111,13 @@ MAX_REQUEST_SIZE = 1_000_000  # 1MB
 
 @app.middleware("http")
 async def limit_request_size(request: Request, call_next):
-    if request.headers.get("content-length"):
-        if int(request.headers["content-length"]) > MAX_REQUEST_SIZE:
-            return JSONResponse(status_code=413, content={"error": "request_too_large"})
+    cl = request.headers.get("content-length")
+    if cl is not None:
+        try:
+            if int(cl) > MAX_REQUEST_SIZE:
+                return JSONResponse(status_code=413, content={"error": "request_too_large"})
+        except ValueError:
+            return JSONResponse(status_code=400, content={"error": "invalid_content_length"})
     response = await call_next(request)
     return response
 
@@ -130,6 +134,7 @@ class RunRequest(BaseModel):
     text: str = Field(..., min_length=1, max_length=100_000, description="Input text (max 100K characters)")
     target: str | None = Field(None, max_length=500)
     source: str | None = Field(None, max_length=500)
+    options: dict[str, Any] | None = Field(None, description="Mode-specific options (e.g. atom_ids, compositions, lang for compose)")
 
 
 class QueryRequest(BaseModel):
@@ -221,7 +226,7 @@ async def _verify_api_key(api_key: str = Security(_api_key_header)) -> None:
     if not _API_KEY:
         # Dev mode: no API key configured, skip auth
         return
-    if api_key != _API_KEY:
+    if not api_key or not secrets.compare_digest(api_key, _API_KEY):
         raise HTTPException(status_code=401, detail="Invalid or missing API key")
 
 
@@ -307,7 +312,7 @@ def _enriched_query_result(raw: Any) -> dict[str, Any]:
 async def run_endpoint(request: Request, req: RunRequest, _auth: None = Depends(_verify_api_key)) -> dict[str, Any]:
     try:
         rsvs: RsvsCoreProtocol = get_rsvs_instance()
-        return run_mode(rsvs, req.mode, text=req.text, target=req.target, source=req.source)
+        return run_mode(rsvs, req.mode, text=req.text, target=req.target, source=req.source, options=req.options)
     except RsvsError:
         raise
     except Exception:
