@@ -56,6 +56,10 @@ impl Rsvs {
     pub fn ingest_text(&mut self, text: &str) -> Result<IngestStats, RsvsError> {
         let mut stats = IngestStats::default();
         let correlation_id = self.next_correlation_id();
+
+        // v7.2: Detect language from the ingested text for surface_label tagging
+        let detected_lang = crate::attention::detect_language(text);
+
         self.emit_event(
             &correlation_id,
             "ingest_started",
@@ -102,10 +106,11 @@ impl Rsvs {
                 continue;
             }
 
+            let surface_label = format!("{}@{}", token, detected_lang);
             let id = self.graph.insert_node(Node {
                 id: 0,
                 label: token.clone(),
-                surface_label: format!("{}@en", token),
+                surface_label: surface_label.clone(),
 
                 kind: "node".to_string(),
                 tier: Tier::Tier2,
@@ -135,7 +140,8 @@ impl Rsvs {
             })?;
 
             self.autonomy.register(id, 0.50, Tier::Tier2);
-            self.token_to_id.insert(token.clone(), id);
+            // v7.2: Use register_label to keep token_to_id and graph.label_to_id in sync
+            self.register_label(token, id, Some(&surface_label));
             self.atom_sets.insert(token.clone(), vec![id]);
             self.senses.insert(
                 id,
@@ -148,7 +154,7 @@ impl Rsvs {
                 serde_json::json!({
                     "id": id,
                     "label": token,
-                    "surface_label": format!("{}@en", token),
+                    "surface_label": surface_label,
                     "tier": 2,
                     "confidence": 0.5,
                     "status": "candidate",
@@ -387,27 +393,30 @@ impl Rsvs {
             self.config.attention.edge_decay_grace_period,
         );
 
-        // v6.3.1: Adaptive domain attention nudge — after each batch, measure
-        // whether coherence improved and nudge the dominant component's weight.
-        // This is a gradient-free optimization: if coherence went up, the current
-        // attention mix is working, so nudge toward whichever component was dominant.
+        // v6.3.1 → v7.2: Adaptive domain attention nudge — after each batch,
+        // measure actual attention scores (not coherence as proxy) and nudge
+        // toward whichever component contributed most to successful pair selection.
         {
             let domain = self.config.current_domain;
-            // Determine dominant attention component from last batch's attention scores
-            // Simple heuristic: compare average NPMI, Jaccard, and Cooc scores from selected pairs
+            // v7.2 FIX: Compute dominant component from ACTUAL attention scores
+            // rather than coherence × alpha/beta/gamma (which always just
+            // reproduced the current weight ratios). We re-run the attention
+            // scorer on the last batch's sentences and measure which component
+            // contributed the highest average score.
             let (avg_npmi, avg_jaccard, avg_cooc) = {
                 let mut npmi_sum = 0.0f32;
                 let mut jaccard_sum = 0.0f32;
                 let mut cooc_sum = 0.0f32;
                 let mut count = 0usize;
-                for sense_mgr in self.senses.values() {
-                    for sense in &sense_mgr.senses {
-                        if sense.context_count() >= 2 {
-                            // Use coherence as proxy for attention quality
-                            let coh = sense.coherence;
-                            npmi_sum += coh * self.config.attention.alpha;
-                            jaccard_sum += coh * self.config.attention.beta;
-                            cooc_sum += coh * self.config.attention.gamma;
+                for tokens in &sentences {
+                    let selected = self
+                        .attention
+                        .select(tokens, &self.stats_db, &self.atom_sets);
+                    for candidates in selected.values() {
+                        for cand in candidates {
+                            npmi_sum += cand.npmi;
+                            jaccard_sum += cand.jaccard;
+                            cooc_sum += cand.cooc;
                             count += 1;
                         }
                     }
@@ -419,7 +428,7 @@ impl Rsvs {
                 }
             };
 
-            // Determine dominant component
+            // Determine dominant component from actual scores
             let dominant = if avg_npmi >= avg_jaccard && avg_npmi >= avg_cooc {
                 crate::attention::AttentionComponent::Npmi
             } else if avg_jaccard >= avg_cooc {
@@ -428,12 +437,31 @@ impl Rsvs {
                 crate::attention::AttentionComponent::Cooc
             };
 
-            // Compute coherence delta (average coherence before vs after batch)
-            // Use a simple proxy: if senses_created > 0, coherence likely improved
-            let coherence_delta = if stats.sense_created > 0 {
-                0.01 // Small positive signal — new senses were needed
+            // v7.2 FIX: Compute coherence delta from actual average coherence,
+            // not just "sense_created > 0 → 0.01". We track the average
+            // coherence of all senses with >= 2 contexts.
+            let avg_coherence: f32 = {
+                let mut total_coh = 0.0f32;
+                let mut coh_count = 0usize;
+                for sense_mgr in self.senses.values() {
+                    for sense in &sense_mgr.senses {
+                        if sense.context_count() >= 2 {
+                            total_coh += sense.coherence;
+                            coh_count += 1;
+                        }
+                    }
+                }
+                if coh_count > 0 { total_coh / coh_count as f32 } else { 0.5 }
+            };
+
+            // Positive signal if average coherence is above 0.5 (well-grounded senses)
+            // Negative signal if below 0.3 (many fragile senses)
+            let coherence_delta = if avg_coherence > 0.5 {
+                0.01 * (avg_coherence - 0.5) // Proportional to coherence quality
+            } else if avg_coherence < 0.3 {
+                -0.005 // Small negative — the current mix isn't working well
             } else {
-                0.0 // No improvement signal
+                0.0 // Neutral
             };
 
             // Nudge domain attention config if domain exists
@@ -573,12 +601,30 @@ impl Rsvs {
                 let old_atoms = node.atoms.clone();
                 node.atoms = atom_ids.clone();
 
-                if !atom_ids.is_empty() {
+                // v7.2: Only set Compressed if the node has sufficient evidence.
+                // Previously, ANY co-occurrence (>0) immediately set Compressed,
+                // which was semantically wrong — a node with 1–2 observations
+                // should not be treated as having mature compositional meaning.
+                //
+                // Now we require:
+                // - At least `min_compression_evidence` co-occurrence links (default: 3)
+                // - The node's confidence must be >= 0.40 (it has been observed enough)
+                // - OR the node already has a composition from sense induction (layer > 0)
+                const MIN_COMPRESSION_EVIDENCE: usize = 3;
+                let has_enough_evidence = cooc_nodes.len() >= MIN_COMPRESSION_EVIDENCE;
+                let meets_confidence = node.confidence >= 0.40;
+                let already_compositional = node.semantic.layer > 0;
+
+                if !atom_ids.is_empty() && (has_enough_evidence && meets_confidence || already_compositional) {
                     node.semantic.compression_state = CompressionState::Compressed;
                     node.semantic.derived_from_node_ids = atom_ids.clone();
                     node.semantic.compression_reason =
                         Some("co-occurrence aggregation".to_string());
                     node.semantic.layer = layer;
+                } else if !atom_ids.is_empty() {
+                    // Not enough evidence for Compressed — but we still record
+                    // the atom links for attention scoring. Keep the node as Raw.
+                    // The atoms are already set above, and atom_sets is updated below.
                 }
 
                 self.atom_sets.insert(token.clone(), atom_ids.clone());

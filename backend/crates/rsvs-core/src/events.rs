@@ -9,7 +9,7 @@ use crate::types::{CompositionRef, NodeId};
 /// API version string for event contracts.
 pub const API_VERSION: &str = "v1";
 /// Schema version string for event contracts.
-pub const SCHEMA_VERSION: &str = "v7.0";
+pub const SCHEMA_VERSION: &str = "v7.2";
 
 /// Runtime node info (v6.0: compositional with layer).
 #[derive(Debug, Clone, Serialize, Deserialize)]

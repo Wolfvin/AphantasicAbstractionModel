@@ -253,6 +253,22 @@ impl Rsvs {
         format!("ingest_{:08}", self.ingest_counter)
     }
 
+    /// v7.2: Insert a token→id mapping into BOTH `token_to_id` and `graph.label_to_id`.
+    ///
+    /// This is the single source of truth for label→id registration.
+    /// Previously, `token_to_id` and `graph.label_to_id` were updated
+    /// independently in different places, which could cause them to
+    /// diverge. All label→id insertions should go through this method.
+    pub(crate) fn register_label(&mut self, label: &str, id: NodeId, surface_label: Option<&str>) {
+        self.token_to_id.insert(label.to_string(), id);
+        self.graph.label_to_id.insert(label.to_string(), id);
+        if let Some(sl) = surface_label {
+            if sl != label {
+                self.graph.label_to_id.insert(sl.to_string(), id);
+            }
+        }
+    }
+
     /// Emit a runtime event into the in-memory event stream.
     fn emit_event(&mut self, correlation_id: &str, event_type: &str, payload: serde_json::Value) {
         self.latest_seq += 1;

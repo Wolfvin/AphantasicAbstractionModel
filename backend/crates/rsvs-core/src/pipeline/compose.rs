@@ -242,7 +242,8 @@ impl Rsvs {
         }
 
         // 6. Register in lookup tables
-        self.token_to_id.insert(label.to_string(), node_id);
+        // v7.2: Use register_label to keep token_to_id and graph.label_to_id in sync
+        self.register_label(label, node_id, Some(&format!("{}@{}", label, lang.unwrap_or("en"))));
         self.atom_sets.insert(label.to_string(), comp_node_ids);
 
         // Register with autonomy engine

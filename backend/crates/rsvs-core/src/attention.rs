@@ -138,22 +138,28 @@ impl DomainAttentionConfig {
     }
 
     /// Gradient-free nudge: if coherence improved, nudge weights toward
-    /// the component that was dominant. Step size is small (0.01) for stability.
+    /// the component that was dominant. If coherence decreased, nudge away.
+    /// Step size is small (0.01) for stability.
+    /// v7.2: Now supports negative coherence_delta for adaptive correction.
     pub fn nudge(
         &mut self,
         coherence_delta: f32,
         dominant_component: AttentionComponent,
         step_size: f32,
     ) {
-        if coherence_delta <= 0.0 {
-            return; // No improvement — don't change weights
+        if coherence_delta.abs() < 1e-6 {
+            return; // No meaningful signal — don't change weights
         }
+        let effective_step = step_size * coherence_delta.signum();
         match dominant_component {
-            AttentionComponent::Npmi => self.alpha += step_size,
-            AttentionComponent::Jaccard => self.beta += step_size,
-            AttentionComponent::Cooc => self.gamma += step_size,
+            AttentionComponent::Npmi => self.alpha += effective_step,
+            AttentionComponent::Jaccard => self.beta += effective_step,
+            AttentionComponent::Cooc => self.gamma += effective_step,
         }
-        // Re-normalize
+        // Re-normalize (clamp negatives to a small floor first)
+        self.alpha = self.alpha.max(0.01);
+        self.beta = self.beta.max(0.01);
+        self.gamma = self.gamma.max(0.01);
         let total = self.alpha + self.beta + self.gamma;
         self.alpha /= total;
         self.beta /= total;
@@ -480,6 +486,66 @@ pub fn text_to_sentences(text: &str) -> Vec<Vec<String>> {
         .collect()
 }
 
+/// v7.2: Detect the dominant language of a text sample based on Unicode ranges.
+///
+/// Returns an ISO 639-1 language code. This is a simple heuristic —
+/// it doesn't need to be perfect, just better than always defaulting to "en".
+///
+/// Detection rules:
+/// - If >30% of characters are CJK → "zh" (Chinese)
+/// - If >30% are Hiragana/Katakana → "ja" (Japanese)
+/// - If >30% are Hangul → "ko" (Korean)
+/// - If >30% are Devanagari → "hi" (Hindi)
+/// - If >30% are Arabic script → "ar"
+/// - Otherwise → "en" (default)
+pub fn detect_language(text: &str) -> &'static str {
+    let mut cjk = 0usize;
+    let mut hira_kata = 0usize;
+    let mut hangul = 0usize;
+    let mut devanagari = 0usize;
+    let mut arabic = 0usize;
+    let mut total = 0usize;
+
+    for ch in text.chars() {
+        if ch.is_whitespace() || ch.is_ascii_punctuation() {
+            continue;
+        }
+        total += 1;
+
+        if (ch >= '\u{4E00}' && ch <= '\u{9FFF}')
+            || (ch >= '\u{3400}' && ch <= '\u{4DBF}')
+            || (ch >= '\u{F900}' && ch <= '\u{FAFF}')
+        {
+            cjk += 1;
+        } else if (ch >= '\u{3040}' && ch <= '\u{309F}')
+            || (ch >= '\u{30A0}' && ch <= '\u{30FF}')
+        {
+            hira_kata += 1;
+        } else if ch >= '\u{AC00}' && ch <= '\u{D7AF}' {
+            hangul += 1;
+        } else if ch >= '\u{0900}' && ch <= '\u{097F}' {
+            devanagari += 1;
+        } else if (ch >= '\u{0600}' && ch <= '\u{06FF}')
+            || (ch >= '\u{0750}' && ch <= '\u{077F}')
+        {
+            arabic += 1;
+        }
+    }
+
+    if total == 0 {
+        return "en";
+    }
+
+    let threshold = (total as f32 * 0.30) as usize;
+    if cjk > threshold { return "zh"; }
+    if hira_kata > threshold { return "ja"; }
+    if hangul > threshold { return "ko"; }
+    if devanagari > threshold { return "hi"; }
+    if arabic > threshold { return "ar"; }
+
+    "en"
+}
+
 // -----------------------------------------------------------------------
 // EntityDetector — bootstrap rule-based (N>=3 contexts + groundable)
 // -----------------------------------------------------------------------
@@ -524,19 +590,63 @@ impl EntityDetector {
 // -----------------------------------------------------------------------
 
 /// Check whether a token is groundable to any seed atom.
+///
+/// v7.2: Uses exact match + word-boundary-aware prefix/suffix matching
+/// instead of raw `contains()`. This prevents false positives where
+/// short tokens like "at" match seeds like "state", "relation", etc.
+///
+/// Grounding is accepted if ANY of these hold:
+/// 1. **Exact match**: token == seed (exact same string)
+/// 2. **Word-boundary prefix**: token starts with seed and the next char
+///    is a word separator (underscore, hyphen, or the token ends there)
+/// 3. **Word-boundary suffix**: seed starts with token and the next char
+///    in the seed is a word separator (or the seed ends there)
 pub fn is_groundable_to_seeds(token: &str, seed_labels: &[&str]) -> bool {
+    /// Check if `haystack` starts with `prefix` followed by a word boundary.
+    /// A word boundary is: end of string, underscore, or hyphen.
+    fn starts_with_word_boundary(haystack: &str, prefix: &str) -> bool {
+        if let Some(rest) = haystack.strip_prefix(prefix) {
+            rest.is_empty() || rest.starts_with('_') || rest.starts_with('-')
+        } else {
+            false
+        }
+    }
+
     for seed in seed_labels {
-        if token.contains(seed) || seed.contains(token) {
+        // Exact match
+        if token == *seed {
+            return true;
+        }
+        // Token starts with seed + word boundary (e.g., token="state", seed="state")
+        if starts_with_word_boundary(token, seed) {
+            return true;
+        }
+        // Seed starts with token + word boundary (e.g., token="time", seed="time_period")
+        if starts_with_word_boundary(seed, token) {
             return true;
         }
     }
+
+    // Also check against common perceptual/physical grounding hints.
+    // These use the same word-boundary matching to avoid false positives.
     const GROUNDABLE_HINTS: &[&str] = &[
         "hard", "soft", "hot", "cold", "rough", "smooth", "heavy", "light", "sharp", "round",
         "solid", "liquid", "fast", "slow", "large", "small", "stone", "rock", "wood", "metal",
         "water", "fire", "earth", "air", "animal", "plant", "human", "body", "hand", "eye",
         "sound", "color", "heat", "pressure", "time", "force", "mass", "energy", "wave",
     ];
-    GROUNDABLE_HINTS
-        .iter()
-        .any(|hint| token.contains(hint) || hint.contains(token))
+
+    for hint in GROUNDABLE_HINTS {
+        if token == *hint {
+            return true;
+        }
+        if starts_with_word_boundary(token, hint) {
+            return true;
+        }
+        if starts_with_word_boundary(hint, token) {
+            return true;
+        }
+    }
+
+    false
 }
