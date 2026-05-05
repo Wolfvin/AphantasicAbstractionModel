@@ -11,6 +11,7 @@ Updated for RSVS v6.0 with:
 from __future__ import annotations
 
 import json
+import logging
 import os
 import secrets
 from contextlib import asynccontextmanager
@@ -24,6 +25,8 @@ from pydantic import BaseModel, Field
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
+
+logger = logging.getLogger(__name__)
 
 from .exceptions import (
     CompositionError,
@@ -42,9 +45,21 @@ from .protocols import RsvsCoreProtocol
 from .rsvs_core import get_rsvs_instance
 
 
-# --- Rate limiter ---
+# --- Rate limiter (keyed by API key when available, fallback to IP) ---
 
-limiter = Limiter(key_func=get_remote_address)
+def _rate_limit_key(request: Request) -> str:
+    """Rate limit by API key when available, otherwise by IP address.
+
+    IP-based limits are trivially bypassed via proxy rotation.
+    Keying by API key ensures per-tenant isolation.
+    """
+    api_key = request.headers.get("X-API-Key")
+    if api_key:
+        return f"key:{api_key}"
+    return get_remote_address(request)
+
+
+limiter = Limiter(key_func=_rate_limit_key)
 
 
 # --- Lifespan ---
@@ -63,8 +78,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="RSVS — Relational Symbolic Vocabulary System",
-    version="6.5.0",
-    description="Hard-attention symbolic knowledge engine with Rust core (v6.5 — Losion Cross-Pollination: Ebbinghaus forgetting, MCTS traversal, ThinkingToggle, CompositionIndex, SenseReflection, Consolidation, NeuroSym verification, Matryoshka traversal)",
+    version="7.1.0",
+    description="Hard-attention symbolic knowledge engine with Rust core (v7.1 — Security hardening: API key proxy, centralized error handling, HTTPS, atomic persist)",
     lifespan=lifespan,
 )
 
@@ -228,10 +243,24 @@ _EXCEPTION_STATUS_MAP: dict[str, int] = {
 @app.exception_handler(RsvsError)
 async def rsvs_error_handler(request: Request, exc: RsvsError) -> JSONResponse:
     status = _EXCEPTION_STATUS_MAP.get(type(exc).__name__, 500)
+    # Log full detail server-side, but only send error class name to client
+    if status >= 500:
+        logger.error("RSVS error (%s): %s", type(exc).__name__, exc)
     return JSONResponse(
         status_code=status,
-        content={"error": type(exc).__name__, "detail": str(exc)},
+        content={"error": type(exc).__name__},
     )
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """Catch-all: log internal details server-side, return generic response to client.
+
+    Prevents stack traces, file paths, and Rust module names from leaking
+    to the browser — a common information disclosure vulnerability.
+    """
+    logger.error("Unhandled exception on %s %s", request.method, request.url.path, exc_info=True)
+    return JSONResponse(status_code=500, content={"error": "internal_error"})
 
 
 # ---------------------------------------------------------------------------
@@ -281,8 +310,8 @@ async def run_endpoint(request: Request, req: RunRequest, _auth: None = Depends(
         return run_mode(rsvs, req.mode, text=req.text, target=req.target, source=req.source)
     except RsvsError:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        raise
 
 
 @app.post("/ingest")
@@ -293,8 +322,8 @@ async def ingest_endpoint(request: Request, req: IngestRequest, _auth: None = De
         return run_mode(rsvs, "ingest", text=req.text, source=req.source)
     except RsvsError:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        raise
 
 
 @app.post("/query")
@@ -310,8 +339,8 @@ async def query_endpoint(request: Request, req: QueryRequest, _auth: None = Depe
         return {"ok": True, "result": enriched}
     except RsvsError:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        raise
 
 
 @app.post("/similarity")
@@ -330,8 +359,8 @@ async def similarity_endpoint(request: Request, req: SimilarityRequest, _auth: N
         return {"label_a": req.label_a, "label_b": req.label_b, "similarity": sim_dict}
     except RsvsError:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        raise
 
 
 @app.get("/structural-similarity", tags=["structural"])
@@ -365,8 +394,8 @@ async def structural_similarity_endpoint(
         }
     except RsvsError:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        raise
 
 
 @app.get("/substitution-analysis", tags=["structural"])
@@ -406,8 +435,8 @@ async def substitution_analysis_endpoint(
         }
     except RsvsError:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        raise
 
 
 @app.post("/appraise")
@@ -418,8 +447,8 @@ async def appraise_endpoint(request: Request, req: AppraiseRequest, _auth: None 
         return run_mode(rsvs, "appraise", text=req.target)
     except RsvsError:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        raise
 
 
 @app.post("/relate")
@@ -430,8 +459,8 @@ async def relate_endpoint(request: Request, req: RelateRequest, _auth: None = De
         return run_mode(rsvs, "relate", text=req.source, target=req.target)
     except RsvsError:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        raise
 
 
 @app.post("/compose", tags=["compose"])
@@ -517,8 +546,8 @@ async def compose_node(request: Request, body: ComposeRequest, _auth: None = Dep
         raise
     except Exception as e:
         if "CompositionRejected" in str(e):
-            raise HTTPException(status_code=422, detail=str(e))
-        raise HTTPException(status_code=400, detail=str(e))
+            raise HTTPException(status_code=422, detail="composition_rejected")
+        raise HTTPException(status_code=400, detail="bad_request")
 
 
 @app.post("/node-info", tags=["node"])
@@ -534,8 +563,8 @@ async def node_info_endpoint(request: Request, req: NodeInfoRequest, _auth: None
         return {"ok": True, "result": enriched}
     except RsvsError:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        raise
 
 
 @app.post("/senses", tags=["node"])
@@ -549,8 +578,8 @@ async def senses_endpoint(request: Request, req: SensesRequest, _auth: None = De
         return {"ok": True, "label": req.label, "senses": enriched_senses}
     except RsvsError:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        raise
 
 
 @app.post("/context-query", tags=["query"])
@@ -595,8 +624,8 @@ async def context_query_endpoint(request: Request, req: ContextQueryRequest, _au
         }
     except RsvsError:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        raise
 
 
 @app.post("/context-similarity", tags=["similarity"])
@@ -631,8 +660,8 @@ async def context_similarity_endpoint(
         }
     except RsvsError:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        raise
 
 
 @app.get("/snapshot")
@@ -643,8 +672,8 @@ async def snapshot_endpoint(request: Request, _auth: None = Depends(_verify_api_
         return json.loads(rsvs.snapshot_v1())
     except RsvsError:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        raise
 
 
 @app.get("/events")
@@ -655,20 +684,20 @@ async def events_endpoint(request: Request, _auth: None = Depends(_verify_api_ke
         return json.loads(rsvs.consume_events_v1())
     except RsvsError:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        raise
 
 
 @app.get("/health")
 @limiter.limit("60/minute")
 async def health(request: Request) -> dict[str, str]:
-    return {"status": "ok", "version": "6.5.0"}
+    return {"status": "ok", "version": "7.1.0"}
 
 
 @app.get("/")
 @limiter.limit("60/minute")
 async def root(request: Request) -> dict[str, str]:
-    return {"name": "RSVS", "version": "6.5.0", "docs": "/docs"}
+    return {"name": "RSVS", "version": "7.1.0", "docs": "/docs"}
 
 
 @app.get("/autonomy/pending-removals", tags=["autonomy"])
@@ -685,8 +714,8 @@ async def pending_removals_endpoint(request: Request, _auth: None = Depends(_ver
         return {"ok": True, "pending_removals": pending}
     except RsvsError:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        raise
 
 
 @app.get("/entity-candidates", tags=["autonomy"])
@@ -714,8 +743,8 @@ async def entity_candidates_endpoint(
         }
     except RsvsError:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        raise
 
 
 @app.post("/set-domain-attention", tags=["domain"])
@@ -754,8 +783,8 @@ async def set_domain_attention_endpoint(
         }
     except RsvsError:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        raise
 
 
 # ---------------------------------------------------------------------------
@@ -810,8 +839,8 @@ async def thinking_mode_endpoint(
         }
     except RsvsError:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        raise
 
 
 @app.post("/mcts-query", tags=["query"])
@@ -852,8 +881,8 @@ async def mcts_query_endpoint(
         }
     except RsvsError:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        raise
 
 
 @app.post("/consolidate", tags=["maintenance"])
@@ -886,8 +915,8 @@ async def consolidate_endpoint(
         }
     except RsvsError:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        raise
 
 
 @app.post("/verify", tags=["verification"])
@@ -922,8 +951,8 @@ async def verify_endpoint(
         }
     except RsvsError:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        raise
 
 
 @app.get("/composition-index/stats", tags=["index"])
@@ -947,8 +976,8 @@ async def composition_index_stats_endpoint(
         }
     except RsvsError:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        raise
 
 
 @app.post("/reflection", tags=["maintenance"])
@@ -977,8 +1006,8 @@ async def reflection_endpoint(
         }
     except RsvsError:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        raise
 
 
 def main() -> None:

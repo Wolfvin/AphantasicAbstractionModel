@@ -48,41 +48,17 @@ interface BackendRunEnvelope {
 }
 
 /**
- * Get the backend base URL.
- *
- * The URL MUST be provided via NEXT_PUBLIC_RSVS_BACKEND_URL environment variable.
- * In development, defaults to http://localhost:8000.
- * In production (docker-compose), this is set to http://backend:8000.
- *
- * IMPORTANT: Never hardcode a production URL here. Always use environment variables.
+ * Build proxy URL for server-side API routing.
+ * All backend calls go through /api/proxy/<path> so the API key
+ * is never exposed to the browser (handled server-side in route.ts).
  */
-export function getBackendBaseUrl(): string {
-  const url = process.env.NEXT_PUBLIC_RSVS_BACKEND_URL;
-  if (!url) {
-    // Development fallback only — warns in production builds
-    if (process.env.NODE_ENV === 'production') {
-      console.error(
-        'NEXT_PUBLIC_RSVS_BACKEND_URL is not set! ' +
-        'Set this environment variable before deploying. ' +
-        'Falling back to localhost (will not work in production).'
-      );
-    }
-    return 'http://localhost:8000';
-  }
-  return url;
+function proxyUrl(path: string): string {
+  return `/api/proxy/${path}`;
 }
 
-/**
- * Get the API key header if configured.
- * Reads from NEXT_PUBLIC_RSVS_API_KEY (client-side) or injects via server proxy.
- */
 function getAuthHeaders(): Record<string, string> {
-  const apiKey = process.env.NEXT_PUBLIC_RSVS_API_KEY;
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (apiKey) {
-    headers['X-API-Key'] = apiKey;
-  }
-  return headers;
+  // API key is injected server-side by the proxy route — never sent from client
+  return { 'Content-Type': 'application/json' };
 }
 
 export async function runModeToBackend(
@@ -91,7 +67,7 @@ export async function runModeToBackend(
   correlationId: string,
   options: Record<string, unknown> = {},
 ): Promise<BackendRunEnvelope> {
-  const url = `${getBackendBaseUrl()}/run`;
+  const url = proxyUrl('run');
   const res = await fetch(url, {
     method: 'POST',
     headers: getAuthHeaders(),
@@ -169,11 +145,8 @@ export async function fetchStructuralSimilarity(
   labelA: string,
   labelB: string,
 ): Promise<StructuralSimilarityResult> {
-  const url = `${getBackendBaseUrl()}/structural-similarity?a=${encodeURIComponent(labelA)}&b=${encodeURIComponent(labelB)}`;
-  const headers: Record<string, string> = {};
-  const apiKey = process.env.NEXT_PUBLIC_RSVS_API_KEY;
-  if (apiKey) headers['X-API-Key'] = apiKey;
-  const res = await fetch(url, { method: 'GET', headers });
+  const url = proxyUrl(`structural-similarity?a=${encodeURIComponent(labelA)}&b=${encodeURIComponent(labelB)}`);
+  const res = await fetch(url, { method: 'GET' });
   if (!res.ok) {
     const body = await res.text();
     throw new Error(`Structural similarity failed (${res.status}): ${body}`);
@@ -189,11 +162,8 @@ export async function fetchSubstitutionAnalysis(
   labelA: string,
   labelB: string,
 ): Promise<SubstitutionAnalysisResult> {
-  const url = `${getBackendBaseUrl()}/substitution-analysis?a=${encodeURIComponent(labelA)}&b=${encodeURIComponent(labelB)}`;
-  const headers: Record<string, string> = {};
-  const apiKey = process.env.NEXT_PUBLIC_RSVS_API_KEY;
-  if (apiKey) headers['X-API-Key'] = apiKey;
-  const res = await fetch(url, { method: 'GET', headers });
+  const url = proxyUrl(`substitution-analysis?a=${encodeURIComponent(labelA)}&b=${encodeURIComponent(labelB)}`);
+  const res = await fetch(url, { method: 'GET' });
   if (!res.ok) {
     const body = await res.text();
     throw new Error(`Substitution analysis failed (${res.status}): ${body}`);
@@ -240,7 +210,7 @@ export interface ContextQueryResult {
 export async function contextQuery(
   options: ContextQueryOptions,
 ): Promise<ContextQueryResult> {
-  const url = `${getBackendBaseUrl()}/context-query`;
+  const url = proxyUrl('context-query');
   const res = await fetch(url, {
     method: 'POST',
     headers: getAuthHeaders(),
@@ -258,11 +228,8 @@ export async function contextQuery(
  * Uses /snapshot endpoint instead of the removed /latest endpoint.
  */
 export async function fetchLatestFromBackend(): Promise<BackendIngestResponse> {
-  const url = `${getBackendBaseUrl()}/snapshot`;
-  const headers: Record<string, string> = {};
-  const apiKey = process.env.NEXT_PUBLIC_RSVS_API_KEY;
-  if (apiKey) headers['X-API-Key'] = apiKey;
-  const res = await fetch(url, { method: 'GET', headers });
+  const url = proxyUrl('snapshot');
+  const res = await fetch(url, { method: 'GET' });
   if (!res.ok) {
     const body = await res.text();
     throw new Error(`Backend snapshot failed (${res.status}): ${body}`);

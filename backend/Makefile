@@ -1,4 +1,4 @@
-.PHONY: check-rust test-rust test-python test-all bridge-run audit
+.PHONY: check-rust test-rust test-python test-all serve audit
 
 check-rust:
         PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1 cargo check -p rsvs
@@ -12,8 +12,8 @@ test-python:
 
 test-all: check-rust test-rust test-python
 
-bridge-run:
-        PYTHONPATH=python python3 -m rsvs.bridge_server
+serve:
+        PYTHONPATH=python python3 -m rsvs.fastapi_server
 
 audit:
         cargo audit

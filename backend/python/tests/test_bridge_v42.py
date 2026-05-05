@@ -10,10 +10,9 @@ import rsvs.config as _config_mod
 import rsvs.modes as _modes_mod
 import rsvs.artifacts as _artifacts_mod
 import rsvs.rsvs_core as _rsvs_core
-import rsvs.bridge_server as bs
 
 # Modules that bind CONFIG from rsvs.config — all must be patched for temp-dir isolation
-_CONFIG_MODULES = (_config_mod, _modes_mod, _artifacts_mod, _rsvs_core, bs)
+_CONFIG_MODULES = (_config_mod, _modes_mod, _artifacts_mod, _rsvs_core)
 
 
 @pytest.fixture

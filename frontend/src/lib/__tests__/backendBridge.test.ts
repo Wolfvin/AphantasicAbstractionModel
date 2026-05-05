@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
-  getBackendBaseUrl,
   runModeToBackend,
   fetchLatestFromBackend,
 } from '../backendBridge';
@@ -13,15 +12,8 @@ beforeEach(() => {
   mockFetch.mockReset();
 });
 
-describe('getBackendBaseUrl', () => {
-  it('returns default URL when env var is not set', () => {
-    const url = getBackendBaseUrl();
-    expect(url).toBe('http://127.0.0.1:8000');
-  });
-});
-
 describe('runModeToBackend', () => {
-  it('sends POST request to /run with correct payload', async () => {
+  it('sends POST request to /api/proxy/run with correct payload', async () => {
     const mockResponse = {
       ok: true,
       mode: 'ingest',
@@ -37,7 +29,7 @@ describe('runModeToBackend', () => {
 
     const result = await runModeToBackend('ingest', 'hello world', 'corr_1');
     expect(mockFetch).toHaveBeenCalledWith(
-      expect.stringContaining('/run'),
+      '/api/proxy/run',
       expect.objectContaining({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -78,21 +70,14 @@ describe('runModeToBackend', () => {
     const body = JSON.parse(callArgs.body);
     expect(body.options).toEqual({ node_id: 42 });
   });
-});
 
-describe('fetchLatestFromBackend', () => {
-  it('sends GET request to /latest', async () => {
+  it('does not include X-API-Key in headers (handled by proxy)', async () => {
     const mockResponse = {
       ok: true,
-      correlation_id: 'corr_latest',
-      snapshot: {
-        snapshot_id: 'snap_1',
-        generated_at: new Date().toISOString(),
-        context: { domain: 'test', batch_id: 'b1', input_message_id: 'm1' },
-        nodes: [],
-        edges: [],
-      },
-      events: [],
+      mode: 'ingest',
+      correlation_id: 'corr_3',
+      timestamp: new Date().toISOString(),
+      result: {},
       messages: [],
     };
     mockFetch.mockResolvedValueOnce({
@@ -100,9 +85,29 @@ describe('fetchLatestFromBackend', () => {
       json: async () => mockResponse,
     });
 
+    await runModeToBackend('ingest', 'test', 'corr_3');
+    const callArgs = mockFetch.mock.calls[0][1];
+    expect(callArgs.headers).not.toHaveProperty('X-API-Key');
+  });
+});
+
+describe('fetchLatestFromBackend', () => {
+  it('sends GET request to /api/proxy/snapshot', async () => {
+    const mockSnapshot = {
+      snapshot_id: 'snap_1',
+      generated_at: new Date().toISOString(),
+      context: { domain: 'test', batch_id: 'b1', input_message_id: 'm1' },
+      nodes: [],
+      edges: [],
+    };
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => mockSnapshot,
+    });
+
     const result = await fetchLatestFromBackend();
     expect(mockFetch).toHaveBeenCalledWith(
-      expect.stringContaining('/latest'),
+      '/api/proxy/snapshot',
       expect.objectContaining({ method: 'GET' }),
     );
     expect(result.ok).toBe(true);
@@ -116,7 +121,7 @@ describe('fetchLatestFromBackend', () => {
     });
 
     await expect(fetchLatestFromBackend()).rejects.toThrow(
-      'Backend latest failed (404)',
+      'Backend snapshot failed (404)',
     );
   });
 });

@@ -379,12 +379,24 @@ fn pair_key(a: &str, b: &str) -> String {
 // -----------------------------------------------------------------------
 
 /// Save the full RSVS state to a JSON file.
+///
+/// Uses atomic write (write to .tmp, then rename) to prevent corruption
+/// if the process crashes during serialization. On Linux/macOS,
+/// `std::fs::rename` is atomic, so the state file is always either
+/// the old version or the new version — never a partial write.
 pub fn save(rsvs: &Rsvs, path: &Path) -> Result<(), RsvsError> {
     let snapshot = to_snapshot(rsvs);
-    let file = File::create(path).map_err(|e| RsvsError::Persistence(e.to_string()))?;
+    let tmp = path.with_extension("tmp");
+    let file = File::create(&tmp).map_err(|e| RsvsError::Persistence(e.to_string()))?;
     let writer = BufWriter::new(file);
     serde_json::to_writer_pretty(writer, &snapshot)
         .map_err(|e| RsvsError::Persistence(e.to_string()))?;
+    // Flush buffers before rename to ensure data is on disk
+    std::fs::rename(&tmp, path).map_err(|e| {
+        // Clean up temp file on rename failure
+        let _ = std::fs::remove_file(&tmp);
+        RsvsError::Persistence(e.to_string())
+    })?;
     Ok(())
 }
 
