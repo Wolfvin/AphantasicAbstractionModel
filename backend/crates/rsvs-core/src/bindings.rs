@@ -249,6 +249,8 @@ pub struct PyAppraiseResult {
     pub disagree_pct: f32,
     pub verdict: String,
     pub evidence: Vec<(String, f32)>,
+    /// v8.2: Convergent nodes that contributed to appraise scoring.
+    pub convergence_info: Vec<(String, f32)>,
 }
 
 #[pymethods]
@@ -805,6 +807,7 @@ impl PyRsvs {
             disagree_pct: r.disagree_pct,
             verdict: r.verdict,
             evidence: r.evidence,
+            convergence_info: r.convergence_info,
         }
     }
 

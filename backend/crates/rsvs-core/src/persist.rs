@@ -274,6 +274,10 @@ pub struct RsvsSnapshot {
     /// v7.3: Domain calibration data for ParadigmRouter persistence.
     #[serde(default)]
     pub domain_calibration: Vec<crate::paradigm::CalibrationEntry>,
+    /// v8.2: Convergence engine's detected pairs for persistence.
+    /// Stored as Vec of (min_id, max_id) pairs. Missing in pre-v8.2 snapshots → defaults to empty.
+    #[serde(default)]
+    pub convergence_detected_pairs: Vec<(u32, u32)>,
 }
 
 // -----------------------------------------------------------------------
@@ -598,6 +602,7 @@ pub fn to_snapshot(rsvs: &Rsvs) -> RsvsSnapshot {
         current_domain: rsvs.config.current_domain,
         traversal: SavedTraversalConfig::from(&rsvs.config.traversal),
         domain_calibration: rsvs.paradigm_router.export_calibration(),
+        convergence_detected_pairs: rsvs.convergence.export_detected_pairs(),
     }
 }
 
@@ -858,6 +863,11 @@ pub fn from_snapshot(snap: RsvsSnapshot) -> Rsvs {
 
     // v7.3: Restore domain calibration from saved data
     rsvs.paradigm_router.import_calibration(&snap.domain_calibration);
+
+    // v8.2: Restore convergence detected pairs from saved data
+    if !snap.convergence_detected_pairs.is_empty() {
+        rsvs.convergence.import_detected_pairs(snap.convergence_detected_pairs);
+    }
 
     // v7.3: Rebuild composition index from restored senses
     rsvs.composition_index.rebuild(&rsvs.senses);

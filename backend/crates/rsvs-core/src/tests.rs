@@ -656,10 +656,27 @@ mod attention_tests {
     }
 
     #[test]
-    fn groundable_physical_words() {
+    fn groundable_seed_labels_match() {
         let seeds = vec!["exists", "entity", "hard"];
+        // Exact seed label match → groundable
         assert!(is_groundable_to_seeds("hard", &seeds));
-        assert!(is_groundable_to_seeds("stone", &seeds));
+        assert!(is_groundable_to_seeds("exists", &seeds));
+        // Non-seed labels → not groundable by string matching alone
+        // (they become groundable via sentence_contains_seed in the ingest pipeline)
+        assert!(!is_groundable_to_seeds("stone", &seeds));
+        assert!(!is_groundable_to_seeds("anjing", &seeds));
+    }
+
+    #[test]
+    fn sentence_level_grounding_works() {
+        use crate::attention::sentence_contains_seed;
+        let seeds = vec!["exists", "entity"];
+        // Sentence with a seed → all tokens are groundable
+        let tokens = vec!["anjing".to_string(), "exists".to_string()];
+        assert!(sentence_contains_seed(&tokens, &seeds));
+        // Sentence without seeds → not groundable
+        let tokens_no_seed = vec!["anjing".to_string(), "kucing".to_string()];
+        assert!(!sentence_contains_seed(&tokens_no_seed, &seeds));
     }
 
     #[test]

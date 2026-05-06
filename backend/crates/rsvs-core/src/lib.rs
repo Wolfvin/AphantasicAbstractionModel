@@ -50,7 +50,7 @@ pub mod spreading;
 pub mod deps;
 
 pub use attention::{
-    is_groundable_to_seeds, text_to_sentences, tokenize, AttentionComponent, AttentionConfig,
+    is_groundable_to_seeds, sentence_contains_seed, text_to_sentences, tokenize, AttentionComponent, AttentionConfig,
     CoocStats, DomainAttentionConfig, EntityDetector, RsvsAttention,
 };
 pub use autonomy::{

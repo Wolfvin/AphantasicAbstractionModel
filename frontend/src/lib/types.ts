@@ -365,6 +365,8 @@ export interface AppraiseResult {
   conflict_nodes: AppraiseEvidenceNode[];
   evidence_paths: EvidencePath[];
   target_node_id?: number;
+  /** v8.2: Convergent nodes that contributed to the appraise score. */
+  convergence_contributors?: Array<{ label: string; boost: number }>;
 }
 
 // ── Relate Result ──

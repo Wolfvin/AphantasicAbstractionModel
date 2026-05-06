@@ -309,6 +309,20 @@ impl ConvergenceEngine {
     pub fn detected_count(&self) -> usize {
         self.detected_pairs.len()
     }
+
+    /// v8.2: Export detected pairs for persistence.
+    /// Returns a sorted Vec of (min_id, max_id) pairs.
+    pub fn export_detected_pairs(&self) -> Vec<(NodeId, NodeId)> {
+        let mut pairs: Vec<_> = self.detected_pairs.iter().copied().collect();
+        pairs.sort();
+        pairs
+    }
+
+    /// v8.2: Import detected pairs from persistence.
+    /// Replaces the current set with the provided pairs.
+    pub fn import_detected_pairs(&mut self, pairs: Vec<(NodeId, NodeId)>) {
+        self.detected_pairs = pairs.into_iter().collect();
+    }
 }
 
 // -----------------------------------------------------------------------

@@ -204,6 +204,8 @@ export interface ContextQueryResult {
     cycles_detected: number;
     layer: number;
     grounding_score: number;
+    /** v8.2: Convergent nodes that contributed to this query result. */
+    convergence_contributors?: [string, number][];
   } | null;
 }
 

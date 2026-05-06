@@ -4,7 +4,7 @@ import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ShieldCheck, ShieldAlert, ShieldX, TrendingUp,
-  ChevronRight, GitBranch, AlertTriangle, CheckCircle2,
+  ChevronRight, GitBranch, AlertTriangle, CheckCircle2, Link2,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -224,6 +224,30 @@ export default function AppraisePanel({ result, className }: AppraisePanelProps)
                       ))}
                     </div>
                   </ScrollArea>
+                </div>
+              </>
+            )}
+
+            {/* v8.2: Convergence Contributors */}
+            {result.convergence_contributors && result.convergence_contributors.length > 0 && (
+              <>
+                <Separator className="bg-[#1e293b]" />
+                <div>
+                  <div className="text-[10px] uppercase tracking-wider text-[#CE93D8] mb-1.5 flex items-center gap-1.5">
+                    <Link2 className="w-3 h-3" />
+                    Convergence Boost ({result.convergence_contributors.length})
+                  </div>
+                  <div className="space-y-0.5">
+                    {result.convergence_contributors.map((contrib, i) => (
+                      <div key={i} className="flex items-center gap-2 px-2 py-1 text-xs">
+                        <Link2 className="w-3 h-3 text-[#CE93D8] shrink-0" />
+                        <span className="text-[#e2e8f0] font-mono truncate flex-1">{contrib.label}</span>
+                        <span className="text-[10px] font-mono text-[#CE93D8] shrink-0">
+                          +{(contrib.boost * 100).toFixed(0)}%
+                        </span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </>
             )}

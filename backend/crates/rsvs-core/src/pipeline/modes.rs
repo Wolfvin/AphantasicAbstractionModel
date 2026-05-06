@@ -26,6 +26,10 @@ pub struct AppraiseResult {
     pub verdict: String,
     /// Per-token evidence: (token, confidence) for matched tokens.
     pub evidence: Vec<(String, f32)>,
+    /// v8.2: Convergent nodes that contributed to the appraise score.
+    /// Each entry is (label, convergence_boost) indicating how much
+    /// a structurally equivalent node boosted the corroboration.
+    pub convergence_info: Vec<(String, f32)>,
 }
 
 // -----------------------------------------------------------------------
@@ -76,12 +80,15 @@ impl Rsvs {
                 disagree_pct: 100.0,
                 verdict: "novel".to_string(),
                 evidence: vec![],
+                convergence_info: vec![],
             };
         }
 
         let total = tokens.len() as f32;
         let mut structural_score = 0.0f32;
         let mut evidence: Vec<(String, f32)> = Vec::new();
+        // v8.2: Track convergent nodes that contributed to appraise scoring
+        let mut convergence_seen: std::collections::HashMap<String, f32> = std::collections::HashMap::new();
 
         // Build the set of all node IDs mentioned in the text for
         // cross-referencing compositions
@@ -123,10 +130,16 @@ impl Rsvs {
                     }).max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
                     .unwrap_or(0.7);
 
-                    // v8.1: Check convergent nodes for additional corroboration
+                    // v8.1 → v8.2: Check convergent nodes for additional corroboration
                     // If this node has structural_equivalence links, check if
                     // the convergent nodes' compositions corroborate the text
-                    let conv_boost = self.convergence_boost_for_appraise(id, &text_node_ids);
+                    // v8.2: Also track which convergent nodes contributed
+                    let (conv_boost, conv_contributors) = self.convergence_boost_for_appraise(id, &text_node_ids);
+                    for (label, boost) in conv_contributors {
+                        convergence_seen.entry(label)
+                            .and_modify(|existing| *existing = existing.max(boost))
+                            .or_insert(boost);
+                    }
 
                     (best_sense_match + conv_boost).min(1.0)
                 } else {
@@ -155,11 +168,16 @@ impl Rsvs {
 
         evidence.sort_by(|a, b| b.1.total_cmp(&a.1));
 
+        // v8.2: Convert convergence tracking map to sorted vec
+        let mut convergence_info: Vec<(String, f32)> = convergence_seen.into_iter().collect();
+        convergence_info.sort_by(|a, b| b.1.total_cmp(&a.1));
+
         AppraiseResult {
             agree_pct,
             disagree_pct,
             verdict,
             evidence,
+            convergence_info,
         }
     }
 
@@ -338,17 +356,20 @@ impl Rsvs {
     ///
     /// Returns a boost value in [0.0, 0.3] — capped to prevent
     /// convergence from overwhelming direct composition evidence.
+    /// v8.2: Returns (boost_value, contributors) where contributors is a list
+    /// of (label, boost) pairs for convergent nodes that corroborated the text.
     fn convergence_boost_for_appraise(
         &self,
         node_id: NodeId,
         text_node_ids: &HashSet<NodeId>,
-    ) -> f32 {
+    ) -> (f32, Vec<(String, f32)>) {
         let node = match self.graph.get_node(node_id) {
             Some(n) => n,
-            None => return 0.0,
+            None => return (0.0, vec![]),
         };
 
         let mut best_boost = 0.0f32;
+        let mut contributors: Vec<(String, f32)> = Vec::new();
 
         for link in &node.language_links {
             if link.link_type != "structural_equivalence" {
@@ -356,6 +377,10 @@ impl Rsvs {
             }
 
             let conv_id = link.target_id;
+            let conv_label = match self.graph.get_node(conv_id) {
+                Some(n) => n.label.clone(),
+                None => continue,
+            };
             let conv_sm = match self.senses.get(&conv_id) {
                 Some(sm) => sm,
                 None => continue,
@@ -373,9 +398,12 @@ impl Rsvs {
 
             // Convert convergent corroboration to a boost (capped at 0.3)
             let boost = (conv_best * 0.3).min(0.3);
+            if boost > 0.01 {
+                contributors.push((conv_label, boost));
+            }
             best_boost = best_boost.max(boost);
         }
 
-        best_boost
+        (best_boost, contributors)
     }
 }

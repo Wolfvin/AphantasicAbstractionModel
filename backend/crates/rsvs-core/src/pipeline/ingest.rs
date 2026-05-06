@@ -7,7 +7,7 @@
 //! compositions of the new sense. This is the INDUCTION mechanism.
 
 use super::Rsvs;
-use crate::attention::{is_groundable_to_seeds, text_to_sentences};
+use crate::attention::{is_groundable_to_seeds, sentence_contains_seed, text_to_sentences};
 use crate::autonomy::ConfidenceUpdateResult;
 use crate::error::RsvsError;
 use crate::sense::IngestResult;
@@ -79,14 +79,25 @@ impl Rsvs {
         }
 
         // --- Step 1: Update co-occurrence statistics ---
+        // v8.2: Language-agnostic grounding. Instead of checking each token
+        // individually against English seed labels (which blocked Indonesian
+        // tokens from ever being promoted), we check at the sentence level:
+        // if a sentence contains at least one seed, ALL tokens in that
+        // sentence are considered groundable. This is structurally correct —
+        // a token that co-occurs with seeds is semantically grounded.
         let seed_refs: Vec<&str> = self.config.seed_labels.iter().map(|s| s.as_str()).collect();
         let entity_records: Vec<Vec<(String, bool)>> = sentences
             .par_iter()
             .map(|tokens| {
+                // Sentence-level grounding: if any token in this sentence
+                // is a seed, then ALL tokens in this sentence are groundable.
+                let has_seed = sentence_contains_seed(tokens, &seed_refs);
                 tokens
                     .iter()
                     .map(|token| {
-                        let groundable = is_groundable_to_seeds(token, &seed_refs);
+                        // Token is groundable if: (1) the sentence contains a seed,
+                        // OR (2) the token is itself a seed label (exact match).
+                        let groundable = has_seed || is_groundable_to_seeds(token, &seed_refs);
                         (token.clone(), groundable)
                     })
                     .collect()

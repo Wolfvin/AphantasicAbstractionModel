@@ -537,62 +537,49 @@ impl EntityDetector {
 
 /// Check whether a token is groundable to any seed atom.
 ///
-/// v7.2: Uses exact match + word-boundary-aware prefix/suffix matching
-/// instead of raw `contains()`. This prevents false positives where
-/// short tokens like "at" match seeds like "state", "relation", etc.
+/// v8.2: Language-agnostic grounding. A token is considered groundable
+/// if it appears in a sentence that contains at least one seed token.
+/// This is a structural criterion — the token co-occurs with primitives,
+/// therefore it is semantically grounded, regardless of language.
 ///
-/// Grounding is accepted if ANY of these hold:
-/// 1. **Exact match**: token == seed (exact same string)
-/// 2. **Word-boundary prefix**: token starts with seed and the next char
-///    is a word separator (underscore, hyphen, or the token ends there)
-/// 3. **Word-boundary suffix**: seed starts with token and the next char
-///    in the seed is a word separator (or the seed ends there)
+/// This replaces the previous string-matching approach (exact match +
+/// word-boundary prefix/suffix against English seed labels and hardcoded
+/// GROUNDABLE_HINTS). That approach was fundamentally incompatible with
+/// the language-agnostic vision: Indonesian tokens like "anjing", "panas",
+/// "keras" could never match English seed labels, so they could never
+/// pass the grounding gate, and thus could never be promoted to nodes.
+///
+/// The new approach: the ingest pipeline already computes which tokens
+/// co-occur with seeds at the sentence level. We simply use that
+/// structural information instead of string matching.
+///
+/// For backward compatibility, seed label matching is still performed
+/// (a token that IS a seed label is trivially groundable), but it is
+/// no longer the primary gate — co-occurrence is.
 pub fn is_groundable_to_seeds(token: &str, seed_labels: &[&str]) -> bool {
-    /// Check if `haystack` starts with `prefix` followed by a word boundary.
-    /// A word boundary is: end of string, underscore, or hyphen.
-    fn starts_with_word_boundary(haystack: &str, prefix: &str) -> bool {
-        if let Some(rest) = haystack.strip_prefix(prefix) {
-            rest.is_empty() || rest.starts_with('_') || rest.starts_with('-')
-        } else {
-            false
-        }
-    }
-
+    // A token that is itself a seed label is trivially groundable.
     for seed in seed_labels {
-        // Exact match
         if token == *seed {
             return true;
         }
-        // Token starts with seed + word boundary (e.g., token="state", seed="state")
-        if starts_with_word_boundary(token, seed) {
-            return true;
-        }
-        // Seed starts with token + word boundary (e.g., token="time", seed="time_period")
-        if starts_with_word_boundary(seed, token) {
-            return true;
-        }
     }
-
-    // Also check against common perceptual/physical grounding hints.
-    // These use the same word-boundary matching to avoid false positives.
-    const GROUNDABLE_HINTS: &[&str] = &[
-        "hard", "soft", "hot", "cold", "rough", "smooth", "heavy", "light", "sharp", "round",
-        "solid", "liquid", "fast", "slow", "large", "small", "stone", "rock", "wood", "metal",
-        "water", "fire", "earth", "air", "animal", "plant", "human", "body", "hand", "eye",
-        "sound", "color", "heat", "pressure", "time", "force", "mass", "energy", "wave",
-    ];
-
-    for hint in GROUNDABLE_HINTS {
-        if token == *hint {
-            return true;
-        }
-        if starts_with_word_boundary(token, hint) {
-            return true;
-        }
-        if starts_with_word_boundary(hint, token) {
-            return true;
-        }
-    }
-
+    // All other grounding is determined structurally by co-occurrence
+    // at the sentence level in the ingest pipeline (see ingest.rs).
+    // The `is_groundable` flag in EntityDetector is now set based on
+    // whether the token appeared in a sentence containing a seed,
+    // not based on string matching.
     false
+}
+
+/// Check whether any token in a sentence is a known seed.
+/// This is the language-agnostic grounding check: a token is groundable
+/// if it shares a sentence with at least one seed. We check the sentence
+/// for seed presence and return true if any seed is found.
+///
+/// This function replaces the per-token `is_groundable_to_seeds` as the
+/// primary grounding mechanism. The ingest pipeline calls this per-sentence
+/// and marks ALL non-seed tokens in that sentence as groundable.
+pub fn sentence_contains_seed(tokens: &[String], seed_labels: &[&str]) -> bool {
+    let seed_set: std::collections::HashSet<&str> = seed_labels.iter().copied().collect();
+    tokens.iter().any(|t| seed_set.contains(t.as_str()))
 }

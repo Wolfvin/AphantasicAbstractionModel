@@ -245,6 +245,15 @@ def _run_appraise_rust(
         if float(conf) > 0.0
     ]
 
+    # v8.2: Extract convergence info from appraise result
+    convergence_contributors = []
+    if hasattr(appraise_result, 'convergence_info'):
+        convergence_contributors = [
+            {"label": label, "boost": round(float(boost), 3)}
+            for label, boost in appraise_result.convergence_info
+            if float(boost) > 0.01
+        ]
+
     result = {
         "view": view,
         "stance": {"agree": int(agree_pct), "disagree": int(disagree_pct)},
@@ -256,6 +265,11 @@ def _run_appraise_rust(
             "conflict_nodes": [],
             "paths": [],
         },
+        "evidence_nodes": support_nodes[:10],
+        "conflict_nodes": [],
+        "evidence_paths": [],
+        # v8.2: Convergent nodes that contributed to appraise scoring
+        "convergence_contributors": convergence_contributors,
     }
 
     messages = [
