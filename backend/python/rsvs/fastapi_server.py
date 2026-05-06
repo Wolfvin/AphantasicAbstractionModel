@@ -15,6 +15,7 @@ includes the route modules, and provides the ``main()`` entrypoint.
 from __future__ import annotations
 
 import os
+import sys
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -39,6 +40,43 @@ from .rsvs_core import get_rsvs_instance
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # v8.3: Production fail-fast — refuse to boot without required secrets.
+    # In production (NODE_ENV=production), RSVS_API_KEY and RSVS_SESSION_SECRET
+    # MUST be set. Empty values are a security risk.
+    _node_env = os.environ.get("NODE_ENV", "development")
+    _api_key = os.environ.get("RSVS_API_KEY", "")
+    _session_secret = os.environ.get("RSVS_SESSION_SECRET", "")
+
+    if _node_env == "production":
+        if not _api_key:
+            print(
+                "FATAL: RSVS_API_KEY is required in production but not set. "
+                "Set it via environment variable or .env file.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        if not _session_secret:
+            print(
+                "FATAL: RSVS_SESSION_SECRET is required in production but not set. "
+                "Set it via environment variable or .env file.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+    else:
+        # Development mode: warn if secrets are empty
+        if not _api_key:
+            import logging
+            logging.getLogger(__name__).warning(
+                "RSVS_API_KEY not set — API authentication is DISABLED. "
+                "Set RSVS_API_KEY in production!"
+            )
+        if not _session_secret and not _api_key:
+            import logging
+            logging.getLogger(__name__).warning(
+                "RSVS_SESSION_SECRET not set — using RSVS_API_KEY as fallback. "
+                "Set RSVS_SESSION_SECRET explicitly in production!"
+            )
+
     try:
         get_rsvs_instance()
     except RustCoreUnavailableError:
@@ -50,8 +88,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="RSVS — Relational Symbolic Vocabulary System",
-    version="7.2.1",
-    description="Hard-attention symbolic knowledge engine with Rust core (v7.2.1 — Session-auth proxy, constant-time compare, modular routes)",
+    version="8.3.0",
+    description="Hard-attention symbolic knowledge engine with Rust core (v8.3 — Language-agnostic, convergence detection, production-ready)",
     lifespan=lifespan,
 )
 

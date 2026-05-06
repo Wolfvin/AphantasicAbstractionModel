@@ -1,7 +1,7 @@
 # ──────────────────────────────────────────────────────────────────────
 #  SymbolicPuzzle3D — Docker Compose
 #  Nginx (reverse proxy) + Backend (Rust + Python bridge) + Frontend (Next.js)
-#  v7.2: Added HTTPS/Certbot support, server-side API key, atomic persist
+#  v8.3: Fixed backend target (runtime, not rust-builder), added session secret,
 # ──────────────────────────────────────────────────────────────────────
 
 services:
@@ -32,19 +32,19 @@ services:
     restart: unless-stopped
 
   # ── Backend: Rust core + Python bridge ──────────────────────────────
+  # v8.3 FIX: Removed `target: rust-builder` — the Dockerfile's final stage
+  # is `runtime`, which is the lean production image with non-root user,
+  # pre-installed wheels, Python bridge, and the proper entrypoint.
+  # Using rust-builder meant running in the build stage (2GB+ image, root,
+  # no /app structure, manual wheel install in command override).
   backend:
     build:
       context: .
       dockerfile: Dockerfile
-      target: rust-builder
     image: symbolic-puzzle-3d/backend:latest
     container_name: sp3d-backend
-    command:
-      - bash
-      - -c
-      - |
-        pip install --no-cache-dir /dist/wheels/*.whl || maturin develop --manifest-path crates/rsvs-core/Cargo.toml
-        cd /build && PYTHONPATH=python python3 -m rsvs.fastapi_server
+    # No command override — the Dockerfile ENTRYPOINT starts both services
+    # via docker-entrypoint.sh (Python bridge on :8000 + Next.js on :3000)
     # No direct port exposure — accessible only via nginx
     expose:
       - "8000"
@@ -54,10 +54,16 @@ services:
       - PYTHONUNBUFFERED=1
       - PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1
       - RSVS_ATOM_DIR=/app/data
+      # v8.3: Unified env vars — FastAPI reads RSVS_HOST/RSVS_PORT,
+      # BridgeConfig reads RSVS_BRIDGE_HOST/RSVS_BRIDGE_PORT.
+      # We set both so there's no mismatch regardless of which code reads them.
+      - RSVS_HOST=0.0.0.0
+      - RSVS_PORT=8000
       - RSVS_BRIDGE_HOST=0.0.0.0
       - RSVS_BRIDGE_PORT=8000
       # Security: Set these in production via .env or docker-compose.override.yml
       - RSVS_API_KEY=${RSVS_API_KEY:-}
+      - RSVS_SESSION_SECRET=${RSVS_SESSION_SECRET:-}
       - RSVS_ALLOWED_ORIGINS=http://frontend:3000,http://localhost:3000
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -83,6 +89,7 @@ services:
       # Server-side only — never exposed to browser (no NEXT_PUBLIC_ prefix)
       - RSVS_BACKEND_URL=http://backend:8000
       - RSVS_API_KEY=${RSVS_API_KEY:-}
+      - RSVS_SESSION_SECRET=${RSVS_SESSION_SECRET:-}
       - HOSTNAME=0.0.0.0
       - PORT=3000
     depends_on:

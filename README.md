@@ -10,8 +10,8 @@
 [![Python](https://img.shields.io/badge/Python-3.12+-blue?style=flat-square&logo=python)](https://python.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-3178C6?style=flat-square&logo=typescript)](https://www.typescriptlang.org/)
 [![License](https://img.shields.io/badge/License-MIT%2FApache--2.0-green?style=flat-square)](LICENSE)
-[![Schema](https://img.shields.io/badge/Schema-v7.2-purple?style=flat-square)]()
-[![Tests](https://img.shields.io/badge/Tests-175_passing-brightgreen?style=flat-square)]()
+[![Schema](https://img.shields.io/badge/Schema-v8.3-purple?style=flat-square)]()
+[![Tests](https://img.shields.io/badge/Tests-178_passing-brightgreen?style=flat-square)]()
 
 [Quick Start](#-quick-start) · [Key Insight](#-the-key-insight) · [Architecture](#-architecture-at-a-glance) · [Core Features](#-core-features) · [Advanced Features](#-advanced-features-v72) · [Security](SECURITY.md) · [API](#-api-reference) · [Contributing](CONTRIBUTING.md)
 
@@ -291,9 +291,9 @@ cd frontend && npm run dev
 
 ---
 
-## Advanced Features (v7.2)
+## Advanced Features (v8.3)
 
-v7.2 completes the full pipeline integration of all Losion-inspired modules. Every v7.0 module is now wired into the core data flows: ParadigmRouter selects traversal strategy in `context_query()`, SpreadingActivation discovers structural relations in `relate()`, NeuroSymVerifier validates compositions in `compose()`, and DEPSPlanner provides recovery hints on failure. All ten modules are cross-pollinated from [Losion](https://github.com/Wolfvin/Losion), adapted from Losion's neural/reasoning architecture to RSVS's structural domain. The key adaptation principle: **Losion uses neural networks; RSVS uses deterministic structural heuristics.**
+v8.3 completes the language-agnostic architecture: `GROUNDABLE_HINTS` removed (entity promotion relies on structural grounding via co-occurrence with seeds), convergence detection with throttled O(N²) and `detected_pairs` persistence, convergence fusion in all 3 modes (query/appraise/relate), and production-ready Docker deployment. The system is now fully language-agnostic — "anjing" and "dog" converge to the same concept structurally without any language detection or hardcoded string matching.
 
 ### ParadigmRouter — Adaptive Traversal Paradigm Selection
 

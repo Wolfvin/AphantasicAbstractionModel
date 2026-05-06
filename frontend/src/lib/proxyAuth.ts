@@ -36,6 +36,16 @@ const SESSION_SECRET = process.env.RSVS_SESSION_SECRET
       // Ephemeral random secret — works for single-instance dev only
       const bytes = Buffer.alloc(32);
       require('crypto').randomFillSync(bytes);
+      // v8.3: Warn loudly if running in production without a session secret.
+      // Ephemeral secrets break sessions on restart and don't work in multi-instance.
+      if (process.env.NODE_ENV === 'production') {
+        console.error(
+          '⚠️  SECURITY: RSVS_SESSION_SECRET is not set in production! ' +
+          'Using an ephemeral random secret which will break sessions on restart ' +
+          'and does not work in multi-instance deployments. ' +
+          'Set RSVS_SESSION_SECRET to a cryptographically random string (≥32 bytes).'
+        );
+      }
       return bytes.toString('hex');
     })();
 
