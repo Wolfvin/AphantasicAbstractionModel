@@ -54,7 +54,7 @@ async def ingest_endpoint(request: Request, req: IngestRequest, _auth: None = De
 @limiter.limit("30/minute")
 async def query_endpoint(request: Request, req: QueryRequest, _auth: None = Depends(_verify_api_key)) -> dict[str, Any]:
     rsvs: RsvsCoreProtocol = get_rsvs_instance()
-    result = rsvs.query(req.text, "")
+    result = rsvs.query(req.text, req.context or "")
     if result is None:
         return {"ok": True, "result": None}
     enriched = _enriched_query_result(result)

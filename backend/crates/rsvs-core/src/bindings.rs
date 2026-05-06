@@ -83,6 +83,9 @@ pub struct PyQueryResult {
     pub layer: u32,
     pub grounding_score: f32,
     pub compositions: Vec<(String, u32)>,
+    /// v8.2: Convergent nodes that contributed to this query result.
+    /// Each entry is (label, convergence_discount).
+    pub convergence_contributors: Vec<(String, f32)>,
 }
 
 #[pymethods]
@@ -95,12 +98,13 @@ impl PyQueryResult {
             .map(|(l, s)| format!("{}:{:.2}", l, s))
             .collect();
         format!(
-            "QueryResult(sense={}, N={}, layer={}, atoms=[{}], comps={})",
+            "QueryResult(sense={}, N={}, layer={}, atoms=[{}], comps={}, conv={})",
             self.sense_idx,
             self.sense_n,
             self.layer,
             top.join(", "),
-            self.compositions.len()
+            self.compositions.len(),
+            self.convergence_contributors.len()
         )
     }
 
@@ -654,6 +658,7 @@ impl PyRsvs {
             layer: r.layer,
             grounding_score: r.grounding_score,
             compositions: r.compositions,
+            convergence_contributors: r.convergence_contributors,
         })
     }
 

@@ -111,10 +111,11 @@ def _enriched_sense_info(raw: Any) -> dict[str, Any]:
 
 
 def _enriched_query_result(raw: Any) -> dict[str, Any]:
-    """Convert a PyQueryResult (v5.0) to a dict, including layer, grounding_score, compositions."""
+    """Convert a PyQueryResult (v8.2) to a dict, including layer, grounding_score, compositions, convergence_contributors."""
     result: dict[str, Any] = {}
     for attr in ("label", "tier", "confidence", "status",
-                 "layer", "grounding_score", "compositions"):
+                 "layer", "grounding_score", "compositions",
+                 "convergence_contributors"):
         val = getattr(raw, attr, None)
         if val is not None:
             result[attr] = val

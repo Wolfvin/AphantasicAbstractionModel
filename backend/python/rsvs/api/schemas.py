@@ -27,6 +27,7 @@ class RunRequest(BaseModel):
 
 class QueryRequest(BaseModel):
     text: str = Field(..., min_length=1)
+    context: str | None = Field(None, max_length=500, description="Context string for query disambiguation (v8.2)")
     top_k: int = Field(10, ge=1, le=100)
 
 

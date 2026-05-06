@@ -486,65 +486,11 @@ pub fn text_to_sentences(text: &str) -> Vec<Vec<String>> {
         .collect()
 }
 
-/// v7.2: Detect the dominant language of a text sample based on Unicode ranges.
-///
-/// Returns an ISO 639-1 language code. This is a simple heuristic —
-/// it doesn't need to be perfect, just better than always defaulting to "en".
-///
-/// Detection rules:
-/// - If >30% of characters are CJK → "zh" (Chinese)
-/// - If >30% are Hiragana/Katakana → "ja" (Japanese)
-/// - If >30% are Hangul → "ko" (Korean)
-/// - If >30% are Devanagari → "hi" (Hindi)
-/// - If >30% are Arabic script → "ar"
-/// - Otherwise → "en" (default)
-pub fn detect_language(text: &str) -> &'static str {
-    let mut cjk = 0usize;
-    let mut hira_kata = 0usize;
-    let mut hangul = 0usize;
-    let mut devanagari = 0usize;
-    let mut arabic = 0usize;
-    let mut total = 0usize;
-
-    for ch in text.chars() {
-        if ch.is_whitespace() || ch.is_ascii_punctuation() {
-            continue;
-        }
-        total += 1;
-
-        if (ch >= '\u{4E00}' && ch <= '\u{9FFF}')
-            || (ch >= '\u{3400}' && ch <= '\u{4DBF}')
-            || (ch >= '\u{F900}' && ch <= '\u{FAFF}')
-        {
-            cjk += 1;
-        } else if (ch >= '\u{3040}' && ch <= '\u{309F}')
-            || (ch >= '\u{30A0}' && ch <= '\u{30FF}')
-        {
-            hira_kata += 1;
-        } else if ch >= '\u{AC00}' && ch <= '\u{D7AF}' {
-            hangul += 1;
-        } else if ch >= '\u{0900}' && ch <= '\u{097F}' {
-            devanagari += 1;
-        } else if (ch >= '\u{0600}' && ch <= '\u{06FF}')
-            || (ch >= '\u{0750}' && ch <= '\u{077F}')
-        {
-            arabic += 1;
-        }
-    }
-
-    if total == 0 {
-        return "en";
-    }
-
-    let threshold = (total as f32 * 0.30) as usize;
-    if cjk > threshold { return "zh"; }
-    if hira_kata > threshold { return "ja"; }
-    if hangul > threshold { return "ko"; }
-    if devanagari > threshold { return "hi"; }
-    if arabic > threshold { return "ar"; }
-
-    "en"
-}
+// v8.2: detect_language() removed — the system is language-agnostic.
+// Language detection contradicts the RSVS vision where meaning emerges
+// from structural composition, not string labels. Tokens from any
+// language follow the same path through the pipeline, and convergence
+// detection handles cross-language equivalence structurally.
 
 // -----------------------------------------------------------------------
 // EntityDetector — bootstrap rule-based (N>=3 contexts + groundable)
