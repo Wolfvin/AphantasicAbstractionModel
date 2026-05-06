@@ -230,7 +230,7 @@ export function DemoControls() {
         }
         case 'confidence_changed': {
           const nodeId = evt.payload.node?.id;
-          const newConf = evt.payload.after?.confidence;
+          const newConf = evt.payload.after?.confidence as number | undefined;
           if (nodeId != null && newConf != null) {
             updateNode(nodeId, { confidence: newConf });
           }

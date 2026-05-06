@@ -277,7 +277,7 @@ export function generateEventStream(
         break;
       }
       case 'confidence_changed': {
-        const node = existingNodes.length > 0 ? pick(existingNodes) : { id: 100, label: 'root' };
+        const node = existingNodes.length > 0 ? pick(existingNodes) : { id: 100, label: 'root', confidence: 0.5 } as RSVSNode;
         const before = node.confidence;
         const after = Math.min(1.0, Math.max(0.0, before + rand(-0.15, 0.2)));
         events.push({

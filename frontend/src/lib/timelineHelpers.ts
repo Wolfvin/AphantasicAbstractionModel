@@ -1,8 +1,5 @@
 /**
  * Timeline event helpers — converts backend RSVSEvent objects into UI TimelineEvent format.
- *
- * This is a utility module used in production to transform raw backend events
- * into the timeline display format. It does NOT generate mock data.
  */
 
 import type { RSVSEvent, TimelineEvent } from '@/lib/types';
@@ -28,7 +25,6 @@ function formatEventLabel(evt: RSVSEvent): string {
   const edgeId = evt.payload?.edge?.id ?? '?';
   switch (evt.event_type) {
     case 'atom_created':
-    case 'node_created':
       return `Node "${nodeLabel}" created`;
     case 'edge_created':
       return `Edge ${edgeId} connected`;
@@ -39,12 +35,9 @@ function formatEventLabel(evt: RSVSEvent): string {
     case 'tier_changed':
       return `Tier changed for ${nodeLabel}`;
     case 'atom_removed':
-    case 'node_removed':
       return `Node ${nodeLabel} removed`;
     case 'sense_changed':
       return `Sense updated for ${nodeLabel}`;
-    case 'status_changed':
-      return `Status changed for ${nodeLabel}`;
     default:
       return evt.event_type;
   }

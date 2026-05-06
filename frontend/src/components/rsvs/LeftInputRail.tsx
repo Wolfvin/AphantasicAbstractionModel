@@ -451,10 +451,11 @@ export default function LeftInputRail({
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const isMobile = useIsMobile();
 
-  // ── Load mock data on first mount if store is empty (development/demo only) ──
+  // ── Load mock data on first mount if store is empty ──
+  // Works in both development and production (demo mode)
   const hasInitialized = useRef(false);
   useEffect(() => {
-    if (!hasInitialized.current && messages.length === 0 && process.env.NODE_ENV === 'development') {
+    if (!hasInitialized.current && messages.length === 0) {
       const mockMessages = generateChatMessages();
       mockMessages.forEach((msg) => addMessage(msg));
       hasInitialized.current = true;
@@ -593,28 +594,17 @@ export default function LeftInputRail({
 
       (res.messages || []).forEach((msg) => addMessage({ ...msg, mode: 'compose' }));
     } catch {
-      // Backend not available — simulate compose result
-      if (process.env.NODE_ENV === 'development') {
-        const nodes = useGraphStore.getState().nodes;
-        const atomNodes = atomIds.map(id => nodes.get(id)).filter(Boolean);
-        addMessage({
-          id: `resp_${correlationId}_compose_fallback`,
-          type: 'system_compose_result',
-          content: `Composed "${label}" from ${atomNodes.length} atom${atomNodes.length !== 1 ? 's' : ''} (${atomNodes.map(n => n?.label).join(', ')}). [Simulated]`,
-          timestamp: new Date().toISOString(),
-          correlation_id: correlationId,
-          mode: 'compose',
-        });
-      } else {
-        addMessage({
-          id: `resp_${correlationId}_fallback`,
-          type: 'system_warnings',
-          content: 'Backend unavailable for Compose mode. Start bridge server and retry.',
-          timestamp: new Date().toISOString(),
-          correlation_id: correlationId,
-          mode: 'compose',
-        });
-      }
+      // Backend not available — simulate compose result (demo mode)
+      const nodes = useGraphStore.getState().nodes;
+      const atomNodes = atomIds.map(id => nodes.get(id)).filter(Boolean);
+      addMessage({
+        id: `resp_${correlationId}_compose_fallback`,
+        type: 'system_compose_result',
+        content: `Composed "${label}" from ${atomNodes.length} atom${atomNodes.length !== 1 ? 's' : ''} (${atomNodes.map(n => n?.label).join(', ')}). [Demo]`,
+        timestamp: new Date().toISOString(),
+        correlation_id: correlationId,
+        mode: 'compose',
+      });
     } finally {
       setIsComposing(false);
     }
@@ -746,13 +736,14 @@ export default function LeftInputRail({
       (res.messages || []).forEach((msg) => addMessage({ ...msg, mode: parsed.mode }));
       setLoading(false);
     } catch {
-      if (parsed.mode === 'ingest' && process.env.NODE_ENV === 'development') {
+      // Backend not available — use simulated response (demo mode)
+      if (parsed.mode === 'ingest') {
         simulateIngestResponse(correlationId);
       } else {
         addMessage({
           id: `resp_${correlationId}_fallback`,
           type: 'system_warnings',
-          content: `Backend unavailable for ${MODE_LABEL[parsed.mode]} mode. Start bridge server and retry.`,
+          content: `Backend unavailable for ${MODE_LABEL[parsed.mode]} mode. Running in demo mode.`,
           timestamp: new Date().toISOString(),
           correlation_id: correlationId,
           mode: parsed.mode,

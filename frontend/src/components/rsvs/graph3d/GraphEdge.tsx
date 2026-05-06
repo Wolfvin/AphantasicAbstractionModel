@@ -248,7 +248,7 @@ const GraphEdgeComponent: React.FC<GraphEdgeProps> = ({
         <mesh
           ref={coneRef}
           geometry={coneGeometry}
-          material={arrowMaterialRef.current}
+          material={arrowMaterialRef.current ?? undefined}
           position={arrowPosition}
           quaternion={arrowQuaternion}
         />

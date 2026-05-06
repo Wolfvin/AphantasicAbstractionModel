@@ -816,7 +816,7 @@ export default function RightNodeDrawer() {
                     </h3>
                   </div>
                   {node.composition.related_composites.map((item, i) => {
-                    const id: number = 'atom_id' in item ? item.atom_id : item.composite_id;
+                    const id: number = 'atom_id' in item ? (item.atom_id as number) : (item.composite_id as number);
                     const label = `#${id}`;
                     return (
                       <div

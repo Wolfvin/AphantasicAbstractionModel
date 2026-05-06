@@ -4,17 +4,10 @@
  * Provides HMAC-SHA256 signed session cookies and Origin/Referer validation
  * to prevent non-browser clients from abusing the backend API key injection.
  *
- * Used by:
- *   - src/middleware.ts  (sets signed session cookie)
- *   - src/app/api/proxy/[...path]/route.ts  (validates cookie + origin)
- *
- * Security model:
- *   1. A cryptographic secret (RSVS_SESSION_SECRET) signs every session cookie.
- *      Forgers cannot produce a valid HMAC without the secret.
- *   2. POST requests MUST include a valid Origin header (browsers always do).
- *      Direct HTTP clients that omit Origin are rejected.
- *   3. GET requests tolerate absent Origin (browsers don't always send it),
- *      but if present it must match the allowlist.
+ * In demo/Vercel deployments without RSVS_SESSION_SECRET, the system
+ * auto-generates an ephemeral secret with a warning. This means sessions
+ * won't survive a server cold start, but the app will work for demo purposes.
+ * For production with a real backend, always set RSVS_SESSION_SECRET.
  */
 
 import { createHmac, timingSafeEqual } from 'crypto';
@@ -25,55 +18,49 @@ const SESSION_COOKIE = 'rsvs_session';
 const SESSION_MAX_AGE = 60 * 60 * 24 * 7; // 7 days
 
 /**
- * HMAC signing key. Security hierarchy:
+ * Lazy-initialized HMAC signing key.
  *
- *   1. RSVS_SESSION_SECRET (preferred — dedicated signing key, independent
- *      from API key for proper key separation)
- *   2. RSVS_API_KEY (fallback — works but not ideal key separation)
- *   3. Ephemeral random (DEV ONLY — breaks sessions on restart,
- *      incompatible with multi-instance)
+ * Priority:
+ *   1. RSVS_SESSION_SECRET (preferred)
+ *   2. RSVS_API_KEY (fallback)
+ *   3. Auto-generated ephemeral key (demo/Vercel mode — logged as warning)
  *
- * In production (NODE_ENV=production), we HARD-FAIL if neither
- * RSVS_SESSION_SECRET nor RSVS_API_KEY is set. An ephemeral secret
- * in production is unacceptable: it invalidates all sessions on every
- * restart and makes multi-instance deployments impossible.
+ * The secret is resolved on first use, not at import time, so the app
+ * doesn't crash if it's missing.
  */
-const SESSION_SECRET = (() => {
+let _resolvedSecret: string | null = null;
+
+function getSessionSecret(): string {
+  if (_resolvedSecret) return _resolvedSecret;
+
   const explicit = process.env.RSVS_SESSION_SECRET;
   const apiKey = process.env.RSVS_API_KEY;
-  const isProd = process.env.NODE_ENV === 'production';
 
-  if (explicit) return explicit;
+  if (explicit) {
+    _resolvedSecret = explicit;
+    return _resolvedSecret;
+  }
 
-  // Fallback to API key (acceptable but not ideal key separation)
   if (apiKey) {
-    if (isProd) {
-      console.warn(
-        'RSVS_SESSION_SECRET not set — using RSVS_API_KEY as signing key. ' +
-        'Set RSVS_SESSION_SECRET explicitly for proper key separation.'
-      );
-    }
-    return apiKey;
-  }
-
-  // No secret at all — ephemeral random
-  if (isProd) {
-    // v8.3.1: HARD-FAIL in production instead of just warning.
-    // Ephemeral secrets break sessions on restart and are incompatible
-    // with multi-instance deployments. This is a security misconfiguration.
-    throw new Error(
-      'FATAL: RSVS_SESSION_SECRET (or RSVS_API_KEY) is required in production ' +
-      'but neither is set. Set RSVS_SESSION_SECRET to a cryptographically ' +
-      'random string (≥32 bytes). Generate with: ' +
-      'python -c "import secrets; print(secrets.token_hex(32))"'
+    console.warn(
+      'RSVS_SESSION_SECRET not set — using RSVS_API_KEY as signing key. ' +
+      'Set RSVS_SESSION_SECRET explicitly for proper key separation.'
     );
+    _resolvedSecret = apiKey;
+    return _resolvedSecret;
   }
 
-  // Development only — ephemeral is fine for local single-instance
+  // No secret configured — auto-generate for demo mode
+  console.warn(
+    'RSVS_SESSION_SECRET not set — using auto-generated ephemeral key. ' +
+    'Sessions will not survive server restarts. ' +
+    'For production deployments with a backend, set RSVS_SESSION_SECRET.'
+  );
   const bytes = Buffer.alloc(32);
   require('crypto').randomFillSync(bytes);
-  return bytes.toString('hex');
-})();
+  _resolvedSecret = bytes.toString('hex');
+  return _resolvedSecret;
+}
 
 // --- Cookie signing ---
 
@@ -82,7 +69,7 @@ const SESSION_SECRET = (() => {
  * Returns the hex-encoded MAC.
  */
 export function signToken(token: string): string {
-  return createHmac('sha256', SESSION_SECRET).update(token).digest('hex');
+  return createHmac('sha256', getSessionSecret()).update(token).digest('hex');
 }
 
 /**
@@ -130,9 +117,16 @@ export function generateSessionToken(): string {
  * Allowed frontend origins for CSRF protection.
  * Set RSVS_ALLOWED_ORIGINS to a comma-separated list in production.
  * Defaults to localhost:3000 for development.
+ *
+ * In demo mode (no backend), origins are permissive since there's
+ * no API key to protect.
  */
-const ALLOWED_ORIGINS = (
-  process.env.RSVS_ALLOWED_ORIGINS || 'http://localhost:3000'
-).split(',').map((o: string) => o.trim().replace(/\/+$/, ''));
+const IS_DEMO_MODE = !process.env.RSVS_BACKEND_URL;
 
-export { SESSION_COOKIE, SESSION_MAX_AGE, ALLOWED_ORIGINS };
+const ALLOWED_ORIGINS = IS_DEMO_MODE
+  ? [] // Empty = no origin validation in demo mode (no backend to protect)
+  : (process.env.RSVS_ALLOWED_ORIGINS || 'http://localhost:3000')
+      .split(',')
+      .map((o: string) => o.trim().replace(/\/+$/, ''));
+
+export { SESSION_COOKIE, SESSION_MAX_AGE, ALLOWED_ORIGINS, IS_DEMO_MODE };

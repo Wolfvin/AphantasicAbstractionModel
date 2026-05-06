@@ -7,9 +7,9 @@ import LeftInputRail from '@/components/rsvs/LeftInputRail';
 import GraphHUD from '@/components/rsvs/GraphHUD';
 import { useUIStore, useGraphStore, useAnimationStore, useTimelineStore, useChatStore, useModeResultStore } from '@/store/rsvsStore';
 import { fetchLatestFromBackend } from '@/lib/backendBridge';
-// Mock data is only used as a fallback when the backend is unreachable.
-// In production, the backend is the sole data source.
+// Mock data is used as a fallback when the backend is unreachable (demo mode).
 import { generateTimelineEvents } from '@/lib/timelineHelpers';
+import { generateInitialSnapshot, generateEventStream, generateTimelineEvents as generateMockTimelineEvents } from '@/lib/mockData';
 
 // Dynamic imports for heavy components (lazy loaded for performance)
 const GraphScene3D = dynamic(
@@ -234,7 +234,7 @@ export default function RSVSApp() {
     (async () => {
       try {
         const latest = await fetchLatestFromBackend();
-        if (!latest.ok || cancelled) return;
+        if (!latest.ok || cancelled) throw new Error('no snapshot');
 
         loadSnapshot(latest.snapshot.nodes, latest.snapshot.edges);
         resetTimeline();
@@ -244,7 +244,17 @@ export default function RSVSApp() {
         });
         (latest.messages || []).forEach((msg) => addMessage(msg));
       } catch {
-        // No latest artifact or backend not reachable on initial load.
+        // Backend not reachable — load demo data
+        if (!cancelled) {
+          const { nodes, edges } = generateInitialSnapshot(25);
+          loadSnapshot(nodes, edges);
+          resetTimeline();
+          const events = generateEventStream(nodes, 10);
+          events.forEach((evt) => {
+            pushEvent(evt);
+            generateMockTimelineEvents([evt]).forEach((tle) => addTimelineEvent(tle));
+          });
+        }
       } finally {
         if (!cancelled) setIsBackendLoading(false);
       }

@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import {
   SESSION_COOKIE,
   ALLOWED_ORIGINS,
+  IS_DEMO_MODE,
   verifySignedCookie,
 } from '@/lib/proxyAuth';
 
-const BACKEND_URL = process.env.RSVS_BACKEND_URL || 'http://localhost:8000';
+const BACKEND_URL = process.env.RSVS_BACKEND_URL || '';
 const API_KEY = process.env.RSVS_API_KEY || '';
 
 /**
@@ -34,8 +35,6 @@ function validatePath(pathSegments: string[]): string | null {
 
 /**
  * Extract the origin from Origin or Referer header, safely.
- * Returns null if neither header is present.
- * Returns 'invalid' if Referer is malformed (cannot be parsed as URL).
  */
 function extractOrigin(request: NextRequest): string | null | 'invalid' {
   const origin = request.headers.get('origin');
@@ -50,77 +49,60 @@ function extractOrigin(request: NextRequest): string | null | 'invalid' {
     }
   }
 
-  return null; // Neither header present
+  return null;
 }
 
 /**
- * Validate auth for state-changing (POST) requests:
- *
- *   1. Session cookie must exist AND have a valid HMAC signature.
- *      This prevents forged cookies — the HMAC secret is server-side only.
- *
- *   2. Origin header is REQUIRED on POST requests.
- *      Browsers always send Origin on fetch/POST. Direct HTTP clients
- *      that omit it are rejected — they must go through the frontend.
- *
- *   3. If Origin is present (or extracted from Referer), it must match
- *      the allowed origins list. Malformed Referer → 400.
+ * In demo mode (no backend), skip auth entirely.
+ * There's no API key to protect, so auth is unnecessary.
  */
+function isDemoRequest(): boolean {
+  return IS_DEMO_MODE || !BACKEND_URL;
+}
+
 function validatePostAuth(request: NextRequest): NextResponse | null {
+  if (isDemoRequest()) return null; // No backend = no auth needed
+
   // 1. Signed session cookie
   const cookieValue = request.cookies.get(SESSION_COOKIE)?.value;
   if (!cookieValue || !verifySignedCookie(cookieValue)) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 
-  // 2. Origin is mandatory for POST (browsers always send it)
+  // 2. Origin is mandatory for POST
   const source = extractOrigin(request);
-
   if (source === 'invalid') {
     return NextResponse.json({ error: 'invalid_referer' }, { status: 400 });
   }
-
   if (source === null) {
-    // No Origin and no Referer — reject POST.
-    // Legitimate browsers always send Origin on POST/fetch.
     return NextResponse.json({ error: 'origin_required' }, { status: 403 });
   }
 
   // 3. Origin must match allowlist
-  if (!ALLOWED_ORIGINS.includes(source)) {
+  if (ALLOWED_ORIGINS.length > 0 && !ALLOWED_ORIGINS.includes(source)) {
     return NextResponse.json({ error: 'forbidden_origin' }, { status: 403 });
   }
 
-  return null; // Auth OK
+  return null;
 }
 
-/**
- * Validate auth for read-only (GET) requests:
- *
- *   1. Signed session cookie required.
- *   2. If Origin/Referer is present, it must match allowlist.
- *      Absence is tolerated on GET (browsers don't always send Origin
- *      on navigation, and GET is non-mutating).
- */
 function validateGetAuth(request: NextRequest): NextResponse | null {
-  // 1. Signed session cookie
+  if (isDemoRequest()) return null;
+
   const cookieValue = request.cookies.get(SESSION_COOKIE)?.value;
   if (!cookieValue || !verifySignedCookie(cookieValue)) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 
-  // 2. If Origin/Referer present, validate it
   const source = extractOrigin(request);
-
   if (source === 'invalid') {
     return NextResponse.json({ error: 'invalid_referer' }, { status: 400 });
   }
-
-  if (source !== null && !ALLOWED_ORIGINS.includes(source)) {
+  if (source !== null && ALLOWED_ORIGINS.length > 0 && !ALLOWED_ORIGINS.includes(source)) {
     return NextResponse.json({ error: 'forbidden_origin' }, { status: 403 });
   }
 
-  return null; // Auth OK
+  return null;
 }
 
 export async function POST(
@@ -136,14 +118,17 @@ export async function POST(
     return NextResponse.json({ error: 'forbidden_path' }, { status: 403 });
   }
 
-  const body = await request.json();
-
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  };
-  if (API_KEY) {
-    headers['X-API-Key'] = API_KEY;
+  // Demo mode: no backend available
+  if (isDemoRequest()) {
+    return NextResponse.json(
+      { error: 'demo_mode', message: 'No backend configured. The app is running in demo mode with simulated data.' },
+      { status: 503 }
+    );
   }
+
+  const body = await request.json();
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (API_KEY) headers['X-API-Key'] = API_KEY;
 
   try {
     const res = await fetch(`${BACKEND_URL}/${backendPath}`, {
@@ -153,7 +138,7 @@ export async function POST(
     });
     const data = await res.json();
     return NextResponse.json(data, { status: res.status });
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: 'backend_unavailable' }, { status: 502 });
   }
 }
@@ -171,12 +156,17 @@ export async function GET(
     return NextResponse.json({ error: 'forbidden_path' }, { status: 403 });
   }
 
-  const searchParams = request.nextUrl.search;
-
-  const headers: Record<string, string> = {};
-  if (API_KEY) {
-    headers['X-API-Key'] = API_KEY;
+  // Demo mode: no backend available
+  if (isDemoRequest()) {
+    return NextResponse.json(
+      { error: 'demo_mode', message: 'No backend configured. Running in demo mode.' },
+      { status: 503 }
+    );
   }
+
+  const searchParams = request.nextUrl.search;
+  const headers: Record<string, string> = {};
+  if (API_KEY) headers['X-API-Key'] = API_KEY;
 
   try {
     const res = await fetch(`${BACKEND_URL}/${backendPath}${searchParams}`, {
@@ -185,7 +175,7 @@ export async function GET(
     });
     const data = await res.json();
     return NextResponse.json(data, { status: res.status });
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: 'backend_unavailable' }, { status: 502 });
   }
 }
