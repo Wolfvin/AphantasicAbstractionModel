@@ -25,29 +25,55 @@ const SESSION_COOKIE = 'rsvs_session';
 const SESSION_MAX_AGE = 60 * 60 * 24 * 7; // 7 days
 
 /**
- * HMAC signing key. In production, set RSVS_SESSION_SECRET to a
- * cryptographically random string (≥32 bytes). Falls back to a
- * derived key from RSVS_API_KEY; if neither is set, generates a
- * random one at startup (valid for single-instance deployments only).
+ * HMAC signing key. Security hierarchy:
+ *
+ *   1. RSVS_SESSION_SECRET (preferred — dedicated signing key, independent
+ *      from API key for proper key separation)
+ *   2. RSVS_API_KEY (fallback — works but not ideal key separation)
+ *   3. Ephemeral random (DEV ONLY — breaks sessions on restart,
+ *      incompatible with multi-instance)
+ *
+ * In production (NODE_ENV=production), we HARD-FAIL if neither
+ * RSVS_SESSION_SECRET nor RSVS_API_KEY is set. An ephemeral secret
+ * in production is unacceptable: it invalidates all sessions on every
+ * restart and makes multi-instance deployments impossible.
  */
-const SESSION_SECRET = process.env.RSVS_SESSION_SECRET
-  || process.env.RSVS_API_KEY
-  || (() => {
-      // Ephemeral random secret — works for single-instance dev only
-      const bytes = Buffer.alloc(32);
-      require('crypto').randomFillSync(bytes);
-      // v8.3: Warn loudly if running in production without a session secret.
-      // Ephemeral secrets break sessions on restart and don't work in multi-instance.
-      if (process.env.NODE_ENV === 'production') {
-        console.error(
-          '⚠️  SECURITY: RSVS_SESSION_SECRET is not set in production! ' +
-          'Using an ephemeral random secret which will break sessions on restart ' +
-          'and does not work in multi-instance deployments. ' +
-          'Set RSVS_SESSION_SECRET to a cryptographically random string (≥32 bytes).'
-        );
-      }
-      return bytes.toString('hex');
-    })();
+const SESSION_SECRET = (() => {
+  const explicit = process.env.RSVS_SESSION_SECRET;
+  const apiKey = process.env.RSVS_API_KEY;
+  const isProd = process.env.NODE_ENV === 'production';
+
+  if (explicit) return explicit;
+
+  // Fallback to API key (acceptable but not ideal key separation)
+  if (apiKey) {
+    if (isProd) {
+      console.warn(
+        'RSVS_SESSION_SECRET not set — using RSVS_API_KEY as signing key. ' +
+        'Set RSVS_SESSION_SECRET explicitly for proper key separation.'
+      );
+    }
+    return apiKey;
+  }
+
+  // No secret at all — ephemeral random
+  if (isProd) {
+    // v8.3.1: HARD-FAIL in production instead of just warning.
+    // Ephemeral secrets break sessions on restart and are incompatible
+    // with multi-instance deployments. This is a security misconfiguration.
+    throw new Error(
+      'FATAL: RSVS_SESSION_SECRET (or RSVS_API_KEY) is required in production ' +
+      'but neither is set. Set RSVS_SESSION_SECRET to a cryptographically ' +
+      'random string (≥32 bytes). Generate with: ' +
+      'python -c "import secrets; print(secrets.token_hex(32))"'
+    );
+  }
+
+  // Development only — ephemeral is fine for local single-instance
+  const bytes = Buffer.alloc(32);
+  require('crypto').randomFillSync(bytes);
+  return bytes.toString('hex');
+})();
 
 // --- Cookie signing ---
 
