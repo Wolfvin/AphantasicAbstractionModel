@@ -167,5 +167,5 @@ extra_css:
   - assets/stylesheets/extra.css
 
 # ── Watch ────────────────────────────────────────────────────────────
-watch:
-  - includes
+# watch:
+#   - includes   # Enable if you add reusable snippet includes
