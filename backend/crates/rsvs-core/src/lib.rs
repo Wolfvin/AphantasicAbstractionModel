@@ -1,6 +1,6 @@
 #![warn(missing_docs)]
 
-//! RSVS Core — v8.0 — Language-Agnostic Seeds + Convergence Detection + Internal Representation
+//! RSVS Core — v8.1 — Language-Agnostic Architecture + Convergence Fusion
 //!
 //! v6.1 builds on v6.0 with:
 //! - `TraversalConfig`: Controls recursive composition expansion during queries

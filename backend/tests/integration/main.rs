@@ -77,7 +77,7 @@ fn full_pipeline_roundtrip() {
 
     // Snapshot
     let snap = rsvs.snapshot_v1();
-    assert_eq!(snap.schema_version, "v8.0");
+    assert_eq!(snap.schema_version, "v8.1");
     assert!(!snap.nodes.is_empty());
     assert!(snap.nodes.len() >= 24); // At least seed nodes (v8.0: 24 language-agnostic seeds)
 }

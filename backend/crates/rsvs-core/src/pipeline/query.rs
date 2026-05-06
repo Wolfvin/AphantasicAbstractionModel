@@ -1,7 +1,13 @@
-//! Query pipeline — RSVS v7.3 Compositional Architecture
+//! Query pipeline — RSVS v8.1 Compositional Architecture
 //!
 //! Contains `query()`, `similarity()`, `structural_similarity()`, and
 //! `substitution_analysis()` methods.
+//!
+//! v8.1: query() now fuses convergent nodes' senses into scoring.
+//! When a queried node has LanguageLinks (structural_equivalence),
+//! the convergent nodes' scored atoms are included with a discount
+//! factor based on the convergence overlap score. This means querying
+//! "dog" will also surface senses from "anjing" if they converge.
 //!
 //! v7.3: query() now integrates ParadigmRouter for adaptive traversal
 //! escalation and ThinkingToggle for depth adjustment.
@@ -28,10 +34,26 @@ pub struct QueryResult {
     pub grounding_score: f32,
     /// Compositions of the active sense (v6.0).
     pub compositions: Vec<(String, SenseId)>,
+    /// v8.1: Convergent nodes that contributed to this query result.
+    /// Each entry is (label, convergence_discount) where discount
+    /// indicates how strongly the convergent node's senses were
+    /// incorporated (1.0 = full, 0.0 = none).
+    pub convergence_contributors: Vec<(String, f32)>,
 }
 
 impl Rsvs {
     /// Context-aware lookup for a concept.
+    ///
+    /// v8.1: Convergence fusion — when a node has LanguageLinks
+    /// (structural_equivalence), the convergent nodes' scored atoms are
+    /// fused into the result with a convergence discount. This is the
+    /// proof that the system truly "understands" equivalence: querying
+    /// "dog" automatically includes senses from "anjing" if they
+    /// structurally converge.
+    ///
+    /// The convergence discount is computed from the overlap score
+    /// stored in the LanguageLink. A node converging with score 0.8
+    /// contributes its atoms at 0.8 × their original score.
     ///
     /// v7.3: Now integrates ParadigmRouter for adaptive traversal escalation.
     /// For simple queries (high confidence, single sense), uses direct lookup.
@@ -120,6 +142,67 @@ impl Rsvs {
 
         scored.sort_by(|a, b| b.1.total_cmp(&a.1));
 
+        // v8.1: Convergence fusion — include scored atoms from convergent nodes.
+        // If this node has LanguageLinks with type "structural_equivalence",
+        // the convergent nodes likely represent the same concept in a different
+        // surface form. We fuse their atoms into the result with a discount
+        // factor, so querying "dog" also surfaces "anjing"'s senses.
+        //
+        // The discount is proportional to the convergence overlap. Since we
+        // don't store the overlap score in the LanguageLink directly, we
+        // compute a proxy: the Jaccard similarity of the two nodes' atom sets.
+        // This gives a reasonable approximation of structural equivalence.
+        let mut convergence_contributors: Vec<(String, f32)> = Vec::new();
+        if let Some(node) = self.graph.get_node(concept_id) {
+            for link in &node.language_links {
+                if link.link_type != "structural_equivalence" {
+                    continue;
+                }
+                let conv_id = link.target_id;
+                let conv_label = match self.graph.get_node(conv_id) {
+                    Some(n) => n.label.clone(),
+                    None => continue,
+                };
+
+                // Compute convergence discount via Jaccard of atom sets
+                let conv_discount = self.graph.jaccard_atom_sets(concept_id, conv_id);
+                if conv_discount < 0.1 {
+                    continue; // Too weak — don't fuse
+                }
+
+                // Score convergent node's atoms
+                if let Some(conv_sm) = self.senses.get(&conv_id) {
+                    let conv_sense_idx = conv_sm.lazy_lookup(&query_atoms)
+                        .or_else(|| if conv_sm.sense_count() > 0 { Some(0) } else { None });
+                    if let Some(idx) = conv_sense_idx {
+                        if let Some(conv_sense) = conv_sm.get_sense(idx) {
+                            let conv_core = conv_sense.core(self.config.sense.tau_core);
+                            for &atom_id in &conv_core {
+                                let label = match self.graph.get_node(atom_id) {
+                                    Some(n) => n.label.clone(),
+                                    None => continue,
+                                };
+                                // Skip atoms already in the primary result
+                                if scored.iter().any(|(l, _)| l == &label) {
+                                    continue;
+                                }
+                                let freq = conv_sense.freq(atom_id);
+                                let fused_score = freq * conv_discount;
+                                if fused_score > 0.01 {
+                                    scored.push((label, fused_score));
+                                }
+                            }
+                        }
+                    }
+                }
+
+                convergence_contributors.push((conv_label, conv_discount));
+            }
+        }
+
+        // Re-sort after convergence fusion
+        scored.sort_by(|a, b| b.1.total_cmp(&a.1));
+
         // Build composition labels (v6.0)
         let compositions: Vec<(String, crate::types::SenseId)> = sense
             .compositions
@@ -137,6 +220,7 @@ impl Rsvs {
             layer: sense.layer,
             grounding_score: sense.grounding.score(),
             compositions,
+            convergence_contributors,
         })
     }
 

@@ -9,6 +9,7 @@
 use super::Rsvs;
 use crate::types::NodeId;
 use rayon::prelude::*;
+use std::collections::HashSet;
 
 // -----------------------------------------------------------------------
 // AppraiseResult — v6.0 appraise mode output
@@ -96,6 +97,9 @@ impl Rsvs {
                 // v7.3: Structural sense matching
                 // Check if this token has compositional senses whose
                 // compositions are corroborated by other tokens in the text
+                // v8.1: Also consider convergent nodes' senses as corroborating
+                // evidence — if "dog" converges with "anjing", and "anjing"'s
+                // compositions match the text, that counts as corroboration for "dog".
                 let structural_multiplier = if let Some(sm) = self.senses.get(&id) {
                     let best_sense_match = sm.senses.iter().map(|sense| {
                         if sense.compositions.is_empty() {
@@ -119,7 +123,12 @@ impl Rsvs {
                     }).max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
                     .unwrap_or(0.7);
 
-                    best_sense_match
+                    // v8.1: Check convergent nodes for additional corroboration
+                    // If this node has structural_equivalence links, check if
+                    // the convergent nodes' compositions corroborate the text
+                    let conv_boost = self.convergence_boost_for_appraise(id, &text_node_ids);
+
+                    (best_sense_match + conv_boost).min(1.0)
                 } else {
                     // No sense manager — token exists but no sense data
                     0.7
@@ -250,6 +259,36 @@ impl Rsvs {
         structural_relations.sort_by(|a, b| b.1.total_cmp(&a.1));
         structural_relations.truncate(20);
 
+        // v8.1: Convergence fusion — promote convergent nodes in the results.
+        // If the queried concept has LanguageLinks, those convergent nodes
+        // are structurally equivalent and should appear prominently in
+        // the relate results. We boost their score to reflect this.
+        if let Some(node) = self.graph.get_node(concept_id) {
+            for link in &node.language_links {
+                if link.link_type != "structural_equivalence" {
+                    continue;
+                }
+                let conv_id = link.target_id;
+                // Check if already in structural_relations
+                if let Some(entry) = structural_relations.iter_mut().find(|(id, _)| *id == conv_id) {
+                    // Boost existing score — convergence is strong evidence
+                    entry.1 = (entry.1 + 0.5).min(1.0);
+                } else {
+                    // Add convergent node with a convergence-based score
+                    let jaccard = self.graph.jaccard_atom_sets(concept_id, conv_id);
+                    if jaccard > 0.0 {
+                        structural_relations.push((conv_id, (jaccard + 0.5).min(1.0)));
+                    } else {
+                        // Even with 0 jaccard, convergence is meaningful
+                        structural_relations.push((conv_id, 0.5));
+                    }
+                }
+            }
+            // Re-sort and re-truncate after convergence boost
+            structural_relations.sort_by(|a, b| b.1.total_cmp(&a.1));
+            structural_relations.truncate(20);
+        }
+
         // Find related edges involving this concept
         let mut related_edges: Vec<(NodeId, NodeId, f32)> = Vec::new();
 
@@ -287,5 +326,56 @@ impl Rsvs {
             related_edges,
             structural_relations,
         })
+    }
+
+    /// v8.1: Compute a convergence boost for appraise mode.
+    ///
+    /// When a node has LanguageLinks (structural_equivalence), we check
+    /// if its convergent partners' compositions corroborate the text.
+    /// If they do, this provides additional evidence that the node is
+    /// structurally consistent — even if the node's own compositions
+    /// don't directly overlap with the text.
+    ///
+    /// Returns a boost value in [0.0, 0.3] — capped to prevent
+    /// convergence from overwhelming direct composition evidence.
+    fn convergence_boost_for_appraise(
+        &self,
+        node_id: NodeId,
+        text_node_ids: &HashSet<NodeId>,
+    ) -> f32 {
+        let node = match self.graph.get_node(node_id) {
+            Some(n) => n,
+            None => return 0.0,
+        };
+
+        let mut best_boost = 0.0f32;
+
+        for link in &node.language_links {
+            if link.link_type != "structural_equivalence" {
+                continue;
+            }
+
+            let conv_id = link.target_id;
+            let conv_sm = match self.senses.get(&conv_id) {
+                Some(sm) => sm,
+                None => continue,
+            };
+
+            // Check convergent node's composition overlap with text
+            let conv_best = conv_sm.senses.iter()
+                .filter(|s| !s.compositions.is_empty())
+                .map(|sense| {
+                    let comp_ids: Vec<NodeId> = sense.compositions.iter().map(|c| c.node_id).collect();
+                    let overlap = comp_ids.iter().filter(|id| text_node_ids.contains(id)).count();
+                    overlap as f32 / comp_ids.len().max(1) as f32
+                })
+                .fold(0.0f32, f32::max);
+
+            // Convert convergent corroboration to a boost (capped at 0.3)
+            let boost = (conv_best * 0.3).min(0.3);
+            best_boost = best_boost.max(boost);
+        }
+
+        best_boost
     }
 }

@@ -9,7 +9,7 @@ use crate::types::{CompositionRef, NodeId};
 /// API version string for event contracts.
 pub const API_VERSION: &str = "v1";
 /// Schema version string for event contracts.
-pub const SCHEMA_VERSION: &str = "v8.0";
+pub const SCHEMA_VERSION: &str = "v8.1";
 
 /// Runtime node info (v6.0: compositional with layer).
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -18,7 +18,7 @@ pub struct RuntimeNode {
     pub id: NodeId,
     /// Canonical label string.
     pub label: String,
-    /// Surface form with language tag (e.g., "raja@id").
+    /// v8.1: Display-only surface form (no language tag).
     pub surface_label: String,
     /// Node kind — always "node" in v6.0.
     pub kind: String,

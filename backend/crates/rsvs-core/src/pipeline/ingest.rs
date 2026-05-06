@@ -57,8 +57,11 @@ impl Rsvs {
         let mut stats = IngestStats::default();
         let correlation_id = self.next_correlation_id();
 
-        // v7.2: Detect language from the ingested text for surface_label tagging
-        let detected_lang = crate::attention::detect_language(text);
+        // v8.1: REMOVED detect_language — surface_label is now display-only.
+        // The system is language-agnostic; adding @lang tags to surface_label
+        // was a subtle contradiction. Nodes are identified by NodeId, not
+        // by their surface form. Language tags remain useful only in the
+        // frontend presentation layer, not in the core pipeline.
 
         self.emit_event(
             &correlation_id,
@@ -106,7 +109,12 @@ impl Rsvs {
                 continue;
             }
 
-            let surface_label = format!("{}@{}", token, detected_lang);
+            // v8.1: surface_label is display-only — no language tag.
+            // The label is the canonical identifier for display; the system
+            // does not need to know which language this token came from.
+            // Convergence detection handles cross-language equivalence
+            // structurally, not via language tags.
+            let surface_label = token.clone();
             let id = self.graph.insert_node(Node {
                 id: 0,
                 label: token.clone(),
@@ -141,8 +149,9 @@ impl Rsvs {
             })?;
 
             self.autonomy.register(id, 0.50, Tier::Tier2);
-            // v7.2: Use register_label to keep token_to_id and graph.label_to_id in sync
-            self.register_label(token, id, Some(&surface_label));
+            // v8.1: register_label with no separate surface_label — label and surface_label
+            // are now the same (language-agnostic). No @lang suffix in the index.
+            self.register_label(token, id, None);
             self.atom_sets.insert(token.clone(), vec![id]);
             self.senses.insert(
                 id,

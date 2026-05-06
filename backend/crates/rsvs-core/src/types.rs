@@ -202,7 +202,10 @@ pub struct Node {
     pub id: NodeId,
     /// Canonical label (e.g., "raja").
     pub label: String,
-    /// Surface form with language tag (e.g., "raja@id").
+    /// v8.1: Display-only surface form (e.g., "raja", "dog").
+    /// No language tag — the system is language-agnostic. Language tags
+    /// are a presentation concern, not a structural one. Convergence
+    /// detection handles cross-language equivalence structurally.
     pub surface_label: String,
 
     /// Node kind — always "node" in v6.0.

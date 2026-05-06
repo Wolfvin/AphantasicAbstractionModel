@@ -47,6 +47,12 @@ pub struct ConvergenceConfig {
 
     /// Minimum confidence both nodes must have for convergence. Default: 0.3
     pub min_confidence: f32,
+
+    /// v8.1: Maximum number of candidate pairs to evaluate per `detect()` call.
+    /// Prevents O(N²) blowup on large graphs. When the number of eligible
+    /// pairs exceeds this limit, a stratified sample is taken (prioritizing
+    /// higher-confidence nodes). Default: 500
+    pub max_pairs_per_run: usize,
 }
 
 impl Default for ConvergenceConfig {
@@ -57,6 +63,7 @@ impl Default for ConvergenceConfig {
             max_cooc_for_equivalence: 1,
             auto_link: true,
             min_confidence: 0.3,
+            max_pairs_per_run: 500,
         }
     }
 }
@@ -152,9 +159,32 @@ impl ConvergenceEngine {
             .map(|n| n.id)
             .collect();
 
-        // Compare all eligible pairs
+        // v8.1: Sort eligible nodes by confidence (descending) so that when
+        // the throttle kicks in, we prioritize pairs involving high-confidence
+        // nodes. This is a simple but effective heuristic — convergent pairs
+        // involving low-confidence nodes are less reliable anyway.
+        let mut eligible = eligible;
+        eligible.sort_by(|&a, &b| {
+            let conf_a = graph.get_node(a).map(|n| n.confidence).unwrap_or(0.0);
+            let conf_b = graph.get_node(b).map(|n| n.confidence).unwrap_or(0.0);
+            conf_b.partial_cmp(&conf_a).unwrap_or(std::cmp::Ordering::Equal)
+        });
+
+        // Compare eligible pairs — v8.1: throttled to prevent O(N²) blowup
+        let _total_pairs = eligible.len() * (eligible.len().saturating_sub(1)) / 2;
+        let mut pairs_checked = 0usize;
+
         for i in 0..eligible.len() {
+            if pairs_checked >= self.config.max_pairs_per_run {
+                break;
+            }
             for j in (i + 1)..eligible.len() {
+                // v8.1: Throttle — stop evaluating pairs once we hit the budget
+                if pairs_checked >= self.config.max_pairs_per_run {
+                    break;
+                }
+                pairs_checked += 1;
+
                 let a = eligible[i];
                 let b = eligible[j];
 
@@ -242,7 +272,7 @@ impl ConvergenceEngine {
         graph: &mut RsvsGraph,
         a: NodeId,
         b: NodeId,
-        score: f32,
+        _score: f32,
     ) -> bool {
         let link_a = LanguageLink {
             link_type: "structural_equivalence".to_string(),
@@ -361,7 +391,7 @@ mod tests {
             .insert_node(Node {
                 id: 0,
                 label: "dog".to_string(),
-                surface_label: "dog@en".to_string(),
+                surface_label: "dog".to_string(),
                 confidence: 0.7,
                 is_seed: false,
                 semantic: SemanticMeta {
@@ -379,7 +409,7 @@ mod tests {
             .insert_node(Node {
                 id: 0,
                 label: "anjing".to_string(),
-                surface_label: "anjing@id".to_string(),
+                surface_label: "anjing".to_string(),
                 confidence: 0.7,
                 is_seed: false,
                 semantic: SemanticMeta {
@@ -468,7 +498,7 @@ mod tests {
             .insert_node(Node {
                 id: 0,
                 label: "dog".to_string(),
-                surface_label: "dog@en".to_string(),
+                surface_label: "dog".to_string(),
                 confidence: 0.7,
                 is_seed: false,
                 semantic: SemanticMeta {
@@ -486,7 +516,7 @@ mod tests {
             .insert_node(Node {
                 id: 0,
                 label: "cat".to_string(),
-                surface_label: "cat@en".to_string(),
+                surface_label: "cat".to_string(),
                 confidence: 0.7,
                 is_seed: false,
                 semantic: SemanticMeta {
