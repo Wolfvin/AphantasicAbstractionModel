@@ -1,687 +1,118 @@
-<div align="center">
-
-# RSVS
-
-### Relational Symbolic Vocabulary System
-
-**Meaning is compositional — every sense is formed by other senses.**
-
+[![PyPI](https://img.shields.io/pypi/v/rsvs?style=flat-square&logo=pypi&color=3775A9)](https://pypi.org/project/rsvs/)
+[![CI](https://img.shields.io/github/actions/workflow/status/Wolfvin/SymbolicPuzzle3D/ci.yml?style=flat-square&logo=github&label=tests)](https://github.com/Wolfvin/SymbolicPuzzle3D/actions/workflows/ci.yml)
+[![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-8A2BE2?style=flat-square&logo=materialformkdocs&logoColor=white)](https://wolfvin.github.io/SymbolicPuzzle3D/)
+[![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-green?style=flat-square)](LICENSE)
+[![Python](https://img.shields.io/badge/Python-3.11+-blue?style=flat-square&logo=python)](https://python.org)
 [![Rust](https://img.shields.io/badge/Rust-1.75+-orange?style=flat-square&logo=rust)](https://www.rust-lang.org/)
-[![Python](https://img.shields.io/badge/Python-3.12+-blue?style=flat-square&logo=python)](https://python.org)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-3178C6?style=flat-square&logo=typescript)](https://www.typescriptlang.org/)
-[![License](https://img.shields.io/badge/License-MIT%2FApache--2.0-green?style=flat-square)](LICENSE)
-[![Schema](https://img.shields.io/badge/Schema-v8.3-purple?style=flat-square)]()
-[![Tests](https://img.shields.io/badge/Tests-178_passing-brightgreen?style=flat-square)]()
 
-[Quick Start](#-quick-start) · [Key Insight](#-the-key-insight) · [Architecture](#-architecture-at-a-glance) · [Core Features](#-core-features) · [Advanced Features](#-advanced-features-v72) · [Security](SECURITY.md) · [API](#-api-reference) · [Contributing](CONTRIBUTING.md)
+# RSVS — Relational Symbolic Vocabulary System
 
-</div>
+**Compositional symbolic meaning, not embeddings. Traceable sense definitions with structural similarity.**
+
+📖 **[Full documentation](https://wolfvin.github.io/SymbolicPuzzle3D/)** · 🚀 [Quick Start](#quick-start) · 📚 [Tutorials](https://wolfvin.github.io/SymbolicPuzzle3D/tutorials/) · 🔧 [API Reference](https://wolfvin.github.io/SymbolicPuzzle3D/api/)
 
 ---
 
 ## What is RSVS?
 
-RSVS is a compositional symbolic meaning engine that builds structured knowledge graphs from raw text. Its core innovation is that **every sense of every word is defined by compositions** — references to specific senses of other nodes. This makes meaning fully traceable: you can follow the chain from any concept down to its constituent parts, explain precisely why two concepts are related, and identify the exact substitution that transforms one into another.
+RSVS (Relational Symbolic Vocabulary System) is a compositional symbolic meaning engine that builds structured knowledge graphs from raw text. Unlike vector embeddings that compress meaning into opaque floating-point arrays, RSVS represents every concept as a composition of other concepts -- and every composition is traceable. You can follow the chain from any concept down to its constituent parts, explain precisely why two concepts are related, and identify the exact substitution that transforms one into another. The system is designed to be an interpretation layer that works alongside Transformer models, adding symbolic traceability to dense vector representations.
 
-Unlike traditional embeddings that tell you "raja and ratu have cosine similarity 0.87," RSVS tells you they share two compositions (tahta_tertinggi, kerajaan) and differ in exactly one (laki_laki vs. perempuan).
+At its core, RSVS ingests text and builds a knowledge graph composed of atoms, senses, and compositions. An atom is the smallest unit of meaning -- a token that has been promoted to entity status through co-occurrence statistics. A sense is a particular meaning of a concept, defined by which other senses it is composed from. A composition is a directed reference from one sense to another, forming a directed acyclic graph of meaning. When you define that "raja" (king) is composed of "tahta_tertinggi" (highest throne), "laki_laki" (male), and "kerajaan" (kingdom), you have created a precise, inspectable specification of what that word means -- not a statistical artifact, but a structural definition.
 
-> **RSVS is NOT a replacement for Transformers.** It is an interpretation layer **on top of them**. Transformers provide the statistical signal; RSVS provides the structural explanation. Meaning is compositional (structural), not statistical. You can use RSVS alongside any Transformer model to add symbolic traceability to dense vector representations.
-
----
-
-## The Key Insight
-
-**raja and ratu are related because they share compositions, not just co-occurrence statistics.**
-
-```python
-from rsvs import Rsvs
-
-r = Rsvs()
-
-# Ingest some text
-r.ingest("Raja adalah pemimpin kerajaan laki-laki. "
-         "Ratu adalah pemimpin kerajaan perempuan. "
-         "Tahta tertinggi ada di kerajaan.")
-
-# Define compositional meanings
-r.compose("raja", [("tahta_tertinggi", 0), ("laki_laki", 0), ("kerajaan", 0)], "id")
-r.compose("ratu", [("tahta_tertinggi", 0), ("perempuan", 0), ("kerajaan", 0)], "id")
-
-# Structural similarity — WHY they're related
-sim = r.structural_similarity("raja", "ratu")
-print(f"Similarity: {sim.structural_similarity:.3f}")   # 0.667
-print(f"Shared: {sim.shared_labels(r)}")                # [(tahta_tertinggi, 0), (kerajaan, 0)]
-
-# Substitution analysis — WHAT transforms one into the other
-sub = r.substitution_analysis("raja", "ratu")
-print(f"Substitution: {sub.substitution_labels(r)}")    # [(laki_laki, 0, perempuan, 0)]
-```
-
-One swap: `laki_laki` → `perempuan`. That's the entire semantic difference between king and queen, expressed as a precise structural transformation — not a fuzzy vector distance.
+RSVS is built with a Rust core compiled to Python via PyO3 and maturin, giving you the safety and speed of Rust with the ergonomics of a Python library. It prioritizes Bahasa Indonesia as its primary language for development and testing, while supporting English and other languages through a fully language-agnostic architecture. The system includes an autonomous tiered memory lifecycle (New, Candidate, Stable, Deprecated), Monte Carlo Tree Search for complex reasoning paths, consolidation and reflection engines for self-maintenance, and an optional FastAPI server for production deployments. A Next.js demo frontend provides interactive 3D graph visualization.
 
 ---
 
-## Quick Start
+## Why RSVS?
 
-### Docker (Recommended)
+If you have used word embeddings or sentence transformers, you are familiar with the pattern: "raja and ratu have cosine similarity 0.87." But what does that number mean? Which aspects of meaning make them similar? What would you need to change to transform one into the other? Embeddings cannot answer these questions because they compress meaning into a single opaque vector. Knowledge graphs and ontologies offer more structure, but they require manual schema design and struggle with ambiguity, multiple senses, and the fluid nature of natural language meaning.
 
-```bash
-docker compose up
-```
+RSVS occupies a different position. It provides the structural precision of a knowledge graph without requiring upfront schema design, and the fuzzy similarity of embeddings without the opacity. When RSVS tells you that "raja" and "ratu" share two compositions (tahta_tertinggi and kerajaan) and differ in exactly one (laki_laki versus perempuan), you have an answer you can inspect, debug, and reason about. This structural approach enables substitution analysis (what transforms concept A into concept B?), context-aware queries (which sense of this word is active given these context atoms?), and compositional verification (are the compositions of this sense well-grounded in evidence?).
 
-Frontend at `http://localhost:3000`, API at `http://localhost:8000`.
+Compared to traditional knowledge graphs, RSVS does not require you to define a schema or ontology upfront. The system bootstraps from 24 seed atoms and induces senses automatically from text. Compared to ontologies, RSVS handles ambiguity natively through its multi-sense framework -- a single concept can have multiple senses, each with its own composition structure. Compared to embeddings, RSVS provides full traceability: every similarity score can be decomposed into shared and differing compositions, and every substitution can be named explicitly.
 
-### From Source
+---
 
-**Prerequisites:** Rust 1.75+, Python 3.12+, Node.js 18+, maturin
+## Quick Install
 
-```bash
-# Clone
-git clone https://github.com/Wolfvin/SymbolicPuzzle3D.git
-cd SymbolicPuzzle3D
-
-# Build Rust core + Python bindings
-cd backend/python
-pip install maturin
-maturin develop
-
-# Start API server
-python -m rsvs.fastapi_server
-
-# Start frontend (new terminal)
-cd ../../frontend
-npm install && npm run dev
-```
-
-### Rust Only (No Python)
-
-```bash
-cd backend
-cargo run --bin rsvs-smoke    # 175+ unit tests + smoke pipeline
-```
-
-### pip install
+Install the Python library from PyPI:
 
 ```bash
 pip install rsvs
 ```
 
----
+The core library has zero Python dependencies. The Rust engine is compiled into the wheel via PyO3, so there is no separate Rust toolchain needed at install time.
 
-## Architecture at a Glance
-
-```
-┌──────────────────────────────────────────────────────────────────┐
-│                      Frontend (Next.js 16)                        │
-│          React Three Fiber · Zustand · shadcn/ui                  │
-│                                                                    │
-│   ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌───────────────┐  │
-│   │  3D Force │  │ Compose  │  │ Appraise │  │  Timeline     │  │
-│   │  Graph   │  │  Panel   │  │  Panel   │  │  + HUD        │  │
-│   └──────────┘  └──────────┘  └──────────┘  └───────────────┘  │
-└──────────────────────────┬───────────────────────────────────────┘
-                           │ HTTP via /api/proxy (API key server-side)
-┌──────────────────────────▼───────────────────────────────────────┐
-│              Python Bridge (FastAPI + PyO3)                        │
-│                                                                    │
-│   ┌────────────┐  ┌───────────┐  ┌──────────┐  ┌──────────┐   │
-│   │  fastapi_  │  │  modes.py │  │validation│  │conversion│   │
-│   │  server.py │  │ (dispatch)│  │  .py     │  │  .py     │   │
-│   └────────────┘  └─────┬─────┘  └──────────┘  └──────────┘   │
-│                          │                                         │
-│               ┌──────────▼──────────┐                              │
-│               │   rsvs_core.py      │                              │
-│               │ (Rust core wrapper) │                              │
-│               └──────────┬──────────┘                              │
-└──────────────────────────┼────────────────────────────────────────┘
-                           │ PyO3 FFI
-┌──────────────────────────▼────────────────────────────────────────┐
-│                    Rust Core (rsvs-core)                           │
-│                                                                    │
-│   ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────────┐   │
-│   │ pipeline │  │attention │  │ autonomy │  │   sense.rs   │   │
-│   │ compose  │  │  .rs     │  │  .rs     │  │ (composit-   │   │
-│   │ query    │  │ NPMI +   │  │ EMA +    │  │  ional v5.0) │   │
-│   │ ingest   │  │ Jaccard  │  │ hysteresis│  │              │   │
-│   └──────────┘  └──────────┘  └──────────┘  └──────────────┘   │
-│   ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────────┐   │
-│   │ graph.rs │  │ seed.rs  │  │ persist  │  │  events.rs   │   │
-│   │structural│  │(24 atoms)│  │  .rs     │  │ (stream)     │   │
-│   │sim + sub │  │          │  │          │  │              │   │
-│   └──────────┘  └──────────┘  └──────────┘  └──────────────┘   │
-│                                                                    │
-│   ── v7.0 Modules (Losion Cross-Pollination) ──────────────────  │
-│                                                                    │
-│   ┌───────────────┐  ┌───────────────┐  ┌───────────────────┐   │
-│   │ paradigm.rs   │  │ spreading.rs  │  │    deps.rs        │   │
-│   │ ParadigmRouter│  │ SpreadingAct. │  │ DEPSPlanner       │   │
-│   │ Direct→Shallow│  │ Composition   │  │ Describe-Explain  │   │
-│   │ →Std→Deep→MCTS│  │ edge spread   │  │ -Plan-Select      │   │
-│   └───────────────┘  └───────────────┘  └───────────────────┘   │
-│   ┌───────────────┐  ┌───────────────┐  ┌───────────────────┐   │
-│   │ neurosym.rs   │  │ thinking.rs   │  │ consolidation.rs  │   │
-│   │ NeuroSymVerif.│  │ ThinkingToggle│  │ ConsolidationEng. │   │
-│   │ 5 verify rules│  │ Adaptive depth│  │ Merge+Prune+Comp. │   │
-│   └───────────────┘  └───────────────┘  └───────────────────┘   │
-│   ┌───────────────┐  ┌───────────────┐  ┌───────────────────┐   │
-│   │ reflection.rs │  │   mcts.rs     │  │ matryoshka.rs     │   │
-│   │ SenseReflect. │  │ MCTSTraversal │  │ MatryoshkaTravers.│   │
-│   │ CONFIRM/REVIE │  │ UCB1 + back-  │  │ Multi-granularity │   │
-│   │ W/REVISE/RET. │  │ tracking      │  │ coarse→fine       │   │
-│   └───────────────┘  └───────────────┘  └───────────────────┘   │
-│   ┌───────────────┐                                                │
-│   │composition_   │  Also: transformer_bridge.rs, error.rs        │
-│   │ index.rs      │  bindings.rs (PyO3 — all v7.0 APIs exposed)  │
-│   │ O(1) reverse  │                                                │
-│   │ lookup        │                                                │
-│   └───────────────┘                                                │
-└────────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## Core Features
-
-### Compositional Meaning
-
-Every sense is defined by compositions — references to specific senses of other nodes. This is the structural definition of meaning: not a statistical artifact, but a precise specification of what a sense means in terms of other senses.
-
-```rust
-// Rust: Compose "raja" from explicit references
-let compositions = vec![
-    CompositionRef::new(tahta_tertinggi_id, 0),
-    CompositionRef::new(laki_laki_id, 0),
-    CompositionRef::new(kerajaan_id, 0),
-];
-rsvs.compose("raja", compositions, Some("id"))?;
-```
-
-```python
-# Python: Same operation via PyO3
-node_id = r.compose("raja", [
-    ("tahta_tertinggi", 0),
-    ("laki_laki", 0),
-    ("kerajaan", 0)
-], "id")
-```
-
-### Structural Similarity
-
-Compare concepts by shared/differing compositions, not just co-occurrence statistics. Structural similarity produces an explicit decomposition: what they share, what differs, and the overall score.
-
-```python
-sim = r.structural_similarity("raja", "ratu")
-# StructuralSimResult:
-#   structural_similarity: 0.667
-#   shared_compositions: [(tahta_tertinggi, 0), (kerajaan, 0)]
-#   only_a_compositions: [(laki_laki, 0)]
-#   only_b_compositions: [(perempuan, 0)]
-#   layer_a: 2, layer_b: 2
-```
-
-### Substitution Analysis
-
-Find the precise swap that transforms one concept into another. This goes beyond saying "they're similar" — it tells you exactly what needs to change.
-
-```python
-sub = r.substitution_analysis("raja", "ratu")
-# SubstitutionResult:
-#   structural_similarity: 0.667
-#   substitutions: [(laki_laki, 0) → (perempuan, 0)]
-#   unpaired_only_a: []
-#   unpaired_only_b: []
-
-# Get human-readable labels
-labels = sub.substitution_labels(r)
-# [("laki_laki", 0, "perempuan", 0)]
-```
-
-### Sense Induction
-
-When text is ingested, RSVS doesn't just record co-occurrences — it induces compositional senses. For each token in context, the system identifies which senses of other tokens are active and uses them as the compositions of a new sense. This is the mechanism that creates structured meaning from raw text.
-
-```python
-stats = r.ingest("Raja adalah pemimpin kerajaan.")
-# IngestStats(sentences=1, atoms_promoted=3, senses_created=3, compositions=6)
-
-# Check induced senses
-senses = r.senses("raja")
-for s in senses:
-    print(f"Sense {s.sense_idx}: layer={s.layer}, "
-          f"grounding={s.grounding_score:.2f}, "
-          f"compositions={s.compositions}")
-```
-
-### Composition Grounding
-
-After a sense is formed, RSVS verifies its compositions against future evidence. Confirming contexts boost the grounding score; contradicting contexts penalize it. Compositions that are consistently contradicted become candidates for revision. The asymmetric penalty (0.10) vs. boost (0.05) ensures that poor compositions are caught quickly.
-
-```python
-# Grounding is updated automatically during ingestion
-stats = r.ingest(more_text)
-
-# Check grounding status
-senses = r.senses("raja")
-for s in senses:
-    verdict = ("WellGrounded" if s.grounding_score >= 0.60
-               else "NeedsReview" if s.grounding_score >= 0.20
-               else "NeedsRevision")
-    print(f"Sense {s.sense_idx}: grounding={s.grounding_score:.2f} ({verdict})")
-```
-
-### Transformer Bridge
-
-RSVS is an interpretation layer on top of Transformer architecture. It doesn't replace Transformers — it adds symbolic traceability. Transformers provide the statistical signal; RSVS provides the structural explanation. You can use RSVS alongside any Transformer model.
-
-| Transformer Concept | RSVS Equivalent |
-|---------------------|-----------------|
-| Attention weight | Hard-attention score (NPMI + Jaccard + Cooc) |
-| Dense vectors | Sparse composition references |
-| Multi-head attention | Multiple senses per node |
-| Cosine similarity | Structural similarity (shared/differing compositions) |
-| "They're similar" | "They share X, differ in Y, swap Z transforms A→B" |
-
-### 3D Visualization
-
-Explore your knowledge graph interactively with React Three Fiber. Nodes are rendered as spheres (size by tier, color by status), edges as lines (thickness by weight). Force-directed layout with tier-weighted repulsion keeps the graph readable.
+For the optional FastAPI server:
 
 ```bash
-cd frontend && npm run dev
+pip install rsvs[server]
+```
+
+For development (includes test tools, linters, and maturin):
+
+```bash
+pip install rsvs[dev]
+```
+
+To install everything:
+
+```bash
+pip install rsvs[all]
 ```
 
 ---
 
-## Advanced Features (v8.3)
-
-v8.3 completes the language-agnostic architecture: `GROUNDABLE_HINTS` removed (entity promotion relies on structural grounding via co-occurrence with seeds), convergence detection with throttled O(N²) and `detected_pairs` persistence, convergence fusion in all 3 modes (query/appraise/relate), and production-ready Docker deployment. The system is now fully language-agnostic — "anjing" and "dog" converge to the same concept structurally without any language detection or hardcoded string matching.
-
-### ParadigmRouter — Adaptive Traversal Paradigm Selection
-
-Instead of always running the heaviest traversal (full MCTS), the ParadigmRouter dynamically selects the cheapest strategy that will work based on three signals: confidence, structural complexity, and domain calibration.
-
-**Paradigm hierarchy** (lightest → heaviest):
-
-| Paradigm | Depth | Use When | Cost |
-|----------|-------|----------|------|
-| Direct | 0 | Single sense, confidence > 0.8 | O(1) |
-| Shallow | 1 | Few context atoms, conf > 0.5 | O(K) |
-| Standard | 2–3 | Multiple senses, conf > 0.3 | O(S×K) |
-| Deep | 5 | Complex disambiguation, conf > 0.15 | O(S×K^D) |
-| MCTS | 4 | Very complex, conf < 0.15 | O(S×K×sims) |
-
-```python
-# ParadigmRouter is used internally by query methods.
-# It can also be calibrated per-domain:
-
-# The router automatically records success/failure for domain calibration.
-# After enough data, it learns which paradigms work best for each domain.
-# You can also force a thinking mode:
-r.set_thinking_mode(1)   # 1 = THINKING (force deep traversal)
-r.set_thinking_mode(0)   # 0 = NON_THINKING (force shallow traversal)
-r.set_thinking_mode(-1)  # -1 = AUTO (default — router decides)
-```
-
-**How routing works:**
-
-1. **Confidence signal**: Grounding score of the active sense selects a baseline paradigm
-2. **Structure signal**: ThinkingToggle classification can upgrade to at least Standard for complex queries
-3. **Domain calibration**: If historical data shows a lighter paradigm succeeds >50% of the time for this domain, use that instead
-
-### SpreadingActivation — Network Activation Through Composition Edges
-
-Energy spreads along composition edges with per-hop decay. Unlike simple graph traversal, spreading follows **structural meaning connections**: if node A's sense is composed from [(B, 0), (C, 0)], then activating A spreads energy to B and C. This is the structural equivalent of semantic priming in cognitive science.
-
-```python
-# SpreadingActivation runs internally during relate() and context queries.
-# Key parameters (configured in Rust core):
-#
-#   decay_factor: 0.5    — each hop halves energy
-#   max_hops: 3          — activation wave travels up to 3 hops
-#   min_energy: 0.01     — nodes below this threshold are not activated
-#   max_activated: 50    — maximum nodes returned
-#
-# Well-grounded seeds get MORE energy (0.5 + 0.5 × grounding_score),
-# poorly-grounded seeds get less — ensuring reliable knowledge spreads further.
-```
-
-**Key properties:**
-- **Additive accumulation**: Multiple paths to the same node reinforce its energy
-- **Grounding-adjusted**: Well-grounded seeds propagate more energy
-- **Composition edges**: Follows structural meaning, not just co-occurrence
-
-### DEPSPlanner — Structured Failure Recovery
-
-When operations fail (circular compositions, missing targets, grounding failures), instead of just returning an error, DEPS generates **recovery plans** with estimated success rates. The planner follows a 4-step process:
-
-1. **DESCRIBE** — Classify the failure type (SelfReference, CircularChain, TargetNotFound, etc.)
-2. **EXPLAIN** — Generate a human-readable explanation of what went wrong
-3. **PLAN** — Generate multiple alternative recovery strategies
-4. **SELECT** — Choose the best plan by composite score: **60% success_rate + 40% simplicity**
-
-```python
-# DEPSPlanner runs automatically inside compose() when verification fails.
-# Example: if you try to create a self-referencing composition:
-try:
-    r.compose("raja", [("raja", 0), ("kerajaan", 0)], "id")
-except Exception as e:
-    print(e)
-    # "Self-reference detected: composition references node 'raja' (id=5).
-    #  Recovery: Remove self-referencing composition"
-    #  ^ This recovery hint comes from DEPSPlanner!
-```
-
-**Recovery actions** include: `RemoveComposition`, `TryAlternativeSense`, `ReduceDepth`, `UseDifferentParadigm`, `ReviseCompositions`, `MergeWithExisting`, `Skip`, and `Retry`.
-
-### NeuroSymVerifier — Composition Verification with 5 Rules
-
-Every composition is verified against five structural rules, now **wired directly into the compose() pipeline**. Failed verifications trigger DEPSPlanner for recovery suggestions.
-
-| Rule | Weight | Threshold | What It Checks |
-|------|--------|-----------|----------------|
-| `no_self_reference` | 1.0 | 1.0 (binary) | Compositions must not reference the same node they define |
-| `layer_consistency` | 0.8 | 0.5 | Compositions should reference equal or lower layers |
-| `grounding_threshold` | 0.7 | 0.5 | Composition targets should be grounded |
-| `frequency_threshold` | 0.5 | 0.3 | Composition targets should have sufficient frequency |
-| `no_circular_chain` | 1.0 | 1.0 (binary) | Transitive closure must not loop back |
-
-```python
-# Verify a node's compositions manually
-result = r.verify("raja")
-# Returns: {
-#   "ok": True,
-#   "label": "raja",
-#   "status": "Verified",        # or "Partial", "NeedsRevision", "Failed"
-#   "rules_checked": 5,
-#   "rules_passed": 5,
-#   "rules_failed": 0,
-#   "iterations": 1
-# }
-
-# Verify with iterative revision (removes worst compositions until verified)
-result = r.verify("raja", max_iterations=3)
-```
-
-**Verification statuses:** `Verified` → `Partial{passed, failed}` → `NeedsRevision` → `Failed`
-
-### ThinkingToggle — Adaptive Complexity Toggle
-
-Not every query needs deep traversal. The ThinkingToggle analyzes query complexity signals and selects the right depth automatically:
-
-```python
-# Simple queries (1-2 context atoms, single sense) → NON_THINKING
-#   - Depth multiplier: 0.5 (halves max_depth)
-#   - Higher tau_relevance (fewer expansions)
-#   - Fast: O(K)
-
-# Complex queries (4+ context atoms, multiple senses, compositional) → THINKING
-#   - Depth multiplier: 1.0 (full max_depth)
-#   - Lower tau_relevance (more expansions)
-#   - Thorough: O(S × K^D)
-
-# Override manually:
-r.set_thinking_mode(-1)  # AUTO (default)
-r.set_thinking_mode(0)   # Force NON_THINKING (fast, shallow)
-r.set_thinking_mode(1)   # Force THINKING (thorough, deep)
-```
-
-**Complexity signals** (2+ of 5 triggers THINKING):
-1. ≥3 context atoms
-2. ≥2 senses
-3. Layer ≥1
-4. Compositional target
-5. Domain complexity > 0.5
-
-### ConsolidationEngine — Periodic Cleanup
-
-Consolidation is a **separate phase** from ingestion (preventing interference with active learning). It runs at safe checkpoints (every 50 batches by default) and performs thorough cross-node cleanup:
-
-```python
-# Manual consolidation (force regardless of interval)
-result = r.consolidate(force=True)
-print(result)
-# ConsolidationResult(merged=2, removed=5, pruned=12, compacted=3)
-
-# Automatic consolidation runs every 50 batches by default.
-# Check if consolidation is due:
-# result = r.consolidate()  # no-op if not due yet
-```
-
-**Four-phase consolidation:**
-1. **Remove dead senses** — fragile + ungrounded + very inactive (>2× k_fragile)
-2. **Merge similar senses** — Jaccard ≥ 0.8 composition overlap (max 5 merges/cycle)
-3. **Prune weak edges** — weight below 0.02 after decay (preserves Bootstrap/Composition edges)
-4. **Compact records** — remove autonomy records below tau_remove
-
-### SenseReflection — Self-Evaluation Loop
-
-After each ingest batch, SenseReflection evaluates each sense and produces actions based on grounding evidence:
-
-| Action | Trigger | Effect |
-|--------|---------|--------|
-| CONFIRM | Grounding ≥ 0.6 | None (sense is healthy) |
-| REVIEW | Grounding 0.3–0.6 | Monitor (escalates after 3 consecutive reviews) |
-| REVISE | Grounding < 0.3 | Prune worst compositions (max 3 per cycle) |
-| RETIRE | Fragile + ungrounded + inactive ≥ 100 contexts | Mark for removal |
-
-```python
-# Run a reflection cycle (call periodically, e.g., after every 50 ingests)
-result = r.run_reflection()
-print(result)
-# ReflectionResult(total=12, applied=3)
-#   total = 12 actions produced (CONFIRM + REVIEW + REVISE + RETIRE)
-#   applied = 3 actions that modified the graph (REVISE + RETIRE only)
-```
-
-**Key safety features:**
-- REVISE actions are rate-limited (max 3 per cycle) to prevent catastrophic pruning
-- REVIEW escalates to REVISE after 3 consecutive cycles
-- RETIRE only removes senses that are fragile + ungrounded + very inactive
-- CONFIRM and REVIEW are informational (no graph mutations)
-
-### MCTSTraversal — Monte Carlo Tree Search for Complex Disambiguation
-
-For the most complex queries (multi-sense, high layer, compositional chains), MCTS provides tree search with UCB1 selection and backtracking. Instead of neural value/policy networks, RSVS uses structural scores:
-
-- **Policy**: P(a|S,q) from freq_map × edge_weight
-- **Value**: grounding score × coherence
-- **UCB1**: Balance exploration vs exploitation using visit counts
-
-```python
-# MCTS query for complex disambiguation
-result = r.mcts_query(
-    concept="batu",
-    context_atoms=["kekerasan", "mineral", "bentuk"],
-    max_simulations=20,    # more = better quality, default: 10
-    max_depth=5,           # max depth per simulation, default: 4
-)
-print(result)
-# MCTSResult(sense=0, sims=20, depth=3, halt=Stability, path_len=4)
-#   active_sense_idx: 0
-#   scored_atoms: [("kekerasan", 0.85), ("mineral", 0.72), ...]
-#   best_path: [("batu", 0), ("kekerasan", 0), ...]
-#   simulations_run: 20
-#   halt_reason: "Stability"
-```
-
-**Backtracking**: If a simulation's confidence drops below `min_value` (0.5), the path is abandoned and the value is penalized by `backtrack_threshold` (0.3). This prevents wasted computation on dead-end paths.
-
-### CompositionIndex — O(1) Reverse Lookup
-
-A reverse index from CompositionRef → set of NodeIds that reference it. This replaces O(N×M) scans with single HashMap lookups:
-
-```python
-# CompositionIndex runs internally. Key operations:
-#   dependents_of_node(id)  → O(1) which nodes reference this node?
-#   impact_count(id)        → O(1) how many senses depend on this node?
-#   dependencies_of(id)     → O(1) what does this node depend on?
-#   rebuild(all_senses)     → Rebuild after bulk operations
-```
-
-**Use cases:**
-- **Impact analysis**: "If I remove node X, how many senses break?" → `impact_count(X)`
-- **Reverse traversal**: "Which nodes use this sense in their compositions?" → `dependents_of_node(X)`
-- **Cascade detection**: "What's the blast radius of deleting this?" → `dependencies_of(X)` recursively
-
-### MatryoshkaTraversal — Multi-Granularity Traversal
-
-Inspired by MatFormer's nested submodels, Matryoshka traversal uses variable depth based on query complexity. Different branches of the traversal tree can use different granularities — high-confidence branches go deeper, low-confidence branches stop early.
-
-| Granularity | Depth Multiplier | Use For |
-|-------------|-----------------|---------|
-| Quarter (0.25) | 25% of max_depth | Simple factual queries |
-| Half (0.5) | 50% of max_depth | Disambiguation queries |
-| ThreeQuarters (0.75) | 75% of max_depth | Complex compositional queries |
-| Full (1.0) | 100% of max_depth | Thorough analysis |
-
-```python
-# Matryoshka runs internally via the ParadigmRouter.
-# When ParadigmRouter selects Standard/Deep paradigm,
-# MatryoshkaTraversal automatically picks the right granularity:
-#
-#   Simple signal (score 0-1)  → Quarter  (depth ≈ max_depth × 0.25)
-#   Moderate signal (score 2-3) → Half     (depth ≈ max_depth × 0.50)
-#   Complex signal (score 4-5)  → 3/4      (depth ≈ max_depth × 0.75)
-#   Very complex (score 6+)     → Full     (depth = max_depth × 1.0)
-#
-# This gives you the answer quality of deep traversal,
-# but only when you actually need it.
-```
-
----
-
-## Example Usage
-
-### Complete Working Example
+## Quick Start
 
 ```python
 from rsvs import Rsvs
 
-# 1. Create RSVS instance (bootstraps 24 seed atoms)
 r = Rsvs(entity_promote_n=3, theta_assign=0.12, n_warm=20, eta=0.1)
 
-# 2. Ingest text — builds co-occurrence stats, promotes entities, induces senses
-r.ingest(
-    "Raja adalah pemimpin tertinggi kerajaan. "
-    "Raja adalah seorang laki-laki. "
-    "Ratu adalah pemimpin perempuan kerajaan. "
-    "Ratu duduk di tahta tertinggi. "
-    "Kerajaan dipimpin oleh raja atau ratu. "
-    "Tahta tertinggi simbol kekuasaan kerajaan."
-)
+r.ingest("Raja adalah pemimpin kerajaan laki-laki. "
+         "Ratu adalah pemimpin kerajaan perempuan. "
+         "Tahta tertinggi ada di kerajaan.")
 
-# 3. Define compositional meanings explicitly
-r.compose("raja", [
-    ("tahta_tertinggi", 0),
-    ("laki_laki", 0),
-    ("kerajaan", 0)
-], "id")
+r.compose("raja", [("tahta_tertinggi", 0), ("laki_laki", 0), ("kerajaan", 0)], lang="id")
+r.compose("ratu", [("tahta_tertinggi", 0), ("perempuan", 0), ("kerajaan", 0)], lang="id")
 
-r.compose("ratu", [
-    ("tahta_tertinggi", 0),
-    ("perempuan", 0),
-    ("kerajaan", 0)
-], "id")
-
-# 4. Query a concept in context
-result = r.query("raja", "pemimpin kerajaan laki-laki")
-print(f"Active sense: {result.sense_idx}")
-print(f"Layer: {result.layer}")
-print(f"Compositions: {result.compositions}")
-
-# 5. Compute structural similarity
 sim = r.structural_similarity("raja", "ratu")
-print(f"\nStructural similarity: {sim.structural_similarity:.3f}")
-print(f"Shared compositions: {sim.shared_labels(r)}")
-print(f"Only in raja: {sim.only_a_compositions}")
-print(f"Only in ratu: {sim.only_b_compositions}")
+print(f"Structural similarity: {sim.structural_similarity:.3f}")  # 0.667
 
-# 6. Substitution analysis — the precise swap
 sub = r.substitution_analysis("raja", "ratu")
-print(f"\nSubstitution: {sub.substitution_labels(r)}")
-print(f"This single swap transforms 'king' into 'queen'.")
-
-# 7. Appraise text against the graph
-appraisal = r.appraise("Raja dan ratu memimpin kerajaan")
-print(f"\nAppraisal: {appraisal.verdict} ({appraisal.agree_pct:.0f}% agree)")
-
-# 8. Find related concepts
-relations = r.relate("raja")
-print(f"\nRelated nodes: {relations.node_labels(r)[:5]}")
-
-# 9. Inspect node details
-info = r.node_info("raja")
-print(f"\nNode: {info.label}, Layer: {info.layer}, "
-      f"Confidence: {info.confidence:.2f}, Status: {info.status}")
-
-# 10. v7.0: MCTS query for complex disambiguation
-mcts_result = r.mcts_query("raja", ["kerajaan", "pemimpin"])
-print(f"\nMCTS: sense={mcts_result.active_sense_idx}, "
-      f"sims={mcts_result.simulations_run}, "
-      f"depth={mcts_result.depth_reached}")
-
-# 11. v7.0: Verify compositions
-verify_result = r.verify("raja")
-print(f"\nVerification: {verify_result}")
-
-# 12. v7.0: Run reflection cycle
-reflection = r.run_reflection()
-print(f"\nReflection: {reflection.total} actions, {reflection.applied} applied")
-
-# 13. v7.0: Consolidate the graph
-consolidation = r.consolidate(force=True)
-print(f"\nConsolidation: merged={consolidation.senses_merged}, "
-      f"removed={consolidation.senses_removed}, "
-      f"pruned={consolidation.edges_pruned}")
-
-# 14. v7.0: Set thinking mode
-r.set_thinking_mode(-1)  # AUTO — router decides per query
-
-# 15. Persist state
-r.save("my_knowledge_graph.json")
+print(f"Substitution: {sub.substitution_labels(r)}")  # [("laki_laki", 0, "perempuan", 0)]
 ```
 
-### cURL Examples
+One swap -- `laki_laki` becomes `perempuan` -- is the entire semantic difference between king and queen, expressed as a precise structural transformation rather than a fuzzy vector distance.
 
-```bash
-# Ingest text
-curl -X POST http://localhost:8000/ingest \
-  -H "Content-Type: application/json" \
-  -d '{"text": "Raja adalah pemimpin kerajaan."}'
+---
 
-# Compose a node
-curl -X POST http://localhost:8000/compose \
-  -H "Content-Type: application/json" \
-  -d '{
-    "label": "raja",
-    "compositions": [
-      {"label": "tahta_tertinggi", "sense_id": 0},
-      {"label": "laki_laki", "sense_id": 0},
-      {"label": "kerajaan", "sense_id": 0}
-    ],
-    "lang": "id"
-  }'
+## Core Concepts
 
-# Structural similarity
-curl "http://localhost:8000/structural-similarity?a=raja&b=ratu"
+### Atoms
 
-# Substitution analysis
-curl "http://localhost:8000/substitution-analysis?a=raja&b=ratu"
+An atom is the smallest unit of meaning in RSVS. When text is ingested, tokens are extracted and tracked for co-occurrence statistics. Tokens that appear frequently enough and with sufficient co-occurrence diversity are promoted to atom status. The system bootstraps with 24 seed atoms (basic semantic primitives like "laki_laki", "perempuan", "kekerasan", and others) that provide the initial vocabulary for compositional definitions. Promotion is controlled by the `entity_promote_n` parameter, which sets the minimum number of co-occurrence contexts required before a token becomes an atom.
 
-# v7.0: MCTS query
-curl -X POST http://localhost:8000/mcts-query \
-  -H "Content-Type: application/json" \
-  -d '{"concept": "raja", "context_atoms": ["kerajaan", "pemimpin"], "max_simulations": 20}'
+### Senses
 
-# v7.0: Verify compositions
-curl -X POST http://localhost:8000/verify \
-  -H "Content-Type: application/json" \
-  -d '{"label": "raja", "max_iterations": 3}'
+A sense is a particular meaning of a concept. Every node in the RSVS graph can have multiple senses, each representing a distinct usage. For example, "batu" (stone/rock) might have one sense for geological material and another for a gemstone. Each sense carries its own composition structure, grounding score, coherence metric, and status. Senses are induced automatically during ingestion -- the system identifies which atoms are active in the context of each token and uses them as the compositions of a new sense. Senses can also be defined explicitly via the `compose()` method.
 
-# v7.0: Consolidate graph
-curl -X POST http://localhost:8000/consolidate \
-  -H "Content-Type: application/json" \
-  -d '{"force": true}'
-```
+### Compositions
+
+A composition is a directed reference from one sense to another sense, forming the edges of the meaning graph. When you define "raja" as composed of ("tahta_tertinggi", sense 0), ("laki_laki", sense 0), and ("kerajaan", sense 0), you are creating three composition edges. Compositions are the fundamental building blocks of meaning in RSVS. They enable structural similarity (comparing shared and differing compositions between two concepts), substitution analysis (identifying the precise swaps that transform one concept into another), and compositional verification (checking whether a sense's compositions are well-grounded in evidence).
+
+### Layers
+
+Layers represent the depth of compositional structure. Seed atoms exist at layer 0. A concept composed entirely of layer-0 atoms exists at layer 1. A concept composed of at least one layer-1 sense exists at layer 2, and so on. Layers create a natural hierarchy: you cannot define a higher-layer concept without first having the lower-layer concepts it depends on. The layer system prevents circular definitions and enables the system to reason about compositional depth.
+
+### Tiers and Autonomous Memory
+
+RSVS implements an autonomous tiered memory lifecycle for all nodes. Every node progresses through four tiers based on its confidence and activity: New (just created, low confidence), Candidate (some evidence, gaining confidence), Stable (well-established, high confidence), and Deprecated (inactive, low confidence, scheduled for removal). This lifecycle is managed by the autonomy engine, which uses exponential moving averages (EMA) and hysteresis thresholds to prevent rapid oscillation between tiers. The `eta` parameter controls the EMA smoothing factor.
+
+### Grounding
+
+Grounding is the process of verifying that a sense's compositions are supported by evidence in the corpus. After a sense is formed, every subsequent ingestion that involves that sense updates its grounding score. Confirming contexts (where the sense's compositions are also active) boost the grounding score; contradicting contexts (where expected compositions are absent) penalize it. The asymmetric penalty (0.10) versus boost (0.05) ensures that poorly grounded compositions are caught quickly. A sense with a grounding score above 0.60 is considered well-grounded; below 0.20 it needs revision; and below that threshold it is a candidate for retirement.
 
 ---
 
@@ -689,79 +120,304 @@ curl -X POST http://localhost:8000/consolidate \
 
 ### Core Operations
 
-| Method | Python | Rust | Description |
-|--------|--------|------|-------------|
-| Ingest | `r.ingest(text)` | `rsvs.ingest_text(text)` | Ingest text, update graph |
-| Ingest+Meta | `r.ingest_with_meta_v1(text, domain_id?)` | — | Ingest with API metadata |
-| Query | `r.query(concept, context)` | `rsvs.query(concept, ctx)` | Context-aware query |
-| Context Query | `r.context_query(concept, atoms, ...)` | `rsvs.context_query(...)` | Depth-controlled traversal |
-| Compose | `r.compose(label, compositions, lang?)` | `rsvs.compose(label, comps, lang)` | Create compositional node |
+These are the primary operations for building and querying a knowledge graph.
 
-### Comparison & Analysis
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `ingest` | `r.ingest(text: str) -> IngestStats` | Ingest text, update co-occurrence stats, promote atoms, induce senses. Returns stats on sentences processed, atoms promoted, senses created. |
+| `query` | `r.query(concept: str, context: str) -> QueryResult \| None` | Context-aware query. Returns the active sense, its layer, grounding score, compositions, and scored atoms. |
+| `context_query` | `r.context_query(concept, atoms, max_depth, gamma, halt_confidence, tau_relevance) -> ContextQueryResult \| None` | Depth-controlled lazy traversal with context atoms. Supports configurable depth limits, relevance thresholds, and halt conditions. |
+| `compose` | `r.compose(label, compositions, lang) -> int` | Create a new compositional node. `compositions` is a list of `(label, sense_idx)` tuples. Returns the new node ID. |
 
-| Method | Python | Description |
-|--------|--------|-------------|
-| Similarity | `r.similarity(a, b)` | Flat Jaccard similarity (v4 compat) |
-| Structural Similarity | `r.structural_similarity(a, b)` | Sense-level composition comparison |
-| Substitution Analysis | `r.substitution_analysis(a, b)` | Precise swap transforming A→B |
-| Context Similarity | `r.context_similarity(a, b, ctx)` | Context-weighted similarity |
-| Appraise | `r.appraise(text)` | Text plausibility against graph |
-| Relate | `r.relate(concept)` | Find related nodes and edges |
+### Analysis Operations
 
-### v7.0 Advanced Operations
+These methods compare concepts and analyze text against the knowledge graph.
 
-| Method | Python | Description |
-|--------|--------|-------------|
-| MCTS Query | `r.mcts_query(concept, atoms, sims?, depth?)` | Monte Carlo tree search traversal |
-| Run Reflection | `r.run_reflection()` | Self-evaluate all senses (CONFIRM/REVIEW/REVISE/RETIRE) |
-| Consolidate | `r.consolidate(force?)` | Periodic cleanup (merge, prune, compact) |
-| Set Thinking Mode | `r.set_thinking_mode(mode)` | -1=auto, 0=shallow, 1=deep |
-| Verify | `r.verify(label, max_iterations?)` | Neuro-symbolic composition verification |
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `similarity` | `r.similarity(a: str, b: str) -> SimResult \| None` | Flat Jaccard similarity based on shared atoms. Returns Jaccard score, shared atoms, and atoms unique to each side. |
+| `structural_similarity` | `r.structural_similarity(a: str, b: str) -> StructuralSimResult \| None` | Sense-level composition comparison. Returns the structural similarity score, shared compositions, and compositions unique to each sense. |
+| `substitution_analysis` | `r.substitution_analysis(a: str, b: str) -> SubstitutionResult \| None` | Find the precise swaps that transform concept A into concept B. Returns paired substitutions and unpaired remainders. |
+| `context_similarity` | `r.context_similarity(a: str, b: str, context: list[str]) -> float \| None` | Context-weighted similarity. Weights shared atoms by their relevance to the provided context. |
+| `appraise` | `r.appraise(text: str) -> AppraiseResult` | Evaluate text plausibility against the graph. Returns agree/disagree percentages, verdict, and supporting evidence. |
+| `relate` | `r.relate(concept: str) -> RelateResult \| None` | Find related nodes and edges via spreading activation along composition edges. |
 
-### Inspection
+### Composition Operations
 
-| Method | Python | Description |
-|--------|--------|-------------|
-| Node Info | `r.node_info(label)` | Node details (layer, confidence, status) |
-| Senses | `r.senses(concept)` | All senses with grounding evidence |
-| Nodes | `r.nodes(include_seeds?)` | List all known nodes |
-| Entity Candidates | `r.entity_candidates(top_k?)` | Unpromoted high-centrality tokens |
-| Confidence Map | `r.confidence_map()` | All node confidence scores |
-| Status | `r.status()` | System status dict |
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `compose` | `r.compose(label, compositions, lang) -> int` | Create compositional node from label/sense references. |
+| `compose_from_ids` | `r.compose_from_ids(label, atom_ids, lang) -> int` | Create compositional node from integer atom IDs. |
 
-### Domain & Attention
+### Reasoning Operations
 
-| Method | Python | Description |
-|--------|--------|-------------|
-| Set Domain | `r.set_domain(domain_id)` | Set current domain tag |
-| Set Domain Attention | `r.set_domain_attention(id, α, β, γ)` | Per-domain attention weights |
-| Set Sense Label | `r.set_sense_label(node, idx, label)` | Annotate a sense |
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `mcts_query` | `r.mcts_query(label, simulations, exploration) -> MCTSResult \| None` | Monte Carlo Tree Search for complex disambiguation. Uses UCB1 selection and structural value functions. Returns active sense, scored atoms, depth reached, and halt reason. |
+| `set_thinking_mode` | `r.set_thinking_mode(mode)` | Control traversal depth. `-1` = AUTO (router decides), `0` = NON_THINKING (shallow, fast), `1` = THINKING (deep, thorough). |
+| `consolidate` | `r.consolidate() -> ConsolidationResult` | Periodic graph cleanup: merge similar senses, remove dead senses, prune weak edges, compact records. |
+| `run_reflection` | `r.run_reflection() -> ReflectionResult` | Self-evaluate all senses. Produces CONFIRM, REVIEW, REVISE, or RETIRE actions based on grounding evidence. |
+| `verify` | `r.verify() -> dict` | Neuro-symbolic composition verification. Checks five structural rules: no self-reference, layer consistency, grounding threshold, frequency threshold, and no circular chains. |
 
-### Persistence & Events
+### Inspection Operations
 
-| Method | Python | Description |
-|--------|--------|-------------|
-| Save | `r.save(path)` | Save state to JSON |
-| Load | `Rsvs.load(path)` | Load state from JSON |
-| Snapshot | `r.snapshot_v1()` | Runtime snapshot for UI |
-| Events | `r.consume_events_v1(after?, limit?)` | Incremental event stream |
-| Latest Seq | `r.latest_seq_v1()` | Monotonic event sequence number |
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `node_info` | `r.node_info(label) -> NodeInfo` | Detailed node information: label, layer, confidence, tier, status, composition state. |
+| `senses` | `r.senses(concept) -> list[SenseInfo]` | All senses of a concept with grounding evidence, coherence, compositions, and status. |
+| `nodes` | `r.nodes(include_seeds=False) -> list[str]` | List all known node labels. |
+| `atoms` | `r.atoms(include_seeds=False) -> list[str]` | List all known atom labels. |
+| `confidence_map` | `r.confidence_map() -> dict[str, float]` | Confidence scores for all nodes. |
+| `entity_candidates` | `r.entity_candidates(top_k) -> list[tuple[str, float]]` | Unpromoted tokens with highest centrality scores. |
+| `status` | `r.status() -> dict[str, float]` | System status including total nodes, atoms, contexts, and configuration parameters. |
+
+### Persistence Operations
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `save` | `r.save(path: str) -> None` | Serialize the entire knowledge graph to a JSON file. |
+| `load` | `Rsvs.load(path: str) -> Rsvs` | Class method. Deserialize a knowledge graph from a JSON file. |
+| `snapshot_v1` | `r.snapshot_v1() -> str` | Runtime snapshot for UI consumption. Returns JSON string. |
+| `consume_events_v1` | `r.consume_events_v1(after_seq, limit) -> str` | Incremental event stream. Returns events with sequence numbers after `after_seq`. |
+| `latest_seq_v1` | `r.latest_seq_v1() -> int` | Current monotonic event sequence number. |
+
+---
+
+## CLI Usage
+
+RSVS installs a `rsvs` command-line tool after `pip install rsvs`. The CLI provides access to all core operations without writing Python code. State is persisted to a JSON file (default: `./rsvs.json`).
+
+```bash
+# Initialize a new knowledge graph
+rsvs init --db my_graph.json
+
+# Ingest text (literal string or file path)
+rsvs ingest "Batu adalah material keras dari alam" --db my_graph.json
+rsvs ingest corpus.txt --db my_graph.json
+
+# Query a concept in context
+rsvs query batu "material keras" --db my_graph.json
+
+# Compute similarity between two concepts
+rsvs similarity batu kayu --db my_graph.json
+
+# Inspect a concept
+rsvs info batu --db my_graph.json
+rsvs senses batu --db my_graph.json
+
+# List all atoms
+rsvs atoms --db my_graph.json
+
+# Show system status
+rsvs status --db my_graph.json
+
+# Ingest from embedded corpus (Bahasa Indonesia domains)
+rsvs ingest-corpus --domains geology materials --db my_graph.json
+rsvs ingest-corpus --all --db my_graph.json
+
+# Run quality evaluation
+rsvs eval --db my_graph.json --json
+
+# Replay incremental event stream
+rsvs replay-events --db my_graph.json --after-seq 100 --limit 50
+```
+
+All commands support `--json` for machine-readable output. The `init` command accepts tuning parameters: `--promote-n`, `--theta`, `--n-warm`, and `--eta` to configure the RSVS hyperparameters.
+
+---
+
+## FastAPI Server
+
+RSVS includes an optional FastAPI server for HTTP access to all operations. Install with the `server` extra:
+
+```bash
+pip install rsvs[server]
+```
+
+Start the server:
+
+```bash
+# Development mode (auto-reload)
+RSVS_DEV_RELOAD=1 python -m rsvs.fastapi_server
+
+# Production mode
+RSVS_API_KEY=your-secret-key RSVS_SESSION_SECRET=your-session-secret python -m rsvs.fastapi_server
+```
+
+The server runs on `0.0.0.0:8000` by default. Configure with environment variables: `RSVS_HOST`, `RSVS_PORT`, `RSVS_API_KEY`, `RSVS_SESSION_SECRET`, `RSVS_ALLOWED_ORIGINS`.
+
+Key endpoints:
+
+```bash
+# Ingest text
+curl -X POST http://localhost:8000/ingest \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: your-key" \
+  -d '{"text": "Raja adalah pemimpin kerajaan."}'
+
+# Compose a node
+curl -X POST http://localhost:8000/compose \
+  -H "Content-Type: application/json" \
+  -d '{"label": "raja", "compositions": [{"label": "tahta_tertinggi", "sense_id": 0}], "lang": "id"}'
+
+# Structural similarity
+curl "http://localhost:8000/structural-similarity?a=raja&b=ratu"
+
+# Substitution analysis
+curl "http://localhost:8000/substitution-analysis?a=raja&b=ratu"
+
+# MCTS query
+curl -X POST http://localhost:8000/mcts-query \
+  -H "Content-Type: application/json" \
+  -d '{"label": "batu", "simulations": 100}'
+
+# Consolidate the graph
+curl -X POST http://localhost:8000/consolidate \
+  -H "Content-Type: application/json" \
+  -d '{"force": true}'
+```
+
+The server includes API-key-based rate limiting, CORS configuration, request size limits, and production fail-fast checks for required secrets. OpenAPI documentation is available at `http://localhost:8000/docs`.
+
+---
+
+## Examples Gallery
+
+### Comparing King and Queen
+
+```python
+from rsvs import Rsvs
+
+r = Rsvs()
+r.ingest("Raja adalah pemimpin kerajaan laki-laki. "
+         "Ratu adalah pemimpin kerajaan perempuan. "
+         "Tahta tertinggi ada di kerajaan.")
+
+r.compose("raja", [("tahta_tertinggi", 0), ("laki_laki", 0), ("kerajaan", 0)], lang="id")
+r.compose("ratu", [("tahta_tertinggi", 0), ("perempuan", 0), ("kerajaan", 0)], lang="id")
+
+sim = r.structural_similarity("raja", "ratu")
+print(f"Similarity: {sim.structural_similarity:.3f}")   # 0.667
+print(f"Shared: {sim.shared_labels(r)}")                # [(tahta_tertinggi, 0), (kerajaan, 0)]
+
+sub = r.substitution_analysis("raja", "ratu")
+print(f"Substitution: {sub.substitution_labels(r)}")    # [(laki_laki, 0, perempuan, 0)]
+```
+
+### Context-Aware Querying
+
+```python
+from rsvs import Rsvs
+
+r = Rsvs()
+r.ingest("Batu adalah material keras. Tulang juga material keras. "
+         "Batu ditemukan di alam. Tulang ada di tubuh.")
+
+result = r.context_query("batu", ["material", "keras"], max_depth=5)
+if result:
+    print(f"Active sense: {result.active_sense_idx}")
+    print(f"Depth reached: {result.depth_reached}")
+    print(f"Scored atoms: {result.scored_atoms[:5]}")
+```
+
+### MCTS Reasoning
+
+```python
+from rsvs import Rsvs
+
+r = Rsvs()
+r.ingest("Batu adalah material keras dari alam. "
+         "Batu digunakan untuk konstruksi. "
+         "Mineral adalah komponen batu.")
+
+result = r.mcts_query("batu", simulations=100)
+if result:
+    print(f"Active sense: {result.active_sense_idx}")
+    print(f"Simulations: {result.simulations_run}")
+    print(f"Depth: {result.depth_reached}")
+    print(f"Halt reason: {result.halt_reason}")
+    print(f"Best path: {result.best_path}")
+```
+
+### Appraising Text Plausibility
+
+```python
+from rsvs import Rsvs
+
+r = Rsvs()
+r.ingest("Batu adalah material keras. Kayu adalah material organik. "
+         "Besi adalah logam keras.")
+
+appraisal = r.appraise("Batu sangat keras")
+print(f"Verdict: {appraisal.verdict}")           # "agree" or "disagree"
+print(f"Agree: {appraisal.agree_pct:.0f}%")      # e.g. 85%
+print(f"Evidence: {appraisal.evidence[:3]}")
+```
+
+### Persistence and Loading
+
+```python
+from rsvs import Rsvs
+
+# Build a knowledge graph
+r = Rsvs()
+r.ingest("Kerajaan dipimpin oleh raja atau ratu.")
+r.compose("kerajaan", [("raja", 0), ("negara", 0)], lang="id")
+
+# Save to disk
+r.save("my_graph.json")
+
+# Load later in a different session
+r2 = Rsvs.load("my_graph.json")
+print(r2.status())
+```
+
+### Finding Related Concepts
+
+```python
+from rsvs import Rsvs
+
+r = Rsvs()
+r.ingest("Raja memimpin kerajaan. Ratu memimpin kerajaan. "
+         "Kerajaan memiliki tahta. Tahta adalah simbol kekuasaan.")
+
+related = r.relate("raja")
+if related:
+    print(f"Related nodes: {related.node_labels(r)[:5]}")
+    print(f"Structural relations: {related.structural_labels(r)[:5]}")
+```
+
+---
+
+## Architecture Overview
+
+RSVS follows a three-tier architecture with strict separation of concerns:
+
+- **Rust Core** (`backend/crates/rsvs-core/src/`): All computational logic lives here -- graph storage, attention scoring, sense management, autonomy lifecycle, pipeline orchestration, MCTS, consolidation, reflection, and persistence. The core has no HTTP, no file I/O, and no Python dependencies. It compiles independently and exposes a pure Rust API.
+
+- **Python Bridge** (`python/rsvs/`): The Python layer provides the PyO3 bindings (compiled from Rust via maturin), FastAPI server, CLI tool, validation, and artifact persistence. No computation happens in Python -- it delegates everything to the Rust core. The Python package is typed (PEP 561) and ships with `.pyi` stubs for IDE support.
+
+- **Frontend** (`frontend/`): A Next.js 16 application with React Three Fiber for 3D graph visualization, Zustand for state management, and shadcn/ui for UI components. The frontend communicates with the Python bridge via an API proxy that keeps the API key server-side.
+
+For the full technical reference, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ---
 
 ## Performance
 
-Benchmarks on Apple M2 Pro with Criterion.rs:
+RSVS is designed for low-latency operations on knowledge graphs of moderate size. The Rust core eliminates the overhead of interpreted Python for all graph operations, and the PyO3 binding layer adds minimal overhead for cross-language calls.
 
-| Benchmark | Time | Notes |
+Representative benchmarks (Apple M2 Pro, Criterion.rs):
+
+| Operation | Time | Notes |
 |-----------|------|-------|
-| `jaccard_100_elements` | ~2 µs | Atom set similarity for 100-element sets |
-| `npmi_lookup` | ~50 ns | Single NPMI table lookup |
-| `cooc_ingest_sentence_20_tokens` | ~5 µs | Co-occurrence stats for 20-token sentence |
-| `sense_ingest_10_atoms` | ~15 µs | Sense assignment for 10-atom context |
-| `pipeline_ingest_text` | ~800 µs | Full pipeline: tokenize → attention → sense → autonomy |
-| `structural_similarity` | ~5 µs | Compare two nodes' compositions |
-| `substitution_analysis` | ~8 µs | Find substitutions between two nodes |
+| Jaccard similarity (100-element sets) | ~2 us | Atom set comparison |
+| NPMI lookup | ~50 ns | Single table lookup |
+| Co-occurrence ingest (20 tokens) | ~5 us | Per-sentence |
+| Sense ingest (10 atoms) | ~15 us | Sense assignment |
+| Full pipeline ingest | ~800 us | Tokenize through autonomy |
+| Structural similarity | ~5 us | Compare two nodes' compositions |
+| Substitution analysis | ~8 us | Find substitutions |
 
 Run benchmarks yourself:
 
@@ -769,129 +425,44 @@ Run benchmarks yourself:
 cd backend && cargo bench
 ```
 
-### Complexity at a Glance
-
-| Operation | Complexity | Parallelism |
-|-----------|-----------|-------------|
-| Ingest (per token) | O(S × K) | Sentence-level via rayon |
-| Structural similarity | O(S_a × S_b × C) | — |
-| Substitution analysis | O(S_a × S_b × C) | — |
-| Relate | O(N × \|A\|) | Full rayon parallelism |
-| Query | O(S × K) | — |
-| MCTS Query | O(S × K × max_simulations) | — |
-| Spreading Activation | O(max_hops × frontier_size) | — |
-| Composition Index lookup | O(1) | HashMap |
-| Consolidation | O(N × S²) | — |
-
-Where S = senses, K = core atoms, C = compositions, N = total nodes, A = atom set size.
-
----
-
-## Bug Fixes & Security Hardening (v7.0.1 → v7.2.0)
-
-### v7.2.0 — Full Pipeline Integration
-
-| Change | Description |
-|--------|-------------|
-| **ParadigmRouter → context_query()** | Queries now go through adaptive paradigm selection before ThinkingToggle fine-tunes depth |
-| **SpreadingActivation → relate()** | Structural relations now include spreading-activated nodes via composition edges |
-| **NeuroSymVerifier → compose()** | Every new composition is automatically verified; failures emit `neurosym_verification_warning` events |
-
-### v7.1.0 — Security Hardening (Score: 77.5 → 97.5/100)
-
-| Vulnerability | Fix | Severity |
-|---------------|-----|----------|
-| API key exposed to browser | Next.js API proxy route (`/api/proxy/[...path]`) | P0 Critical |
-| Stack traces leak to client | Centralized exception handler + bare `raise` | P0 Critical |
-| No HTTPS in production | Certbot + nginx SSL + HSTS | P0 Critical |
-| Non-atomic persistence writes | tmp+rename pattern in `persist.rs` | P1 Medium |
-| Missing CSP header | `Content-Security-Policy` in nginx.conf | P1 Medium |
-| IP-only rate limiting | API-key-based rate limiter | P1 Medium |
-| Deprecated `bridge_server.py` | Deleted from repo | P1 Medium |
-
-### v7.0.1 — Critical Bug Fixes
-
-| Bug | Fix | Impact |
-|-----|-----|--------|
-| **Missing PyO3 bindings** | Added `mcts_query`, `run_reflection`, `consolidate`, `set_thinking_mode` to `bindings.rs` | Previously, `fastapi_server.py` called these methods but they would crash with `AttributeError` |
-| `unwrap()` in `mcts.rs` | Replaced with safe `if let Some` pattern | Prevented panics on empty search paths |
-| `FailureType` missing `Hash` derive | Added `#[derive(Hash)]` to `FailureType` enum in `deps.rs` | Was preventing HashMap usage for DEPS strategies |
-| Non-exhaustive match in `deps.rs` | Covered all `RsvsError` variants | Was causing compilation failures |
-| NeuroSym + DEPS standalone | Wired into `compose()` pipeline | Composition verification and recovery now run automatically |
-
----
-
-## Roadmap
-
-### v8.0 — Distributed Cognition
-
-- [ ] Distributed Rust core with Raft consensus for multi-node deployments
-- [ ] Plugin system for custom attention scorers and policy rules
-- [ ] Streaming events via WebSocket/SSE for real-time UI updates
-- [ ] Multi-domain knowledge graphs with cross-domain edges
-- [ ] LLM integration for guided knowledge extraction
-- [ ] Cross-lingual composition alignment (raja@id ↔ king@en ↔ roi@fr)
-- [ ] Export to RDF/OWL for interoperability with semantic web
-- [ ] Analogical reasoning via composition pattern matching
-- [ ] Composition-driven text generation (controlled by structural constraints)
-- [ ] Graph embeddings for approximate nearest-neighbor search
+For detailed benchmark methodology and scaling characteristics, see [BENCHMARKS.md](docs/BENCHMARKS.md).
 
 ---
 
 ## Contributing
 
-We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for:
+We welcome contributions of all kinds -- bug reports, feature requests, documentation improvements, and code changes. RSVS follows Conventional Commits and requires all code to pass formatting checks, linting, and tests before merging.
 
-- Development environment setup
-- Code style guidelines (Rust, Python, TypeScript)
-- Commit message convention (Conventional Commits)
-- PR process and testing requirements
-- How to add new modes and extend the Rust core
+Key guidelines:
 
-### Development Setup
+- **Rust**: Run `cargo fmt`, `cargo clippy --all-targets -- -D warnings`, and `cargo test --lib` before every commit.
+- **Python**: Run `ruff format .`, `ruff check .`, and `pytest tests/ -v` before every commit.
+- **TypeScript**: Run `npm run lint` before every commit.
+- **PyO3 bindings**: All new Rust methods exposed to Python must be feature-gated behind `#[cfg(feature = "python")]`.
+- **Tests**: Every new feature or bug fix must include tests.
 
-```bash
-# Rust unit tests (175+ tests)
-cd backend && cargo test --lib
-
-# Rust benchmarks
-cd backend && cargo bench
-
-# Python tests
-cd backend/python && pytest tests/ -v
-
-# Full pipeline smoke test
-cd backend && cargo run --bin rsvs-smoke
-
-# Frontend tests
-cd frontend && npm test
-```
+For the full contribution guide, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
 ## License
 
-Dual-licensed under [MIT](LICENSE) OR [Apache-2.0](LICENSE). You may choose either license.
+Dual-licensed under [MIT](LICENSE) OR [Apache-2.0](LICENSE). You may choose either license at your option.
 
 ---
 
-## Acknowledgments
+## Citation
 
-RSVS was inspired by research in compositional semantics, symbolic AI, and the desire to make neural representations interpretable. Special thanks to:
+If you use RSVS in your research, please cite it as follows:
 
-- The **Losion** project for the cross-pollination of advanced reasoning patterns (ParadigmRouter, DEPSPlanner, NeuroSymVerifier, ThinkingToggle, MCTS, Matryoshka, SpreadingActivation, SenseReflection, ConsolidationEngine)
-- The Rust community for zero-cost abstractions that make compositional graph operations fast
-- The PyO3 project for seamless Rust-Python interop
-- The React Three Fiber team for making 3D visualization accessible
-- The Indonesian language community for providing rich compositional examples (raja/ratu, tahta/kerajaan)
+```bibtex
+@software{rsvs2026,
+  title = {RSVS: Relational Symbolic Vocabulary System},
+  author = {Wolfvin},
+  year = {2026},
+  version = {8.3.0},
+  url = {https://github.com/Wolfvin/SymbolicPuzzle3D}
+}
+```
 
----
-
-<div align="center">
-
-**[Report a Bug](https://github.com/Wolfvin/SymbolicPuzzle3D/issues/new?template=bug_report.md)** ·
-**[Request a Feature](https://github.com/Wolfvin/SymbolicPuzzle3D/issues/new?template=feature_request.md)** ·
-**[Read the Architecture](ARCHITECTURE.md)** ·
-**[Read the API Docs](docs/API.md)**
-
-</div>
+The CITATION.cff file at the repository root contains the full citation metadata in CITATION.cff format.

@@ -23,7 +23,7 @@ Thank you for your interest in contributing to RSVS! This guide will help you se
 | Tool | Version | Install |
 |------|---------|---------|
 | Rust | 1.75+ | [rustup.rs](https://rustup.rs/) |
-| Python | 3.12+ | [python.org](https://python.org) |
+| Python | 3.11+ | [python.org](https://python.org) |
 | Node.js | 18+ | [nodejs.org](https://nodejs.org) |
 | maturin | latest | `pip install maturin` |
 
@@ -74,7 +74,7 @@ cargo run --bin rsvs-smoke
 
 ## Architecture Overview
 
-RSVS is a three-tier system. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full technical reference.
+RSVS is a three-tier system. See [ARCHITECTURE.md](ARCHITECTURE.md) for the full technical reference.
 
 ```
 ┌─────────────────────────────┐
@@ -89,7 +89,7 @@ RSVS is a three-tier system. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) fo
 ### Key Boundaries
 
 - **Rust core** (`backend/crates/rsvs-core/src/`): All computational logic. No HTTP, no file I/O, no Python.
-- **Python bridge** (`backend/python/rsvs/`): HTTP layer + artifact I/O only. No computation.
+- **Python bridge** (`python/rsvs/`): HTTP layer + artifact I/O only. No computation.
 - **Frontend** (`frontend/`): Visualization + user interaction. No business logic.
 
 ### Module Map
@@ -297,7 +297,7 @@ Common scopes: `attention`, `autonomy`, `sense`, `graph`, `pipeline`, `bridge`, 
 4. **Run all tests**:
    ```bash
    cd backend && cargo test --lib && cargo clippy --all-targets -- -D warnings
-   cd backend/python && pytest tests/ -v && ruff check .
+   cd ../python && pytest tests/ -v && ruff check .
    cd frontend && npm run lint
    ```
 5. **Write a clear PR description** using the PR template
@@ -342,16 +342,16 @@ cd backend && cargo fmt -- --check
 
 ```bash
 # All tests
-cd backend/python && pytest tests/ -v
+cd ../python && pytest tests/ -v
 
 # Specific test file
-cd backend/python && pytest tests/test_conversion.py -v
+cd ../python && pytest tests/test_conversion.py -v
 
 # With coverage
-cd backend/python && pytest tests/ -v --cov=rsvs
+cd ../python && pytest tests/ -v --cov=rsvs
 
 # Lint
-cd backend/python && ruff check .
+cd ../python && ruff check .
 ```
 
 ### Frontend Tests
@@ -375,7 +375,7 @@ cd backend && cargo run --bin rsvs-smoke
 
 ## How to Add New Modes
 
-RSVS currently supports three modes: `ingest`, `appraise`, `relate`. To add a new mode (e.g., `summarize`):
+RSVS currently supports nine modes: `ingest`, `appraise`, `relate`, `compose`, `structural_similarity`, `substitution_analysis`, `grounding_info`, `context_query`, `context_similarity`. To add a new mode (e.g., `summarize`):
 
 ### 1. Add Rust Core Support
 
@@ -416,7 +416,7 @@ impl RsvsPy {
 
 ### 2. Add Python Bridge Support
 
-In `backend/python/rsvs/modes.py`:
+In `python/rsvs/modes.py`:
 
 ```python
 def _run_summarize_rust(
@@ -562,7 +562,7 @@ impl RsvsPy {
 
 ## Getting Help
 
-- **Documentation**: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for technical reference, [docs/API.md](docs/API.md) for API docs
+- **Documentation**: [ARCHITECTURE.md](ARCHITECTURE.md) for technical reference, [docs/API.md](docs/API.md) for API docs
 - **Issues**: [GitHub Issues](https://github.com/Wolfvin/SymbolicPuzzle3D/issues) for bugs and feature requests
 - **Discussions**: [GitHub Discussions](https://github.com/Wolfvin/SymbolicPuzzle3D/discussions) for questions and ideas
 

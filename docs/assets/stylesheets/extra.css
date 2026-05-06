@@ -1,0 +1,38 @@
+/* ──────────────────────────────────────────────────────────────────
+   RSVS Documentation — Extra Styles
+   ────────────────────────────────────────────────────────────────── */
+
+/* Grid cards on homepage */
+.md-typeset .grid.cards > ul > li,
+.md-typeset .grid.cards > ol > li {
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 0.5rem;
+}
+
+/* Slightly larger code blocks */
+.md-typeset code {
+  font-size: 0.85em;
+}
+
+/* Nicer table headers */
+.md-typeset table:not([class]) th {
+  background-color: var(--md-primary-fg-color);
+  color: var(--md-primary-bg-color);
+  font-weight: 600;
+}
+
+/* Admonition tweaks */
+.md-typeset .admonition,
+.md-typeset details {
+  border-radius: 0.5rem;
+}
+
+/* Tabbed code blocks */
+.md-typeset .tabbed-labels {
+  font-size: 0.8rem;
+}
+
+/* Link hover */
+.md-typeset a:hover {
+  text-decoration: underline;
+}

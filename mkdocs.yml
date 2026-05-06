@@ -1,0 +1,171 @@
+# ──────────────────────────────────────────────────────────────────────
+#  RSVS Documentation — MkDocs Configuration
+#  Deploys to GitHub Pages via .github/workflows/docs.yml
+# ──────────────────────────────────────────────────────────────────────
+
+site_name: RSVS
+site_description: >-
+  Relational Symbolic Vocabulary System — compositional symbolic meaning
+  engine with structural similarity, substitution analysis, and autonomous
+  tiered memory lifecycle.
+site_url: https://wolfvin.github.io/SymbolicPuzzle3D/
+site_author: Wolfvin
+
+repo_name: Wolfvin/SymbolicPuzzle3D
+repo_url: https://github.com/Wolfvin/SymbolicPuzzle3D
+edit_uri: edit/main/docs/
+
+copyright: "Dual-licensed under MIT OR Apache-2.0"
+
+# ── Theme ────────────────────────────────────────────────────────────
+theme:
+  name: material
+  language: en
+  logo: assets/logo.png
+  favicon: assets/logo.png
+  palette:
+    # Light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: deep purple
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    # Dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: deep purple
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.instant       # SPA-like navigation
+    - navigation.tracking      # URL updates on scroll
+    - navigation.tabs          # Top-level sections as tabs
+    - navigation.tabs.sticky   # Tabs stay visible on scroll
+    - navigation.sections      # Sections in sidebar
+    - navigation.expand        # Auto-expand sections
+    - navigation.indexes       # Section index pages
+    - navigation.top           # Back-to-top button
+    - search.suggest           # Search autocomplete
+    - search.highlight         # Highlight search results
+    - search.share             # Shareable search links
+    - content.code.copy        # Copy code button
+    - content.code.annotate    # Code annotations
+    - content.tabs.link        # Linked tab content
+    - toc.follow               # Sidebar TOC follows scroll
+  icon:
+    repo: fontawesome/brands/github
+  font:
+    text: Inter
+    code: JetBrains Mono
+
+# ── Plugins ──────────────────────────────────────────────────────────
+plugins:
+  - search:
+      lang: en
+  - autorefs
+  - git-revision-date-localized:
+      enable_creation_date: true
+      type: datetime
+  - minify:
+      minify_html: true
+      minify_js: true
+      minify_css: true
+
+# ── Extensions ───────────────────────────────────────────────────────
+markdown_extensions:
+  - abbr
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - toc:
+      permalink: true
+      title: On this page
+  - tables
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.betterem:
+      smart_enable: all
+  - pymdownx.caret
+  - pymdownx.details
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.magiclink:
+      repo_url_shorthand: true
+      user: Wolfvin
+      repo: SymbolicPuzzle3D
+  - pymdownx.mark
+  - pymdownx.smartsymbols
+  - pymdownx.snippets:
+      check_paths: true
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.tilde
+
+# ── Navigation ───────────────────────────────────────────────────────
+nav:
+  - Home: index.md
+  - Tutorials:
+      - tutorials/index.md
+      - Basic Usage: tutorials/basic-usage.md
+      - Indonesian NLP: tutorials/indonesian-nlp.md
+      - Composition Demo: tutorials/composition-demo.md
+      - Structural Reasoning: tutorials/structural-reasoning.md
+  - API Reference:
+      - api/index.md
+      - Core Operations: api/core.md
+      - Analysis Operations: api/analysis.md
+      - Reasoning Operations: api/reasoning.md
+      - Inspection Operations: api/inspection.md
+      - Persistence Operations: api/persistence.md
+      - FastAPI Server: api/server.md
+      - CLI: api/cli.md
+  - Architecture: architecture.md
+  - Changelog: changelog.md
+
+# ── Extra ────────────────────────────────────────────────────────────
+extra:
+  version:
+    provider: mike
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/Wolfvin/SymbolicPuzzle3D
+      name: GitHub
+  analytics:
+    feedback:
+      title: Was this page helpful?
+      ratings:
+        - icon: material/thumb-up-outline
+          name: This page was helpful
+          data: 1
+          note: Thanks for your feedback!
+        - icon: material/thumb-down-outline
+          name: This page could be improved
+          data: 0
+          note: Thanks for your feedback! Help us improve by opening an issue.
+
+extra_css:
+  - assets/stylesheets/extra.css
+
+# ── Watch ────────────────────────────────────────────────────────────
+watch:
+  - includes

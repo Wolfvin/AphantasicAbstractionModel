@@ -1,0 +1,86 @@
+# ──────────────────────────────────────────────────────────────────────
+#  RSVS — Documentation (GitHub Pages)
+#  Builds MkDocs site and deploys to GitHub Pages on push to main.
+#  Also validates docs build on pull requests.
+# ──────────────────────────────────────────────────────────────────────
+
+name: Docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'mkdocs.yml'
+      - 'README.md'
+      - 'ARCHITECTURE.md'
+      - 'CHANGELOG.md'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'mkdocs.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+environment:
+  name: github-pages
+  url: ${{ steps.deploy.outputs.page_url }}
+
+jobs:
+  # ── Build ───────────────────────────────────────────────────────────
+  build:
+    name: Build documentation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Needed for git-revision-date plugin
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install MkDocs and plugins
+        run: |
+          pip install --upgrade pip
+          pip install \
+            mkdocs-material>=9.5 \
+            mkdocs-git-revision-date-localized-plugin>=1.2 \
+            mkdocs-minify-plugin>=0.7 \
+            mkdocs-autorefs>=1.0 \
+            pymdown-extensions>=10.0
+
+      - name: Copy root docs into docs/ (MkDocs source)
+        run: |
+          # Architecture and changelog are at repo root — link them into docs/
+          cp ARCHITECTURE.md docs/architecture.md
+          # We maintain a curated changelog in docs/ already
+
+      - name: Build MkDocs site
+        run: mkdocs build --strict
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  # ── Deploy ──────────────────────────────────────────────────────────
+  deploy:
+    name: Deploy to GitHub Pages
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v4

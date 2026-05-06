@@ -1,0 +1,34 @@
+cff-version: 1.2.0
+message: "If you use RSVS in your research, please cite it as below."
+type: software
+title: "RSVS: Relational Symbolic Vocabulary System"
+version: "8.3.0"
+authors:
+  - name: "Wolfvin"
+    orcid: "0000-0000-0000-0000"
+abstract: >
+  RSVS is a compositional symbolic meaning engine with a Rust core and
+  Python API. It provides traceable, compositional sense definitions,
+  structural similarity, substitution analysis, and autonomous tiered
+  memory lifecycle — designed for neuro-symbolic AI and multilingual NLP
+  with a focus on Bahasa Indonesia.
+repository-code: "https://github.com/Wolfvin/SymbolicPuzzle3D"
+license:
+  - MIT
+  - Apache-2.0
+keywords:
+  - symbolic-ai
+  - knowledge-graph
+  - compositional-semantics
+  - neuro-symbolic
+  - indonesian-nlp
+  - rust
+  - pyo3
+date-released: "2026-05-06"
+preferred-citation:
+  type: software
+  title: "RSVS: Relational Symbolic Vocabulary System"
+  authors:
+    - name: "Wolfvin"
+  year: 2026
+  repository: "https://github.com/Wolfvin/SymbolicPuzzle3D"
