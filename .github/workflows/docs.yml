@@ -1,7 +1,10 @@
 # ──────────────────────────────────────────────────────────────────────
 #  RSVS — Documentation (GitHub Pages)
-#  Builds MkDocs site and deploys to GitHub Pages on push to main.
+#  Builds MkDocs site and deploys to gh-pages branch.
 #  Also validates docs build on pull requests.
+#
+#  After first run, go to:
+#    Settings → Pages → Source → Deploy from branch → gh-pages / root
 # ──────────────────────────────────────────────────────────────────────
 
 name: Docs
@@ -9,12 +12,6 @@ name: Docs
 on:
   push:
     branches: [main]
-    paths:
-      - 'docs/**'
-      - 'mkdocs.yml'
-      - 'README.md'
-      - 'ARCHITECTURE.md'
-      - 'CHANGELOG.md'
   pull_request:
     branches: [main]
     paths:
@@ -27,18 +24,12 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
-
-environment:
-  name: github-pages
-  url: ${{ steps.deploy.outputs.page_url }}
+  contents: write
 
 jobs:
-  # ── Build ───────────────────────────────────────────────────────────
-  build:
-    name: Build documentation
+  # ── Build & Deploy ─────────────────────────────────────────────────
+  deploy:
+    name: Build & deploy docs
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -62,25 +53,19 @@ jobs:
 
       - name: Copy root docs into docs/ (MkDocs source)
         run: |
-          # Architecture and changelog are at repo root — link them into docs/
           cp ARCHITECTURE.md docs/architecture.md
-          # We maintain a curated changelog in docs/ already
 
       - name: Build MkDocs site
         run: mkdocs build
 
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+      - name: Deploy to gh-pages branch
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: peaceiris/actions-gh-pages@v4
         with:
-          path: site
-
-  # ── Deploy ──────────────────────────────────────────────────────────
-  deploy:
-    name: Deploy to GitHub Pages
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deploy
-        uses: actions/deploy-pages@v4
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./site
+          publish_branch: gh-pages
+          force_orphan: true
+          user_name: "github-actions[bot]"
+          user_email: "github-actions[bot]@users.noreply.github.com"
+          commit_message: "docs: deploy ${{ github.sha }}"
