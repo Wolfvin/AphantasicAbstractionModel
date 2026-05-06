@@ -39,7 +39,7 @@ import { cn } from '@/lib/utils';
 import { useChatStore, useUIStore, useGraphStore, useTimelineStore, useModeResultStore } from '@/store/rsvsStore';
 import { generateChatMessages, generateTimelineEvents } from '@/lib/mockData';
 import { runModeToBackend, composeToBackend } from '@/lib/backendBridge';
-import type { ChatMessage, MessageType, AppraiseResult, RelateResult, ComposeResult } from '@/lib/types';
+import type { ChatMessage, MessageType, AppraiseResult, AppraiseVerdict, RelateResult, ComposeResult } from '@/lib/types';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { ComposeFormPanel } from '@/components/rsvs/ComposePanel';
 
@@ -551,6 +551,128 @@ export default function LeftInputRail({
     };
   }, []);
 
+  // ── Simulated appraise response (demo mode) ──
+  const simulateAppraiseResponse = useCallback(
+    (correlationId: string, text: string) => {
+      const delay = 800 + Math.random() * 800;
+
+      setTimeout(() => {
+        const nodes = useGraphStore.getState().nodes;
+        const allNodes = Array.from(nodes.values());
+
+        // Pick some random nodes as evidence
+        const shuffled = [...allNodes].sort(() => Math.random() - 0.5);
+        const supportCount = Math.min(Math.floor(Math.random() * 4) + 1, shuffled.length);
+        const conflictCount = Math.min(Math.floor(Math.random() * 3), Math.max(0, shuffled.length - supportCount));
+        const supportNodes = shuffled.slice(0, supportCount);
+        const conflictNodes = shuffled.slice(supportCount, supportCount + conflictCount);
+
+        const agree = Math.floor(Math.random() * 60) + 20;
+        const disagree = Math.floor(Math.random() * 30) + 5;
+        const neutral = 100 - agree - disagree;
+        const verdict: AppraiseVerdict = agree > 60 ? 'agree' : disagree > 40 ? 'disagree' : 'mixed';
+        const confidence = agree / 100;
+
+        const appraiseResult: AppraiseResult = {
+          verdict,
+          stance: { agree, disagree, neutral },
+          confidence,
+          rationale: `Demo appraise for "${text.slice(0, 50)}": ${verdict} verdict based on ${supportCount} supporting and ${conflictCount} conflicting evidence nodes.`,
+          evidence_nodes: supportNodes.map((n) => ({
+            node_id: n.id,
+            label: n.label,
+            confidence: n.confidence,
+            role: 'support' as const,
+          })),
+          conflict_nodes: conflictNodes.map((n) => ({
+            node_id: n.id,
+            label: n.label,
+            confidence: n.confidence,
+            role: 'conflict' as const,
+          })),
+          evidence_paths: supportNodes.slice(0, 3).map((n, i) => ({
+            path: [n.id, shuffled[(i + 1) % shuffled.length]?.id ?? n.id],
+            weight: Math.random() * 0.5 + 0.3,
+          })),
+        };
+
+        useModeResultStore.getState().setAppraiseResult(appraiseResult);
+
+        addMessage({
+          id: `resp_${correlationId}_appraise`,
+          type: 'system_ingest_status',
+          content: `Appraise: ${verdict} (${agree}% agree / ${disagree}% disagree). ${supportCount} support, ${conflictCount} conflict. [Demo]`,
+          timestamp: new Date().toISOString(),
+          correlation_id: correlationId,
+          mode: 'appraise',
+        });
+
+        setLoading(false);
+      }, delay);
+    },
+    [addMessage, setLoading],
+  );
+
+  // ── Simulated relate response (demo mode) ──
+  const simulateRelateResponse = useCallback(
+    (correlationId: string, text: string) => {
+      const delay = 800 + Math.random() * 800;
+
+      setTimeout(() => {
+        const nodes = useGraphStore.getState().nodes;
+        const edges = useGraphStore.getState().edges;
+        const allNodes = Array.from(nodes.values());
+        const allEdges = Array.from(edges.values());
+
+        // Pick random related nodes
+        const relatedCount = Math.min(Math.floor(Math.random() * 8) + 3, allNodes.length);
+        const relatedNodes = allNodes.slice(0, relatedCount);
+        const relatedEdges = allEdges.slice(0, Math.min(relatedCount * 2, allEdges.length));
+
+        const relateResult: RelateResult = {
+          query_terms: text.split(/\s+/).slice(0, 5),
+          related_nodes: relatedNodes.map((n) => ({
+            node_id: n.id,
+            label: n.label,
+            score: Math.random() * 0.7 + 0.3,
+            tier: n.tier,
+            kind: n.kind,
+            layer: n.layer,
+            grounding_score: n.grounding_score,
+          })),
+          related_edges: relatedEdges.map((e) => ({
+            edge_id: e.id,
+            source: e.source,
+            target: e.target,
+            weight: e.weight,
+            label: e.label,
+          })),
+          structural_relations: relatedNodes.slice(0, 4).map((n, i) => ({
+            relation_type: ['composes', 'depends_on', 'similar_to', 'contrasts_with'][i % 4],
+            source_label: text.split(/\s+/)[0] || 'query',
+            target_label: n.label,
+            weight: Math.random() * 0.6 + 0.2,
+            description: `Structural relation between query and ${n.label}`,
+          })),
+        };
+
+        useModeResultStore.getState().setRelateResult(relateResult);
+
+        addMessage({
+          id: `resp_${correlationId}_relate`,
+          type: 'system_ingest_status',
+          content: `Relate: found ${relatedNodes.length} nodes and ${relatedEdges.length} edges. ${relateResult.structural_relations?.length ?? 0} structural relations. [Demo]`,
+          timestamp: new Date().toISOString(),
+          correlation_id: correlationId,
+          mode: 'relate',
+        });
+
+        setLoading(false);
+      }, delay);
+    },
+    [addMessage, setLoading],
+  );
+
   // ── Handle compose action ──
   const handleCompose = useCallback(async (label: string, atomIds: number[], lang: string) => {
     const correlationId = `msg_${Date.now()}`;
@@ -739,6 +861,10 @@ export default function LeftInputRail({
       // Backend not available — use simulated response (demo mode)
       if (parsed.mode === 'ingest') {
         simulateIngestResponse(correlationId);
+      } else if (parsed.mode === 'appraise') {
+        simulateAppraiseResponse(correlationId, payloadText);
+      } else if (parsed.mode === 'relate') {
+        simulateRelateResponse(correlationId, payloadText);
       } else {
         addMessage({
           id: `resp_${correlationId}_fallback`,
@@ -758,6 +884,8 @@ export default function LeftInputRail({
     addMessage,
     setLoading,
     simulateIngestResponse,
+    simulateAppraiseResponse,
+    simulateRelateResponse,
     loadSnapshot,
     resetTimeline,
     pushEvent,
