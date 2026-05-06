@@ -20,6 +20,7 @@
 
 use crate::thinking::{ComplexitySignal, ThinkingMode, ThinkingToggle};
 use crate::types::TraversalConfig;
+use serde::{Deserialize, Serialize};
 
 // -----------------------------------------------------------------------
 // TraversalParadigm
@@ -117,6 +118,15 @@ impl Default for ParadigmRouterConfig {
 // -----------------------------------------------------------------------
 // ParadigmRouter
 // -----------------------------------------------------------------------
+
+/// Serializable calibration entry for persistence.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CalibrationEntry {
+    /// Domain ID.
+    pub domain: usize,
+    /// Success counts per paradigm: [Direct, Shallow, Standard, Deep, Mcts].
+    pub successes: [usize; 5],
+}
 
 /// Paradigm router — selects the lightest traversal strategy that will succeed.
 ///
@@ -254,6 +264,32 @@ impl ParadigmRouter {
     /// Get calibration data for a domain.
     pub fn calibration_for(&self, domain: usize) -> Option<[usize; 5]> {
         self.domain_calibration.get(&domain).copied()
+    }
+
+    /// v7.3: Export all calibration data for persistence.
+    /// Returns a Vec of CalibrationEntry that can be serialized to JSONL.
+    pub fn export_calibration(&self) -> Vec<CalibrationEntry> {
+        self.domain_calibration
+            .iter()
+            .map(|(&domain, &successes)| CalibrationEntry { domain, successes })
+            .collect()
+    }
+
+    /// v7.3: Import calibration data from persistence.
+    /// Merges with existing calibration (additive — new confirmations
+    /// are added to existing counts).
+    pub fn import_calibration(&mut self, entries: &[CalibrationEntry]) {
+        for entry in entries {
+            let existing = self.domain_calibration.entry(entry.domain).or_insert([0; 5]);
+            for i in 0..5 {
+                existing[i] += entry.successes[i];
+            }
+        }
+    }
+
+    /// v7.3: Clear all calibration data (used when loading a fresh state).
+    pub fn clear_calibration(&mut self) {
+        self.domain_calibration.clear();
     }
 }
 

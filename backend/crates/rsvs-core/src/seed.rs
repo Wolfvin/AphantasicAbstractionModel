@@ -1,8 +1,13 @@
-//! Seed graph bootstrap (v6.0)
+//! Seed graph bootstrap (v7.3)
 //!
 //! Loads seed atoms into the graph at startup. By default, uses 24
-//! epistemological seeds, but callers can provide custom seed labels
-//! for domain-specific bootstrapping.
+//! epistemological seeds (English), plus 7 Indonesian seed atoms for
+//! better grounding in Indonesian text.
+//!
+//! v7.3: Added Indonesian seed atoms: "ada", "entitas", "relasi",
+//! "waktu", "ruang", "sebab", "akibat". These mirror the English
+//! epistemological seeds and enable proper grounding for Indonesian
+//! text without requiring large English-only vocabularies.
 //!
 //! These nodes have confidence=1.0, Tier=Tier1, status=Stable,
 //! is_seed=true, is_locked=true, and cannot be removed.
@@ -41,11 +46,31 @@ const SEED_ATOMS: &[&str] = &[
     "feedback",
 ];
 
-/// Bootstrap the graph with seed nodes (v6.0 format).
+/// v7.3: Indonesian seed atoms for better grounding in Indonesian text.
+/// These mirror the most fundamental English seeds in Indonesian:
+/// - "ada" = exists
+/// - "entitas" = entity
+/// - "relasi" = relation
+/// - "waktu" = time
+/// - "ruang" = space
+/// - "sebab" = cause
+/// - "akibat" = effect
+const ID_SEED_ATOMS: &[&str] = &[
+    "ada",
+    "entitas",
+    "relasi",
+    "waktu",
+    "ruang",
+    "sebab",
+    "akibat",
+];
+
+/// Bootstrap the graph with seed nodes (v7.3 format).
 ///
 /// If `custom_seeds` is provided, those labels are used instead of the
-/// default 24 epistemological seeds. Returns a map of label → NodeId for
-/// external reference.
+/// default 24 epistemological seeds. In addition, 7 Indonesian seed atoms
+/// are always added unless `custom_seeds` is provided (to avoid conflicts).
+/// Returns a map of label → NodeId for external reference.
 ///
 /// # Errors
 ///
@@ -58,7 +83,10 @@ pub fn bootstrap(
     let labels: Vec<&str> = if let Some(seeds) = custom_seeds {
         seeds.iter().map(|s| s.as_str()).collect()
     } else {
-        SEED_ATOMS.to_vec()
+        // v7.3: Include both English and Indonesian seeds
+        let mut all_labels: Vec<&str> = SEED_ATOMS.to_vec();
+        all_labels.extend_from_slice(ID_SEED_ATOMS);
+        all_labels
     };
     let expected_count = labels.len();
 
@@ -106,6 +134,7 @@ pub fn bootstrap(
 }
 
 /// Public list of seed atom labels — used by pipeline for grounding checks.
+/// v7.3: Now includes Indonesian seeds.
 pub const SEED_LABEL_LIST: &[&str] = &[
     "exists",
     "entity",
@@ -131,6 +160,14 @@ pub const SEED_LABEL_LIST: &[&str] = &[
     "meaning",
     "action",
     "feedback",
+    // v7.3: Indonesian seeds
+    "ada",
+    "entitas",
+    "relasi",
+    "waktu",
+    "ruang",
+    "sebab",
+    "akibat",
 ];
 
 #[cfg(test)]
@@ -141,8 +178,8 @@ mod tests {
     fn seed_count_is_correct() {
         let mut graph = RsvsGraph::new();
         let map = bootstrap(&mut graph, None).unwrap();
-        assert_eq!(map.len(), 24);
-        assert_eq!(graph.node_count(), 24);
+        assert_eq!(map.len(), 31); // 24 English + 7 Indonesian
+        assert_eq!(graph.node_count(), 31);
     }
 
     #[test]
@@ -181,6 +218,11 @@ mod tests {
         assert!(map.contains_key("entity"));
         assert!(map.contains_key("relation"));
         assert!(map.contains_key("feedback"));
+        // v7.3: Indonesian seeds
+        assert!(map.contains_key("ada"));
+        assert!(map.contains_key("entitas"));
+        assert!(map.contains_key("sebab"));
+        assert!(map.contains_key("akibat"));
     }
 
     #[test]

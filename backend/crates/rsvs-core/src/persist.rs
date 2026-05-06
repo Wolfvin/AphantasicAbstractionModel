@@ -145,6 +145,19 @@ impl From<&SavedTransformerBridgeConfig> for TransformerBridgeConfig {
     }
 }
 
+/// Serializable entry for per-composition evidence tracking (v7.3).
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct SavedCompositionEvidence {
+    /// Node ID of the composition target.
+    pub node_id: u32,
+    /// Sense ID of the composition target.
+    pub sense_id: u32,
+    /// Number of confirming contexts.
+    pub confirmations: usize,
+    /// Number of contradicting contexts.
+    pub contradictions: usize,
+}
+
 /// Serializable mirror of a `Sense` for JSON persistence (v6.0).
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SavedSense {
@@ -162,6 +175,9 @@ pub struct SavedSense {
     pub status: String,
     pub inactivity: usize,
     pub grounding: SavedGroundingEvidence,
+    /// v7.3: Per-composition evidence tracking.
+    #[serde(default)]
+    pub composition_evidence: Vec<SavedCompositionEvidence>,
 }
 
 /// Serializable mirror of a `SenseManager` for JSON persistence.
@@ -221,7 +237,7 @@ pub struct SavedEntityDetector {
     pub groundable: HashMap<String, bool>,
 }
 
-/// Top-level snapshot of the entire RSVS state (v6.0).
+/// Top-level snapshot of the entire RSVS state (v7.3).
 #[derive(Serialize, Deserialize, Debug)]
 pub struct RsvsSnapshot {
     pub version: String,
@@ -242,6 +258,9 @@ pub struct RsvsSnapshot {
     /// v6.1: Traversal configuration. Missing in v6.0 snapshots.
     #[serde(default)]
     pub traversal: SavedTraversalConfig,
+    /// v7.3: Domain calibration data for ParadigmRouter persistence.
+    #[serde(default)]
+    pub domain_calibration: Vec<crate::paradigm::CalibrationEntry>,
 }
 
 // -----------------------------------------------------------------------
@@ -477,6 +496,12 @@ pub fn to_snapshot(rsvs: &Rsvs) -> RsvsSnapshot {
                     sense_id: comp.sense_id,
                     freq: *freq,
                 }).collect(),
+                composition_evidence: s.composition_evidence.iter().map(|(comp, (conf, contra))| SavedCompositionEvidence {
+                    node_id: comp.node_id,
+                    sense_id: comp.sense_id,
+                    confirmations: *conf,
+                    contradictions: *contra,
+                }).collect(),
             })
             .collect();
 
@@ -538,7 +563,7 @@ pub fn to_snapshot(rsvs: &Rsvs) -> RsvsSnapshot {
     };
 
     RsvsSnapshot {
-        version: "7.2".to_string(),
+        version: "7.3".to_string(),
         total_contexts: rsvs.total_contexts,
         token_to_id: rsvs.token_to_id.clone(),
         next_node_id: rsvs.graph.next_id,
@@ -554,6 +579,7 @@ pub fn to_snapshot(rsvs: &Rsvs) -> RsvsSnapshot {
         eta: rsvs.config.autonomy.eta,
         current_domain: rsvs.config.current_domain,
         traversal: SavedTraversalConfig::from(&rsvs.config.traversal),
+        domain_calibration: rsvs.paradigm_router.export_calibration(),
     }
 }
 
@@ -684,6 +710,11 @@ pub fn from_snapshot(snap: RsvsSnapshot) -> Rsvs {
                 let comp = crate::types::CompositionRef::new(entry.node_id, entry.sense_id);
                 (comp, entry.freq)
             }).collect();
+            // v7.3: Restore composition_evidence from saved entries
+            sense.composition_evidence = ss.composition_evidence.iter().map(|entry| {
+                let comp = crate::types::CompositionRef::new(entry.node_id, entry.sense_id);
+                (comp, (entry.confirmations, entry.contradictions))
+            }).collect();
             sm.senses.push(sense);
         }
         senses.insert(node_id, sm);
@@ -759,7 +790,7 @@ pub fn from_snapshot(snap: RsvsSnapshot) -> Rsvs {
 
     let attention = crate::attention::RsvsAttention::new(config.attention.clone());
 
-    Rsvs {
+    let mut rsvs = Rsvs {
         graph,
         senses,
         autonomy,
@@ -793,5 +824,13 @@ pub fn from_snapshot(snap: RsvsSnapshot) -> Rsvs {
             crate::spreading::SpreadingActivationConfig::default(),
         ),
         deps_planner: crate::deps::DEPSPlanner::new(),
-    }
+    };
+
+    // v7.3: Restore domain calibration from saved data
+    rsvs.paradigm_router.import_calibration(&snap.domain_calibration);
+
+    // v7.3: Rebuild composition index from restored senses
+    rsvs.composition_index.rebuild(&rsvs.senses);
+
+    rsvs
 }

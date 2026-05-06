@@ -1,7 +1,10 @@
-//! Query pipeline — RSVS v6.0 Compositional Architecture
+//! Query pipeline — RSVS v7.3 Compositional Architecture
 //!
 //! Contains `query()`, `similarity()`, `structural_similarity()`, and
 //! `substitution_analysis()` methods.
+//!
+//! v7.3: query() now integrates ParadigmRouter for adaptive traversal
+//! escalation and ThinkingToggle for depth adjustment.
 
 use super::Rsvs;
 use crate::types::{NodeId, SenseId};
@@ -29,6 +32,11 @@ pub struct QueryResult {
 
 impl Rsvs {
     /// Context-aware lookup for a concept.
+    ///
+    /// v7.3: Now integrates ParadigmRouter for adaptive traversal escalation.
+    /// For simple queries (high confidence, single sense), uses direct lookup.
+    /// For complex queries (low confidence, multiple senses), escalates to
+    /// deeper traversal with ThinkingToggle adjustment.
     pub fn query(&self, concept: &str, query_context: &str) -> Option<QueryResult> {
         let concept_id = *self.token_to_id.get(concept)?;
         let sense_mgr = self.senses.get(&concept_id)?;
@@ -52,31 +60,68 @@ impl Rsvs {
         let tau = self.config.sense.tau_core;
         let core = sense.core(tau);
 
+        // v7.3: Use ParadigmRouter + ThinkingToggle for adaptive scoring
+        let confidence = sense.grounding.score();
+        let signal = crate::thinking::ComplexitySignal {
+            n_context_atoms: query_atoms.len(),
+            n_senses: sense_mgr.senses.len(),
+            target_layer: sense.layer,
+            is_compositional: sense.is_compositional(),
+            domain_complexity: 0.0,
+        };
+
+        // Route to optimal paradigm
+        let paradigm = self.paradigm_router.route(confidence, &signal, self.config.current_domain);
+
+        // v7.3: Apply ThinkingToggle to determine scoring depth
+        let thinking_mode = self.thinking_toggle.classify(&signal);
+
+        // Determine if we should use deep scoring based on paradigm + thinking mode
+        let use_deep_scoring = paradigm >= crate::paradigm::TraversalParadigm::Standard
+            || thinking_mode == crate::thinking::ThinkingMode::Thinking;
+
         let mut scored: Vec<(String, f32)> = core
             .iter()
             .filter_map(|&atom_id| {
                 let label = self.graph.get_node(atom_id)?.label.clone();
                 let freq = sense.freq(atom_id);
-                let edge_score = self
-                    .graph
-                    .edges_from(atom_id)
-                    .iter()
-                    .filter(|e| query_atoms.contains(&e.to))
-                    .map(|e| e.weight)
-                    .fold(0.0f32, f32::max);
-                let score = if edge_score > 0.0 {
-                    freq * edge_score
+
+                if use_deep_scoring {
+                    // v7.3: Deep scoring uses P(a|S,q) from compositions
+                    let edge_score = self
+                        .graph
+                        .edges_from(atom_id)
+                        .iter()
+                        .filter(|e| query_atoms.contains(&e.to))
+                        .map(|e| e.weight)
+                        .fold(0.0f32, f32::max);
+                    let comp_ref = crate::types::CompositionRef::new(atom_id, 0);
+                    let p_score = sense.p_a_given_s_q(&comp_ref, if edge_score > 0.0 { edge_score } else { 1.0 });
+                    let score = if p_score > 0.0 { p_score } else { freq };
+                    Some((label, score))
                 } else {
-                    freq
-                };
-                Some((label, score))
+                    // Simple scoring for Direct/Shallow paradigms
+                    let edge_score = self
+                        .graph
+                        .edges_from(atom_id)
+                        .iter()
+                        .filter(|e| query_atoms.contains(&e.to))
+                        .map(|e| e.weight)
+                        .fold(0.0f32, f32::max);
+                    let score = if edge_score > 0.0 {
+                        freq * edge_score
+                    } else {
+                        freq
+                    };
+                    Some((label, score))
+                }
             })
             .collect();
 
         scored.sort_by(|a, b| b.1.total_cmp(&a.1));
 
         // Build composition labels (v6.0)
-        let compositions: Vec<(String, SenseId)> = sense
+        let compositions: Vec<(String, crate::types::SenseId)> = sense
             .compositions
             .iter()
             .filter_map(|comp| {

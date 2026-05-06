@@ -1,6 +1,6 @@
 #![warn(missing_docs)]
 
-//! RSVS Core — v7.0 Deep Losion Integration — Paradigm Router + Spreading Activation + DEPS Recovery
+//! RSVS Core — v7.3 — Evidence-Based Revision + Structural Appraise + Indonesian Seeds
 //!
 //! v6.1 builds on v6.0 with:
 //! - `TraversalConfig`: Controls recursive composition expansion during queries
@@ -76,7 +76,7 @@ pub use sense::{
 };
 pub use thinking::{ThinkingMode, ThinkingToggle, ThinkingToggleConfig, ComplexitySignal};
 pub use transformer_bridge::{TransformerBridge, TransformerBridgeConfig};
-pub use paradigm::{ParadigmRouter, ParadigmRouterConfig, TraversalParadigm};
+pub use paradigm::{ParadigmRouter, ParadigmRouterConfig, TraversalParadigm, CalibrationEntry};
 pub use spreading::{SpreadingActivation, SpreadingActivationConfig, ActivationResult};
 pub use deps::{DEPSPlanner, DEPSResult, RecoveryPlan, RecoveryAction, FailureType};
 pub use types::*;

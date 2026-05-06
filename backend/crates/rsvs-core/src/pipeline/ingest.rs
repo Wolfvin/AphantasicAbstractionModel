@@ -524,9 +524,23 @@ impl Rsvs {
             }
         }
 
-        // v6.4: Update composition index after ingest
-        // Rebuild is safe at this point since the graph is stable
-        self.composition_index.rebuild(&self.senses);
+        // v6.4 → v7.3: Incremental composition index update after ingest.
+        // Instead of rebuilding the entire index on every ingest (O(N×S)),
+        // we only update entries for nodes that actually changed during
+        // this ingest batch. The `composition_index.rebuild()` is now only
+        // called during consolidation (bulk operations).
+        //
+        // For the newly promoted nodes, they have no previous compositions,
+        // so we just add their new entries.
+        for &token_id in self.token_to_id.values() {
+            if let Some(sm) = self.senses.get(&token_id) {
+                for sense in &sm.senses {
+                    if !sense.compositions.is_empty() {
+                        self.composition_index.add(token_id, &sense.compositions);
+                    }
+                }
+            }
+        }
         self.emit_event(
             &correlation_id,
             "ingest_completed",

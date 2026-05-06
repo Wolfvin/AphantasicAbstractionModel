@@ -150,6 +150,36 @@ impl CompositionIndex {
         }
     }
 
+    /// v7.3: Incrementally update the index for a single node's sense.
+    ///
+    /// Instead of rebuilding the entire index on every ingest (O(N×S)),
+    /// this method only updates the entries for a specific node, which
+    /// is O(K) where K = number of compositions for that node's senses.
+    ///
+    /// Call this after each sense change (assign, create, merge, revise)
+    /// for the affected node. Use `rebuild()` only for bulk operations
+    /// like consolidation that touch many nodes at once.
+    ///
+    /// # Arguments
+    /// * `node_id` — the node whose senses have changed
+    /// * `old_compositions` — the node's compositions BEFORE the change
+    /// * `new_compositions` — the node's compositions AFTER the change
+    pub fn update_node(
+        &mut self,
+        node_id: NodeId,
+        old_compositions: &[CompositionRef],
+        new_compositions: &[CompositionRef],
+    ) {
+        // Remove old entries
+        if !old_compositions.is_empty() {
+            self.remove(node_id, old_compositions);
+        }
+        // Add new entries
+        if !new_compositions.is_empty() {
+            self.add(node_id, new_compositions);
+        }
+    }
+
     /// Return the total number of reverse index entries.
     pub fn len(&self) -> usize {
         self.ref_to_dependents.len()

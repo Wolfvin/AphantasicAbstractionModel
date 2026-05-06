@@ -337,6 +337,12 @@ pub struct Sense {
     /// Flushed to `compositions` on next core() recompute or check_merge().
     /// None = no pending compression.
     pub pending_compression: Option<Vec<CompositionRef>>,
+
+    /// v7.3: Per-composition evidence tracking for evidence-based revision.
+    /// Maps each CompositionRef to (confirmations, contradictions) counts.
+    /// This replaces the naive LIFO pop in revise_compositions() with
+    /// targeted removal of the weakest-evidenced composition.
+    pub composition_evidence: HashMap<CompositionRef, (usize, usize)>,
 }
 
 impl Sense {
@@ -362,6 +368,7 @@ impl Sense {
             grounding: GroundingEvidence::new(),
             condition_label: None,
             pending_compression: None,
+            composition_evidence: HashMap::new(),
         }
     }
 
@@ -410,6 +417,7 @@ impl Sense {
             grounding: GroundingEvidence::new(),
             condition_label: None,
             pending_compression: None,
+            composition_evidence: HashMap::new(),
         }
     }
 
@@ -562,12 +570,20 @@ impl Sense {
     /// Update grounding evidence based on whether a context confirms or contradicts
     /// the compositional definition.
     ///
+    /// v7.3: Also updates per-composition evidence tracking. Each composition
+    /// individually gets its confirmation/contradiction count updated based on
+    /// whether the context includes that composition's node_id. This enables
+    /// evidence-based revision in revise_compositions().
+    ///
     /// A context "confirms" if it overlaps significantly with the composition node IDs.
     /// A context "contradicts" if it has little overlap with composition node IDs.
     pub fn update_grounding(&mut self, context_node_ids: &[NodeId], config: &SenseConfig) {
         if self.compositions.is_empty() {
             return; // Primitive senses don't need grounding
         }
+
+        let context_set: std::collections::HashSet<NodeId> =
+            context_node_ids.iter().copied().collect();
 
         let comp_node_ids: Vec<NodeId> =
             self.compositions.iter().map(|c| c.node_id).collect();
@@ -578,6 +594,21 @@ impl Sense {
             .count();
 
         let overlap_ratio = overlap as f32 / comp_node_ids.len().max(1) as f32;
+
+        // v7.3: Update per-composition evidence tracking
+        for comp in &self.compositions {
+            let entry = self.composition_evidence
+                .entry(comp.clone())
+                .or_insert((0, 0));
+
+            if context_set.contains(&comp.node_id) {
+                // This specific composition was corroborated by context
+                entry.0 += 1; // confirmation
+            } else {
+                // This specific composition was absent from context
+                entry.1 += 1; // contradiction
+            }
+        }
 
         if overlap_ratio >= config.theta_comp_overlap {
             // Context confirms compositions
@@ -712,11 +743,20 @@ impl Sense {
     // Grounding revision (Problem 2) — v6.0
     // -------------------------------------------------------------------
 
-    /// Revise compositions based on accumulated grounding evidence.
+    /// Revise compositions based on accumulated per-composition evidence.
+    ///
+    /// v7.3: Instead of naively popping the last composition (LIFO), which
+    /// may remove a well-evidenced composition while keeping a weak one,
+    /// we now track per-composition confirmation/contradiction counts and
+    /// remove the composition with the WORST evidence ratio.
+    ///
+    /// Evidence ratio = confirmations / (confirmations + contradictions)
+    /// The composition with the lowest ratio (or most contradictions) is
+    /// the one least supported by observational data and should be removed.
     ///
     /// If the grounding score drops below `grounding_min`, this method
-    /// removes the least-confirmed composition (the one with the weakest
-    /// evidence) and increments the revision count.
+    /// removes the weakest-evidenced composition and increments the
+    /// revision count.
     ///
     /// Returns true if a revision was made.
     pub fn revise_compositions(&mut self, grounding_min: f32) -> bool {
@@ -728,15 +768,50 @@ impl Sense {
             return false; // No revision needed
         }
 
-        // Remove the last composition (least recently added = least confirmed)
-        // In a full implementation, we would track per-composition confirmation
-        if self.compositions.len() > 1 {
-            self.compositions.pop();
-            self.grounding.revision_count += 1;
-            return true;
+        if self.compositions.len() <= 1 {
+            return false; // Can't remove the last composition
         }
 
-        false
+        // v7.3: Find the composition with the worst evidence ratio
+        let worst_idx = self.find_weakest_composition();
+
+        // Remove the weakest composition and its evidence
+        let removed = self.compositions.remove(worst_idx);
+        self.composition_evidence.remove(&removed);
+        self.freq_map.remove(&removed);
+        self.grounding.revision_count += 1;
+        true
+    }
+
+    /// Find the index of the composition with the weakest evidence.
+    ///
+    /// Evidence ratio = confirmations / (confirmations + contradictions).
+    /// Compositions with no evidence yet are treated as neutral (0.5),
+    /// which makes them MORE likely to be removed than well-confirmed
+    /// ones (ratio > 0.5) but less likely than contradicted ones.
+    fn find_weakest_composition(&self) -> usize {
+        let mut worst_idx = 0;
+        let mut worst_ratio = 1.0f32; // Start with best possible
+
+        for (i, comp) in self.compositions.iter().enumerate() {
+            let ratio = if let Some(&(conf, contra)) = self.composition_evidence.get(comp) {
+                let total = conf + contra;
+                if total == 0 {
+                    0.5 // No evidence — neutral
+                } else {
+                    conf as f32 / total as f32
+                }
+            } else {
+                0.5 // No evidence tracked — neutral
+            };
+
+            if ratio < worst_ratio {
+                worst_ratio = ratio;
+                worst_idx = i;
+            }
+        }
+
+        worst_idx
     }
 
     /// Get the grounding verdict for this sense's compositions.
@@ -1145,17 +1220,47 @@ impl SenseManager {
     // -------------------------------------------------------------------
 
     /// Given a query context, return the index of the most relevant sense.
+    ///
+    /// v7.3: Now uses `p_a_given_s_q` for compositional senses instead of
+    /// raw Jaccard on core sets. Raw Jaccard ignores composition frequencies
+    /// and edge weights, treating all atoms equally. `p_a_given_s_q` produces
+    /// weighted scores that reflect how often each composition is active AND
+    /// how strongly it connects to the query context.
+    ///
+    /// For primitive senses (no compositions), falls back to Jaccard on cores.
     pub fn lazy_lookup(&self, context: &AtomSet) -> Option<usize> {
         if self.senses.is_empty() {
             return None;
         }
         let tau = self.config.tau_core;
+
         self.senses
             .iter()
             .enumerate()
             .map(|(i, s)| {
-                let core = s.core(tau);
-                let score = jaccard_sets(context, &core);
+                let score = if s.is_compositional() && !s.compositions.is_empty() {
+                    // v7.3: Use p_a_given_s_q for compositional senses
+                    // Score = sum of P(a|S,q) for each composition that appears
+                    // in the context, with edge weight = 1.0 if the composition's
+                    // node_id is in the context, else 0.1 (low relevance).
+                    let context_set: std::collections::HashSet<NodeId> =
+                        context.iter().copied().collect();
+                    let total_score: f32 = s.compositions.iter().map(|comp| {
+                        let edge_weight = if context_set.contains(&comp.node_id) {
+                            1.0
+                        } else {
+                            0.1 // Low relevance but not zero
+                        };
+                        s.p_a_given_s_q(comp, edge_weight)
+                    }).sum();
+
+                    // Normalize by number of compositions to keep scores in [0, 1]
+                    total_score / s.compositions.len().max(1) as f32
+                } else {
+                    // Fallback to Jaccard for primitive senses
+                    let core = s.core(tau);
+                    jaccard_sets(context, &core)
+                };
                 (i, score)
             })
             .max_by(|a, b| a.1.total_cmp(&b.1))
@@ -1260,6 +1365,21 @@ impl SenseManager {
     }
 
     /// Merge sense j into sense i. Removes sense j.
+    /// v7.3: Fixed "hyper-sense" problem — compositions are merged using
+    /// INTERSECTION + well-evidenced additions instead of raw union.
+    ///
+    /// The old approach used union, which created an ever-growing "hyper-sense"
+    /// that accumulated ALL compositions from both senses, losing precision.
+    /// If sense A = [(x,0), (y,0), (z,0)] and sense B = [(x,0), (y,0), (w,0)],
+    /// the union would be [(x,0), (y,0), (z,0), (w,0)] — but (z,0) and (w,0)
+    /// only had evidence from ONE of the two senses, not both.
+    ///
+    /// The new approach:
+    /// 1. Start with the INTERSECTION (compositions confirmed by both senses)
+    /// 2. Add compositions from either side that have strong evidence
+    ///    (confirming_contexts > contradicting_contexts in composition_evidence)
+    /// 3. This produces a merged sense that preserves only well-supported meaning
+    ///
     /// v6.4: Made public for ConsolidationEngine access.
     pub fn merge_senses(&mut self, keep: usize, remove: usize) {
         let contexts_remove = self.senses[remove].contexts.clone();
@@ -1285,14 +1405,74 @@ impl SenseManager {
             (self.senses[keep].sum_sim / self.senses[keep].pair_count as f64) as f32
         };
 
-        // Merge compositions (union of both) using HashSet for dedup
+        // v7.3: Merge compositions using intersection + well-evidenced additions
+        // instead of raw union to prevent "hyper-sense" precision loss
         let keep_set: HashSet<CompositionRef> =
             self.senses[keep].compositions.iter().cloned().collect();
         let remove_comps: HashSet<CompositionRef> =
             self.senses[remove].compositions.iter().cloned().collect();
-        let merged_comps: Vec<CompositionRef> =
-            keep_set.union(&remove_comps).cloned().collect();
+
+        // Start with intersection (compositions confirmed by both senses)
+        let intersection: HashSet<CompositionRef> =
+            keep_set.intersection(&remove_comps).cloned().collect();
+
+        let mut merged_comps: Vec<CompositionRef> = intersection.iter().cloned().collect();
+
+        // Add compositions from EITHER side that have strong per-composition evidence
+        // (confirmations > contradictions). These are compositions that may not be
+        // shared, but are well-supported by observational data.
+        let is_well_evidenced = |comp: &CompositionRef, evidence: &HashMap<CompositionRef, (usize, usize)>| -> bool {
+            if let Some(&(conf, contra)) = evidence.get(comp) {
+                conf > contra // More confirmations than contradictions
+            } else {
+                false // No evidence — don't include in merge
+            }
+        };
+
+        // Add well-evidenced compositions from keep sense
+        for comp in &keep_set {
+            if !intersection.contains(comp)
+                && is_well_evidenced(comp, &self.senses[keep].composition_evidence) {
+                merged_comps.push(comp.clone());
+            }
+        }
+
+        // Add well-evidenced compositions from remove sense
+        for comp in &remove_comps {
+            if !intersection.contains(comp)
+                && is_well_evidenced(comp, &self.senses[remove].composition_evidence) {
+                merged_comps.push(comp.clone());
+            }
+        }
+
+        // Fallback: if merged_comps is empty but both had compositions,
+        // keep the larger set to avoid losing all structural meaning
+        if merged_comps.is_empty() && (!keep_set.is_empty() || !remove_comps.is_empty()) {
+            let larger = if keep_set.len() >= remove_comps.len() {
+                keep_set.iter().cloned().collect()
+            } else {
+                remove_comps.iter().cloned().collect()
+            };
+            merged_comps = larger;
+        }
+
         self.senses[keep].compositions = merged_comps;
+
+        // Merge composition_evidence from both senses
+        let mut merged_evidence: HashMap<CompositionRef, (usize, usize)> = HashMap::new();
+        for (comp, &(conf, contra)) in &self.senses[keep].composition_evidence {
+            if self.senses[keep].compositions.contains(comp) {
+                *merged_evidence.entry(comp.clone()).or_insert((0, 0)) = (conf, contra);
+            }
+        }
+        for (comp, &(conf, contra)) in &self.senses[remove].composition_evidence {
+            if self.senses[keep].compositions.contains(comp) {
+                let entry = merged_evidence.entry(comp.clone()).or_insert((0, 0));
+                entry.0 += conf;
+                entry.1 += contra;
+            }
+        }
+        self.senses[keep].composition_evidence = merged_evidence;
 
         // Keep the higher layer
         self.senses[keep].layer = self.senses[keep].layer.max(self.senses[remove].layer);
@@ -1311,6 +1491,15 @@ impl SenseManager {
         // Merge freq counts
         for (&atom, &count) in &self.senses[remove].freq_counts.clone() {
             *self.senses[keep].freq_counts.entry(atom).or_insert(0) += count;
+        }
+
+        // Merge freq_map from remove into keep (for compositions that survived)
+        for (comp, &freq) in &self.senses[remove].freq_map.clone() {
+            if self.senses[keep].compositions.contains(comp) {
+                let existing = self.senses[keep].freq_map.get(comp).copied().unwrap_or(0.0);
+                // Average the frequencies
+                self.senses[keep].freq_map.insert(comp.clone(), (existing + freq) / 2.0);
+            }
         }
 
         let ctx = self.senses[remove].contexts.clone();
