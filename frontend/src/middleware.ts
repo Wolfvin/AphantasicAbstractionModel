@@ -1,35 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server';
+import {
+  SESSION_COOKIE,
+  SESSION_MAX_AGE,
+  generateSessionToken,
+  createSignedCookieValue,
+  verifySignedCookie,
+} from '@/lib/proxyAuth';
 
 /**
- * Next.js middleware: ensures every visitor has an HttpOnly session cookie.
+ * Next.js middleware: ensures every visitor has a valid, HMAC-signed
+ * HttpOnly session cookie.
  *
- * The proxy route (`/api/proxy/*`) checks for this cookie before injecting
- * the backend API key, preventing unauthenticated abuse of the proxy.
+ * On first visit: generates a random token, signs it with HMAC-SHA256,
+ * and stores `token.hmac` as the cookie value.
  *
- * Cookie-based sessions are sufficient for single-user / internal deployments.
- * For multi-tenant production, replace with a real auth provider (NextAuth, etc.).
+ * On subsequent visits: validates the existing cookie's HMAC signature.
+ * If the signature is invalid (tampered), regenerates the cookie.
  */
-
-const SESSION_COOKIE = 'rsvs_session';
-const SESSION_MAX_AGE = 60 * 60 * 24 * 7; // 7 days
-
-function generateSessionToken(): string {
-  // Cryptographic random hex string (32 bytes = 64 chars)
-  const bytes = new Uint8Array(32);
-  // Node.js crypto available in Edge Runtime
-  const crypto = globalThis.crypto;
-  crypto.getRandomValues(bytes);
-  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
-}
 
 export function middleware(request: NextRequest) {
   const response = NextResponse.next();
 
-  // Set session cookie if missing
   const existing = request.cookies.get(SESSION_COOKIE)?.value;
-  if (!existing) {
+
+  if (!existing || !verifySignedCookie(existing)) {
+    // No cookie or tampered cookie — issue a fresh signed one
     const token = generateSessionToken();
-    response.cookies.set(SESSION_COOKIE, token, {
+    const signedValue = createSignedCookieValue(token);
+    response.cookies.set(SESSION_COOKIE, signedValue, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
