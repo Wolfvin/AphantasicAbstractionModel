@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import { useGraphStore } from '@/store/rsvsStore';
-import { computeNodeRenderProps, computeEdgeRenderProps, isCompositeNode, isAtomNode, getAtomCount, computeNodeLayer, getLayerYOffset } from '@/lib/nodeRendering';
+import { computeNodeRenderProps, computeEdgeRenderProps, isCompositeNode, isAtomNode, getAtomCount, computeNodeLayer, getLayerYOffset, isInternalRepresentation } from '@/lib/nodeRendering';
 
 // ── Simulation Constants ──
 const REPULSION_CONSTANT = 600;
@@ -14,6 +14,11 @@ const ENERGY_THRESHOLD = 0.005;
 const IDEAL_EDGE_LENGTH = 8;
 const SEED_SPHERE_RADIUS = 5;
 const MAX_VELOCITY = 2.0;
+
+// v8.0: Layer 1 ring radius — internal representation nodes orbit around the seed cluster
+const LAYER1_RING_RADIUS = 10;
+// v8.0: Layer 2+ outer orbit radius
+const LAYER2_ORBIT_RADIUS = 18;
 
 // Composition clustering: extra attraction between composites and their atoms
 const COMPOSITION_ATTRACTION_CONSTANT = 0.025;
@@ -46,8 +51,36 @@ function computeSeedPosition(index: number, total: number): { x: number; y: numb
 }
 
 /**
- * Get atom IDs for a node (from any of the composition fields).
+ * v8.0: Position layer 1 nodes on a ring around the seed cluster.
+ * Uses golden angle distribution for even spacing on a circle.
  */
+function computeLayer1RingPosition(index: number, total: number): { x: number; z: number } {
+  if (total <= 1) return { x: LAYER1_RING_RADIUS, z: 0 };
+
+  const goldenAngle = Math.PI * (3 - Math.sqrt(5));
+  const theta = goldenAngle * index;
+
+  return {
+    x: LAYER1_RING_RADIUS * Math.cos(theta),
+    z: LAYER1_RING_RADIUS * Math.sin(theta),
+  };
+}
+
+/**
+ * v8.0: Position layer 2+ nodes in an outer orbit.
+ */
+function computeLayer2OrbitPosition(index: number, total: number): { x: number; z: number } {
+  if (total <= 1) return { x: LAYER2_ORBIT_RADIUS, z: 0 };
+
+  const goldenAngle = Math.PI * (3 - Math.sqrt(5));
+  const theta = goldenAngle * index;
+  const radiusVariation = LAYER2_ORBIT_RADIUS + (Math.random() - 0.5) * 6;
+
+  return {
+    x: radiusVariation * Math.cos(theta),
+    z: radiusVariation * Math.sin(theta),
+  };
+}
 function getAtomIds(node: {
   atoms?: number[];
   derived_from_node_ids?: number[];
@@ -104,6 +137,7 @@ export function useForceLayout(): void {
 
       // Detect new nodes and assign initial positions
       const seedNodes = nodeList.filter((n) => n.is_seed);
+      const layer1Nodes = nodeList.filter((n) => !n.is_seed && isInternalRepresentation(n));
       const nonSeedNewNodes: number[] = [];
 
       for (const node of nodeList) {
@@ -134,103 +168,48 @@ export function useForceLayout(): void {
               vz: (Math.random() - 0.5) * 0.3,
             };
 
-            // Try to position near a connected seed node
-            let placedNearSeed = false;
-            for (const edge of edgeList) {
-              const connectedId = edge.source === node.id ? edge.target : edge.target === node.id ? edge.source : null;
-              if (connectedId !== null) {
-                const connectedNode = currentNodes.get(connectedId);
-                if (connectedNode?.is_seed && connectedNode.render?.position) {
-                  const renderProps = computeNodeRenderProps(node);
-                  const offset = {
-                    x: (Math.random() - 0.5) * 4,
-                    y: (Math.random() - 0.5) * 4,
-                    z: (Math.random() - 0.5) * 4,
-                  };
-                  currentUpdateNode(node.id, {
-                    render: {
-                      position: {
-                        x: connectedNode.render.position.x + offset.x,
-                        y: connectedNode.render.position.y + offset.y,
-                        z: connectedNode.render.position.z + offset.z,
-                      },
-                      size: renderProps.size,
-                      color: renderProps.color,
-                      glow: renderProps.glow,
-                    },
-                  });
-                  placedNearSeed = true;
-                  break;
-                }
-              }
-            }
+            // v8.0: Layer-aware initial positioning
+            const nodeLayer = computeNodeLayer(node);
+            const isInternalRepr = isInternalRepresentation(node);
 
-            // Composition-aware: try to position new composites near their atom nodes
-            if (!placedNearSeed && isCompositeNode(node)) {
-              const atomIds = getAtomIds(node);
-              let avgX = 0, avgY = 0, avgZ = 0;
-              let count = 0;
-              for (const aid of atomIds) {
-                const atomNode = currentNodes.get(aid);
-                if (atomNode?.render?.position) {
-                  avgX += atomNode.render.position.x;
-                  avgY += atomNode.render.position.y;
-                  avgZ += atomNode.render.position.z;
-                  count++;
-                }
-              }
-              if (count > 0) {
-                const renderProps = computeNodeRenderProps(node);
-                currentUpdateNode(node.id, {
-                  render: {
-                    position: {
-                      x: avgX / count + (Math.random() - 0.5) * 2,
-                      y: avgY / count + (Math.random() - 0.5) * 2,
-                      z: avgZ / count + (Math.random() - 0.5) * 2,
-                    },
-                    size: renderProps.size,
-                    color: renderProps.color,
-                    glow: renderProps.glow,
+            // v8.0: Layer 1 nodes start on a ring around the seed cluster
+            if (isInternalRepr && !node.render?.position) {
+              const layer1Index = layer1Nodes.indexOf(node);
+              const ringPos = computeLayer1RingPosition(layer1Index, layer1Nodes.length);
+              const renderProps = computeNodeRenderProps(node);
+              currentUpdateNode(node.id, {
+                render: {
+                  position: {
+                    x: ringPos.x,
+                    y: getLayerYOffset(1),
+                    z: ringPos.z,
                   },
-                });
-                placedNearSeed = true;
-              }
-            }
-
-            // Composition-aware: try to position atom nodes near their composite
-            if (!placedNearSeed && isAtomNode(node)) {
-              // Find composites that reference this node as an atom
-              for (const otherNode of nodeList) {
-                if (isCompositeNode(otherNode) && otherNode.render?.position) {
-                  const otherAtomIds = getAtomIds(otherNode);
-                  if (otherAtomIds.includes(node.id)) {
-                    const renderProps = computeNodeRenderProps(node);
-                    const offset = {
-                      x: (Math.random() - 0.5) * 3,
-                      y: (Math.random() - 0.5) * 3,
-                      z: (Math.random() - 0.5) * 3,
-                    };
-                    currentUpdateNode(node.id, {
-                      render: {
-                        position: {
-                          x: otherNode.render.position.x + offset.x,
-                          y: otherNode.render.position.y + offset.y,
-                          z: otherNode.render.position.z + offset.z,
-                        },
-                        size: renderProps.size,
-                        color: renderProps.color,
-                        glow: renderProps.glow,
-                      },
-                    });
-                    placedNearSeed = true;
-                    break;
-                  }
-                }
-              }
-            }
-
-            // Fallback: random position further from center
-            if (!placedNearSeed) {
+                  size: renderProps.size,
+                  color: renderProps.color,
+                  glow: renderProps.glow,
+                },
+              });
+            } else if (nodeLayer >= 2 && !node.render?.position) {
+              // v8.0: Layer 2+ nodes start in outer orbit
+              const layer2PlusNodes = nodeList.filter(
+                (n) => !n.is_seed && !isInternalRepresentation(n) && computeNodeLayer(n) >= 2
+              );
+              const outerIndex = layer2PlusNodes.indexOf(node);
+              const orbitPos = computeLayer2OrbitPosition(outerIndex, layer2PlusNodes.length);
+              const renderProps = computeNodeRenderProps(node);
+              currentUpdateNode(node.id, {
+                render: {
+                  position: {
+                    x: orbitPos.x,
+                    y: getLayerYOffset(nodeLayer),
+                    z: orbitPos.z,
+                  },
+                  size: renderProps.size,
+                  color: renderProps.color,
+                  glow: renderProps.glow,
+                },
+              });
+            } else {
               const renderProps = computeNodeRenderProps(node);
               const pos = node.render?.position;
               if (!pos || (pos.x === 0 && pos.y === 0 && pos.z === 0)) {
@@ -373,10 +352,59 @@ export function useForceLayout(): void {
         forces[node.id].fz -= pos.z * gravityStrength;
       }
 
+      // ── v8.0: Seed immovable constraint ──
+      // Seed nodes are locked in their sphere positions — zero out all forces
+      for (const node of nodeList) {
+        if (node.is_seed) {
+          forces[node.id].fx = 0;
+          forces[node.id].fy = 0;
+          forces[node.id].fz = 0;
+        }
+      }
+
+      // ── v8.0: Layer 1 ring gravity ──
+      // Internal representation nodes are gently pulled toward a ring
+      // at LAYER1_RING_RADIUS around the Y axis at their layer height
+      for (const node of nodeList) {
+        if (node.is_seed) continue;
+        const isInternalRepr = isInternalRepresentation(node);
+        const layer = computeNodeLayer(node);
+        const pos = node.render?.position ?? { x: 0, y: 0, z: 0 };
+
+        if (isInternalRepr) {
+          // Pull toward ring at radius LAYER1_RING_RADIUS on the XZ plane
+          const distFromCenter = Math.sqrt(pos.x * pos.x + pos.z * pos.z);
+          if (distFromCenter > 0.1) {
+            const targetX = (pos.x / distFromCenter) * LAYER1_RING_RADIUS;
+            const targetZ = (pos.z / distFromCenter) * LAYER1_RING_RADIUS;
+            const ringForce = 0.005;
+            forces[node.id].fx += (targetX - pos.x) * ringForce;
+            forces[node.id].fz += (targetZ - pos.z) * ringForce;
+          } else {
+            // Node at center — push out to ring
+            const angle = Math.random() * Math.PI * 2;
+            forces[node.id].fx += Math.cos(angle) * LAYER1_RING_RADIUS * 0.01;
+            forces[node.id].fz += Math.sin(angle) * LAYER1_RING_RADIUS * 0.01;
+          }
+        } else if (layer >= 2) {
+          // Layer 2+ nodes: gently pushed outward from center
+          const distFromCenter = Math.sqrt(pos.x * pos.x + pos.z * pos.z);
+          if (distFromCenter < LAYER2_ORBIT_RADIUS - 3) {
+            // Too close to center — push outward
+            const pushForce = 0.002;
+            if (distFromCenter > 0.1) {
+              forces[node.id].fx += (pos.x / distFromCenter) * pushForce * LAYER2_ORBIT_RADIUS;
+              forces[node.id].fz += (pos.z / distFromCenter) * pushForce * LAYER2_ORBIT_RADIUS;
+            }
+          }
+        }
+      }
+
       // ── v5.0: Layer Y-gravity ──
       // Gently pull nodes toward their layer's Y-offset
       // Layer 0 at bottom (y=0), higher layers stacked up
       for (const node of nodeList) {
+        if (node.is_seed) continue; // Seeds are already positioned
         const layer = computeNodeLayer(node);
         const targetY = getLayerYOffset(layer);
         const pos = node.render?.position ?? { x: 0, y: 0, z: 0 };
@@ -390,6 +418,22 @@ export function useForceLayout(): void {
       for (const node of nodeList) {
         const vel = velocities[node.id];
         if (!vel) continue;
+
+        // v8.0: Seed nodes are immovable — skip velocity/position update
+        if (node.is_seed) {
+          // Still update render props in case layer colors changed
+          const renderProps = computeNodeRenderProps(node);
+          const existingPos = node.render?.position ?? { x: 0, y: 0, z: 0 };
+          currentUpdateNode(node.id, {
+            render: {
+              position: existingPos,
+              size: renderProps.size,
+              color: renderProps.color,
+              glow: renderProps.glow,
+            },
+          });
+          continue;
+        }
 
         vel.vx = (vel.vx + forces[node.id].fx) * DAMPING;
         vel.vy = (vel.vy + forces[node.id].fy) * DAMPING;

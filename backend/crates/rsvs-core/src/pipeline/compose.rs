@@ -220,6 +220,7 @@ impl Rsvs {
                 layer,
                 derived_from_node_ids: comp_node_ids.clone(),
                 compression_reason: Some("explicit composition".to_string()),
+                internal_representation: false,
             },
             policy_meta: None,
             language_links: vec![],

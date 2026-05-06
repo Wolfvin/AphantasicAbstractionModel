@@ -28,6 +28,7 @@ use crate::sense::SenseManager;
 use crate::types::{AtomSet, ContextQueryResult, NodeId, SenseId, Tier, TraversalConfig};
 
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::collections::VecDeque;
 
 // Re-export everything from submodules
@@ -149,6 +150,13 @@ pub struct Rsvs {
     /// NodeId → atom sets (for attention Jaccard)
     pub atom_sets: HashMap<String, Vec<NodeId>>,
 
+    /// v8.0: Set of seed NodeIds for O(1) composition-based grounding checks.
+    /// When a node's compositions reference any of these NodeIds, it is
+    /// grounded to the seed layer. This replaces string-based grounding
+    /// for composition-aware operations. The string-based `is_groundable_to_seeds`
+    /// is retained for entity detection only.
+    pub seed_node_ids: HashSet<NodeId>,
+
     /// Pipeline configuration.
     pub config: PipelineConfig,
     /// Total contexts processed.
@@ -179,6 +187,9 @@ pub struct Rsvs {
     pub spreading_activation: crate::spreading::SpreadingActivation,
     /// v7.0: DEPS planner — structured failure recovery.
     pub deps_planner: crate::deps::DEPSPlanner,
+    /// v8.0: Convergence detection engine — detects structural equivalence
+    /// between nodes (e.g., "dog" ↔ "anjing") based on composition overlap.
+    pub convergence: crate::convergence::ConvergenceEngine,
 }
 
 impl Rsvs {
@@ -210,6 +221,9 @@ impl Rsvs {
         let mut config = config;
         config.seed_labels = effective_seed_labels;
 
+        // v8.0: Build seed NodeId set for composition-based grounding
+        let seed_node_ids: HashSet<NodeId> = seed_map.values().copied().collect();
+
         Ok(Self {
             graph,
             senses,
@@ -219,6 +233,7 @@ impl Rsvs {
             attention,
             token_to_id,
             atom_sets,
+            seed_node_ids,
             config,
             total_contexts: 0,
             latest_seq: 0,
@@ -244,6 +259,7 @@ impl Rsvs {
                 crate::spreading::SpreadingActivationConfig::default(),
             ),
             deps_planner: crate::deps::DEPSPlanner::new(),
+            convergence: crate::convergence::ConvergenceEngine::new(),
         })
     }
 
@@ -313,6 +329,66 @@ impl Rsvs {
             .unwrap_or(0);
 
         max_layer + 1
+    }
+
+    /// v8.0: Check if a node is groundable via structural composition to seed NodeIds.
+    ///
+    /// This is the language-agnostic grounding check. A node is composition-groundable
+    /// if ANY of its sense compositions reference a seed NodeId. This replaces the
+    /// string-based `is_groundable_to_seeds()` for all composition-aware operations.
+    ///
+    /// The string-based check is retained ONLY for entity detection (which operates
+    /// on raw tokens before they have compositions).
+    pub fn is_groundable_via_composition(&self, node_id: NodeId) -> bool {
+        if self.seed_node_ids.contains(&node_id) {
+            return true; // It IS a seed
+        }
+        let sm = match self.senses.get(&node_id) {
+            Some(sm) => sm,
+            None => return false,
+        };
+        for sense in &sm.senses {
+            for comp in &sense.compositions {
+                if self.seed_node_ids.contains(&comp.node_id) {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    /// v8.0: Check if a node qualifies as an "internal representation" (layer 1).
+    ///
+    /// An internal representation is a node whose ALL sense compositions reference
+    /// ONLY layer 0 seed primitives. Such nodes serve as the bridge between surface
+    /// tokens (layer 2+) and epistemological primitives (layer 0).
+    ///
+    /// Returns true if:
+    /// - The node has at least one compositional sense
+    /// - ALL composition targets across ALL senses are layer 0 seed nodes
+    pub fn is_internal_representation(&self, node_id: NodeId) -> bool {
+        if self.seed_node_ids.contains(&node_id) {
+            return false; // Seeds themselves are not internal representations
+        }
+        let sm = match self.senses.get(&node_id) {
+            Some(sm) => sm,
+            None => return false,
+        };
+
+        let mut has_any_composition = false;
+        for sense in &sm.senses {
+            if sense.compositions.is_empty() {
+                continue;
+            }
+            has_any_composition = true;
+            for comp in &sense.compositions {
+                // If ANY composition targets a non-seed node, this is NOT an internal repr
+                if !self.seed_node_ids.contains(&comp.node_id) {
+                    return false;
+                }
+            }
+        }
+        has_any_composition
     }
 
     /// v6.3: Get the active attention config for the current domain.

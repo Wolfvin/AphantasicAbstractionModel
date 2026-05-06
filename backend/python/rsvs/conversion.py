@@ -43,6 +43,9 @@ def _project_node(
         "compression_state": semantic.get("compression_state"),
         "derived_from_node_ids": semantic.get("derived_from_node_ids", []),
         "atoms": semantic.get("atoms"),
+        # v8.0: Layer and internal representation
+        "layer": node.get("layer", semantic.get("layer", 0)),
+        "internal_representation": bool(node.get("internal_representation", semantic.get("internal_representation", False))),
     }
     if view == "detail":
         projected["derived_nodes"] = [
@@ -94,22 +97,46 @@ def _convert_rust_node(rn: dict[str, Any], correlation_id: str) -> dict[str, Any
 
     is_seed = bool(rn.get("is_seed", False))
 
+    # v8.0: Layer and internal_representation from Rust snapshot
+    layer = rn.get("layer", 0 if not derived_ids else 1)
+    internal_representation = bool(rn.get("internal_representation", False))
+
+    # v8.0: Language links with proper structure (link_type, target_id)
+    raw_language_links = rn.get("language_links", [])
+    language_links = []
+    for ll in raw_language_links:
+        if isinstance(ll, dict):
+            language_links.append({
+                "link_type": ll.get("link_type", "structural_equivalence"),
+                "target_id": ll.get("target_id"),
+            })
+        elif isinstance(ll, (list, tuple)) and len(ll) >= 2:
+            # Legacy format: [link_type, target_id]
+            language_links.append({
+                "link_type": ll[0],
+                "target_id": ll[1],
+            })
+
     return {
         "id": rn.get("id"),
         "label": rn.get("label"),
         "surface_label": rn.get("surface_label"),
-        "language_links": rn.get("language_links", []),
+        "language_links": language_links,
         "kind": rn.get("kind", "node"),
         "tier": rn.get("tier", 1 if is_seed else 3),
         "confidence": rn.get("confidence", 1.0 if is_seed else 0.25),
         "status": rn.get("status", "stable" if is_seed else "new"),
         "is_seed": is_seed,
         "is_locked": bool(rn.get("is_locked", is_seed)),
+        "layer": layer,
+        "internal_representation": internal_representation,
         "semantic": {
             "compression_state": compression_state,
             "derived_from_node_ids": derived_ids,
             "atoms": atoms,
             "compression_reason": compression_reason,
+            "layer": layer,
+            "internal_representation": internal_representation,
         },
         "policy_meta": {
             "policy_version": SCHEMA_VERSION,

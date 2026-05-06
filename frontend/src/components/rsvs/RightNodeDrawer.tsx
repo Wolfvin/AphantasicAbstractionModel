@@ -158,10 +158,9 @@ function LanguageLinksSection({ links }: { links: LanguageLink[] }) {
         {links.map((link, i) => (
           <div key={i} className="flex items-center gap-2 px-2 py-1 rounded-md bg-[#0d1520] border border-[#1e293b]">
             <Badge variant="outline" className="text-[9px] border-[#334155] text-[#64748b] shrink-0 px-1">
-              {link.lang}
+              {link.link_type}
             </Badge>
-            <span className="text-xs text-[#e2e8f0] font-mono truncate flex-1">{link.label}</span>
-            <span className="text-[10px] text-[#64748b] font-mono shrink-0">{link.confidence.toFixed(2)}</span>
+            <span className="text-xs text-[#e2e8f0] font-mono truncate flex-1">→ #{link.target_id}</span>
           </div>
         ))}
       </div>

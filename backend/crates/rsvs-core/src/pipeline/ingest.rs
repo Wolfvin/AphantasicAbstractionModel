@@ -124,6 +124,7 @@ impl Rsvs {
                     layer: 0,
                     derived_from_node_ids: vec![],
                     compression_reason: None,
+                    internal_representation: false,
                 },
                 policy_meta: Some(PolicyMeta {
                     policy_version: "6.0".to_string(),
@@ -272,22 +273,44 @@ impl Rsvs {
                         stats.sense_created += 1;
                         // Update node layer if this sense has a higher layer
                         if let Some(node) = self.graph.get_node_mut(token_id) {
-                            if layer > node.semantic.layer {
-                                node.semantic.layer = layer;
+                            // v8.0 PHASE 3: Enforce Layer 1 semantics.
+                            // If ALL composition targets are layer 0 seeds,
+                            // this node is an "internal representation" — force
+                            // layer to 1 and tag it.
+                            let all_targets_are_seeds = !context_ids.is_empty()
+                                && context_ids.iter().all(|id| self.seed_node_ids.contains(id));
+
+                            let effective_layer = if all_targets_are_seeds {
+                                // Force layer 1 — this is an internal representation
+                                node.semantic.internal_representation = true;
+                                1
+                            } else if layer > node.semantic.layer {
+                                layer
+                            } else {
+                                node.semantic.layer
+                            };
+
+                            if effective_layer > node.semantic.layer {
+                                node.semantic.layer = effective_layer;
                             }
-                            if layer > 0 {
+                            if effective_layer > 0 {
                                 node.semantic.compression_state = CompressionState::Compressed;
                                 node.semantic.derived_from_node_ids = context_ids.clone();
                                 node.semantic.compression_reason =
-                                    Some("compositional induction".to_string());
+                                    if all_targets_are_seeds {
+                                        Some("internal representation (layer 1 bridge)".to_string())
+                                    } else {
+                                        Some("compositional induction".to_string())
+                                    };
                             }
                         }
                         Some(serde_json::json!({
                             "id": token_id,
                             "sense_idx": idx,
                             "action": "created",
-                            "layer": layer,
-                            "compositions": active_senses.len()
+                            "layer": if !context_ids.is_empty() && context_ids.iter().all(|id| self.seed_node_ids.contains(id)) { 1 } else { layer },
+                            "compositions": active_senses.len(),
+                            "internal_representation": !context_ids.is_empty() && context_ids.iter().all(|id| self.seed_node_ids.contains(id))
                         }))
                     }
                 };
@@ -501,6 +524,37 @@ impl Rsvs {
                     "atoms_compacted": consolidation_result.atoms_compacted,
                 }),
             );
+
+            // v8.0 PHASE 2: Run convergence detection after consolidation.
+            // Consolidation stabilizes the graph, making convergence detection
+            // more reliable. We detect structural equivalence between nodes
+            // that have similar compositions but never co-occur (e.g., "dog" ↔ "anjing").
+            let convergence_results = self.convergence.detect(
+                &mut self.graph,
+                &self.senses,
+                &self.stats_db,
+            );
+            if !convergence_results.is_empty() {
+                let linked_count = convergence_results.iter().filter(|r| r.linked).count();
+                self.emit_event(
+                    &correlation_id,
+                    "convergence_detected",
+                    serde_json::json!({
+                        "pairs_found": convergence_results.len(),
+                        "links_created": linked_count,
+                        "pairs": convergence_results.iter().map(|r| {
+                            let label_a = self.graph.get_node(r.node_a).map(|n| n.label.clone()).unwrap_or_default();
+                            let label_b = self.graph.get_node(r.node_b).map(|n| n.label.clone()).unwrap_or_default();
+                            serde_json::json!({
+                                "a": label_a,
+                                "b": label_b,
+                                "overlap": format!("{:.3}", r.overlap_score),
+                                "linked": r.linked
+                            })
+                        }).collect::<Vec<_>>()
+                    }),
+                );
+            }
         }
 
         // v6.4: Periodic sense reflection — self-evaluation loop

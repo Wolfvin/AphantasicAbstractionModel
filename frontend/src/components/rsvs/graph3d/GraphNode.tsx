@@ -7,7 +7,7 @@ import { Html, Billboard } from '@react-three/drei';
 import * as THREE from 'three';
 import type { RSVSNode } from '@/lib/types';
 import { useGraphStore, useUIStore } from '@/store/rsvsStore';
-import { isCompositeNode, isAtomNode, getAtomCount, computeNodeLayer, getLayerColor, buildCompositionChain } from '@/lib/nodeRendering';
+import { isCompositeNode, isAtomNode, getAtomCount, computeNodeLayer, getLayerColor, buildCompositionChain, isInternalRepresentation, hasConvergenceLinks, getConvergenceTargets } from '@/lib/nodeRendering';
 
 // ── Animation constants ──
 const SPAWN_DURATION_MS = 500;
@@ -53,6 +53,11 @@ const GraphNodeComponent: React.FC<GraphNodeProps> = ({
   const composite = isCompositeNode(node);
   const atom = isAtomNode(node);
   const atomCount = getAtomCount(node);
+
+  // v8.0: Internal representation and convergence detection
+  const internalRepr = isInternalRepresentation(node);
+  const hasConvergence = hasConvergenceLinks(node);
+  const convergenceTargets = getConvergenceTargets(node);
 
   // v5.0: Compute effective layer
   const layer = computeNodeLayer(node);
@@ -120,14 +125,15 @@ const GraphNodeComponent: React.FC<GraphNodeProps> = ({
   const compositeHaloMaterial = useMemo(
     () =>
       new THREE.MeshBasicMaterial({
-        color: new THREE.Color(composite ? '#FF80AB' : '#00E5FF'),
+        // v8.0: Internal repr gets cyan, composites get pink
+        color: new THREE.Color(internalRepr ? '#00BCD4' : composite ? '#FF80AB' : '#00E5FF'),
         transparent: true,
         opacity: 0,
         blending: THREE.AdditiveBlending,
         depthWrite: false,
         side: THREE.DoubleSide,
       }),
-    [composite],
+    [composite, internalRepr],
   );
 
   // Spawn animation tracking
@@ -355,21 +361,25 @@ const GraphNodeComponent: React.FC<GraphNodeProps> = ({
       }
     }
 
-    // ── Composite halo ──
+    // ── Composite / Internal Repr halo ──
     if (compositeHaloRef.current) {
-      // Halo is visible on composites, and extra visible when selected/hovered
+      // v8.0: Internal repr has a subtle pulsing ring, composites have stronger halo
+      const baseHaloOpacity = internalRepr ? 0.08 : 0.15;
       const haloTargetOpacity = isSelected || isHovered
-        ? 0.35 + 0.1 * Math.sin(time * 2)
-        : 0.15 + 0.05 * Math.sin(time * 1.5);
+        ? (internalRepr ? 0.25 : 0.35) + 0.1 * Math.sin(time * 2)
+        : baseHaloOpacity + 0.05 * Math.sin(time * 1.5);
 
-      compositeHaloMaterial.opacity = lerp(compositeHaloMaterial.opacity, composite ? haloTargetOpacity : 0, LERP_FACTOR);
+      const shouldShowHalo = composite || internalRepr;
+      compositeHaloMaterial.opacity = lerp(compositeHaloMaterial.opacity, shouldShowHalo ? haloTargetOpacity : 0, LERP_FACTOR);
 
       // Rotate the halo slowly
       compositeHaloRef.current.rotation.z += delta * 0.3;
       compositeHaloRef.current.rotation.x = Math.sin(time * 0.5) * 0.4;
 
-      // Scale based on atom count
-      const haloScale = 1.5 + Math.min(atomCount * 0.15, 0.8);
+      // Scale based on atom count (internal repr typically has fewer atoms)
+      const haloScale = internalRepr
+        ? 1.3 + Math.min(atomCount * 0.1, 0.4)
+        : 1.5 + Math.min(atomCount * 0.15, 0.8);
       compositeHaloRef.current.scale.setScalar(haloScale);
     }
   });
@@ -381,8 +391,8 @@ const GraphNodeComponent: React.FC<GraphNodeProps> = ({
   const displayLabel =
     node.label.length > 20 ? node.label.slice(0, 18) + '…' : node.label;
 
-  // v5.0: Layer prefix
-  const layerPrefix = layer === 0 ? '● ' : `◆L${layer} `;
+  // v5.0: Layer prefix — v8.0 updated labels
+  const layerPrefix = layer === 0 ? '● ' : internalRepr ? '◆L1 ' : `◆L${layer} `;
 
   // v5.0: Composition chain tooltip (shown on hover for compositional nodes)
   const showCompositionChain = isHovered && compositionChain !== null;
@@ -406,8 +416,27 @@ const GraphNodeComponent: React.FC<GraphNodeProps> = ({
       {/* Selection ring (torus) */}
       <mesh ref={torusRef} geometry={torusGeometry} material={selectionRingMaterial} />
 
-      {/* Composite halo ring — only visible for composites */}
-      {composite && (
+      {/* v8.0: Internal representation ring — semi-transparent cyan ring for layer 1 bridge nodes */}
+      {internalRepr && (
+        <mesh ref={compositeHaloRef} geometry={haloGeometry} material={compositeHaloMaterial} />
+      )}
+
+      {/* v8.0: Convergence link tendrils — special dashed lines to structurally equivalent nodes */}
+      {(isSelected || isHovered) && hasConvergence && convergenceTargets.map((targetId) => {
+        const targetNode = nodes.get(targetId);
+        if (!targetNode?.render?.position) return null;
+        return (
+          <ConvergenceTendrilLine
+            key={`conv-${node.id}-${targetId}`}
+            startPos={new THREE.Vector3(pos.x, pos.y, pos.z)}
+            endPos={new THREE.Vector3(targetNode.render.position.x, targetNode.render.position.y, targetNode.render.position.z)}
+            visible={isSelected || isHovered}
+          />
+        );
+      })}
+
+      {/* Composite halo ring — only visible for composites (non-internal-repr) */}
+      {composite && !internalRepr && (
         <mesh ref={compositeHaloRef} geometry={haloGeometry} material={compositeHaloMaterial} />
       )}
 
@@ -526,6 +555,63 @@ function TendrilLine({
   useFrame((state) => {
     const time = state.clock.elapsedTime;
     const targetOpacity = visible ? 0.3 + 0.1 * Math.sin(time * 3) : 0;
+    material.opacity = lerp(material.opacity, targetOpacity, LERP_FACTOR);
+  });
+
+  return (
+    <primitive ref={lineRef} object={new THREE.Line(geometry, material)} />
+  );
+}
+
+// ── Convergence Tendril Line Component ──
+// Renders a special dashed line between convergent nodes (e.g., "anjing" ↔ "dog")
+// Uses a distinct purple/white color to differentiate from composition tendrils
+function ConvergenceTendrilLine({
+  startPos,
+  endPos,
+  visible,
+}: {
+  startPos: THREE.Vector3;
+  endPos: THREE.Vector3;
+  visible: boolean;
+}) {
+  const lineRef = useRef<THREE.Line>(null);
+
+  const CONVERGENCE_COLOR = '#E040FB'; // Bright purple for convergence links
+
+  const material = useMemo(
+    () =>
+      new THREE.LineDashedMaterial({
+        color: new THREE.Color(CONVERGENCE_COLOR),
+        transparent: true,
+        opacity: 0,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        dashSize: 0.4,
+        gapSize: 0.25,
+      }),
+    [],
+  );
+
+  const geometry = useMemo(() => {
+    const geo = new THREE.BufferGeometry().setFromPoints([startPos, endPos]);
+    // computeLineDistances is needed for LineDashedMaterial
+    const positions = geo.getAttribute('position');
+    const lineDistances = new Float32Array(positions.count);
+    lineDistances[0] = 0;
+    for (let i = 1; i < positions.count; i++) {
+      const x = positions.getX(i) - positions.getX(i - 1);
+      const y = positions.getY(i) - positions.getY(i - 1);
+      const z = positions.getZ(i) - positions.getZ(i - 1);
+      lineDistances[i] = lineDistances[i - 1] + Math.sqrt(x * x + y * y + z * z);
+    }
+    geo.setAttribute('lineDistance', new THREE.BufferAttribute(lineDistances, 1));
+    return geo;
+  }, [startPos, endPos]);
+
+  useFrame((state) => {
+    const time = state.clock.elapsedTime;
+    const targetOpacity = visible ? 0.5 + 0.2 * Math.sin(time * 4) : 0;
     material.opacity = lerp(material.opacity, targetOpacity, LERP_FACTOR);
   });
 

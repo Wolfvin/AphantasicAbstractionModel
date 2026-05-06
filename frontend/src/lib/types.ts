@@ -101,10 +101,12 @@ export interface PolicyMeta {
   min_confidence: number;
 }
 
+// v8.0: Language link matching the Rust backend's LanguageLink struct.
+// link_type is typically "structural_equivalence" from convergence detection.
+// target_id references another node that this node is structurally equivalent to.
 export interface LanguageLink {
-  lang: string;
-  label: string;
-  confidence: number;
+  link_type: string;
+  target_id: number;
 }
 
 export interface RSVSNode {
@@ -134,10 +136,12 @@ export interface RSVSNode {
   atoms?: number[];
   compression_reason?: string;
   // v6.0 compositional architecture fields
-  layer?: number; // 0=primitive, N=compositional
+  layer?: number; // 0=primitive, 1=internal representation, N=compositional
   grounding_score?: number;
   grounding_evidence?: GroundingEvidence;
   compositions?: CompositionPair[]; // list of [label, sense_id] pairs
+  // v8.0: Whether this node is an internal representation (layer 1 bridge)
+  internal_representation?: boolean;
 }
 
 export interface EdgeMetrics {

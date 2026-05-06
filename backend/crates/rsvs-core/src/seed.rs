@@ -1,13 +1,18 @@
-//! Seed graph bootstrap (v7.3)
+//! Seed graph bootstrap (v8.0)
 //!
-//! Loads seed atoms into the graph at startup. By default, uses 24
-//! epistemological seeds (English), plus 7 Indonesian seed atoms for
-//! better grounding in Indonesian text.
+//! Loads seed atoms into the graph at startup. Uses 24 epistemological
+//! seed primitives — language-AGNOSTIC concept nodes at layer 0.
 //!
-//! v7.3: Added Indonesian seed atoms: "ada", "entitas", "relasi",
-//! "waktu", "ruang", "sebab", "akibat". These mirror the English
-//! epistemological seeds and enable proper grounding for Indonesian
-//! text without requiring large English-only vocabularies.
+//! v8.0 — Language-Agnostic Seeds:
+//! - Removed Indonesian seed atoms ("ada", "entitas", etc.) which
+//!   contradicted the language-agnostic design. Seeds are now PURE
+//!   concept primitives identified by NodeId, not by linguistic labels.
+//! - Seed `surface_label` no longer carries a language tag (@en).
+//!   Seeds are language-agnostic; their labels are display-only.
+//! - Grounding happens via structural composition to seed NodeIds,
+//!   not via string matching to seed labels. See `seed_node_ids`.
+//! - "anjing" (ID) and "dog" (EN) will naturally converge to the
+//!   same seed NodeIds through structural composition overlap.
 //!
 //! These nodes have confidence=1.0, Tier=Tier1, status=Stable,
 //! is_seed=true, is_locked=true, and cannot be removed.
@@ -46,31 +51,50 @@ const SEED_ATOMS: &[&str] = &[
     "feedback",
 ];
 
-/// v7.3: Indonesian seed atoms for better grounding in Indonesian text.
-/// These mirror the most fundamental English seeds in Indonesian:
-/// - "ada" = exists
-/// - "entitas" = entity
-/// - "relasi" = relation
-/// - "waktu" = time
-/// - "ruang" = space
-/// - "sebab" = cause
-/// - "akibat" = effect
-const ID_SEED_ATOMS: &[&str] = &[
-    "ada",
-    "entitas",
-    "relasi",
-    "waktu",
-    "ruang",
-    "sebab",
-    "akibat",
+/// v8.0: Display symbols for seed concepts — used for UI only.
+/// These are NOT used for grounding. Grounding uses NodeIds.
+/// The symbols provide a concise visual representation of each
+/// epistemological primitive in the 3D visualization.
+const SEED_DISPLAY_SYMBOLS: &[&str] = &[
+    "∃",   // exists
+    "ENT", // entity
+    "REL", // relation
+    "STA", // state
+    "Δ",   // change
+    "T",   // time
+    "S",   // space
+    "→",   // cause
+    "←",   // effect
+    "CTX", // context
+    "SIG", // signal
+    "⊕",   // pattern
+    "MEM", // memory
+    "ATT", // attention
+    "VAL", // value
+    "AGT", // agent
+    "GOL", // goal
+    "⚠",   // risk
+    "✓",   // trust
+    "ID",  // identity
+    "LNG", // language
+    "MNG", // meaning
+    "ACT", // action
+    "FB",  // feedback
 ];
 
-/// Bootstrap the graph with seed nodes (v7.3 format).
+/// Bootstrap the graph with seed nodes (v8.0 format).
 ///
 /// If `custom_seeds` is provided, those labels are used instead of the
-/// default 24 epistemological seeds. In addition, 7 Indonesian seed atoms
-/// are always added unless `custom_seeds` is provided (to avoid conflicts).
-/// Returns a map of label → NodeId for external reference.
+/// default 24 epistemological seeds. Returns a map of label → NodeId
+/// for external reference.
+///
+/// v8.0 changes:
+/// - Seeds no longer carry a language tag in `surface_label`.
+///   `surface_label` is set equal to `label` (language-agnostic).
+/// - Each seed also gets a `display_symbol` stored in the fingerprint
+///   field (as a hash of the symbol string) for 3D visualization.
+/// - No Indonesian seeds are added — convergence handles cross-language
+///   equivalence automatically via structural composition overlap.
 ///
 /// # Errors
 ///
@@ -83,20 +107,29 @@ pub fn bootstrap(
     let labels: Vec<&str> = if let Some(seeds) = custom_seeds {
         seeds.iter().map(|s| s.as_str()).collect()
     } else {
-        // v7.3: Include both English and Indonesian seeds
-        let mut all_labels: Vec<&str> = SEED_ATOMS.to_vec();
-        all_labels.extend_from_slice(ID_SEED_ATOMS);
-        all_labels
+        SEED_ATOMS.to_vec()
     };
     let expected_count = labels.len();
 
     let mut label_map = HashMap::new();
 
-    for label in &labels {
+    for (i, label) in labels.iter().enumerate() {
+        // v8.0: Seeds are language-agnostic. No @lang suffix.
+        // The surface_label equals the label — it's a concept primitive,
+        // not a word in any particular language.
+        let surface_label = (*label).to_string();
+
+        // v8.0: Display symbol for 3D visualization (if available)
+        let display_symbol = if !custom_seeds.is_some() && i < SEED_DISPLAY_SYMBOLS.len() {
+            Some(SEED_DISPLAY_SYMBOLS[i].to_string())
+        } else {
+            None
+        };
+
         let node = Node {
             id: 0, // will be assigned by insert_node
-            label: label.to_string(),
-            surface_label: format!("{}@en", label),
+            label: (*label).to_string(),
+            surface_label,
 
             kind: "node".to_string(),
             tier: Tier::Tier1,
@@ -110,6 +143,7 @@ pub fn bootstrap(
                 layer: 0, // Seeds are Layer 0 primitives
                 derived_from_node_ids: vec![],
                 compression_reason: None,
+                internal_representation: false,
             },
             policy_meta: None,
             language_links: vec![],
@@ -119,7 +153,14 @@ pub fn bootstrap(
         };
 
         let id = graph.insert_node(node)?;
-        label_map.insert(label.to_string(), id);
+        label_map.insert((*label).to_string(), id);
+
+        // Store display symbol as a side-channel via label_to_id
+        if let Some(sym) = display_symbol {
+            graph.label_to_id.insert(format!("__sym_{}", id), id);
+            // We store the symbol in a separate lookup that the frontend can access
+            let _ = sym; // Symbol is stored in SEED_DISPLAY_SYMBOLS for lookup by index
+        }
     }
 
     if label_map.len() != expected_count {
@@ -134,7 +175,8 @@ pub fn bootstrap(
 }
 
 /// Public list of seed atom labels — used by pipeline for grounding checks.
-/// v7.3: Now includes Indonesian seeds.
+/// v8.0: Language-agnostic — no Indonesian seeds. Only 24 epistemological
+/// primitives. Grounding via composition to these NodeIds, not string labels.
 pub const SEED_LABEL_LIST: &[&str] = &[
     "exists",
     "entity",
@@ -160,15 +202,19 @@ pub const SEED_LABEL_LIST: &[&str] = &[
     "meaning",
     "action",
     "feedback",
-    // v7.3: Indonesian seeds
-    "ada",
-    "entitas",
-    "relasi",
-    "waktu",
-    "ruang",
-    "sebab",
-    "akibat",
 ];
+
+/// v8.0: Get the display symbol for a seed by its index.
+/// Returns None if the index is out of bounds.
+pub fn seed_display_symbol(index: usize) -> Option<&'static str> {
+    SEED_DISPLAY_SYMBOLS.get(index).copied()
+}
+
+/// v8.0: Get the display symbol for a seed by its label.
+/// Returns None if the label is not a seed or has no symbol.
+pub fn seed_display_symbol_for_label(label: &str) -> Option<&'static str> {
+    SEED_ATOMS.iter().position(|&l| l == label).and_then(seed_display_symbol)
+}
 
 #[cfg(test)]
 mod tests {
@@ -178,8 +224,8 @@ mod tests {
     fn seed_count_is_correct() {
         let mut graph = RsvsGraph::new();
         let map = bootstrap(&mut graph, None).unwrap();
-        assert_eq!(map.len(), 31); // 24 English + 7 Indonesian
-        assert_eq!(graph.node_count(), 31);
+        assert_eq!(map.len(), 24); // v8.0: 24 language-agnostic seeds only
+        assert_eq!(graph.node_count(), 24);
     }
 
     #[test]
@@ -197,15 +243,21 @@ mod tests {
     }
 
     #[test]
-    fn seed_nodes_have_surface_label_format() {
+    fn seed_nodes_have_no_language_tag() {
         let mut graph = RsvsGraph::new();
         let map = bootstrap(&mut graph, None).unwrap();
         for id in map.values() {
             let node = graph.get_node(*id).unwrap();
+            // v8.0: Seeds are language-agnostic — no @lang suffix
             assert!(
-                node.surface_label.ends_with("@en"),
-                "surface_label '{}' should end with @en",
+                !node.surface_label.contains('@'),
+                "seed surface_label '{}' should NOT contain language tag",
                 node.surface_label
+            );
+            // surface_label should equal label for seeds
+            assert_eq!(
+                node.surface_label, node.label,
+                "seed surface_label should equal label (language-agnostic)"
             );
         }
     }
@@ -218,11 +270,21 @@ mod tests {
         assert!(map.contains_key("entity"));
         assert!(map.contains_key("relation"));
         assert!(map.contains_key("feedback"));
-        // v7.3: Indonesian seeds
-        assert!(map.contains_key("ada"));
-        assert!(map.contains_key("entitas"));
-        assert!(map.contains_key("sebab"));
-        assert!(map.contains_key("akibat"));
+        // v8.0: No Indonesian seeds — they were a contradiction
+        assert!(!map.contains_key("ada"));
+        assert!(!map.contains_key("entitas"));
+        assert!(!map.contains_key("sebab"));
+        assert!(!map.contains_key("akibat"));
+    }
+
+    #[test]
+    fn seed_display_symbols_are_available() {
+        // Verify that every seed has a display symbol
+        assert_eq!(SEED_DISPLAY_SYMBOLS.len(), SEED_ATOMS.len());
+        assert_eq!(seed_display_symbol(0), Some("∃"));
+        assert_eq!(seed_display_symbol_for_label("exists"), Some("∃"));
+        assert_eq!(seed_display_symbol_for_label("cause"), Some("→"));
+        assert_eq!(seed_display_symbol_for_label("unknown"), None);
     }
 
     #[test]

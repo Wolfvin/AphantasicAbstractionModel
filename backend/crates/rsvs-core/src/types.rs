@@ -137,6 +137,16 @@ pub struct SemanticMeta {
     pub derived_from_node_ids: Vec<NodeId>,
     /// Why the node was compressed (None for raw nodes).
     pub compression_reason: Option<String>,
+    /// v8.0: Whether this node is an "internal representation" — a layer 1
+    /// node whose compositions reference ONLY layer 0 seed primitives.
+    /// Such nodes serve as the bridge between surface tokens (layer 2+)
+    /// and epistemological primitives (layer 0). They form the system's
+    /// "internal language" — language-agnostic structural meanings that
+    /// emerge from co-occurrence patterns with seed primitives.
+    /// This field is enforced during ingest: if all composition targets
+    /// are layer 0 seeds, the node is tagged `internal_representation = true`
+    /// and its layer is forced to 1.
+    pub internal_representation: bool,
 }
 
 impl Default for SemanticMeta {
@@ -146,6 +156,7 @@ impl Default for SemanticMeta {
             layer: 0,
             derived_from_node_ids: Vec::new(),
             compression_reason: None,
+            internal_representation: false,
         }
     }
 }

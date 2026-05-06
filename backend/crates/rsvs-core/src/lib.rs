@@ -1,6 +1,6 @@
 #![warn(missing_docs)]
 
-//! RSVS Core — v7.3 — Evidence-Based Revision + Structural Appraise + Indonesian Seeds
+//! RSVS Core — v8.0 — Language-Agnostic Seeds + Convergence Detection + Internal Representation
 //!
 //! v6.1 builds on v6.0 with:
 //! - `TraversalConfig`: Controls recursive composition expansion during queries
@@ -28,6 +28,7 @@ pub mod autonomy;
 #[cfg(feature = "python")]
 pub mod bindings;
 pub mod composition_index;
+pub mod convergence;
 pub mod consolidation;
 pub mod error;
 pub mod events;
@@ -57,7 +58,7 @@ pub use autonomy::{
     RemovalDecision, StabilityStatus, StatusTransitionResult, WarmUpState, count_impact,
 };
 pub use composition_index::CompositionIndex;
-pub use consolidation::ConsolidationEngine;
+pub use convergence::{ConvergenceConfig, ConvergenceEngine, ConvergencePair};
 pub use error::RsvsError;
 pub use events::{EventBatch, RuntimeEvent, RuntimeSnapshot, API_VERSION, SCHEMA_VERSION};
 pub use graph::{

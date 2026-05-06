@@ -29,6 +29,13 @@ use crate::types::{
 // Serializable mirror types (v6.0 serde-friendly)
 // -----------------------------------------------------------------------
 
+/// Serializable mirror of a `LanguageLink` for JSON persistence.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct SavedLanguageLink {
+    pub link_type: String,
+    pub target_id: u32,
+}
+
 /// Serializable mirror of a `Node` for JSON persistence.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SavedNode {
@@ -45,6 +52,12 @@ pub struct SavedNode {
     pub layer: u32,
     pub derived_from_node_ids: Vec<u32>,
     pub compression_reason: Option<String>,
+    /// v8.0: Whether this node is an internal representation (layer 1 bridge).
+    #[serde(default)]
+    pub internal_representation: bool,
+    /// v8.0: Cross-language links (structural equivalence from convergence detection).
+    #[serde(default)]
+    pub language_links: Vec<SavedLanguageLink>,
     pub policy_meta: Option<SavedPolicyMeta>,
     pub atoms: Vec<u32>,
 }
@@ -439,6 +452,11 @@ pub fn to_snapshot(rsvs: &Rsvs) -> RsvsSnapshot {
             layer: n.semantic.layer,
             derived_from_node_ids: n.semantic.derived_from_node_ids.clone(),
             compression_reason: n.semantic.compression_reason.clone(),
+            internal_representation: n.semantic.internal_representation,
+            language_links: n.language_links.iter().map(|ll| SavedLanguageLink {
+                link_type: ll.link_type.clone(),
+                target_id: ll.target_id,
+            }).collect(),
             policy_meta: n.policy_meta.as_ref().map(|pm| SavedPolicyMeta {
                 policy_version: pm.policy_version.clone(),
                 governance_score: pm.governance_score,
@@ -563,7 +581,7 @@ pub fn to_snapshot(rsvs: &Rsvs) -> RsvsSnapshot {
     };
 
     RsvsSnapshot {
-        version: "7.3".to_string(),
+        version: "8.0".to_string(),
         total_contexts: rsvs.total_contexts,
         token_to_id: rsvs.token_to_id.clone(),
         next_node_id: rsvs.graph.next_id,
@@ -635,6 +653,7 @@ pub fn from_snapshot(snap: RsvsSnapshot) -> Rsvs {
                 layer: sn.layer,
                 derived_from_node_ids: sn.derived_from_node_ids.clone(),
                 compression_reason: sn.compression_reason.clone(),
+                internal_representation: sn.internal_representation,
             },
             policy_meta: sn.policy_meta.as_ref().map(|pm| PolicyMeta {
                 policy_version: pm.policy_version.clone(),
@@ -644,7 +663,10 @@ pub fn from_snapshot(snap: RsvsSnapshot) -> Rsvs {
                 seen_fingerprints: pm.seen_fingerprints.clone(),
                 last_seen_at: pm.last_seen_at.clone(),
             }),
-            language_links: vec![],
+            language_links: sn.language_links.iter().map(|sll| crate::types::LanguageLink {
+                link_type: sll.link_type.clone(),
+                target_id: sll.target_id,
+            }).collect(),
             atoms: sn.atoms.clone(),
             fingerprint: None,
         };
@@ -790,6 +812,12 @@ pub fn from_snapshot(snap: RsvsSnapshot) -> Rsvs {
 
     let attention = crate::attention::RsvsAttention::new(config.attention.clone());
 
+    // v8.0: Rebuild seed_node_ids from loaded graph
+    let seed_node_ids: std::collections::HashSet<NodeId> = graph.nodes.values()
+        .filter(|n| n.is_seed)
+        .map(|n| n.id)
+        .collect();
+
     let mut rsvs = Rsvs {
         graph,
         senses,
@@ -799,6 +827,7 @@ pub fn from_snapshot(snap: RsvsSnapshot) -> Rsvs {
         attention,
         token_to_id,
         atom_sets,
+        seed_node_ids,
         config,
         total_contexts: snap.total_contexts,
         latest_seq: 0,
@@ -824,6 +853,7 @@ pub fn from_snapshot(snap: RsvsSnapshot) -> Rsvs {
             crate::spreading::SpreadingActivationConfig::default(),
         ),
         deps_planner: crate::deps::DEPSPlanner::new(),
+        convergence: crate::convergence::ConvergenceEngine::new(),
     };
 
     // v7.3: Restore domain calibration from saved data
