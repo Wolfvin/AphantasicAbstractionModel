@@ -1,8 +1,18 @@
 # rsvs-core
 
-**Recursive Symbolic Vocabulary System — Rust Core**
+**Recursive Symbolic Vector Space — Rust Core**
 
-A cognitive symbolic engine implementing hard-attention knowledge graph construction, multi-sense disambiguation, and autonomous node lifecycle management.
+A cognitive symbolic engine implementing human-memory-inspired knowledge graph construction, multi-sense disambiguation, and autonomous node lifecycle management.
+
+## Design Philosophy
+
+rsvs-core is not just a graph database with NLP features. It is an implementation of how human memory stores and retrieves symbolic knowledge:
+
+- **Seed atoms** are the unconscious primitives — always present, never removed, anchoring all new knowledge (Global Workspace Theory, Baars 1988)
+- **Grounding gate** (`sentence_contains_seed`) ensures only information anchored to existing knowledge enters the graph — mirroring how humans only retain information that connects to prior knowledge (state-dependent memory, Radulovic et al.)
+- **Spreading activation** (`spreading.rs`) propagates through composition edges for retrieval, exactly as described by Collins & Loftus (1975) and Anderson (1983)
+- **SessionGraph** (working memory) vs main Rsvs (long-term memory) — volatile per-context isolation vs persistent consolidated knowledge (Baddeley's dual memory model)
+- **Autonomous tiered lifecycle** — atoms are promoted, maintained, and deprecated based on evidence, not manual curation
 
 ## Features
 

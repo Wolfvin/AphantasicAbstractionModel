@@ -5,7 +5,7 @@
 [![Python](https://img.shields.io/badge/Python-3.11+-blue?style=flat-square&logo=python)](https://python.org)
 [![Rust](https://img.shields.io/badge/Rust-1.75+-orange?style=flat-square&logo=rust)](https://www.rust-lang.org/)
 
-# RSVS — Recursive Symbolic Vocabulary System
+# RSVS — Recursive Symbolic Vector Space
 
 **Compositional symbolic meaning, not embeddings. Traceable sense definitions with structural similarity.**
 
@@ -15,9 +15,11 @@
 
 ## What is RSVS?
 
-RSVS (Recursive Symbolic Vocabulary System) is a compositional symbolic meaning engine that builds structured knowledge graphs from raw text. Unlike vector embeddings that compress meaning into opaque floating-point arrays, RSVS represents every concept as a composition of other concepts -- and every composition is traceable. You can follow the chain from any concept down to its constituent parts, explain precisely why two concepts are related, and identify the exact substitution that transforms one into another. The system is designed to be an interpretation layer that works alongside Transformer models, adding symbolic traceability to dense vector representations.
+RSVS (Recursive Symbolic Vector Space) is a compositional symbolic meaning engine that builds structured knowledge graphs from raw text — modeled after how human memory actually stores and retrieves knowledge.
 
-At its core, RSVS ingests text and builds a knowledge graph composed of atoms, senses, and compositions. An atom is the smallest unit of meaning -- a token that has been promoted to entity status through co-occurrence statistics. A sense is a particular meaning of a concept, defined by which other senses it is composed from. A composition is a directed reference from one sense to another, forming a directed acyclic graph of meaning. When you define that "raja" (king) is composed of "tahta_tertinggi" (highest throne), "laki_laki" (male), and "kerajaan" (kingdom), you have created a precise, inspectable specification of what that word means -- not a statistical artifact, but a structural definition.
+Unlike vector embeddings that compress meaning into opaque floating-point arrays, RSVS represents every concept as a composition of other concepts — and every composition is traceable. You can follow the chain from any concept down to its constituent parts, explain precisely why two concepts are related, and identify the exact substitution that transforms one into another.
+
+At its core, RSVS ingests text and builds a knowledge graph composed of atoms, senses, and compositions. An atom is the smallest unit of meaning — a token that has been promoted to entity status through co-occurrence statistics, but only if it is *groundable* to existing knowledge (the grounding gate). A sense is a particular meaning of a concept, defined by which other senses it is composed from. A composition is a directed reference from one sense to another, forming a directed acyclic graph of meaning.
 
 RSVS is built with a Rust core compiled to Python via PyO3 and maturin, giving you the safety and speed of Rust with the ergonomics of a Python library. It prioritizes Bahasa Indonesia as its primary language for development and testing, while supporting English and other languages through a fully language-agnostic architecture. The system includes an autonomous tiered memory lifecycle (New, Candidate, Stable, Deprecated), Monte Carlo Tree Search for complex reasoning paths, consolidation and reflection engines for self-maintenance, and an optional FastAPI server for production deployments. A Next.js demo frontend provides interactive 3D graph visualization.
 
@@ -386,6 +388,25 @@ if related:
     print(f"Related nodes: {related.node_labels(r)[:5]}")
     print(f"Structural relations: {related.structural_labels(r)[:5]}")
 ```
+
+---
+
+## Cognitive Foundations
+
+RSVS is not designed from NLP literature alone. It is modeled after how human cognition actually works.
+
+The core observation: humans receive information constantly, but most of it is not retained. Something must *trigger* the connection before a memory becomes accessible. This is not a bug in human cognition — it is a feature. Not everything deserves to be promoted to long-term memory.
+
+RSVS implements this directly:
+
+- **Grounding gate** (`sentence_contains_seed`) — information only enters the graph if it connects to something already known, just as new information only enters long-term human memory if it anchors to existing knowledge
+- **Spreading activation** (`relate()`) — retrieval works by activation spreading through composition edges, exactly as described by Collins & Loftus (1975) and Anderson (1983)
+- **Dual memory** (`SessionGraph` + main `Rsvs`) — working memory (volatile, per-context) versus long-term memory (persistent, consolidated), following Baddeley's model
+- **Prediction layer** — RSVS is designed as the symbolic grounding layer for a prediction system (transformer), not as a replacement. The unconscious (RSVS graph) shapes what can be predicted before prediction happens
+
+This is backed by established cognitive science: Predictive Coding (Friston), Global Workspace Theory (Baars 1988), State-Dependent Memory (Radulovic et al.), and recent involuntary memory research (Kobelt et al., 2025).
+
+For the full theoretical foundation, see **[COGNITIVE_FOUNDATIONS.md](docs/COGNITIVE_FOUNDATIONS.md)**.
 
 ---
 

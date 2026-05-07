@@ -1,6 +1,6 @@
 # RSVS Architecture v8.3 — Language-Agnostic Compositional Symbolic Meaning
 
-> Technical reference for the Recursive Symbolic Vocabulary System, v8.3
+> Technical reference for the Recursive Symbolic Vector Space, v8.3
 
 ---
 
@@ -17,6 +17,28 @@
 9. [Performance Characteristics](#9-performance-characteristics)
 10. [Security Architecture](#10-security-architecture)
 11. [API Surface](#11-api-surface)
+
+---
+
+## 0. Cognitive Model
+
+Before the technical details: RSVS is architected around how human memory works, not how NLP systems are typically designed.
+
+The key insight: humans do not store all information they receive. Information is only promoted to long-term memory if it **connects to something already known** — a trigger, an anchor, a prior. Without that anchor, information passes through without being retained.
+
+Every architectural decision in RSVS traces back to this model:
+
+| Human Cognition | RSVS Implementation |
+|---|---|
+| Unconscious always running (Baars, GWT 1988) | Seed atoms — always in graph, never removed |
+| Grounding gate — new info needs anchor to existing | `sentence_contains_seed` in `attention.rs` |
+| Spreading activation triggers recall (Anderson 1983) | `relate()` via `SpreadingActivation` in `spreading.rs` |
+| Working memory — volatile, per-context | `SessionGraph` — isolated Rsvs instance per context |
+| Long-term memory — persistent, consolidated | Main `Rsvs` graph with `consolidate()` |
+| Prediction shaped by unconscious priors (Friston) | RSVS as grounding layer for transformer inference |
+| Involuntary vs voluntary retrieval (Kobelt 2025) | `relate()` (involuntary) vs `appraise()` (voluntary) |
+
+For the full theoretical foundation, see [COGNITIVE_FOUNDATIONS.md](COGNITIVE_FOUNDATIONS.md).
 
 ---
 
