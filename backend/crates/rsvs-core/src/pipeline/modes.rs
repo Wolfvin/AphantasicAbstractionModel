@@ -219,7 +219,9 @@ impl Rsvs {
             .collect();
 
         let mut related_nodes = related_nodes;
-        related_nodes.sort_by(|a, b| b.1.total_cmp(&a.1));
+        // Deterministic sort: primary by score DESC, secondary by node_id ASC for tie-breaking
+        // (par_iter collect order is non-deterministic)
+        related_nodes.sort_by(|a, b| b.1.total_cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
         related_nodes.truncate(20);
 
         // v7.3: FUSED SpreadingActivation + structural similarity
@@ -277,7 +279,9 @@ impl Rsvs {
             }
         }
 
-        structural_relations.sort_by(|a, b| b.1.total_cmp(&a.1));
+        // Deterministic sort: primary by score DESC, secondary by node_id ASC for tie-breaking
+        // (self.senses is a HashMap, so iteration order is random)
+        structural_relations.sort_by(|a, b| b.1.total_cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
         structural_relations.truncate(20);
 
         // v8.1: Convergence fusion — promote convergent nodes in the results.
@@ -305,8 +309,8 @@ impl Rsvs {
                     }
                 }
             }
-            // Re-sort and re-truncate after convergence boost
-            structural_relations.sort_by(|a, b| b.1.total_cmp(&a.1));
+            // Re-sort and re-truncate after convergence boost (with deterministic tie-breaking)
+            structural_relations.sort_by(|a, b| b.1.total_cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
             structural_relations.truncate(20);
         }
 

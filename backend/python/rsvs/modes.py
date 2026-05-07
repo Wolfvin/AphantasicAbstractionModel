@@ -332,7 +332,9 @@ def _run_relate_rust(
 
     # The Rust core's relate() takes a single concept label.
     # We try each token from the input; fall back to _score_overlap.
-    input_tokens = _tokenize(text)
+    # Sort tokens alphabetically for deterministic selection (otherwise
+    # which token gets tried first depends on dict iteration order)
+    input_tokens = sorted(_tokenize(text))
 
     # Try to use Rust relate for the first known token
     relate_result = None
