@@ -9,7 +9,7 @@
 use super::Rsvs;
 use crate::types::NodeId;
 use rayon::prelude::*;
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 
 // -----------------------------------------------------------------------
 // AppraiseResult — v6.0 appraise mode output
@@ -88,7 +88,8 @@ impl Rsvs {
         let mut structural_score = 0.0f32;
         let mut evidence: Vec<(String, f32)> = Vec::new();
         // v8.2: Track convergent nodes that contributed to appraise scoring
-        let mut convergence_seen: std::collections::HashMap<String, f32> = std::collections::HashMap::new();
+        // Using BTreeMap for deterministic iteration order (fixes non-deterministic output)
+        let mut convergence_seen: BTreeMap<String, f32> = BTreeMap::new();
 
         // Build the set of all node IDs mentioned in the text for
         // cross-referencing compositions
@@ -166,11 +167,13 @@ impl Rsvs {
         }
         .to_string();
 
-        evidence.sort_by(|a, b| b.1.total_cmp(&a.1));
+        // Deterministic sort: primary by score DESC, secondary by label ASC for tie-breaking
+        evidence.sort_by(|a, b| b.1.total_cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
 
         // v8.2: Convert convergence tracking map to sorted vec
+        // BTreeMap already iterates in key order; re-sort by (boost DESC, label ASC)
         let mut convergence_info: Vec<(String, f32)> = convergence_seen.into_iter().collect();
-        convergence_info.sort_by(|a, b| b.1.total_cmp(&a.1));
+        convergence_info.sort_by(|a, b| b.1.total_cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
 
         AppraiseResult {
             agree_pct,

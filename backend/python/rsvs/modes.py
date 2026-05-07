@@ -239,11 +239,19 @@ def _run_appraise_rust(
 
     # Build evidence from Rust result
     evidence_tuples = appraise_result.evidence  # list of (label, confidence)
+
+    # Separate into support (score > 0.3) and conflict (score <= 0.1)
     support_nodes = [
-        {"label": label, "score": round(float(conf), 3)}
-        for label, conf in evidence_tuples[:5]
-        if float(conf) > 0.0
-    ]
+        {"label": label, "score": round(float(conf), 3), "role": "support"}
+        for label, conf in evidence_tuples
+        if float(conf) > 0.3
+    ][:10]
+
+    conflict_nodes = [
+        {"label": label, "score": round(float(conf), 3), "role": "conflict"}
+        for label, conf in evidence_tuples
+        if 0.0 <= float(conf) <= 0.1
+    ][:5]
 
     # v8.2: Extract convergence info from appraise result
     convergence_contributors = []
@@ -254,19 +262,24 @@ def _run_appraise_rust(
             if float(boost) > 0.01
         ]
 
+    # Use round() instead of int() to avoid truncation errors in stance percentages
+    agree_int = round(agree_pct)
+    disagree_int = round(disagree_pct)
+    neutral_int = max(0, 100 - agree_int - disagree_int)
+
     result = {
         "view": view,
-        "stance": {"agree": int(agree_pct), "disagree": int(disagree_pct)},
+        "stance": {"agree": agree_int, "disagree": disagree_int, "neutral": neutral_int},
         "confidence": round(min(1.0, 0.4 + len(support_nodes) / 50.0 + abs(agree_pct - disagree_pct) / 200.0), 3),
         "verdict": verdict,
         "rationale": rationale,
         "evidence": {
             "support_nodes": support_nodes,
-            "conflict_nodes": [],
+            "conflict_nodes": conflict_nodes,
             "paths": [],
         },
         "evidence_nodes": support_nodes[:10],
-        "conflict_nodes": [],
+        "conflict_nodes": conflict_nodes,
         "evidence_paths": [],
         # v8.2: Convergent nodes that contributed to appraise scoring
         "convergence_contributors": convergence_contributors,
@@ -276,7 +289,7 @@ def _run_appraise_rust(
         {
             "id": make_id("msg"),
             "type": "system_ingest_status",
-            "content": f"Appraise verdict: {verdict} ({int(agree_pct)}% agree / {int(disagree_pct)}% disagree) [Rust core].",
+            "content": f"Appraise verdict: {verdict} ({agree_int}% agree / {disagree_int}% disagree) [Rust core].",
             "timestamp": iso_now(),
             "correlation_id": correlation_id,
         }
