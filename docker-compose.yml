@@ -43,6 +43,9 @@ services:
       dockerfile: Dockerfile
     image: symbolic-puzzle-3d/backend:latest
     container_name: sp3d-backend
+    env_file:
+      - path: .env
+        required: false
     # No command override — the Dockerfile ENTRYPOINT starts both services
     # via docker-entrypoint.sh (Python bridge on :8000 + Next.js on :3000)
     # No direct port exposure — accessible only via nginx
@@ -80,6 +83,9 @@ services:
       dockerfile: Dockerfile.frontend
     image: symbolic-puzzle-3d/frontend:latest
     container_name: sp3d-frontend
+    env_file:
+      - path: .env
+        required: false
     command: ["node", "server.js"]
     # No direct port exposure — accessible only via nginx
     expose:
