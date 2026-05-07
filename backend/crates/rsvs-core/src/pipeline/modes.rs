@@ -413,4 +413,18 @@ impl Rsvs {
 
         (best_boost, contributors)
     }
+
+    /// Appraise `statement` hanya berdasarkan `context` — bukan seluruh graph.
+    /// Context di-ingest ke instance temporary yang isolated, lalu statement di-appraise
+    /// terhadap instance itu saja. Graph utama tidak berubah.
+    pub fn appraise_against(&self, context: &str, statement: &str) -> AppraiseResult {
+        // 1. Buat Rsvs instance temporary dengan config yang sama
+        let mut temp = Rsvs::new(self.config.clone()).expect("temp rsvs");
+
+        // 2. Ingest context ke instance temporary
+        let _ = temp.ingest_text(context);
+
+        // 3. Appraise statement terhadap temp instance
+        temp.appraise(statement)
+    }
 }
