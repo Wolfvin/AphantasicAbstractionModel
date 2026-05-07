@@ -72,56 +72,44 @@ fn print_appraise(label: &str, result: &AppraiseResult) {
 fn make_config() -> PipelineConfig {
     let custom_seeds: Vec<String> = vec![
         // Epistemological primitives (original 24)
-        "exists".into(),
-        "entity".into(),
-        "relation".into(),
-        "state".into(),
-        "change".into(),
-        "time".into(),
-        "space".into(),
-        "cause".into(),
-        "effect".into(),
-        "context".into(),
-        "signal".into(),
-        "pattern".into(),
-        "memory".into(),
-        "attention".into(),
-        "value".into(),
-        "agent".into(),
-        "goal".into(),
-        "risk".into(),
-        "trust".into(),
-        "identity".into(),
-        "language".into(),
-        "meaning".into(),
-        "action".into(),
-        "feedback".into(),
-        // Indonesian functional words — appear in nearly every sentence
-        // These are NOT content words. They're grammatical connectors that
-        // enable sentence-level grounding for Indonesian text.
-        "yang".into(),
-        "di".into(),
-        "dan".into(),
-        "adalah".into(),
-        "untuk".into(),
-        "dengan".into(),
-        "pada".into(),
-        "dari".into(),
-        "ke".into(),
-        "itu".into(),
-        "ini".into(),
-        "tidak".into(),
-        "sangat".into(),
-        "setiap".into(),
-        "sudah".into(),
-        "seperti".into(),
-        "sebuah".into(),
-        "seorang".into(),
+        "exists".into(), "entity".into(), "relation".into(), "state".into(),
+        "change".into(), "time".into(), "space".into(), "cause".into(),
+        "effect".into(), "context".into(), "signal".into(), "pattern".into(),
+        "memory".into(), "attention".into(), "value".into(), "agent".into(),
+        "goal".into(), "risk".into(), "trust".into(), "identity".into(),
+        "language".into(), "meaning".into(), "action".into(), "feedback".into(),
+        // Indonesian functional words (grounding gate untuk teks Indonesia)
+        "yang".into(), "di".into(), "dan".into(), "adalah".into(),
+        "untuk".into(), "dengan".into(), "pada".into(), "dari".into(),
+        "ke".into(), "itu".into(), "ini".into(), "tidak".into(),
+        "sangat".into(), "setiap".into(), "sudah".into(), "seperti".into(),
+        "sebuah".into(), "seorang".into(), "oleh".into(), "juga".into(),
+        "atau".into(), "bisa".into(), "lebih".into(), "dalam".into(),
+        "telah".into(), "akan".into(), "ada".into(), "banyak".into(),
     ];
 
+    // Tuned SenseInductionConfig untuk short corpus
+    let mut induction = rsvs::sense::SenseInductionConfig::default();
+    induction.tau_overlap = 0.5;              // was 0.8 — terlalu ketat untuk sparse graph
+    induction.tau_compress = 0.15;            // was 0.3 — buang terlalu banyak komposisi
+    induction.composition_min_confidence = 0.15; // was 0.3 — terlalu tinggi early-stage
+
+    // Tuned SenseConfig
+    let mut sense = rsvs::sense::SenseConfig::default();
+    sense.theta_assign = 0.20;               // was 0.30 — context lebih mudah di-assign ke sense
+    sense.gamma_stopword = 0.85;             // was 0.70 — content words tidak kena filter
+    sense.induction = induction;
+
+    // Tuned AttentionConfig
+    let mut attention = rsvs::attention::AttentionConfig::default();
+    attention.min_cooc = 1;                  // was 2 — di corpus kecil, cooc=1 tetap penting
+
     PipelineConfig {
-        entity_promote_n: 3,
+        entity_promote_n: 2,                 // was 3 — threshold lebih rendah untuk short corpus
         custom_seeds: Some(custom_seeds),
+        sense,
+        attention,
+        tau_entity_learned: 0.10,            // was 0.15 — lebih mudah promote via learned score
         ..PipelineConfig::default()
     }
 }
@@ -136,7 +124,7 @@ fn main() {
     let mut rsvs = Rsvs::new(make_config()).expect("Failed to initialize RSVS");
 
     let initial_nodes = rsvs.status().total_nodes;
-    println!("\n  Initialized with {} seed nodes (42 epistemological + Indonesian functional)",
+    println!("\n  Initialized with {} seed nodes (52 epistemological + Indonesian functional)",
         initial_nodes);
 
     // ==================================================================
@@ -504,6 +492,36 @@ fn main() {
     let false_avg = (r2.agree_pct + r4.agree_pct + c2.agree_pct + t2.agree_pct + h2.agree_pct + r6.agree_pct) / 6.0;
     println!("\n  TRUE avg: {:.1}%  vs  FALSE avg: {:.1}%  →  gap: {:.1} pp",
         true_avg, false_avg, true_avg - false_avg);
+
+    // Discriminability per domain
+    println!("\n  --- Discriminability per Domain ---");
+    let domains = vec![
+        ("Budi(dokter)", r1.agree_pct, r2.agree_pct),
+        ("Siti(petani)", r5.agree_pct, r4.agree_pct),
+        ("Andi(guru)", c1.agree_pct, c2.agree_pct),
+        ("Komputer", t1.agree_pct, t2.agree_pct),
+        ("Sejarah", h1.agree_pct, h2.agree_pct),
+        ("Gunung", r7.agree_pct, r6.agree_pct),
+    ];
+
+    let mut all_pass = true;
+    for (name, t, f) in &domains {
+        let gap = *t - *f;
+        let status = if gap > 0.0 { "✓ PASS" } else { "✗ FAIL" };
+        if gap <= 0.0 { all_pass = false; }
+        println!("  {:20} TRUE={:.1}%  FALSE={:.1}%  gap={:+.1}pp  {}",
+            name, t, f, gap, status);
+    }
+
+    println!("\n  Overall: {} / {} domains discriminable",
+        domains.iter().filter(|(_, t, f)| t > f).count(),
+        domains.len());
+
+    if all_pass {
+        println!("  RESULT: ALL DOMAINS PASS — system discriminates TRUE from FALSE");
+    } else {
+        println!("  RESULT: PARTIAL — some domains need more corpus data");
+    }
 
     if true_avg > false_avg {
         println!("\n  PASS: TRUE statements consistently score higher than FALSE statements");
