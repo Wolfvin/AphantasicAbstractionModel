@@ -241,27 +241,30 @@ impl PyNodeInfo {
     }
 }
 
-/// Result of appraise() (v7.4)
+/// Result of appraise() (v7.5)
 #[pyclass(get_all)]
 #[derive(Clone, Debug)]
 pub struct PyAppraiseResult {
     pub agree_pct: f32,
-    /// v7.4: Genuine structural conflict score, NOT 100-agree.
+    /// Genuine structural clash score.
     pub disagree_pct: f32,
-    /// v7.4: Neutral tokens (seeds with no compositions) excluded from scoring.
+    /// Seeds excluded from scoring.
     pub neutral_pct: f32,
     pub verdict: String,
     pub evidence: Vec<(String, f32)>,
-    /// v8.2: Convergent nodes that contributed to appraise scoring.
     pub convergence_info: Vec<(String, f32)>,
+    /// v7.5: Token pairs that structurally clash.
+    pub clash_pairs: Vec<(String, String)>,
+    /// v7.5: Number of domain clusters detected.
+    pub n_clusters: usize,
 }
 
 #[pymethods]
 impl PyAppraiseResult {
     fn __repr__(&self) -> String {
         format!(
-            "AppraiseResult(agree={:.1}%, conflict={:.1}%, neutral={:.1}%, verdict='{}')",
-            self.agree_pct, self.disagree_pct, self.neutral_pct, self.verdict
+            "AppraiseResult(agree={:.1}%, clash={:.1}%, neutral={:.1}%, verdict='{}', clashes={})",
+            self.agree_pct, self.disagree_pct, self.neutral_pct, self.verdict, self.clash_pairs.len()
         )
     }
 }
@@ -812,6 +815,8 @@ impl PyRsvs {
             verdict: r.verdict,
             evidence: r.evidence,
             convergence_info: r.convergence_info,
+            clash_pairs: r.clash_pairs,
+            n_clusters: r.n_clusters,
         }
     }
 

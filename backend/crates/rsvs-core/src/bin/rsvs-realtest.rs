@@ -25,31 +25,33 @@ fn section(title: &str) {
 }
 
 fn print_appraise(label: &str, result: &AppraiseResult) {
+    let clash_str = if result.clash_pairs.is_empty() {
+        String::new()
+    } else {
+        let pairs: Vec<String> = result.clash_pairs.iter()
+            .take(3)
+            .map(|(a, b)| format!("{}\u{2194}{ }", a, b))
+            .collect();
+        format!(" | clashes: {}", pairs.join(", "))
+    };
+    let cluster_str = if result.n_clusters > 1 {
+        format!(" | {} clusters", result.n_clusters)
+    } else {
+        String::new()
+    };
     println!(
-        "\n  {} → verdict: {} ({:.1}% agree / {:.1}% conflict / {:.1}% neutral)",
-        label, result.verdict, result.agree_pct, result.disagree_pct, result.neutral_pct
+        "\n  {} → verdict: {} ({:.1}% agree / {:.1}% clash / {:.1}% neutral){}{}",
+        label, result.verdict, result.agree_pct, result.disagree_pct, result.neutral_pct, clash_str, cluster_str
     );
     if !result.evidence.is_empty() {
         let support: Vec<String> = result
-            .evidence
-            .iter()
-            .filter(|(_, s)| *s > 0.1)
-            .take(5)
-            .map(|(t, s)| format!("{}({:.2})", t, s))
-            .collect();
+            .evidence.iter().filter(|(_, s)| *s > 0.0).take(5)
+            .map(|(t, s)| format!("{}({:.2})", t, s)).collect();
         let conflict: Vec<String> = result
-            .evidence
-            .iter()
-            .filter(|(_, s)| *s <= 0.1)
-            .take(5)
-            .map(|(t, s)| format!("{}({:.2})", t, s))
-            .collect();
-        if !support.is_empty() {
-            println!("    Support : {}", support.join(" | "));
-        }
-        if !conflict.is_empty() {
-            println!("    Conflict: {}", conflict.join(" | "));
-        }
+            .evidence.iter().filter(|(_, s)| *s <= 0.0).take(5)
+            .map(|(t, s)| format!("{}({:.2})", t, s)).collect();
+        if !support.is_empty() { println!("    Support : {}", support.join(" | ")); }
+        if !conflict.is_empty() { println!("    Conflict: {}", conflict.join(" | ")); }
     }
     if !result.convergence_info.is_empty() {
         let conv: Vec<String> = result
@@ -70,12 +72,21 @@ fn print_verdict(label: &str, v: &AppraiseVerdict) {
     } else if v.confidence_gap > 0.0 {
         "[AMBIGUOUS]"
     } else {
-        "[INVERTED]" // conflict > agree
+        "[INVERTED]" // clash > agree
     };
     let ctx_label = if v.is_contextual { "[CONTEXTUAL]" } else { "" };
+    let clash_str = if v.clash_pairs.is_empty() {
+        String::new()
+    } else {
+        let pairs: Vec<String> = v.clash_pairs.iter()
+            .take(3)
+            .map(|(a, b)| format!("{}\u{2194}{ }", a, b))
+            .collect();
+        format!(" | CLASH: {}", pairs.join(", "))
+    };
     println!(
-        "\n  {} → verdict: {} ({:.1}% agree / {:.1}% conflict / {:.1}% neutral) gap={:+.1}pp {} {}",
-        label, v.verdict, v.agree_pct, v.disagree_pct, v.neutral_pct, v.confidence_gap, confidence_label, ctx_label
+        "\n  {} → verdict: {} ({:.1}% agree / {:.1}% clash / {:.1}% neutral) gap={:+.1}pp {} {}{}",
+        label, v.verdict, v.agree_pct, v.disagree_pct, v.neutral_pct, v.confidence_gap, confidence_label, ctx_label, clash_str
     );
     if !v.support.is_empty() {
         let s: Vec<String> = v.support.iter()
