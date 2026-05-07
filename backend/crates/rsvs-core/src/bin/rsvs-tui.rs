@@ -20,7 +20,8 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph, Wrap},
     Frame, Terminal,
 };
-use rsvs::{AppraiseResult, IngestStats, PipelineConfig, RelateResult, Rsvs};
+use rsvs::{AppraiseResult, AppraiseVerdict, IngestStats, PipelineConfig, RelateResult, Rsvs};
+use rsvs::session::SessionGraph;
 use std::io;
 
 // ---------------------------------------------------------------------------
@@ -136,8 +137,8 @@ impl App {
                         Style::default().fg(Color::Yellow),
                     ))]);
                 } else {
-                    let result = self.rsvs.appraise(&input);
-                    self.push_output(format_appraise_result(&result, "Appraise"));
+                    let verdict = self.rsvs.appraise_verbose(&input);
+                    self.push_output(format_verdict_result(&verdict, "Appraise"));
                 }
                 self.mode = Mode::Normal;
             }
@@ -165,12 +166,44 @@ impl App {
                         Style::default().fg(Color::Yellow),
                     ))]);
                 } else {
-                    let result = self.rsvs.appraise_against(&self.context_buffer, &input);
-                    self.push_output(format_appraise_result(&result, "Contextual Appraise (isolated)"));
-                    self.push_output(vec![Line::from(Span::styled(
-                        "Note: Main graph was NOT modified.",
-                        Style::default().fg(Color::DarkGray),
-                    ))]);
+                    // Use SessionGraph for Dual Memory pattern
+                    match SessionGraph::new(&self.context_buffer, self.rsvs.config.clone()) {
+                        Ok(session) => {
+                            // Show session stats
+                            let sstats = session.stats();
+                            self.push_output(vec![Line::from(Span::styled(
+                                format!("[Session] {} sentences ingested → {} atoms induced",
+                                    sstats.sentences_ingested, sstats.atoms_induced),
+                                Style::default().fg(Color::DarkGray),
+                            ))]);
+                            // Show truncated context
+                            let ctx_preview = if self.context_buffer.len() > 60 {
+                                format!("[Context] {}...", &self.context_buffer[..60])
+                            } else {
+                                format!("[Context] {}", self.context_buffer)
+                            };
+                            self.push_output(vec![Line::from(Span::styled(
+                                ctx_preview,
+                                Style::default().fg(Color::DarkGray),
+                            ))]);
+                            self.push_output(vec![Line::from(Span::raw(
+                                "─".repeat(60),
+                            ))]);
+                            // Appraise with verbose verdict
+                            let verdict = session.appraise(&input);
+                            self.push_output(format_verdict_result(&verdict, "Contextual Appraise"));
+                            self.push_output(vec![Line::from(Span::styled(
+                                "Note: Main graph was NOT modified.",
+                                Style::default().fg(Color::DarkGray),
+                            ))]);
+                        }
+                        Err(e) => {
+                            self.push_output(vec![Line::from(Span::styled(
+                                format!("Session error: {}", e),
+                                Style::default().fg(Color::Red),
+                            ))]);
+                        }
+                    }
                 }
                 self.context_buffer.clear();
                 self.mode = Mode::Normal;
@@ -282,6 +315,94 @@ fn score_color(score: f32) -> Color {
     } else {
         Color::Red
     }
+}
+
+fn format_verdict_result(verdict: &AppraiseVerdict, label: &str) -> Vec<Line<'static>> {
+    let mut lines = Vec::new();
+
+    // Confidence label
+    let confidence_label = if verdict.confidence_gap > 30.0 {
+        " [CONFIDENT]"
+    } else if verdict.confidence_gap < 10.0 {
+        " [AMBIGUOUS]"
+    } else {
+        ""
+    };
+    let ctx_label = if verdict.is_contextual { " [CONTEXTUAL]" } else { "" };
+
+    lines.push(Line::from(vec![
+        Span::styled(
+            format!("{}: ", label),
+            Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(
+            verdict.verdict.clone(),
+            Style::default()
+                .fg(verdict_color(&verdict.verdict))
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::raw(format!(
+            " ({:.1}% agree / {:.1}% disagree) gap={:.1}pp",
+            verdict.agree_pct, verdict.disagree_pct, verdict.confidence_gap
+        )),
+        Span::styled(
+            format!("{}{}", confidence_label, ctx_label),
+            Style::default().fg(
+                if verdict.confidence_gap > 30.0 { Color::Green }
+                else if verdict.confidence_gap < 10.0 { Color::Yellow }
+                else { Color::White }
+            ).add_modifier(Modifier::BOLD),
+        ),
+    ]));
+
+    // Support evidence with reasons
+    if !verdict.support.is_empty() {
+        let spans: Vec<Span> = std::iter::once(Span::styled(
+            "  Support  : ",
+            Style::default().fg(Color::White),
+        ))
+        .chain(verdict.support.iter().take(5).flat_map(|(token, score, reason)| {
+            vec![
+                Span::styled(
+                    token.clone(),
+                    Style::default().fg(score_color(*score)),
+                ),
+                Span::raw(format!(" ({},{:.2}) ", reason, score)),
+            ]
+        }))
+        .collect();
+        lines.push(Line::from(spans));
+    }
+
+    // Conflict evidence with reasons
+    if !verdict.conflict.is_empty() {
+        let spans: Vec<Span> = std::iter::once(Span::styled(
+            "  Conflict : ",
+            Style::default().fg(Color::White),
+        ))
+        .chain(verdict.conflict.iter().take(5).flat_map(|(token, score, reason)| {
+            vec![
+                Span::styled(
+                    token.clone(),
+                    Style::default().fg(score_color(*score)),
+                ),
+                Span::raw(format!(" ({},{:.2}) ", reason, score)),
+            ]
+        }))
+        .collect();
+        lines.push(Line::from(spans));
+    }
+
+    // Explanation
+    lines.push(Line::from(Span::styled(
+        format!("  {}", verdict.explanation),
+        Style::default().fg(Color::DarkGray),
+    )));
+
+    // Separator line
+    lines.push(Line::from(Span::raw("─".repeat(60))));
+
+    lines
 }
 
 fn format_appraise_result(result: &AppraiseResult, label: &str) -> Vec<Line<'static>> {

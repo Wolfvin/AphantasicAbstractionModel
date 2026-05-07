@@ -12,8 +12,11 @@
 //! - Zero manual composition definitions
 //! - All knowledge auto-induced from co-occurrence patterns in free text
 //! - Contradiction detection from structural meaning, not string matching
+//! - v8.4: Uses appraise_verbose() for token-level explanations,
+//!   SessionGraph for Dual Memory pattern (Losion bridge)
 
-use rsvs::{AppraiseResult, PipelineConfig, Rsvs};
+use rsvs::{AppraiseResult, AppraiseVerdict, PipelineConfig, Rsvs};
+use rsvs::session::SessionGraph;
 
 fn section(title: &str) {
     println!("\n{}", "=".repeat(70));
@@ -57,6 +60,36 @@ fn print_appraise(label: &str, result: &AppraiseResult) {
             .collect();
         println!("    Converge: {}", conv.join(" | "));
     }
+}
+
+fn print_verdict(label: &str, v: &AppraiseVerdict) {
+    let confidence_label = if v.confidence_gap > 30.0 {
+        "[CONFIDENT]"
+    } else if v.confidence_gap < 10.0 {
+        "[AMBIGUOUS]"
+    } else {
+        ""
+    };
+    let ctx_label = if v.is_contextual { "[CONTEXTUAL]" } else { "" };
+    println!(
+        "\n  {} → verdict: {} ({:.1}% agree / {:.1}% disagree) gap={:.1}pp {} {}",
+        label, v.verdict, v.agree_pct, v.disagree_pct, v.confidence_gap, confidence_label, ctx_label
+    );
+    if !v.support.is_empty() {
+        let s: Vec<String> = v.support.iter()
+            .take(5)
+            .map(|(t, s, r)| format!("{}({},{:.2})", t, r, s))
+            .collect();
+        println!("    Support : {}", s.join(" | "));
+    }
+    if !v.conflict.is_empty() {
+        let c: Vec<String> = v.conflict.iter()
+            .take(5)
+            .map(|(t, s, r)| format!("{}({},{:.2})", t, r, s))
+            .collect();
+        println!("    Conflict: {}", c.join(" | "));
+    }
+    println!("    Explanation: {}", v.explanation);
 }
 
 /// Custom seeds: 24 epistemological primitives + Indonesian functional words.
@@ -259,42 +292,42 @@ fn main() {
     }
 
     // ==================================================================
-    // PART 2: Prove auto-induced knowledge — appraise from graph
+    // PART 2: Verbose appraise — with token-level explanations
     // ==================================================================
-    section("PART 2: Auto-Induced Appraise (from graph)");
+    section("PART 2: Auto-Induced Appraise (verbose — with explanation)");
 
     // TRUE statement about Budi — should agree
-    let r1 = rsvs.appraise("Budi bekerja di rumah sakit sebagai dokter");
-    print_appraise("Statement 1 (TRUE): 'Budi bekerja di rumah sakit sebagai dokter'", &r1);
+    let v1 = rsvs.appraise_verbose("Budi bekerja di rumah sakit sebagai dokter");
+    print_verdict("Statement 1 (TRUE): 'Budi bekerja di rumah sakit sebagai dokter'", &v1);
 
     // FALSE statement — Budi is NOT a farmer
-    let r2 = rsvs.appraise("Budi adalah seorang petani yang menanam padi di sawah");
-    print_appraise("Statement 2 (FALSE): 'Budi adalah seorang petani yang menanam padi di sawah'", &r2);
+    let v2 = rsvs.appraise_verbose("Budi adalah seorang petani yang menanam padi di sawah");
+    print_verdict("Statement 2 (FALSE): 'Budi adalah seorang petani yang menanam padi di sawah'", &v2);
 
     // AMBIGUOUS — semantically consistent but vague
-    let r3 = rsvs.appraise("Budi bekerja membantu orang lain setiap hari");
-    print_appraise("Statement 3 (AMBIGUOUS): 'Budi bekerja membantu orang lain setiap hari'", &r3);
+    let _v3 = rsvs.appraise_verbose("Budi bekerja membantu orang lain setiap hari");
+    // (v3 not used in summary, prefix with _)
 
     // WRONG person — Siti is a farmer, not a doctor
-    let r4 = rsvs.appraise("Siti menyembuhkan pasien di rumah sakit");
-    print_appraise("Statement 4 (WRONG person): 'Siti menyembuhkan pasien di rumah sakit'", &r4);
+    let v4 = rsvs.appraise_verbose("Siti menyembuhkan pasien di rumah sakit");
+    print_verdict("Statement 4 (WRONG person): 'Siti menyembuhkan pasien di rumah sakit'", &v4);
 
     // TRUE about Siti
-    let r5 = rsvs.appraise("Siti menanam padi di sawah");
-    print_appraise("Statement 5 (TRUE about Siti): 'Siti menanam padi di sawah'", &r5);
+    let v5 = rsvs.appraise_verbose("Siti menanam padi di sawah");
+    print_verdict("Statement 5 (TRUE about Siti): 'Siti menanam padi di sawah'", &v5);
 
     // Cross-domain confusion
-    let r6 = rsvs.appraise("Gunung mengeluarkan obat untuk pasien");
-    print_appraise("Statement 6 (CROSS-DOMAIN): 'Gunung mengeluarkan obat untuk pasien'", &r6);
+    let v6 = rsvs.appraise_verbose("Gunung mengeluarkan obat untuk pasien");
+    print_verdict("Statement 6 (CROSS-DOMAIN): 'Gunung mengeluarkan obat untuk pasien'", &v6);
 
     // TRUE about gunung
-    let r7 = rsvs.appraise("Gunung memiliki puncak yang tinggi");
-    print_appraise("Statement 7 (TRUE about gunung): 'Gunung memiliki puncak yang tinggi'", &r7);
+    let v7 = rsvs.appraise_verbose("Gunung memiliki puncak yang tinggi");
+    print_verdict("Statement 7 (TRUE about gunung): 'Gunung memiliki puncak yang tinggi'", &v7);
 
     // ==================================================================
-    // PART 3: Contextual Appraise — ISOLATED, graph untouched
+    // PART 3: SessionGraph — Dual Memory (Working Graph)
     // ==================================================================
-    section("PART 3: Contextual Appraise (Isolated — Graph Untouched)");
+    section("PART 3: SessionGraph — Dual Memory (Working Graph)");
 
     // Graph knows nothing about Andi the teacher
     let context_andi = "Andi adalah seorang guru yang mengajar di sekolah. \
@@ -309,21 +342,42 @@ fn main() {
 
     let nodes_before = rsvs.status().total_nodes;
 
-    let c1 = rsvs.appraise_against(context_andi, "Andi mengajar di sekolah");
-    print_appraise("Context-TRUE: 'Andi mengajar di sekolah'", &c1);
+    let session = SessionGraph::new(context_andi, make_config())
+        .expect("session failed");
 
-    let c2 = rsvs.appraise_against(context_andi, "Andi menangkap ikan di laut");
-    print_appraise("Context-FALSE: 'Andi menangkap ikan di laut'", &c2);
+    println!("\n  Session stats: {} sentences, {} atoms induced",
+        session.stats().sentences_ingested,
+        session.stats().atoms_induced);
 
-    let c3 = rsvs.appraise_against(context_andi, "Andi bekerja dengan orang lain setiap hari");
-    print_appraise("Context-PARTIAL: 'Andi bekerja dengan orang lain setiap hari'", &c3);
+    // Gunakan compare() untuk contradiction detection
+    let comparison = session.compare(
+        "Andi mengajar di sekolah",
+        "Andi menangkap ikan di laut",
+    );
+    println!("\n  Comparison: {}", comparison.explanation);
+    println!("  TRUE  ({:.1}% agree): {}", comparison.verdict_a.agree_pct,
+        comparison.verdict_a.explanation);
+    println!("  FALSE ({:.1}% agree): {}", comparison.verdict_b.agree_pct,
+        comparison.verdict_b.explanation);
+    println!("  Discriminable: {}", comparison.is_discriminable);
 
-    let c4 = rsvs.appraise_against(context_andi, "Andi menanam padi di sawah");
-    print_appraise("Context-FALSE2: 'Andi menanam padi di sawah'", &c4);
+    // Individual verdicts for detailed output
+    let c1 = session.appraise("Andi mengajar di sekolah");
+    print_verdict("Context-TRUE: 'Andi mengajar di sekolah'", &c1);
 
+    let c2 = session.appraise("Andi menangkap ikan di laut");
+    print_verdict("Context-FALSE: 'Andi menangkap ikan di laut'", &c2);
+
+    let _c3 = session.appraise("Andi bekerja dengan orang lain setiap hari");
+
+    let c4 = session.appraise("Andi menanam padi di sawah");
+    print_verdict("Context-FALSE2: 'Andi menanam padi di sawah'", &c4);
+
+    // Verify graph untouched — drop session explicitly
+    drop(session);
     let nodes_after = rsvs.status().total_nodes;
-    println!("\n  GRAPH UNTOUCHED: {} nodes before = {} nodes after", nodes_before, nodes_after);
-    assert_eq!(nodes_before, nodes_after, "GRAPH WAS MODIFIED — appraise_against isolation broken!");
+    println!("\n  ISOLATION VERIFIED: main graph untouched ({} nodes)", nodes_after);
+    assert_eq!(nodes_before, nodes_after, "MAIN GRAPH MODIFIED — isolation broken!");
 
     // ==================================================================
     // PART 4: Random word test — new domain auto-induced
@@ -460,24 +514,24 @@ fn main() {
     println!("     - 'Budi petani' vs 'Budi dokter' — different structure detected");
     println!("     - Cross-domain confusion detected (Soekarno + sawah = novel)");
 
-    println!("\n  3. Isolated context appraise — graph remains untouched");
-    println!("     - appraise_against() uses temporary instance");
-    println!("     - No contamination of main knowledge graph");
+    println!("\n  3. SessionGraph (Dual Memory) — working graph isolated from long-term");
+    println!("     - SessionGraph: volatile, per-context, auto-induced");
+    println!("     - Main graph: persistent, long-term, untouched by sessions");
 
-    println!("\n  4. Works on ANY text — not just hand-crafted examples");
+    println!("\n  4. Verbose appraise — explains WHY verdict was reached");
+    println!("     - Token-level reasons: structural, seed, cooccurrence, novel");
+    println!("     - Confidence gap + [CONFIDENT/AMBIGUOUS/CONTEXTUAL] labels");
+
+    println!("\n  5. Works on ANY text — not just hand-crafted examples");
     println!("     - Indonesian stories, tech, history — all auto-induced");
     println!("     - New domains can be added at any time");
 
-    println!("\n  5. Structural relationships auto-discovered");
-    println!("     - dokter↔rumah_sakit, petani↔sawah, gunung↔lereng");
-    println!("     - Not pre-defined — emerged from text ingestion");
-
-    // Prove with numbers
+    // Prove with numbers (using verbose verdict data)
     println!("\n  --- Numeric Summary ---");
     println!("  Budi(TRUE)  agree: {:.1}%  vs  Budi(FALSE) agree: {:.1}%",
-        r1.agree_pct, r2.agree_pct);
+        v1.agree_pct, v2.agree_pct);
     println!("  Siti(TRUE)  agree: {:.1}%  vs  Siti(FALSE) agree: {:.1}%",
-        r5.agree_pct, r4.agree_pct);
+        v5.agree_pct, v4.agree_pct);
     println!("  Andi(TRUE)  agree: {:.1}%  vs  Andi(FALSE) agree: {:.1}%",
         c1.agree_pct, c2.agree_pct);
     println!("  Tech(TRUE)  agree: {:.1}%  vs  Tech(FALSE) agree: {:.1}%",
@@ -485,23 +539,23 @@ fn main() {
     println!("  History(TRUE) agree: {:.1}%  vs  History(FALSE) agree: {:.1}%",
         h1.agree_pct, h2.agree_pct);
     println!("  Gunung(TRUE) agree: {:.1}%  vs  Gunung(CROSS) agree: {:.1}%",
-        r7.agree_pct, r6.agree_pct);
+        v7.agree_pct, v6.agree_pct);
 
     // The key proof: TRUE statements consistently score higher than FALSE
-    let true_avg = (r1.agree_pct + r5.agree_pct + c1.agree_pct + t1.agree_pct + h1.agree_pct + r7.agree_pct) / 6.0;
-    let false_avg = (r2.agree_pct + r4.agree_pct + c2.agree_pct + t2.agree_pct + h2.agree_pct + r6.agree_pct) / 6.0;
+    let true_avg = (v1.agree_pct + v5.agree_pct + c1.agree_pct + t1.agree_pct + h1.agree_pct + v7.agree_pct) / 6.0;
+    let false_avg = (v2.agree_pct + v4.agree_pct + c2.agree_pct + t2.agree_pct + h2.agree_pct + v6.agree_pct) / 6.0;
     println!("\n  TRUE avg: {:.1}%  vs  FALSE avg: {:.1}%  →  gap: {:.1} pp",
         true_avg, false_avg, true_avg - false_avg);
 
     // Discriminability per domain
     println!("\n  --- Discriminability per Domain ---");
     let domains = vec![
-        ("Budi(dokter)", r1.agree_pct, r2.agree_pct),
-        ("Siti(petani)", r5.agree_pct, r4.agree_pct),
+        ("Budi(dokter)", v1.agree_pct, v2.agree_pct),
+        ("Siti(petani)", v5.agree_pct, v4.agree_pct),
         ("Andi(guru)", c1.agree_pct, c2.agree_pct),
         ("Komputer", t1.agree_pct, t2.agree_pct),
         ("Sejarah", h1.agree_pct, h2.agree_pct),
-        ("Gunung", r7.agree_pct, r6.agree_pct),
+        ("Gunung", v7.agree_pct, v6.agree_pct),
     ];
 
     let mut all_pass = true;

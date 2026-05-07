@@ -48,6 +48,7 @@ pub mod neurosym;
 pub mod paradigm;
 pub mod spreading;
 pub mod deps;
+pub mod session;
 
 pub use attention::{
     is_groundable_to_seeds, sentence_contains_seed, text_to_sentences, tokenize, AttentionComponent, AttentionConfig,
@@ -67,7 +68,7 @@ pub use graph::{
 pub use matryoshka::MatryoshkaTraversal;
 pub use mcts::MCTSTraversal;
 pub use pipeline::{
-    AppraiseResult, IngestStats, PipelineConfig, PipelineStatus, QueryResult, RelateResult, Rsvs,
+    AppraiseResult, AppraiseVerdict, IngestStats, PipelineConfig, PipelineStatus, QueryResult, RelateResult, Rsvs,
     traverse_query,
 };
 pub use reflection::SenseReflection;
@@ -80,4 +81,5 @@ pub use transformer_bridge::{TransformerBridge, TransformerBridgeConfig};
 pub use paradigm::{ParadigmRouter, ParadigmRouterConfig, TraversalParadigm, CalibrationEntry};
 pub use spreading::{SpreadingActivation, SpreadingActivationConfig, ActivationResult};
 pub use deps::{DEPSPlanner, DEPSResult, RecoveryPlan, RecoveryAction, FailureType};
+pub use session::{SessionGraph, SessionComparison, SessionStats, ComparisonWinner};
 pub use types::*;

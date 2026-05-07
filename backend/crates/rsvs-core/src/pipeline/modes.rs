@@ -32,6 +32,33 @@ pub struct AppraiseResult {
     pub convergence_info: Vec<(String, f32)>,
 }
 
+/// Detailed verdict dari appraise — menjelaskan *mengapa* verdict keluar.
+/// Terinspirasi dari Losion's VerificationStatus + VerificationResult.
+/// Di Losion: neural verifier menghasilkan confidence + error_type + feedback.
+/// Di RSVS: symbolic verifier menghasilkan token-level explanation dari graph.
+#[derive(Debug, Clone)]
+pub struct AppraiseVerdict {
+    /// Verdict ringkas: "agree" | "disagree" | "mixed" | "novel"
+    pub verdict: String,
+    /// Agree percentage (0–100)
+    pub agree_pct: f32,
+    /// Disagree percentage (0–100)
+    pub disagree_pct: f32,
+    /// Token-level support evidence: (token, score, reason)
+    /// reason: "structural" | "convergent" | "seed" | "novel"
+    pub support: Vec<(String, f32, String)>,
+    /// Token-level conflict evidence: (token, score, reason)
+    pub conflict: Vec<(String, f32, String)>,
+    /// Human-readable explanation dari verdict
+    /// Contoh: "3 tokens structurally grounded (budi, dokter, rumah).
+    ///          1 token conflicts via absent composition (petani)."
+    pub explanation: String,
+    /// Apakah ini contextual appraise (isolated) atau global
+    pub is_contextual: bool,
+    /// Gap antara agree dan disagree — makin tinggi makin confident
+    pub confidence_gap: f32,
+}
+
 // -----------------------------------------------------------------------
 // RelateResult — v6.0 relate mode output
 // -----------------------------------------------------------------------
@@ -426,5 +453,111 @@ impl Rsvs {
 
         // 3. Appraise statement terhadap temp instance
         temp.appraise(statement)
+    }
+
+    /// Verbose appraise — returns `AppraiseVerdict` with token-level explanation.
+    ///
+    /// Adapted from Losion's NeuroSymbolicVerifier pattern:
+    /// - Losion: neural verifier produces confidence + error_type + feedback
+    /// - RSVS: symbolic verifier produces token-level explanation from graph
+    ///
+    /// Each evidence token is categorized with a reason:
+    /// - "seed": token is a seed node (epistemological primitive or functional word)
+    /// - "structural": token has compositional senses that corroborate the text
+    /// - "cooccurrence": token exists in graph but no structural corroboration
+    /// - "novel": token not found in the graph
+    ///
+    /// The explanation field provides a human-readable summary of why the verdict
+    /// was reached, listing the top supporting and conflicting tokens with their
+    /// reasons and scores.
+    pub fn appraise_verbose(&self, text: &str) -> AppraiseVerdict {
+        let base = self.appraise(text);
+
+        // Categorize evidence tokens dengan reason
+        let mut support = Vec::new();
+        let mut conflict = Vec::new();
+
+        for (token, score) in &base.evidence {
+            let reason = if let Some(&id) = self.token_to_id.get(token.as_str()) {
+                let has_compositions = self.senses.get(&id)
+                    .map(|sm| sm.senses.iter().any(|s| !s.compositions.is_empty()))
+                    .unwrap_or(false);
+                let is_seed = self.graph.get_node(id)
+                    .map(|n| n.is_seed)
+                    .unwrap_or(false);
+
+                if is_seed { "seed".to_string() }
+                else if has_compositions { "structural".to_string() }
+                else { "cooccurrence".to_string() }
+            } else {
+                "novel".to_string()
+            };
+
+            if *score > 0.4 {
+                support.push((token.clone(), *score, reason));
+            } else {
+                conflict.push((token.clone(), *score, reason));
+            }
+        }
+
+        // Sort by score
+        support.sort_by(|a, b| b.1.total_cmp(&a.1));
+        conflict.sort_by(|a, b| a.1.total_cmp(&b.1));
+
+        // Generate human-readable explanation
+        let explanation = {
+            let n_support = support.len();
+            let n_conflict = conflict.len();
+            let support_tokens: Vec<String> = support.iter()
+                .take(3)
+                .map(|(t, s, r)| format!("{} ({}, {:.2})", t, r, s))
+                .collect();
+            let conflict_tokens: Vec<String> = conflict.iter()
+                .take(3)
+                .map(|(t, s, r)| format!("{} ({}, {:.2})", t, r, s))
+                .collect();
+
+            let mut parts = Vec::new();
+            if n_support > 0 {
+                parts.push(format!("{} token(s) support: {}",
+                    n_support, support_tokens.join(", ")));
+            }
+            if n_conflict > 0 {
+                parts.push(format!("{} token(s) conflict: {}",
+                    n_conflict, conflict_tokens.join(", ")));
+            }
+            if parts.is_empty() {
+                "No grounded tokens found — statement is novel to this graph.".to_string()
+            } else {
+                parts.join(". ") + "."
+            }
+        };
+
+        let confidence_gap = base.agree_pct - base.disagree_pct;
+
+        AppraiseVerdict {
+            verdict: base.verdict,
+            agree_pct: base.agree_pct,
+            disagree_pct: base.disagree_pct,
+            support,
+            conflict,
+            explanation,
+            is_contextual: false,
+            confidence_gap,
+        }
+    }
+
+    /// Contextual verbose appraise — isolated, graph untouched.
+    ///
+    /// Adapted from Losion's DualMemorySystem pattern:
+    /// the context is ingested into a temporary working graph (SessionGraph
+    /// equivalent), appraised with verbose explanation, then discarded.
+    /// The main long-term graph is never modified.
+    pub fn appraise_against_verbose(&self, context: &str, statement: &str) -> AppraiseVerdict {
+        let mut temp = Rsvs::new(self.config.clone()).expect("temp rsvs");
+        let _ = temp.ingest_text(context);
+        let mut verdict = temp.appraise_verbose(statement);
+        verdict.is_contextual = true;
+        verdict
     }
 }

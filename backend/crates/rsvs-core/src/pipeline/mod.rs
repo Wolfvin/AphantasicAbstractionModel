@@ -33,7 +33,7 @@ use std::collections::VecDeque;
 
 // Re-export everything from submodules
 pub use ingest::IngestStats;
-pub use modes::{AppraiseResult, RelateResult};
+pub use modes::{AppraiseResult, AppraiseVerdict, RelateResult};
 pub use query::QueryResult;
 pub use snapshot::PipelineStatus;
 pub use traverse::traverse as traverse_query;
