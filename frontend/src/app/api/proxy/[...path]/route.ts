@@ -16,6 +16,9 @@ const API_KEY = process.env.RSVS_API_KEY || '';
 const ALLOWED_ENDPOINTS = new Set([
   'run',
   'ingest',
+  'appraise',
+  'relate',
+  'compose',
   'query',
   'snapshot',
   'events',
@@ -24,6 +27,9 @@ const ALLOWED_ENDPOINTS = new Set([
   'context-query',
   'context-similarity',
   'health',
+  'node-info',
+  'senses',
+  'similarity',
 ]);
 
 function validatePath(pathSegments: string[]): string | null {

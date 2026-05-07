@@ -857,8 +857,9 @@ export default function LeftInputRail({
 
       (res.messages || []).forEach((msg) => addMessage({ ...msg, mode: parsed.mode }));
       setLoading(false);
-    } catch {
+    } catch (err) {
       // Backend not available — use simulated response (demo mode)
+      console.error('[RSVS] Backend call failed, mode=', parsed.mode, 'error=', err);
       if (parsed.mode === 'ingest') {
         simulateIngestResponse(correlationId);
       } else if (parsed.mode === 'appraise') {

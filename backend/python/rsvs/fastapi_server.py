@@ -15,7 +15,6 @@ includes the route modules, and provides the ``main()`` entrypoint.
 from __future__ import annotations
 
 import os
-import sys
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -40,42 +39,51 @@ from .rsvs_core import get_rsvs_instance
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # v8.3: Production fail-fast — refuse to boot without required secrets.
+    # v8.3: Production secret handling — auto-generate if not provided.
     # In production (NODE_ENV=production), RSVS_API_KEY and RSVS_SESSION_SECRET
-    # MUST be set. Empty values are a security risk.
+    # SHOULD be set explicitly. If missing, we auto-generate ephemeral values
+    # with a WARNING instead of crashing — this allows demo/staging deployments
+    # on platforms like Koyeb where secrets may not be configured yet.
     _node_env = os.environ.get("NODE_ENV", "development")
     _api_key = os.environ.get("RSVS_API_KEY", "")
     _session_secret = os.environ.get("RSVS_SESSION_SECRET", "")
 
-    if _node_env == "production":
-        if not _api_key:
-            print(
-                "FATAL: RSVS_API_KEY is required in production but not set. "
-                "Set it via environment variable or .env file.",
-                file=sys.stderr,
+    import logging
+    _logger = logging.getLogger(__name__)
+
+    if not _api_key:
+        if _node_env == "production":
+            import secrets as _secrets
+            _api_key = _secrets.token_hex(32)
+            os.environ["RSVS_API_KEY"] = _api_key
+            _logger.warning(
+                "RSVS_API_KEY not set in production — auto-generated ephemeral key. "
+                "Set RSVS_API_KEY explicitly for persistent authentication!"
             )
-            sys.exit(1)
-        if not _session_secret:
-            print(
-                "FATAL: RSVS_SESSION_SECRET is required in production but not set. "
-                "Set it via environment variable or .env file.",
-                file=sys.stderr,
-            )
-            sys.exit(1)
-    else:
-        # Development mode: warn if secrets are empty
-        if not _api_key:
-            import logging
-            logging.getLogger(__name__).warning(
+        else:
+            _logger.warning(
                 "RSVS_API_KEY not set — API authentication is DISABLED. "
                 "Set RSVS_API_KEY in production!"
             )
-        if not _session_secret and not _api_key:
-            import logging
-            logging.getLogger(__name__).warning(
-                "RSVS_SESSION_SECRET not set — using RSVS_API_KEY as fallback. "
-                "Set RSVS_SESSION_SECRET explicitly in production!"
+
+    if not _session_secret:
+        if _node_env == "production":
+            # Fallback: use API key as signing secret, or auto-generate
+            if _api_key:
+                os.environ["RSVS_SESSION_SECRET"] = _api_key
+            else:
+                import secrets as _secrets
+                os.environ["RSVS_SESSION_SECRET"] = _secrets.token_hex(32)
+            _logger.warning(
+                "RSVS_SESSION_SECRET not set in production — using fallback. "
+                "Set RSVS_SESSION_SECRET explicitly for proper key separation!"
             )
+        else:
+            if not _api_key:
+                _logger.warning(
+                    "RSVS_SESSION_SECRET not set — using RSVS_API_KEY as fallback. "
+                    "Set RSVS_SESSION_SECRET explicitly in production!"
+                )
 
     try:
         get_rsvs_instance()

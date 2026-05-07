@@ -1,0 +1,35 @@
+name: symbolicpuzzle3d-backend
+services:
+  - name: backend
+    type: web
+    git:
+      repository: github.com/Wolfvin/SymbolicPuzzle3D
+      branch: main
+    dockerfile:
+      dockerfile: Dockerfile.backend
+    instance_type: free
+    regions:
+      - fra
+    ports:
+      - port: 8000
+        protocol: http
+    health_checks:
+      - path: /health
+        port: 8000
+        protocol: http
+    env:
+      - name: RSVS_HOST
+        value: "0.0.0.0"
+      - name: RSVS_PORT
+        value: "8000"
+      - name: NODE_ENV
+        value: "production"
+      - name: RSVS_ATOM_DIR
+        value: "/app/data"
+      - name: RSVS_API_KEY
+        secret: true
+      - name: RSVS_SESSION_SECRET
+        secret: true
+    scaling:
+      min: 1
+      max: 1
