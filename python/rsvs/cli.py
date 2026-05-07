@@ -30,7 +30,7 @@ from pathlib import Path
 
 DEFAULT_DB    = "rsvs.json"
 VERSION       = "6.0.0"
-BANNER        = f"RSVS v{VERSION} — Relational Symbolic Vocabulary System"
+BANNER        = f"RSVS v{VERSION} — Recursive Symbolic Vocabulary System"
 
 # -----------------------------------------------------------------------
 # Helpers

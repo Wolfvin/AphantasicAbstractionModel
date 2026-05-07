@@ -1,6 +1,6 @@
 # RSVS Frontend
 
-3D knowledge graph visualization for the RSVS (Relational Symbolic Vector Space) system.
+3D knowledge graph visualization for the RSVS (Recursive Symbolic Vector Space) system.
 
 ## Stack
 

@@ -5,7 +5,7 @@ build-backend = "maturin"
 [project]
 name = "rsvs"
 version = "8.3.0"
-description = "Relational Symbolic Vocabulary System — compositional symbolic engine with structural meaning, sense-level compositions, and autonomous tiered memory lifecycle"
+description = "Recursive Symbolic Vocabulary System — compositional symbolic engine with structural meaning, sense-level compositions, and autonomous tiered memory lifecycle"
 readme = "README.md"
 license = {text = "MIT OR Apache-2.0"}
 requires-python = ">=3.11"

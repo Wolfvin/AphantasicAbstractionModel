@@ -1,6 +1,6 @@
 # RSVS Architecture v8.3 — Language-Agnostic Compositional Symbolic Meaning
 
-> Technical reference for the Relational Symbolic Vocabulary System, v8.3
+> Technical reference for the Recursive Symbolic Vocabulary System, v8.3
 
 ---
 
@@ -22,7 +22,7 @@
 
 ## 1. Overview
 
-The Relational Symbolic Vocabulary System (RSVS) is a compositional symbolic meaning engine built on the fundamental thesis that **meaning is structural, not statistical**. When RSVS says that "raja" (king) and "ratu" (queen) are related, it does not express this as a cosine similarity between opaque vectors — it says they share two out of three compositions (`tahta_tertinggi`, `kerajaan`) and differ in exactly one (`laki_laki` vs. `perempuan`). Every dimension of meaning can be traced back to its constituent senses, and every relationship between concepts can be explained as shared or differing compositions. The system builds a structured knowledge graph where each node can have multiple senses, each sense is defined by its compositions — pairs of `(NodeId, SenseId)` that collectively form the meaning — and this recursive structure means meaning is never atomic beyond the seed layer; it is always a composition of other meanings already in the system.
+The Recursive Symbolic Vocabulary System (RSVS) is a compositional symbolic meaning engine built on the fundamental thesis that **meaning is structural, not statistical**. When RSVS says that "raja" (king) and "ratu" (queen) are related, it does not express this as a cosine similarity between opaque vectors — it says they share two out of three compositions (`tahta_tertinggi`, `kerajaan`) and differ in exactly one (`laki_laki` vs. `perempuan`). Every dimension of meaning can be traced back to its constituent senses, and every relationship between concepts can be explained as shared or differing compositions. The system builds a structured knowledge graph where each node can have multiple senses, each sense is defined by its compositions — pairs of `(NodeId, SenseId)` that collectively form the meaning — and this recursive structure means meaning is never atomic beyond the seed layer; it is always a composition of other meanings already in the system.
 
 RSVS is **not a replacement for Transformer architecture**. It is an interpretation layer on top of it. Transformers produce dense vector representations that are powerful but opaque. RSVS transforms those abstract numbers into symbolically referenceable representations where every dimension of meaning can be traced back to its constituent senses. The TransformerBridge module provides the integration point, allowing RSVS to operate alongside any Transformer model: the Transformer handles pattern recognition at scale, and RSVS provides the symbolic traceability layer that makes results interpretable, auditable, and compositional. RSVS is also not a traditional knowledge graph with hand-curated ontologies — all meaning emerges from data through the ingest pipeline, with only 24 epistemological seed atoms forming the axiomatic foundation.
 
@@ -1000,4 +1000,4 @@ All core computation happens in Rust, which provides:
 
 ---
 
-*RSVS v8.3 — Relational Symbolic Vocabulary System. Architecture document generated from source code analysis.*
+*RSVS v8.3 — Recursive Symbolic Vocabulary System. Architecture document generated from source code analysis.*

@@ -88,7 +88,7 @@ async def lifespan(app: FastAPI):
 # --- App ---
 
 app = FastAPI(
-    title="RSVS — Relational Symbolic Vocabulary System",
+    title="RSVS — Recursive Symbolic Vocabulary System",
     version=__version__,
     description="Hard-attention symbolic knowledge engine with Rust core (v8.3 — Language-agnostic, convergence detection, production-ready)",
     lifespan=lifespan,

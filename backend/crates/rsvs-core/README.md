@@ -1,6 +1,6 @@
 # rsvs-core
 
-**Relational Symbolic Vocabulary System — Rust Core**
+**Recursive Symbolic Vocabulary System — Rust Core**
 
 A cognitive symbolic engine implementing hard-attention knowledge graph construction, multi-sense disambiguation, and autonomous node lifecycle management.
 

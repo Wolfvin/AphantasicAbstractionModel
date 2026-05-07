@@ -1,4 +1,4 @@
-"""RSVS — Relational Symbolic Vocabulary System.
+"""RSVS — Recursive Symbolic Vocabulary System.
 
 A cognitive symbolic engine with hard attention, multi-sense disambiguation,
 and autonomous tiered memory lifecycle.

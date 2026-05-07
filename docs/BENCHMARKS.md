@@ -1,6 +1,6 @@
 # Benchmark Documentation
 
-> Performance characteristics and benchmarking guide for RSVS (Relational Symbolic Vocabulary System)
+> Performance characteristics and benchmarking guide for RSVS (Recursive Symbolic Vocabulary System)
 
 ---
 

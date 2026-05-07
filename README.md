@@ -5,7 +5,7 @@
 [![Python](https://img.shields.io/badge/Python-3.11+-blue?style=flat-square&logo=python)](https://python.org)
 [![Rust](https://img.shields.io/badge/Rust-1.75+-orange?style=flat-square&logo=rust)](https://www.rust-lang.org/)
 
-# RSVS — Relational Symbolic Vocabulary System
+# RSVS — Recursive Symbolic Vocabulary System
 
 **Compositional symbolic meaning, not embeddings. Traceable sense definitions with structural similarity.**
 
@@ -15,7 +15,7 @@
 
 ## What is RSVS?
 
-RSVS (Relational Symbolic Vocabulary System) is a compositional symbolic meaning engine that builds structured knowledge graphs from raw text. Unlike vector embeddings that compress meaning into opaque floating-point arrays, RSVS represents every concept as a composition of other concepts -- and every composition is traceable. You can follow the chain from any concept down to its constituent parts, explain precisely why two concepts are related, and identify the exact substitution that transforms one into another. The system is designed to be an interpretation layer that works alongside Transformer models, adding symbolic traceability to dense vector representations.
+RSVS (Recursive Symbolic Vocabulary System) is a compositional symbolic meaning engine that builds structured knowledge graphs from raw text. Unlike vector embeddings that compress meaning into opaque floating-point arrays, RSVS represents every concept as a composition of other concepts -- and every composition is traceable. You can follow the chain from any concept down to its constituent parts, explain precisely why two concepts are related, and identify the exact substitution that transforms one into another. The system is designed to be an interpretation layer that works alongside Transformer models, adding symbolic traceability to dense vector representations.
 
 At its core, RSVS ingests text and builds a knowledge graph composed of atoms, senses, and compositions. An atom is the smallest unit of meaning -- a token that has been promoted to entity status through co-occurrence statistics. A sense is a particular meaning of a concept, defined by which other senses it is composed from. A composition is a directed reference from one sense to another, forming a directed acyclic graph of meaning. When you define that "raja" (king) is composed of "tahta_tertinggi" (highest throne), "laki_laki" (male), and "kerajaan" (kingdom), you have created a precise, inspectable specification of what that word means -- not a statistical artifact, but a structural definition.
 
@@ -457,7 +457,7 @@ If you use RSVS in your research, please cite it as follows:
 
 ```bibtex
 @software{rsvs2026,
-  title = {RSVS: Relational Symbolic Vocabulary System},
+  title = {RSVS: Recursive Symbolic Vocabulary System},
   author = {Wolfvin},
   year = {2026},
   version = {8.3.0},

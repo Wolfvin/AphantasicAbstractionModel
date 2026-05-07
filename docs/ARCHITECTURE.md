@@ -1,6 +1,6 @@
 # RSVS Architecture
 
-> Comprehensive technical reference for the Relational Symbolic Vocabulary System (Schema v4.2)
+> Comprehensive technical reference for the Recursive Symbolic Vocabulary System (Schema v4.2)
 
 ## Table of Contents
 

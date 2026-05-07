@@ -5,7 +5,7 @@
 
 site_name: RSVS
 site_description: >-
-  Relational Symbolic Vocabulary System — compositional symbolic meaning
+  Recursive Symbolic Vocabulary System — compositional symbolic meaning
   engine with structural similarity, substitution analysis, and autonomous
   tiered memory lifecycle.
 site_url: https://wolfvin.github.io/SymbolicPuzzle3D/

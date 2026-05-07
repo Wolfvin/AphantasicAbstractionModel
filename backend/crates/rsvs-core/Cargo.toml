@@ -2,7 +2,7 @@
 name = "rsvs"
 version = "8.3.0"
 edition = "2021"
-description = "Relational Symbolic Vocabulary System — compositional symbolic engine with structural meaning"
+description = "Recursive Symbolic Vocabulary System — compositional symbolic engine with structural meaning"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/Wolfvin/SymbolicPuzzle3D"
 keywords = ["symbolic", "knowledge-graph", "compositional", "cognitive", "nlp"]
@@ -21,6 +21,10 @@ path = "src/bin/rsvs-smoke.rs"
 [[bin]]
 name = "rsvs-tui"
 path = "src/bin/rsvs-tui.rs"
+
+[[bin]]
+name = "rsvs-realtest"
+path = "src/bin/rsvs-realtest.rs"
 
 [features]
 default = []

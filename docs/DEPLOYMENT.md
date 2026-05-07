@@ -1,6 +1,6 @@
 # Deployment Guide
 
-> How to deploy RSVS (Relational Symbolic Vocabulary System) in production
+> How to deploy RSVS (Recursive Symbolic Vocabulary System) in production
 
 ---
 

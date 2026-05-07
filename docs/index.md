@@ -1,5 +1,5 @@
 ---
-title: RSVS — Relational Symbolic Vocabulary System
+title: RSVS — Recursive Symbolic Vocabulary System
 description: Compositional symbolic meaning, not embeddings. Traceable sense definitions with structural similarity.
 ---
 
@@ -161,7 +161,7 @@ If you use RSVS in your research, please cite it:
 
 ```bibtex
 @software{rsvs2026,
-  title = {RSVS: Relational Symbolic Vocabulary System},
+  title = {RSVS: Recursive Symbolic Vocabulary System},
   author = {Wolfvin},
   year = {2026},
   version = {8.3.0},

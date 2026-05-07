@@ -1,7 +1,7 @@
 cff-version: 1.2.0
 message: "If you use RSVS in your research, please cite it as below."
 type: software
-title: "RSVS: Relational Symbolic Vocabulary System"
+title: "RSVS: Recursive Symbolic Vocabulary System"
 version: "8.3.0"
 authors:
   - name: "Wolfvin"
@@ -27,7 +27,7 @@ keywords:
 date-released: "2026-05-06"
 preferred-citation:
   type: software
-  title: "RSVS: Relational Symbolic Vocabulary System"
+  title: "RSVS: Recursive Symbolic Vocabulary System"
   authors:
     - name: "Wolfvin"
   year: 2026
