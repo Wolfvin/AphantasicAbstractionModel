@@ -320,13 +320,15 @@ fn score_color(score: f32) -> Color {
 fn format_verdict_result(verdict: &AppraiseVerdict, label: &str) -> Vec<Line<'static>> {
     let mut lines = Vec::new();
 
-    // Confidence label
+    // Confidence label — v7.4: gap is now agree - genuine_conflict
     let confidence_label = if verdict.confidence_gap > 30.0 {
         " [CONFIDENT]"
-    } else if verdict.confidence_gap < 10.0 {
+    } else if verdict.confidence_gap > 10.0 {
+        " [MODERATE]"
+    } else if verdict.confidence_gap > 0.0 {
         " [AMBIGUOUS]"
     } else {
-        ""
+        " [INVERTED]"
     };
     let ctx_label = if verdict.is_contextual { " [CONTEXTUAL]" } else { "" };
 
@@ -342,8 +344,8 @@ fn format_verdict_result(verdict: &AppraiseVerdict, label: &str) -> Vec<Line<'st
                 .add_modifier(Modifier::BOLD),
         ),
         Span::raw(format!(
-            " ({:.1}% agree / {:.1}% disagree) gap={:.1}pp",
-            verdict.agree_pct, verdict.disagree_pct, verdict.confidence_gap
+            " ({:.1}% agree / {:.1}% conflict / {:.1}% neutral) gap={:+.1}pp",
+            verdict.agree_pct, verdict.disagree_pct, verdict.neutral_pct, verdict.confidence_gap
         )),
         Span::styled(
             format!("{}{}", confidence_label, ctx_label),
@@ -420,14 +422,14 @@ fn format_appraise_result(result: &AppraiseResult, label: &str) -> Vec<Line<'sta
                 .add_modifier(Modifier::BOLD),
         ),
         Span::raw(format!(
-            " ({:.1}% agree / {:.1}% disagree)",
-            result.agree_pct, result.disagree_pct
+            " ({:.1}% agree / {:.1}% conflict / {:.1}% neutral)",
+            result.agree_pct, result.disagree_pct, result.neutral_pct
         )),
     ]));
 
-    // Evidence: support (high score) and conflict (low score)
-    let support: Vec<&(String, f32)> = result.evidence.iter().filter(|(_, s)| *s > 0.4).collect();
-    let conflict: Vec<&(String, f32)> = result.evidence.iter().filter(|(_, s)| *s <= 0.4).collect();
+    // Evidence: support (score > 0.1) and conflict (score <= 0.1, including seeds)
+    let support: Vec<&(String, f32)> = result.evidence.iter().filter(|(_, s)| *s > 0.1).collect();
+    let conflict: Vec<&(String, f32)> = result.evidence.iter().filter(|(_, s)| *s <= 0.1).collect();
 
     if !support.is_empty() {
         let spans: Vec<Span> = std::iter::once(Span::styled(

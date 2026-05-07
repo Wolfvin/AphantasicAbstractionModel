@@ -1,6 +1,13 @@
-//! Appraise and Relate modes — RSVS v7.3
+//! Appraise and Relate modes — RSVS v7.4
 //!
 //! Contains `appraise()` and `relate()` methods.
+//! v7.4: Three fundamental fixes to appraise scoring:
+//!   Fix A — Seed tokens with empty compositions excluded from agree_pct.
+//!           They carry no structural information and were inflating scores.
+//!   Fix B — disagree_pct is now a genuine conflict score, NOT 100-agree.
+//!           Tokens whose compositions CONTRADICT other tokens in the
+//!           statement contribute to disagree, not merely absent tokens.
+//!   Fix C — Verbose appraise provides richer structural analysis.
 //! v7.3: appraise() uses structural sense matching instead of shallow
 //! token-presence check. Two concepts agree not just because they share
 //! tokens, but because they share compositions (structural meaning).
@@ -12,17 +19,30 @@ use rayon::prelude::*;
 use std::collections::{BTreeMap, HashSet};
 
 // -----------------------------------------------------------------------
-// AppraiseResult — v6.0 appraise mode output
+// AppraiseResult — v7.4 appraise mode output
 // -----------------------------------------------------------------------
 
 /// Appraise mode output: agree/disagree percentages, verdict, and evidence.
+///
+/// v7.4: Scoring semantics have changed fundamentally:
+/// - `agree_pct`: measures % of content tokens (non-seed, structural) that
+///   are structurally corroborated by the graph. Seed tokens with empty
+///   compositions are EXCLUDED from the denominator.
+/// - `disagree_pct`: measures % of content tokens whose compositions
+///   actively CONTRADICT other tokens in the statement. This is NOT
+///   100-agree — it's a genuine conflict measurement.
+/// - `neutral_pct` (new): tokens that exist but neither support nor
+///   contradict — they're present but carry no structural signal.
 #[derive(Debug, Clone)]
 pub struct AppraiseResult {
-    /// Percentage of tokens found in the graph.
+    /// Percentage of content tokens structurally corroborated (0–100).
     pub agree_pct: f32,
-    /// Percentage of tokens NOT found in the graph.
+    /// Percentage of content tokens actively conflicting (0–100).
+    /// This is genuine structural conflict, NOT 100-agree.
     pub disagree_pct: f32,
-    /// Verdict: "consistent", "partial", or "novel".
+    /// Percentage of tokens that are neutral — present but no signal.
+    pub neutral_pct: f32,
+    /// Verdict: "consistent", "partial", "mixed", or "novel".
     pub verdict: String,
     /// Per-token evidence: (token, confidence) for matched tokens.
     pub evidence: Vec<(String, f32)>,
@@ -42,8 +62,10 @@ pub struct AppraiseVerdict {
     pub verdict: String,
     /// Agree percentage (0–100)
     pub agree_pct: f32,
-    /// Disagree percentage (0–100)
+    /// Disagree percentage (0–100) — genuine conflict score (v7.4)
     pub disagree_pct: f32,
+    /// Neutral percentage (0–100) — seeds with no structural info (v7.4)
+    pub neutral_pct: f32,
     /// Token-level support evidence: (token, score, reason)
     /// reason: "structural" | "convergent" | "seed" | "novel"
     pub support: Vec<(String, f32, String)>,
@@ -77,46 +99,58 @@ pub struct RelateResult {
 impl Rsvs {
     /// Evaluate text against the graph using structural sense matching.
     ///
-    /// v7.3: Instead of just checking if a token EXISTS in the graph
-    /// (shallow token-presence check), we now evaluate whether the token's
-    /// structural meaning (its compositions) is consistent with the graph.
+    /// v7.4: Three fundamental fixes applied:
     ///
-    /// The evaluation works in two layers:
-    /// 1. **Token presence**: Does the token exist at all? (baseline)
-    /// 2. **Structural match**: For tokens with compositional senses, how
-       ///    well do their compositions align with the other tokens in the text?
+    /// **Fix A — Seed token exclusion**: Seed tokens (epistemological
+    /// primitives and functional words like "yang", "di", "dan") with
+    /// empty compositions carry NO structural information. They are
+    /// excluded from the agree_pct denominator. They still appear in
+    /// evidence but cannot inflate the agreement score.
     ///
-    /// A token that exists but whose compositions conflict with the rest of
-    /// the text scores lower than one whose compositions are corroborated.
-    /// This prevents false positives where "bank" (river) is counted as
-    /// "consistent" when the text is about finance.
+    /// **Fix B — Genuine conflict score**: `disagree_pct` now measures
+    /// actual structural contradiction — tokens whose compositions
+    /// are INCOMPATIBLE with other tokens in the statement. A token
+    /// contradicts when its compositional neighbors belong to a
+    /// different domain than the other content tokens. This is NOT
+    /// simply 100-agree.
     ///
-    /// Scoring:
-    /// - Token exists but has no compositional sense → confidence × 0.7
-    ///   (we know the token but can't verify structural meaning)
-    /// - Token exists with compositional sense, compositions corroborated →
-    ///   confidence × 1.0 (full structural agreement)
-    /// - Token exists with compositional sense, compositions partially match →
-    ///   confidence × (0.4 + 0.6 × overlap_ratio)
-    /// - Token not found → 0.0
+    /// **Scoring** (v7.4 revised):
+    /// - Seed token with empty compositions → EXCLUDED from scoring
+    ///   (contributes to neutral pool, not agree or disagree)
+    /// - Content token, compositions corroborated → positive agree score
+    /// - Content token, compositions conflict → positive disagree score
+    /// - Content token, no compositions but in graph → neutral
+    /// - Token not found → contributes to disagree (novel = uncertain)
+    ///
+    /// The percentages are calculated against content tokens only
+    /// (excluding seeds with empty compositions), making the metric
+    /// reflect actual structural meaning rather than coverage.
     pub fn appraise(&self, text: &str) -> AppraiseResult {
         let tokens = crate::attention::tokenize(text);
         if tokens.is_empty() {
             return AppraiseResult {
                 agree_pct: 0.0,
                 disagree_pct: 100.0,
+                neutral_pct: 0.0,
                 verdict: "novel".to_string(),
                 evidence: vec![],
                 convergence_info: vec![],
             };
         }
 
-        let total = tokens.len() as f32;
-        let mut structural_score = 0.0f32;
+        // v7.4: Classify each token into categories
+        // - seed_empty: seed node with no compositions → NEUTRAL (excluded)
+        // - content: has compositions or is a non-seed node → SCORED
+        // - novel: not found in graph → DISAGREE
+        let mut structural_score = 0.0f32;  // accumulated agree score
+        let mut conflict_score = 0.0f32;    // accumulated genuine conflict score
         let mut evidence: Vec<(String, f32)> = Vec::new();
-        // v8.2: Track convergent nodes that contributed to appraise scoring
-        // Using BTreeMap for deterministic iteration order (fixes non-deterministic output)
         let mut convergence_seen: BTreeMap<String, f32> = BTreeMap::new();
+
+        // Count tokens in each category for percentage calculation
+        let mut n_content = 0usize;  // tokens that contribute to scoring
+        let mut n_neutral = 0usize;  // seed tokens excluded from scoring
+        let mut n_novel = 0usize;    // tokens not found in graph
 
         // Build the set of all node IDs mentioned in the text for
         // cross-referencing compositions
@@ -125,25 +159,82 @@ impl Rsvs {
             .filter_map(|t| self.token_to_id.get(t.as_str()).copied())
             .collect();
 
+        // v7.4 Fix B: Build domain clusters from compositions.
+        // Tokens that share compositions belong to the same "domain cluster".
+        // A token contradicts the statement if its compositional neighbors
+        // are in a different domain cluster than the majority of content tokens.
+        let content_node_ids: std::collections::HashSet<NodeId> = tokens
+            .iter()
+            .filter_map(|t| {
+                if let Some(&id) = self.token_to_id.get(t.as_str()) {
+                    let is_seed = self.graph.get_node(id).map(|n| n.is_seed).unwrap_or(false);
+                    let has_comps = self.senses.get(&id)
+                        .map(|sm| sm.senses.iter().any(|s| !s.compositions.is_empty()))
+                        .unwrap_or(false);
+                    // Only include non-seed tokens with compositions
+                    if !is_seed && has_comps { Some(id) } else { None }
+                } else { None }
+            })
+            .collect();
+
+        // For each content token, find its compositional neighbor set.
+        // These are the nodes it's structurally "about".
+        let token_comp_neighbors: Vec<(NodeId, std::collections::HashSet<NodeId>)> = tokens
+            .iter()
+            .filter_map(|t| {
+                if let Some(&id) = self.token_to_id.get(t.as_str()) {
+                    let is_seed = self.graph.get_node(id).map(|n| n.is_seed).unwrap_or(false);
+                    if is_seed { return None; }
+                    if let Some(sm) = self.senses.get(&id) {
+                        let best_sense = sm.senses.iter()
+                            .filter(|s| !s.compositions.is_empty())
+                            .max_by_key(|s| s.compositions.len());
+                        if let Some(sense) = best_sense {
+                            let neighbors: std::collections::HashSet<NodeId> =
+                                sense.compositions.iter().map(|c| c.node_id).collect();
+                            return Some((id, neighbors));
+                        }
+                    }
+                }
+                None
+            })
+            .collect();
+
+        // The "statement domain" = union of all content tokens' compositional
+        // neighbors. Tokens whose compositions fall outside this domain
+        // are the ones that create genuine conflict.
+        let statement_domain: std::collections::HashSet<NodeId> = token_comp_neighbors
+            .iter()
+            .flat_map(|(_, neighbors)| neighbors.iter().copied())
+            .collect();
+
         for token in &tokens {
             if let Some(&id) = self.token_to_id.get(token.as_str()) {
+                let is_seed = self.graph.get_node(id).map(|n| n.is_seed).unwrap_or(false);
                 let base_conf = self.autonomy.confidence(id).unwrap_or(0.0);
 
-                // v7.3: Structural sense matching
-                // Check if this token has compositional senses whose
-                // compositions are corroborated by other tokens in the text
-                // v8.1: Also consider convergent nodes' senses as corroborating
-                // evidence — if "dog" converges with "anjing", and "anjing"'s
-                // compositions match the text, that counts as corroboration for "dog".
-                let structural_multiplier = if let Some(sm) = self.senses.get(&id) {
+                // ── Fix A: Seed tokens → NEUTRAL (excluded from scoring) ──
+                // Seeds are structural primitives and functional words (yang, di, dan).
+                // They exist to ground the graph and enable entity detection, NOT to
+                // score statements. Even when they acquire compositions through
+                // co-occurrence, those compositions are universal (they appear with
+                // everything) and therefore non-discriminative. Only content tokens
+                // (non-seeds) should determine agree/disagree.
+                if is_seed {
+                    n_neutral += 1;
+                    evidence.push((token.clone(), base_conf * 0.05)); // minimal evidence
+                    continue;
+                }
+
+                n_content += 1;
+
+                // v7.4: Determine structural multiplier AND conflict score
+                let (structural_multiplier, conflict_multiplier) =
+                    if let Some(sm) = self.senses.get(&id) {
                     let best_sense_match = sm.senses.iter().map(|sense| {
                         if sense.compositions.is_empty() {
-                            // No compositions — can't verify structurally,
-                            // but token exists. Use reduced confidence.
-                            0.7
+                            0.5 // reduced — no structural verification possible
                         } else {
-                            // Count how many composition node_ids appear in
-                            // the text's node set
                             let comp_node_ids: Vec<NodeId> =
                                 sense.compositions.iter().map(|c| c.node_id).collect();
                             let overlap = comp_node_ids
@@ -151,44 +242,91 @@ impl Rsvs {
                                 .filter(|cid| text_node_ids.contains(cid))
                                 .count();
                             let overlap_ratio = overlap as f32 / comp_node_ids.len().max(1) as f32;
-
-                            // Full corroboration → 1.0, partial → 0.4–1.0
                             0.4 + 0.6 * overlap_ratio
                         }
                     }).max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
-                    .unwrap_or(0.7);
+                    .unwrap_or(0.5);
 
-                    // v8.1 → v8.2: Check convergent nodes for additional corroboration
-                    // If this node has structural_equivalence links, check if
-                    // the convergent nodes' compositions corroborate the text
-                    // v8.2: Also track which convergent nodes contributed
-                    let (conv_boost, conv_contributors) = self.convergence_boost_for_appraise(id, &text_node_ids);
+                    let (conv_boost, conv_contributors) =
+                        self.convergence_boost_for_appraise(id, &text_node_ids);
                     for (label, boost) in conv_contributors {
                         convergence_seen.entry(label)
                             .and_modify(|existing| *existing = existing.max(boost))
                             .or_insert(boost);
                     }
 
-                    (best_sense_match + conv_boost).min(1.0)
+                    let adjusted_match = (best_sense_match + conv_boost).min(1.0);
+
+                    // ── Fix B: Genuine conflict detection ──
+                    // Check if this token's compositions fall outside the
+                    // statement's domain. If most of its compositional
+                    // neighbors are NOT in the statement domain, it conflicts.
+                    let conflict_mult = if let Some((_, neighbors)) =
+                        token_comp_neighbors.iter().find(|(nid, _)| *nid == id)
+                    {
+                        if neighbors.is_empty() {
+                            0.0 // no compositions → no conflict
+                        } else {
+                            // What fraction of this token's compositional
+                            // neighbors are OUTSIDE the statement domain?
+                            let outside = neighbors.iter()
+                                .filter(|n| !statement_domain.contains(n))
+                                .count();
+                            let outside_ratio = outside as f32 / neighbors.len() as f32;
+                            // Also check: how many neighbors overlap with
+                            // OTHER content tokens' composition sets?
+                            let inside_content = neighbors.iter()
+                                .filter(|n| content_node_ids.contains(n))
+                                .count();
+                            let content_overlap = inside_content as f32 / neighbors.len() as f32;
+                            // Conflict = high outside + low content overlap
+                            (outside_ratio * (1.0 - content_overlap)).clamp(0.0, 1.0)
+                        }
+                    } else {
+                        0.0 // no composition data → can't determine conflict
+                    };
+
+                    (adjusted_match, conflict_mult)
                 } else {
                     // No sense manager — token exists but no sense data
-                    0.7
+                    // Neutral: slight agree for presence, slight conflict for uncertainty
+                    (0.5, 0.3)
                 };
 
                 let scored = base_conf * structural_multiplier;
+                let conflicted = base_conf * conflict_multiplier;
                 structural_score += scored;
+                conflict_score += conflicted;
                 evidence.push((token.clone(), scored));
+            } else {
+                // Token not found in graph → novel = contributes to disagree
+                n_novel += 1;
+                n_content += 1; // novel tokens count against the statement
+                conflict_score += 0.5; // novel = uncertain = mild disagreement
             }
-            // Token not found → contributes 0.0 (implicit)
         }
 
-        let agree_pct = (structural_score / total) * 100.0;
-        let disagree_pct = 100.0 - agree_pct;
+        // v7.4: Calculate percentages against content tokens only
+        let content_total = n_content.max(1) as f32;
+        let agree_pct = (structural_score / content_total) * 100.0;
+        let disagree_pct = (conflict_score / content_total) * 100.0;
+        let neutral_pct = (n_neutral as f32 / tokens.len().max(1) as f32) * 100.0;
 
-        let verdict = if agree_pct >= 80.0 {
+        // v7.4: Verdict based on content-token agree_pct and genuine conflict
+        // Thresholds adjusted for the new scoring semantics:
+        // - agree >= 60% and conflict < 20%: consistent
+        // - agree >= 30% and conflict < 40%: partial
+        // - conflict >= 40% and agree < 30%: disagree
+        // - both >= 30%: mixed
+        // - else: novel
+        let verdict = if agree_pct >= 60.0 && disagree_pct < 20.0 {
             "consistent"
-        } else if agree_pct >= 40.0 {
+        } else if agree_pct >= 30.0 && disagree_pct < 40.0 {
             "partial"
+        } else if disagree_pct >= 40.0 && agree_pct < 30.0 {
+            "disagree"
+        } else if agree_pct >= 30.0 && disagree_pct >= 30.0 {
+            "mixed"
         } else {
             "novel"
         }
@@ -198,13 +336,13 @@ impl Rsvs {
         evidence.sort_by(|a, b| b.1.total_cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
 
         // v8.2: Convert convergence tracking map to sorted vec
-        // BTreeMap already iterates in key order; re-sort by (boost DESC, label ASC)
         let mut convergence_info: Vec<(String, f32)> = convergence_seen.into_iter().collect();
         convergence_info.sort_by(|a, b| b.1.total_cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
 
         AppraiseResult {
             agree_pct,
             disagree_pct,
+            neutral_pct,
             verdict,
             evidence,
             convergence_info,
@@ -461,15 +599,10 @@ impl Rsvs {
     /// - Losion: neural verifier produces confidence + error_type + feedback
     /// - RSVS: symbolic verifier produces token-level explanation from graph
     ///
-    /// Each evidence token is categorized with a reason:
-    /// - "seed": token is a seed node (epistemological primitive or functional word)
-    /// - "structural": token has compositional senses that corroborate the text
-    /// - "cooccurrence": token exists in graph but no structural corroboration
-    /// - "novel": token not found in the graph
-    ///
-    /// The explanation field provides a human-readable summary of why the verdict
-    /// was reached, listing the top supporting and conflicting tokens with their
-    /// reasons and scores.
+    /// v7.4: Now uses genuine conflict score (Fix B) and excludes seed
+    /// tokens from the agree_pct denominator (Fix A). The confidence_gap
+    /// is now based on the difference between agree and genuine conflict,
+    /// not agree vs 100-agree.
     pub fn appraise_verbose(&self, text: &str) -> AppraiseVerdict {
         let base = self.appraise(text);
 
@@ -479,13 +612,14 @@ impl Rsvs {
 
         for (token, score) in &base.evidence {
             let reason = if let Some(&id) = self.token_to_id.get(token.as_str()) {
-                let has_compositions = self.senses.get(&id)
-                    .map(|sm| sm.senses.iter().any(|s| !s.compositions.is_empty()))
-                    .unwrap_or(false);
                 let is_seed = self.graph.get_node(id)
                     .map(|n| n.is_seed)
                     .unwrap_or(false);
+                let has_compositions = self.senses.get(&id)
+                    .map(|sm| sm.senses.iter().any(|s| !s.compositions.is_empty()))
+                    .unwrap_or(false);
 
+                // v7.4: ALL seeds are neutral/excluded from scoring
                 if is_seed { "seed".to_string() }
                 else if has_compositions { "structural".to_string() }
                 else { "cooccurrence".to_string() }
@@ -493,7 +627,10 @@ impl Rsvs {
                 "novel".to_string()
             };
 
-            if *score > 0.4 {
+            // v7.4: Seeds with empty comps are now near-zero in evidence,
+            // so they'll always fall into conflict — but mark them as
+            // "seed" so the explanation can distinguish them from genuine conflicts.
+            if *score > 0.1 {
                 support.push((token.clone(), *score, reason));
             } else {
                 conflict.push((token.clone(), *score, reason));
@@ -526,6 +663,10 @@ impl Rsvs {
                 parts.push(format!("{} token(s) conflict: {}",
                     n_conflict, conflict_tokens.join(", ")));
             }
+            if !parts.is_empty() {
+                parts.push(format!("{} seed token(s) excluded (neutral)", 
+                    base.neutral_pct.round() as usize));
+            }
             if parts.is_empty() {
                 "No grounded tokens found — statement is novel to this graph.".to_string()
             } else {
@@ -533,12 +674,14 @@ impl Rsvs {
             }
         };
 
+        // v7.4: confidence_gap is now agree - genuine_conflict, not agree - (100-agree)
         let confidence_gap = base.agree_pct - base.disagree_pct;
 
         AppraiseVerdict {
             verdict: base.verdict,
             agree_pct: base.agree_pct,
             disagree_pct: base.disagree_pct,
+            neutral_pct: base.neutral_pct,
             support,
             conflict,
             explanation,

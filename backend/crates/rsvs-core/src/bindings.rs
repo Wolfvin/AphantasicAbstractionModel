@@ -241,12 +241,15 @@ impl PyNodeInfo {
     }
 }
 
-/// Result of appraise() (v6.0)
+/// Result of appraise() (v7.4)
 #[pyclass(get_all)]
 #[derive(Clone, Debug)]
 pub struct PyAppraiseResult {
     pub agree_pct: f32,
+    /// v7.4: Genuine structural conflict score, NOT 100-agree.
     pub disagree_pct: f32,
+    /// v7.4: Neutral tokens (seeds with no compositions) excluded from scoring.
+    pub neutral_pct: f32,
     pub verdict: String,
     pub evidence: Vec<(String, f32)>,
     /// v8.2: Convergent nodes that contributed to appraise scoring.
@@ -257,8 +260,8 @@ pub struct PyAppraiseResult {
 impl PyAppraiseResult {
     fn __repr__(&self) -> String {
         format!(
-            "AppraiseResult(agree={:.1}%, disagree={:.1}%, verdict='{}')",
-            self.agree_pct, self.disagree_pct, self.verdict
+            "AppraiseResult(agree={:.1}%, conflict={:.1}%, neutral={:.1}%, verdict='{}')",
+            self.agree_pct, self.disagree_pct, self.neutral_pct, self.verdict
         )
     }
 }
@@ -805,6 +808,7 @@ impl PyRsvs {
         PyAppraiseResult {
             agree_pct: r.agree_pct,
             disagree_pct: r.disagree_pct,
+            neutral_pct: r.neutral_pct,
             verdict: r.verdict,
             evidence: r.evidence,
             convergence_info: r.convergence_info,

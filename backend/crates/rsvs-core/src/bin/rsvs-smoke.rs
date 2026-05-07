@@ -148,8 +148,8 @@ fn main() {
     println!("\n--- Appraise (v6.0) ---");
     let appraise_result = rsvs.appraise("Stone is hard and solid like metal");
     println!(
-        "  agree: {:.1}%  disagree: {:.1}%  verdict: {}",
-        appraise_result.agree_pct, appraise_result.disagree_pct, appraise_result.verdict
+        "  agree: {:.1}%  conflict: {:.1}%  neutral: {:.1}%  verdict: {}",
+        appraise_result.agree_pct, appraise_result.disagree_pct, appraise_result.neutral_pct, appraise_result.verdict
     );
     println!(
         "  evidence: {:?}",

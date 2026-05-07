@@ -26,21 +26,21 @@ fn section(title: &str) {
 
 fn print_appraise(label: &str, result: &AppraiseResult) {
     println!(
-        "\n  {} → verdict: {} ({:.1}% agree / {:.1}% disagree)",
-        label, result.verdict, result.agree_pct, result.disagree_pct
+        "\n  {} → verdict: {} ({:.1}% agree / {:.1}% conflict / {:.1}% neutral)",
+        label, result.verdict, result.agree_pct, result.disagree_pct, result.neutral_pct
     );
     if !result.evidence.is_empty() {
         let support: Vec<String> = result
             .evidence
             .iter()
-            .filter(|(_, s)| *s > 0.4)
+            .filter(|(_, s)| *s > 0.1)
             .take(5)
             .map(|(t, s)| format!("{}({:.2})", t, s))
             .collect();
         let conflict: Vec<String> = result
             .evidence
             .iter()
-            .filter(|(_, s)| *s <= 0.4)
+            .filter(|(_, s)| *s <= 0.1)
             .take(5)
             .map(|(t, s)| format!("{}({:.2})", t, s))
             .collect();
@@ -65,15 +65,17 @@ fn print_appraise(label: &str, result: &AppraiseResult) {
 fn print_verdict(label: &str, v: &AppraiseVerdict) {
     let confidence_label = if v.confidence_gap > 30.0 {
         "[CONFIDENT]"
-    } else if v.confidence_gap < 10.0 {
+    } else if v.confidence_gap > 10.0 {
+        "[MODERATE]"
+    } else if v.confidence_gap > 0.0 {
         "[AMBIGUOUS]"
     } else {
-        ""
+        "[INVERTED]" // conflict > agree
     };
     let ctx_label = if v.is_contextual { "[CONTEXTUAL]" } else { "" };
     println!(
-        "\n  {} → verdict: {} ({:.1}% agree / {:.1}% disagree) gap={:.1}pp {} {}",
-        label, v.verdict, v.agree_pct, v.disagree_pct, v.confidence_gap, confidence_label, ctx_label
+        "\n  {} → verdict: {} ({:.1}% agree / {:.1}% conflict / {:.1}% neutral) gap={:+.1}pp {} {}",
+        label, v.verdict, v.agree_pct, v.disagree_pct, v.neutral_pct, v.confidence_gap, confidence_label, ctx_label
     );
     if !v.support.is_empty() {
         let s: Vec<String> = v.support.iter()
