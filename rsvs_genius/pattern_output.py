@@ -307,7 +307,8 @@ class PatternOutput:
         evidence_nodes = list(dict.fromkeys(evidence_nodes))  # Deduplicate, preserve order
 
         narrative_step = self._generate_narrative(
-            pattern=result.pattern, evidence=evidence_nodes
+            pattern=result.pattern, evidence=evidence_nodes,
+            trigger=trigger, steps=result.steps,
         )
         result.steps.append(narrative_step)
         result.narrative = narrative_step.data.get("narrative", "")
@@ -924,7 +925,8 @@ class PatternOutput:
     # ==================================================================
 
     def _generate_narrative(
-        self, pattern: str, evidence: list[str]
+        self, pattern: str, evidence: list[str],
+        trigger: str = "", steps: list[ReasoningStep] | None = None,
     ) -> ReasoningStep:
         """Step 6: Generate traceable narrative text from the reasoning chain.
 
@@ -935,6 +937,11 @@ class PatternOutput:
         KEY INSIGHT: The LLM doesn't generate from nothing. It generates
         FROM the graph. Graph = structural memory, LLM = narrative voice.
 
+        In the future, an LLM will generate the narrative FROM the
+        structured reasoning chain. For now, we build a structured
+        narrative that reads like a Jin Soun investigation report —
+        each claim traced to evidence, each step documented.
+
         Analogi: Jin Soun mengungkapkan kesimpulannya — bukan dengan
         mengarang, tapi dengan menelusuri rantai bukti. Setiap klaim
         bisa ditelusuri kembali ke node di graf kenangannya.
@@ -943,10 +950,14 @@ class PatternOutput:
         Args:
             pattern: The completed pattern description from Step 5.
             evidence: List of evidence node labels.
+            trigger: The original trigger text.
+            steps: The full reasoning chain (for structured narrative).
 
         Returns:
             A ReasoningStep with the generated narrative.
         """
+        steps = steps or []
+
         # Compute confidence from evidence grounding
         evidence_confidence = 0.5
         if self.rsvs_available and evidence:
@@ -958,27 +969,55 @@ class PatternOutput:
             except Exception:
                 pass
 
-        # Build the narrative
-        # Analogi: Jin Soun menyusun cerita — bukan fiksi, tapi
-        # laporan investigasi. Setiap paragraf punya footnote
-        # yang merujuk ke bukti spesifik.
+        # Build structured narrative — like a Jin Soun investigation report
+        # Analogi: Jin Soun menyusun laporan investigasi yang bisa diaudit.
+        # Setiap langkah punya footnote yang merujuk ke bukti spesifik.
         narrative_parts: list[str] = []
 
-        # Opening — what triggered this investigation
-        narrative_parts.append(f"Based on analysis triggered by the input, the following pattern emerged:")
-
-        # Body — the pattern description
-        if pattern:
-            narrative_parts.append(pattern)
-
-        # Evidence summary
-        if evidence:
-            evidence_str = ", ".join(evidence[:10])
+        # === Section 1: Trigger Summary ===
+        if trigger:
             narrative_parts.append(
-                f"This analysis is grounded in the following evidence nodes: {evidence_str}."
+                f"## Trigger\n\nInput: \"{trigger}\"\n\n"
+                f"This triggered a pattern completion analysis across the knowledge graph."
             )
 
-        # Confidence statement
+        # === Section 2: Reasoning Chain ===
+        if steps:
+            chain_lines: list[str] = ["## Reasoning Chain"]
+            for i, step in enumerate(steps[:-1], 1):  # Exclude this narrative step
+                step_emoji = {
+                    "trigger": "🎯",
+                    "recall": "🔍",
+                    "cross_reference": "🔗",
+                    "anomaly": "⚠️",
+                    "pattern": "🧩",
+                }.get(step.step_type, "📋")
+
+                chain_lines.append(
+                    f"\n**Step {i}: {step.step_type.upper()}** {step_emoji}\n"
+                    f"{step.description}\n"
+                    f"Confidence: {step.confidence:.0%}"
+                )
+                if step.evidence_nodes:
+                    chain_lines.append(
+                        f"Evidence: {', '.join(step.evidence_nodes[:8])}"
+                    )
+            narrative_parts.append("\n".join(chain_lines))
+
+        # === Section 3: Pattern Description ===
+        if pattern:
+            narrative_parts.append(f"## Pattern\n\n{pattern}")
+
+        # === Section 4: Evidence Summary ===
+        if evidence:
+            unique_evidence = list(dict.fromkeys(evidence))
+            evidence_str = ", ".join(unique_evidence[:15])
+            narrative_parts.append(
+                f"## Evidence\n\n"
+                f"Grounded in {len(unique_evidence)} knowledge node(s): {evidence_str}."
+            )
+
+        # === Section 5: Confidence Assessment ===
         confidence_desc = "low"
         if evidence_confidence >= 0.7:
             confidence_desc = "high"
@@ -986,9 +1025,11 @@ class PatternOutput:
             confidence_desc = "moderate"
 
         narrative_parts.append(
-            f"Overall confidence: {evidence_confidence:.0%} ({confidence_desc}). "
+            f"## Confidence\n\n"
+            f"Overall: **{evidence_confidence:.0%}** ({confidence_desc}).\n\n"
             f"Each claim in this narrative can be traced back to specific nodes "
-            f"in the knowledge graph."
+            f"in the knowledge graph. This is not probabilistic text generation — "
+            f"it is structured reasoning from graph evidence."
         )
 
         narrative = "\n\n".join(narrative_parts)
@@ -996,8 +1037,8 @@ class PatternOutput:
         return ReasoningStep(
             step_type="narrative",
             description=(
-                f"Generated narrative ({len(narrative)} chars) from "
-                f"{len(evidence)} evidence nodes."
+                f"Generated structured narrative ({len(narrative)} chars) from "
+                f"{len(evidence)} evidence nodes and {len(steps)} reasoning steps."
             ),
             data={
                 "narrative": narrative,
