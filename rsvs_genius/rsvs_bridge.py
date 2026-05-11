@@ -26,6 +26,7 @@ bridge ini menerjemahkan API Rust ke Python dengan cara yang konsisten.
 
 from __future__ import annotations
 
+import itertools
 import json
 import logging
 import time
@@ -33,6 +34,30 @@ from dataclasses import dataclass, field
 from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Epistemological seed labels — must match Rust core's SEED_LABEL_LIST
+# ---------------------------------------------------------------------------
+
+SEED_LABELS = [
+    "exists", "entity", "relation", "state", "change", "time", "space",
+    "cause", "effect", "context", "signal", "pattern", "memory",
+    "attention", "value", "agent", "goal", "risk", "trust", "identity",
+    "language", "meaning", "action", "feedback",
+]
+
+# Priming sentence that contains ALL 24 seed labels, ensuring the Rust core
+# graph has seed-relevant sentences from the start.
+_PRIMING_SENTENCE = (
+    "The entity exists in time and space. "
+    "Cause and effect relate to change. "
+    "Pattern and signal create meaning. "
+    "Context provides value. "
+    "Agent has goal, risk, trust, and identity. "
+    "Memory and attention form feedback. "
+    "Language and state define action. "
+    "Relation connects cause and effect."
+)
 
 # ---------------------------------------------------------------------------
 # Try to import the Rust core
@@ -391,12 +416,16 @@ class RsvsBridge:
         self._rsvs: Any = None
         self.is_rust_core: bool = False
         self._fallback: Optional[_FallbackGraph] = None
+        self._primed: bool = False
+        # Rotating seed word cycle for ingest_with_grounding()
+        self._seed_cycle = itertools.cycle(SEED_LABELS)
 
         if rsvs_instance is not None:
             self._rsvs = rsvs_instance
             self.is_rust_core = True
             self.is_available = True
             logger.info("RsvsBridge initialized with provided RSVS instance")
+            self._prime_rust_core()
             return
 
         # Try to get the Rust core
@@ -409,6 +438,7 @@ class RsvsBridge:
                     self.is_rust_core = True
                     self.is_available = True
                     logger.info("RsvsBridge initialized with Rust core (singleton)")
+                    self._prime_rust_core()
                     return
                 except Exception:
                     pass
@@ -419,6 +449,7 @@ class RsvsBridge:
                     self.is_rust_core = True
                     self.is_available = True
                     logger.info("RsvsBridge initialized with Rust core (new instance)")
+                    self._prime_rust_core()
                     return
             except Exception as exc:
                 logger.warning("Failed to initialize Rust core: %s", exc)
@@ -430,11 +461,103 @@ class RsvsBridge:
         logger.info("RsvsBridge initialized in FALLBACK mode (no Rust core)")
 
     # ------------------------------------------------------------------
+    # Priming & grounding for Rust core
+    # ------------------------------------------------------------------
+
+    def _prime_rust_core(self) -> None:
+        """Prime the Rust core by ingesting a sentence containing seed labels.
+
+        The Rust core requires tokens to be "groundable" — they must appear
+        in a sentence containing one of the 24 epistemological seed labels.
+        Without this priming, non-English text can never produce groundable
+        tokens because no token matches the English seed labels.
+
+        This method is called once during initialization when the Rust core
+        is active. It ingests a priming sentence that contains ALL 24 seed
+        labels, ensuring the graph has seed-relevant sentences from the start.
+        """
+        if self._primed or not self.is_rust_core:
+            return
+
+        try:
+            stats = self._rsvs.ingest(_PRIMING_SENTENCE)
+            normalized = self._normalize_stats(stats)
+            self._primed = True
+            logger.info(
+                "Rust core primed: atoms_promoted=%d, sentences=%d",
+                normalized.get("atoms_promoted", 0),
+                normalized.get("sentences_processed", 0),
+            )
+        except Exception as exc:
+            logger.warning("Failed to prime Rust core: %s", exc)
+
+    def _text_contains_seed(self, text: str) -> bool:
+        """Check whether text naturally contains any of the 24 seed labels.
+
+        This mirrors the Rust core's ``sentence_contains_seed()`` logic so
+        we can decide whether a grounding prefix is needed BEFORE sending
+        the text to Rust.
+        """
+        words = text.lower().split()
+        # Also split on punctuation for robustness
+        all_tokens = set()
+        for w in words:
+            # Strip punctuation and add both raw and stripped
+            all_tokens.add(w)
+            stripped = w.strip(".,;:!?'\"()[]{}-")
+            if stripped:
+                all_tokens.add(stripped)
+        seed_set = set(SEED_LABELS)
+        return bool(all_tokens & seed_set)
+
+    def ingest_with_grounding(self, text: str, domain_id: Optional[int] = None) -> dict:
+        """Ingest text with a grounding prefix when using the Rust core.
+
+        When the Rust core is active and the text does not naturally
+        contain any of the 24 epistemological seed labels, this method
+        prepends a grounding context sentence to ensure the combined
+        text passes ``sentence_contains_seed()`` in the Rust pipeline.
+
+        Different seed words are used in rotation (round-robin over all
+        24 seeds) to avoid over-reliance on a single seed label.
+
+        Args:
+            text: The text to ingest.
+            domain_id: Optional domain tag for the ingestion.
+
+        Returns:
+            A dict with ingestion stats.
+        """
+        if not self.is_rust_core:
+            # No grounding needed in fallback mode
+            return self._fallback.ingest(text)  # type: ignore[union-attr]
+
+        if self._text_contains_seed(text):
+            # Text already has seed co-occurrence — ingest as-is
+            return self.ingest(text, domain_id=domain_id)
+
+        # Pick the next seed word in rotation
+        seed_word = next(self._seed_cycle)
+        grounded_text = f"The {seed_word} relates to {text}"
+        logger.debug(
+            "ingest_with_grounding: prepended seed '%s' for text: %.60s...",
+            seed_word, text,
+        )
+        return self.ingest(grounded_text, domain_id=domain_id)
+
+    # ------------------------------------------------------------------
     # Core operations
     # ------------------------------------------------------------------
 
     def ingest(self, text: str, domain_id: Optional[int] = None) -> dict:
         """Ingest text into the knowledge graph.
+
+        When the Rust core is active and the text does not naturally
+        contain any of the 24 epistemological seed labels, this method
+        automatically delegates to ``ingest_with_grounding()`` which
+        prepends a grounding context sentence. This ensures that even
+        standalone Indonesian or mixed-language ingests have seed
+        co-occurrence, so tokens can be promoted.
 
         Args:
             text: The text to ingest.
@@ -444,6 +567,10 @@ class RsvsBridge:
             A dict with ingestion stats.
         """
         if self.is_rust_core:
+            # Auto-ground: if text lacks seed words, prepend a grounding prefix
+            if not self._text_contains_seed(text):
+                return self.ingest_with_grounding(text, domain_id=domain_id)
+
             try:
                 if domain_id is not None:
                     self._rsvs.set_domain(domain_id)

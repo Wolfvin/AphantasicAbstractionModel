@@ -14,13 +14,12 @@ Flow:
 
 from __future__ import annotations
 
-import json
 import logging
-import subprocess
 import time
 from typing import Any, Optional
 
 from .rsvs_bridge import RsvsBridge, get_bridge
+from .web_search import WebSearchEngine, _web_search
 
 logger = logging.getLogger(__name__)
 
@@ -40,50 +39,8 @@ SOURCE_TRUST: dict[str, float] = {
 }
 
 
-def _web_search(query: str, num: int = 5) -> list[dict]:
-    """Search the web using z-ai-web-dev-sdk or fallback.
-
-    Tries the Node.js SDK first; if that fails, returns an empty list.
-    This keeps the Python package pure while leveraging the existing
-    JS-based search infrastructure.
-
-    Args:
-        query: Search query string.
-        num: Maximum number of results to return.
-
-    Returns:
-        A list of search result dicts with keys like 'title', 'url', 'snippet'.
-    """
-    try:
-        # Escape the query for safe embedding in JS string
-        safe_query = query.replace("\\", "\\\\").replace('"', '\\"').replace("'", "\\'")
-        result = subprocess.run(
-            [
-                "node", "-e",
-                f"""
-const ZAI = require('z-ai-web-dev-sdk').default;
-(async () => {{
-  const zai = await ZAI.create();
-  const r = await zai.functions.invoke("web_search", {{query: "{safe_query}", num: {num}}});
-  console.log(JSON.stringify(r));
-}})();
-""",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            return json.loads(result.stdout)
-    except FileNotFoundError:
-        logger.debug("Node.js not found — web search unavailable")
-    except subprocess.TimeoutExpired:
-        logger.warning("Web search timed out for query: %s", query)
-    except json.JSONDecodeError as exc:
-        logger.warning("Failed to parse web search results: %s", exc)
-    except Exception as exc:
-        logger.warning("Web search failed: %s", exc)
-    return []
+# _web_search is now imported from .web_search for backward compatibility.
+# It delegates to a shared WebSearchEngine instance with caching.
 
 
 class ContextLayer:
@@ -103,7 +60,12 @@ class ContextLayer:
         is_rust_core: Whether the Rust core is being used.
     """
 
-    def __init__(self, rsvs_instance: Any | None = None, bridge: Optional[RsvsBridge] = None) -> None:
+    def __init__(
+        self,
+        rsvs_instance: Any | None = None,
+        bridge: Optional[RsvsBridge] = None,
+        web_search: Optional[WebSearchEngine] = None,
+    ) -> None:
         """Initialize the Context Layer.
 
         Args:
@@ -111,6 +73,8 @@ class ContextLayer:
                 the layer will obtain a bridge via get_bridge().
             bridge: Optional pre-built RsvsBridge instance. If provided,
                 takes precedence over rsvs_instance.
+            web_search: Optional WebSearchEngine instance. If None,
+                a default instance is created with standard settings.
         """
         if bridge is not None:
             self._bridge = bridge
@@ -121,6 +85,9 @@ class ContextLayer:
 
         self.rsvs_available = self._bridge.is_available
         self.is_rust_core = self._bridge.is_rust_core
+
+        # Web search engine — with caching and fallback
+        self._web_search = web_search or WebSearchEngine()
 
         # Scope filter — when set, only sources in this list are used
         # Analogi: Jin Soun membatasi diri hanya membaca laporan dari
@@ -325,8 +292,8 @@ class ContextLayer:
             "trust": trust,
         }
 
-        # Step 1: Perform web search
-        search_results = _web_search(query, num=max_results)
+        # Step 1: Perform web search (using instance engine with caching)
+        search_results = self._web_search.search(query, num=max_results)
         response["results"] = search_results
         response["result_count"] = len(search_results)
 
