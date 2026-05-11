@@ -20,6 +20,8 @@ import subprocess
 import time
 from typing import Any
 
+from .rsvs_bridge import RsvsBridge, get_bridge
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -84,29 +86,6 @@ const ZAI = require('z-ai-web-dev-sdk').default;
     return []
 
 
-def _get_rsvs_instance() -> Any:
-    """Attempt to get an RSVS instance, returning None if unavailable.
-
-    Tries multiple import strategies to be resilient across
-    different installation setups.
-    """
-    # Strategy 1: Direct import from rsvs package
-    try:
-        from rsvs import Rsvs
-        return Rsvs()
-    except Exception:
-        pass
-
-    # Strategy 2: Get singleton from rsvs_core
-    try:
-        from rsvs.rsvs_core import get_rsvs_instance
-        return get_rsvs_instance()
-    except Exception:
-        pass
-
-    return None
-
-
 class ContextLayer:
     """Context Layer — Internet Search + Scope Filter + Source Trust.
 
@@ -119,8 +98,9 @@ class ContextLayer:
     mata-mata terpercayanya. Context Layer = filter sumber itu.
 
     Attributes:
-        rsvs: The RSVS instance (may be None if core is unavailable).
-        rsvs_available: Whether a working RSVS instance is connected.
+        rsvs_available: Whether a working RSVS instance is connected
+            (either Rust core or fallback graph via the bridge).
+        is_rust_core: Whether the Rust core is being used.
     """
 
     def __init__(self, rsvs_instance: Any | None = None) -> None:
@@ -128,14 +108,15 @@ class ContextLayer:
 
         Args:
             rsvs_instance: Optional pre-built RSVS instance. If None,
-                the layer will try to obtain one from rsvs.rsvs_core.
+                the layer will obtain a bridge via get_bridge().
         """
         if rsvs_instance is not None:
-            self.rsvs: Any = rsvs_instance
-            self.rsvs_available = True
+            self._bridge = RsvsBridge(rsvs_instance=rsvs_instance)
         else:
-            self.rsvs = _get_rsvs_instance()
-            self.rsvs_available = self.rsvs is not None
+            self._bridge = get_bridge()
+
+        self.rsvs_available = self._bridge.is_available
+        self.is_rust_core = self._bridge.is_rust_core
 
         # Scope filter — when set, only sources in this list are used
         # Analogi: Jin Soun membatasi diri hanya membaca laporan dari
@@ -147,7 +128,10 @@ class ContextLayer:
         self._ingestion_log: list[dict] = []
 
         if self.rsvs_available:
-            logger.info("ContextLayer initialized with RSVS core")
+            if self.is_rust_core:
+                logger.info("ContextLayer initialized with RSVS Rust core")
+            else:
+                logger.info("ContextLayer initialized with RSVS fallback graph")
         else:
             logger.info("ContextLayer initialized WITHOUT RSVS core (fallback mode)")
 
@@ -272,9 +256,9 @@ class ContextLayer:
 
         if self.rsvs_available:
             try:
-                stats = self.rsvs.ingest(text)
+                stats = self._bridge.ingest(text)
                 record["success"] = True
-                record["stats"] = self._normalize_stats(stats)
+                record["stats"] = stats  # Already a plain dict from bridge
             except Exception as exc:
                 logger.error("RSVS ingestion failed: %s", exc)
                 record["success"] = False
@@ -391,27 +375,4 @@ class ContextLayer:
         """Clear the ingestion log."""
         self._ingestion_log = []
 
-    @staticmethod
-    def _normalize_stats(stats: Any) -> dict:
-        """Normalize RSVS ingest stats to a plain dict.
 
-        RSVS returns various stats objects (PyIngestStats etc.)
-        which may be PyO3 objects. Convert to dict for JSON safety.
-
-        Args:
-            stats: The stats object from RSVS.ingest().
-
-        Returns:
-            A plain dict representation.
-        """
-        if isinstance(stats, dict):
-            return stats
-        # Try to convert PyO3 object to dict via __dict__ or dir()
-        try:
-            return {
-                k: getattr(stats, k)
-                for k in dir(stats)
-                if not k.startswith("_") and not callable(getattr(stats, k))
-            }
-        except Exception:
-            return {"raw": str(stats)}

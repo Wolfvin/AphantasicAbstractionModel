@@ -17,7 +17,9 @@ from __future__ import annotations
 import json
 import logging
 import time
-from typing import Any
+from typing import Any, Optional
+
+from .rsvs_bridge import RsvsBridge, get_bridge
 
 logger = logging.getLogger(__name__)
 
@@ -26,29 +28,6 @@ _DEFAULT_ACTIVE_WINDOW = 10
 
 # How many seconds before a sense is considered "stale"
 _SENSE_STALENESS_SECONDS = 300.0  # 5 minutes
-
-
-def _get_rsvs_instance() -> Any:
-    """Attempt to get an RSVS instance, returning None if unavailable.
-
-    Tries multiple import strategies to be resilient across
-    different installation setups.
-    """
-    # Strategy 1: Direct import from rsvs package
-    try:
-        from rsvs import Rsvs
-        return Rsvs()
-    except Exception:
-        pass
-
-    # Strategy 2: Get singleton from rsvs_core
-    try:
-        from rsvs.rsvs_core import get_rsvs_instance
-        return get_rsvs_instance()
-    except Exception:
-        pass
-
-    return None
 
 
 class SituationLayer:
@@ -63,8 +42,8 @@ class SituationLayer:
     30 tahun pengalaman — hanya yang relevan untuk situasi sekarang.
 
     Attributes:
-        rsvs: The RSVS instance (may be None if core is unavailable).
         rsvs_available: Whether a working RSVS instance is connected.
+        is_rust_core: Whether the Rust core backend is being used.
     """
 
     def __init__(self, rsvs_instance: Any | None = None) -> None:
@@ -72,14 +51,15 @@ class SituationLayer:
 
         Args:
             rsvs_instance: Optional pre-built RSVS instance. If None,
-                the layer will try to obtain one from rsvs.rsvs_core.
+                the layer will try to obtain one via the RsvsBridge.
         """
         if rsvs_instance is not None:
-            self.rsvs: Any = rsvs_instance
-            self.rsvs_available = True
+            self._bridge = RsvsBridge(rsvs_instance=rsvs_instance)
         else:
-            self.rsvs = _get_rsvs_instance()
-            self.rsvs_available = self.rsvs is not None
+            self._bridge = get_bridge()
+
+        self.rsvs_available = self._bridge.is_available
+        self.is_rust_core = self._bridge.is_rust_core
 
         # Session tracking
         # Analogi: Jin Soun mencatat percakapan hari ini terpisah
@@ -92,7 +72,7 @@ class SituationLayer:
         if self.rsvs_available:
             # Capture the current event sequence so we only track new events
             try:
-                self._last_event_seq = self.rsvs.latest_seq_v1()
+                self._last_event_seq = self._bridge.latest_seq_v1()
             except Exception:
                 self._last_event_seq = 0
             logger.info("SituationLayer initialized with RSVS core (seq=%d)",
@@ -150,9 +130,9 @@ class SituationLayer:
 
         if self.rsvs_available:
             try:
-                stats = self.rsvs.ingest(ingest_text)
+                stats = self._bridge.ingest(ingest_text)
                 result["success"] = True
-                result["stats"] = self._normalize_stats(stats)
+                result["stats"] = stats  # Already a plain dict from bridge
 
                 # After ingestion, update active senses
                 self._update_active_senses()
@@ -240,7 +220,7 @@ class SituationLayer:
 
         try:
             # Use relate() for spreading activation
-            relate_result = self.rsvs.relate(query)
+            relate_result = self._bridge.relate(query)
             if relate_result is not None:
                 results = self._parse_relate_result(relate_result, top_k)
         except Exception as exc:
@@ -249,7 +229,7 @@ class SituationLayer:
         # If relate didn't give enough results, try query()
         if len(results) < top_k:
             try:
-                query_result = self.rsvs.query(query, context="conversation")
+                query_result = self._bridge.query(query, context="conversation")
                 if query_result is not None:
                     extra = self._parse_query_result(query_result, top_k - len(results))
                     results.extend(extra)
@@ -293,11 +273,11 @@ class SituationLayer:
 
         if self.rsvs_available:
             try:
-                summary["confidence_map"] = self.rsvs.confidence_map()
+                summary["confidence_map"] = self._bridge.confidence_map()
             except Exception:
                 pass
             try:
-                summary["rsvs_status"] = self.rsvs.status()
+                summary["rsvs_status"] = self._bridge.status()
             except Exception:
                 pass
 
@@ -325,7 +305,7 @@ class SituationLayer:
         # Update event sequence to skip past events
         if self.rsvs_available:
             try:
-                self._last_event_seq = self.rsvs.latest_seq_v1()
+                self._last_event_seq = self._bridge.latest_seq_v1()
             except Exception:
                 self._last_event_seq = 0
 
@@ -357,7 +337,7 @@ class SituationLayer:
             return []
 
         try:
-            raw = self.rsvs.consume_events_v1(since_seq=after_seq)
+            raw = self._bridge.consume_events_v1(after_seq=after_seq)
             if raw:
                 return self._parse_event_stream(raw)
         except Exception as exc:
@@ -383,7 +363,7 @@ class SituationLayer:
 
         try:
             # Get confidence map — high confidence = recently activated
-            cmap = self.rsvs.confidence_map()
+            cmap = self._bridge.confidence_map()
             # Sort by confidence (descending) and take top entries
             sorted_items = sorted(cmap.items(), key=lambda x: x[1], reverse=True)
 
@@ -393,7 +373,7 @@ class SituationLayer:
                 #  in a full implementation, we'd track this precisely)
                 sense_count = 0
                 try:
-                    senses = self.rsvs.senses(label)
+                    senses = self._bridge.senses(label)
                     sense_count = len(senses) if senses else 0
                 except Exception:
                     pass
@@ -495,7 +475,7 @@ class SituationLayer:
         """Get raw event stream from RSVS since last check."""
         if not self.rsvs_available:
             return ""
-        return self.rsvs.consume_events_v1(since_seq=self._last_event_seq)
+        return self._bridge.consume_events_v1(after_seq=self._last_event_seq)
 
     @staticmethod
     def _extract_new_atoms(events_raw: str) -> list[str]:
@@ -503,6 +483,9 @@ class SituationLayer:
         atoms: list[str] = []
         try:
             events = json.loads(events_raw) if events_raw else []
+            if isinstance(events, dict):
+                # Bridge may return {"events": [...], ...}
+                events = events.get("events", [events])
             for event in events:
                 if isinstance(event, dict):
                     # Try common event structures
@@ -515,11 +498,20 @@ class SituationLayer:
         return atoms
 
     @staticmethod
-    def _parse_relate_result(result: Any, top_k: int) -> list[dict]:
-        """Parse an RSVS relate() result into a list of related concepts.
+    def _parse_relate_result(result: dict, top_k: int) -> list[dict]:
+        """Parse a bridge relate() result into a list of related concepts.
+
+        The bridge returns a dict with keys:
+            - "related_nodes": [(node_id_or_label, score), ...]
+            - "related_edges": [...]
+            - "structural_relations": [...]
+            - "_pyo3_object": bool (optional, indicates numeric IDs)
+
+        When is_rust_core, related_nodes contains numeric IDs (u32, f32).
+        When fallback, contains (label_str, float).
 
         Args:
-            result: The result from RSVS.relate().
+            result: The result dict from RsvsBridge.relate().
             top_k: Maximum number of results.
 
         Returns:
@@ -527,59 +519,76 @@ class SituationLayer:
         """
         items: list[dict] = []
 
-        if isinstance(result, dict):
-            # Dict-style result
-            related = result.get("related", result.get("nodes", []))
-            for item in related[:top_k]:
-                if isinstance(item, dict):
-                    items.append({
-                        "label": item.get("label", str(item)),
-                        "relevance": float(item.get("score",
-                                                     item.get("relevance", 0.0))),
-                        "senses": int(item.get("sense_count", 0)),
-                        "source": "relate",
-                    })
-                elif isinstance(item, str):
-                    items.append({
-                        "label": item,
-                        "relevance": 0.0,
-                        "senses": 0,
-                        "source": "relate",
-                    })
-        else:
-            # PyO3 object — try attribute access
-            try:
-                for attr_name in ("related", "nodes", "atoms"):
-                    related = getattr(result, attr_name, None)
-                    if related is not None:
-                        for item in related[:top_k]:
-                            if isinstance(item, str):
-                                items.append({
-                                    "label": item,
-                                    "relevance": 0.0,
-                                    "senses": 0,
-                                    "source": "relate",
-                                })
-                            elif hasattr(item, "label"):
-                                items.append({
-                                    "label": getattr(item, "label", str(item)),
-                                    "relevance": float(getattr(item, "score",
-                                                                getattr(item, "relevance", 0.0))),
-                                    "senses": int(getattr(item, "sense_count", 0)),
-                                    "source": "relate",
-                                })
-                        break
-            except Exception:
-                pass
+        if not isinstance(result, dict):
+            return items
+
+        # The bridge always returns dicts — extract related_nodes
+        related_nodes = result.get("related_nodes", [])
+        is_pyo3 = result.get("_pyo3_object", False)
+
+        for item in related_nodes[:top_k]:
+            if isinstance(item, (list, tuple)) and len(item) >= 2:
+                node_id_or_label = item[0]
+                score = float(item[1])
+                # When Rust core, node IDs are numeric (u32) — convert to
+                # string label as best-effort; when fallback, already a label
+                label = str(node_id_or_label) if is_pyo3 else str(node_id_or_label)
+                items.append({
+                    "label": label,
+                    "relevance": score,
+                    "senses": 0,
+                    "source": "relate",
+                })
+            elif isinstance(item, dict):
+                items.append({
+                    "label": item.get("label", str(item)),
+                    "relevance": float(item.get("score",
+                                                 item.get("relevance", 0.0))),
+                    "senses": int(item.get("sense_count", 0)),
+                    "source": "relate",
+                })
+            elif isinstance(item, str):
+                items.append({
+                    "label": item,
+                    "relevance": 0.0,
+                    "senses": 0,
+                    "source": "relate",
+                })
+
+        # Also check structural_relations for additional related items
+        if len(items) < top_k:
+            structural = result.get("structural_relations", [])
+            existing_labels = {it["label"] for it in items}
+            for item in structural[:top_k - len(items)]:
+                if isinstance(item, (list, tuple)) and len(item) >= 2:
+                    node_id_or_label = item[0]
+                    score = float(item[1])
+                    label = str(node_id_or_label)
+                    if label not in existing_labels:
+                        items.append({
+                            "label": label,
+                            "relevance": score,
+                            "senses": 0,
+                            "source": "relate_structural",
+                        })
+                        existing_labels.add(label)
 
         return items[:top_k]
 
     @staticmethod
-    def _parse_query_result(result: Any, top_k: int) -> list[dict]:
-        """Parse an RSVS query() result into related concepts.
+    def _parse_query_result(result: dict, top_k: int) -> list[dict]:
+        """Parse a bridge query() result into related concepts.
+
+        The bridge returns a dict with keys:
+            - "sense_idx": int
+            - "sense_n": int
+            - "atoms": [(label, score), ...]
+            - "layer": int
+            - "grounding_score": float
+            - "compositions": [(label, sense_id), ...]
 
         Args:
-            result: The result from RSVS.query().
+            result: The result dict from RsvsBridge.query().
             top_k: Maximum number of results.
 
         Returns:
@@ -587,31 +596,48 @@ class SituationLayer:
         """
         items: list[dict] = []
 
-        if isinstance(result, dict):
-            # Dict-style result
-            label = result.get("label", result.get("concept", ""))
-            if label:
+        if not isinstance(result, dict):
+            return items
+
+        # Extract atoms — each is a (label, score) tuple
+        atoms = result.get("atoms", [])
+        for atom_entry in atoms[:top_k]:
+            if isinstance(atom_entry, (list, tuple)) and len(atom_entry) >= 2:
+                label = str(atom_entry[0])
+                score = float(atom_entry[1])
                 items.append({
                     "label": label,
-                    "relevance": float(result.get("score",
-                                                   result.get("confidence", 1.0))),
-                    "senses": int(result.get("sense_count", 0)),
+                    "relevance": score,
+                    "senses": result.get("sense_n", 1),
                     "source": "query",
                 })
-        else:
-            # PyO3 object
-            try:
-                label = getattr(result, "label", None)
-                if label:
+            elif isinstance(atom_entry, str):
+                items.append({
+                    "label": atom_entry,
+                    "relevance": float(result.get("grounding_score", 0.5)),
+                    "senses": result.get("sense_n", 1),
+                    "source": "query",
+                })
+
+        # If no atoms, try compositions — each is (label, sense_id)
+        if not items:
+            compositions = result.get("compositions", [])
+            for comp_entry in compositions[:top_k]:
+                if isinstance(comp_entry, (list, tuple)) and len(comp_entry) >= 1:
+                    label = str(comp_entry[0])
                     items.append({
                         "label": label,
-                        "relevance": float(getattr(result, "score",
-                                                    getattr(result, "confidence", 1.0))),
-                        "senses": int(getattr(result, "sense_count", 0)),
-                        "source": "query",
+                        "relevance": float(result.get("grounding_score", 0.5)),
+                        "senses": result.get("sense_n", 1),
+                        "source": "query_composition",
                     })
-            except Exception:
-                pass
+                elif isinstance(comp_entry, str):
+                    items.append({
+                        "label": comp_entry,
+                        "relevance": float(result.get("grounding_score", 0.5)),
+                        "senses": result.get("sense_n", 1),
+                        "source": "query_composition",
+                    })
 
         return items[:top_k]
 
@@ -627,10 +653,14 @@ class SituationLayer:
         """
         try:
             events = json.loads(raw)
+            if isinstance(events, dict):
+                # Bridge may wrap in {"events": [...], ...}
+                if "events" in events:
+                    events = events["events"]
+                else:
+                    return [events]
             if isinstance(events, list):
                 return events
-            if isinstance(events, dict):
-                return [events]
         except json.JSONDecodeError:
             pass
         return []
@@ -704,7 +734,7 @@ class SituationLayer:
         # If RSVS is available, use the confidence map
         if self.rsvs_available:
             try:
-                cmap = self.rsvs.confidence_map()
+                cmap = self._bridge.confidence_map()
                 sorted_topics = sorted(cmap.items(), key=lambda x: -x[1])
                 topics = [label for label, _ in sorted_topics[:10]]
             except Exception:
@@ -722,24 +752,3 @@ class SituationLayer:
                             break
 
         return topics
-
-    @staticmethod
-    def _normalize_stats(stats: Any) -> dict:
-        """Normalize RSVS ingest stats to a plain dict.
-
-        Args:
-            stats: The stats object from RSVS.ingest().
-
-        Returns:
-            A plain dict representation.
-        """
-        if isinstance(stats, dict):
-            return stats
-        try:
-            return {
-                k: getattr(stats, k)
-                for k in dir(stats)
-                if not k.startswith("_") and not callable(getattr(stats, k))
-            }
-        except Exception:
-            return {"raw": str(stats)}

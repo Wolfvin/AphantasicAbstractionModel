@@ -34,6 +34,8 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
+from .rsvs_bridge import RsvsBridge, get_bridge
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -58,33 +60,6 @@ _STOP_WORDS = frozenset({
     "yang", "dan", "dari", "untuk", "dengan", "adalah", "itu",
     "ini", "ke", "di", "pada", "tidak", "akan", "telah", "oleh",
 })
-
-
-# ---------------------------------------------------------------------------
-# RSVS instance helper — shared pattern with other layers
-# ---------------------------------------------------------------------------
-
-def _get_rsvs_instance() -> Any:
-    """Attempt to get an RSVS instance, returning None if unavailable.
-
-    Tries multiple import strategies to be resilient across
-    different installation setups.
-    """
-    # Strategy 1: Direct import from rsvs package
-    try:
-        from rsvs import Rsvs
-        return Rsvs()
-    except Exception:
-        pass
-
-    # Strategy 2: Get singleton from rsvs_core
-    try:
-        from rsvs.rsvs_core import get_rsvs_instance
-        return get_rsvs_instance()
-    except Exception:
-        pass
-
-    return None
 
 
 # ---------------------------------------------------------------------------
@@ -199,8 +174,8 @@ class PatternOutput:
     menyusun pola → menghasilkan narasi yang bisa ditelusuri.
 
     Attributes:
-        rsvs: The RSVS instance (may be None if core is unavailable).
         rsvs_available: Whether a working RSVS instance is connected.
+        is_rust_core: Whether the Rust core is being used.
     """
 
     def __init__(self, rsvs_instance: Any | None = None) -> None:
@@ -208,14 +183,15 @@ class PatternOutput:
 
         Args:
             rsvs_instance: Optional pre-built RSVS instance. If None,
-                the layer will try to obtain one from rsvs.rsvs_core.
+                the layer will obtain a bridge via get_bridge().
         """
         if rsvs_instance is not None:
-            self.rsvs: Any = rsvs_instance
-            self.rsvs_available = True
+            self._bridge = RsvsBridge(rsvs_instance=rsvs_instance)
         else:
-            self.rsvs = _get_rsvs_instance()
-            self.rsvs_available = self.rsvs is not None
+            self._bridge = get_bridge()
+
+        self.rsvs_available = self._bridge.is_available
+        self.is_rust_core = self._bridge.is_rust_core
 
         # Fallback graph for when RSVS is unavailable
         # Maps concept → {compositions: [...], relations: [...], confidence: float}
@@ -225,7 +201,7 @@ class PatternOutput:
         self._history: list[PatternResult] = []
 
         if self.rsvs_available:
-            logger.info("PatternOutput initialized with RSVS core")
+            logger.info("PatternOutput initialized with RSVS core (rust=%s)", self.is_rust_core)
         else:
             logger.info("PatternOutput initialized WITHOUT RSVS core (fallback mode)")
 
@@ -395,7 +371,7 @@ class PatternOutput:
         if self.rsvs_available:
             # Use relate() to find concepts connected to the trigger
             try:
-                relate_result = self.rsvs.relate(text)
+                relate_result = self._bridge.relate(text)
                 if relate_result:
                     parsed = self._parse_concept_list(relate_result)
                     concepts.extend(parsed["labels"])
@@ -406,7 +382,7 @@ class PatternOutput:
 
             # Also try query() for direct concept lookup
             try:
-                query_result = self.rsvs.query(text, context="trigger")
+                query_result = self._bridge.query(text, context="trigger")
                 if query_result:
                     parsed = self._parse_concept_list(query_result)
                     for label in parsed["labels"]:
@@ -482,7 +458,7 @@ class PatternOutput:
 
             if self.rsvs_available:
                 try:
-                    relate_result = self.rsvs.relate(concept)
+                    relate_result = self._bridge.relate(concept)
                     if relate_result:
                         parsed = self._parse_relate_result(relate_result)
                         for node_label in parsed["labels"]:
@@ -512,7 +488,7 @@ class PatternOutput:
         for node in second_order_candidates:
             if self.rsvs_available:
                 try:
-                    relate_result = self.rsvs.relate(node)
+                    relate_result = self._bridge.relate(node)
                     if relate_result:
                         parsed = self._parse_relate_result(relate_result)
                         for node_label in parsed["labels"][:5]:  # Limit expansion
@@ -584,7 +560,7 @@ class PatternOutput:
                 for node_b in nodes_to_compare[i + 1:]:
                     # Compute structural similarity
                     try:
-                        sim = self.rsvs.structural_similarity(node_a, node_b)
+                        sim = self._bridge.structural_similarity(node_a, node_b)
                         sim_value = self._parse_similarity(sim)
 
                         if sim_value >= _MIN_SIMILARITY_FOR_XREF:
@@ -602,8 +578,8 @@ class PatternOutput:
 
                     # Also check for shared compositions via senses()
                     try:
-                        senses_a = self.rsvs.senses(node_a)
-                        senses_b = self.rsvs.senses(node_b)
+                        senses_a = self._bridge.senses(node_a)
+                        senses_b = self._bridge.senses(node_b)
                         comps_a = self._parse_composition_list(senses_a)
                         comps_b = self._parse_composition_list(senses_b)
                         shared = set(comps_a) & set(comps_b)
@@ -699,7 +675,7 @@ class PatternOutput:
                     f"(similarity: {similarity:.2f})"
                 )
                 try:
-                    appraise_result = self.rsvs.appraise(statement)
+                    appraise_result = self._bridge.appraise(statement)
                     if self._is_appraise_negative(appraise_result):
                         anomalies.append({
                             "type": "contradiction",
@@ -729,7 +705,7 @@ class PatternOutput:
                     f"{', '.join(shared[:3])}"
                 )
                 try:
-                    appraise_result = self.rsvs.appraise(statement)
+                    appraise_result = self._bridge.appraise(statement)
                     if self._is_appraise_negative(appraise_result):
                         anomalies.append({
                             "type": "unexpected_overlap",
@@ -754,7 +730,7 @@ class PatternOutput:
                     node_b = pair.get("node_b", "")
                     if node_a and node_b:
                         try:
-                            sub_result = self.rsvs.substitution_analysis(node_a, node_b)
+                            sub_result = self._bridge.substitution_analysis(node_a, node_b)
                             if sub_result:
                                 parsed = self._parse_substitution(sub_result)
                                 if parsed.get("has_substitution", False):
@@ -870,7 +846,7 @@ class PatternOutput:
                 node_a = pair.get("node_a", "")
                 node_b = pair.get("node_b", "")
                 try:
-                    sub_result = self.rsvs.substitution_analysis(node_a, node_b)
+                    sub_result = self._bridge.substitution_analysis(node_a, node_b)
                     if sub_result:
                         parsed = self._parse_substitution(sub_result)
                         if parsed.get("has_substitution", False):
@@ -892,9 +868,10 @@ class PatternOutput:
                 ).replace(" ", "_")[:50]
 
                 composition_texts = [p[:200] for p in pattern_parts[:5]]
-                compose_result = self.rsvs.compose(
-                    pattern_label, composition_texts, lang="en"
-                )
+                # BUG FIX: RSVS compose() expects compositions: Vec<(String, u32)>
+                # — a list of (node_label, sense_id) tuples, NOT a list of strings.
+                comp_tuples = [(text, 0) for text in composition_texts]  # sense_id=0 for default
+                compose_result = self._bridge.compose(pattern_label, comp_tuples, lang="en")
                 if compose_result:
                     # The compose result may give us a formal representation
                     composed = self._parse_compose_result(compose_result)
@@ -974,7 +951,7 @@ class PatternOutput:
         evidence_confidence = 0.5
         if self.rsvs_available and evidence:
             try:
-                cmap = self.rsvs.confidence_map()
+                cmap = self._bridge.confidence_map()
                 confidences = [cmap.get(n, 0.3) for n in evidence if n in cmap]
                 if confidences:
                     evidence_confidence = sum(confidences) / len(confidences)
@@ -1057,7 +1034,7 @@ class PatternOutput:
                 node_info: dict = {"label": node}
                 if self.rsvs_available:
                     try:
-                        info = self.rsvs.node_info(node)
+                        info = self._bridge.node_info(node)
                         if info:
                             node_info.update(self._parse_node_info(info))
                     except Exception:
@@ -1083,9 +1060,11 @@ class PatternOutput:
         """Parse a concept list from RSVS relate()/query() results.
 
         Handles dicts, lists, strings, and PyO3 objects.
+        The bridge returns dicts with "related_nodes" key containing
+        (label, score) tuples.
 
         Args:
-            result: The result from an RSVS method.
+            result: The result from an RSVS bridge method.
 
         Returns:
             A dict with "labels" (list of str).
@@ -1110,13 +1089,17 @@ class PatternOutput:
             return {"labels": labels}
 
         if isinstance(result, dict):
-            for key in ("related", "nodes", "atoms", "concepts", "results"):
+            # Bridge relate() returns "related_nodes" with (label, score) tuples
+            for key in ("related_nodes", "related", "nodes", "atoms", "concepts", "results"):
                 items = result.get(key, [])
                 if items:
                     if isinstance(items, list):
                         for item in items:
                             if isinstance(item, str):
                                 labels.append(item)
+                            elif isinstance(item, tuple) and len(item) >= 1:
+                                # (label, score) or (node_id, score) tuple
+                                labels.append(str(item[0]))
                             elif isinstance(item, dict):
                                 label = item.get("label", "")
                                 if label:
@@ -1137,7 +1120,7 @@ class PatternOutput:
             except (json.JSONDecodeError, ValueError):
                 return {"labels": [result] if result.strip() else []}
 
-        # PyO3 object
+        # PyO3 object fallback
         for attr_name in ("related", "nodes", "atoms", "concepts"):
             try:
                 items = getattr(result, attr_name, None)
@@ -1157,8 +1140,11 @@ class PatternOutput:
     def _parse_relate_result(result: Any) -> dict:
         """Parse a relate() result into labels and edges.
 
+        The bridge returns a dict with "related_nodes" key containing
+        (label, score) tuples and optional "related_edges" / "structural_relations".
+
         Args:
-            result: The result from RSVS.relate().
+            result: The result from RsvsBridge.relate().
 
         Returns:
             A dict with "labels" (list of str) and "edges" (list of dict).
@@ -1170,29 +1156,47 @@ class PatternOutput:
             return {"labels": labels, "edges": edges}
 
         if isinstance(result, dict):
-            related = result.get("related", result.get("nodes", []))
-            if isinstance(related, list):
-                for item in related:
-                    if isinstance(item, str):
-                        labels.append(item)
-                    elif isinstance(item, dict):
-                        label = item.get("label", "")
-                        if label:
-                            labels.append(str(label))
-                        # Try to extract edge info
-                        edge_type = item.get("relation", item.get("edge_type", ""))
-                        target = item.get("target", item.get("to", ""))
-                        if edge_type and target:
-                            edges.append({
-                                "type": edge_type,
-                                "target": target,
-                                "source": item.get("source", item.get("from", "")),
-                            })
+            # Bridge returns "related_nodes" with (label, score) tuples
+            for key in ("related_nodes", "related", "nodes"):
+                items = result.get(key, [])
+                if isinstance(items, list):
+                    for item in items:
+                        if isinstance(item, str):
+                            labels.append(item)
+                        elif isinstance(item, tuple) and len(item) >= 1:
+                            # (label_or_id, score) tuple — extract label
+                            labels.append(str(item[0]))
+                        elif isinstance(item, dict):
+                            label = item.get("label", "")
+                            if label:
+                                labels.append(str(label))
+                            # Try to extract edge info
+                            edge_type = item.get("relation", item.get("edge_type", ""))
+                            target = item.get("target", item.get("to", ""))
+                            if edge_type and target:
+                                edges.append({
+                                    "type": edge_type,
+                                    "target": target,
+                                    "source": item.get("source", item.get("from", "")),
+                                })
+
             raw_edges = result.get("edges", [])
             if isinstance(raw_edges, list):
                 for edge in raw_edges:
                     if isinstance(edge, dict):
                         edges.append(edge)
+
+            # Also check "structural_relations"
+            struct_rels = result.get("structural_relations", [])
+            if isinstance(struct_rels, list):
+                for item in struct_rels:
+                    if isinstance(item, tuple) and len(item) >= 1:
+                        label = str(item[0])
+                        if label not in labels:
+                            labels.append(label)
+                    elif isinstance(item, str) and item not in labels:
+                        labels.append(item)
+
             return {"labels": labels, "edges": edges}
 
         # Try PyO3 or list
@@ -1201,6 +1205,8 @@ class PatternOutput:
             for item in items:
                 if isinstance(item, str):
                     labels.append(item)
+                elif isinstance(item, tuple) and len(item) >= 1:
+                    labels.append(str(item[0]))
                 elif hasattr(item, "label"):
                     labels.append(str(getattr(item, "label", "")))
         except (TypeError, ValueError):
@@ -1212,17 +1218,20 @@ class PatternOutput:
     def _parse_similarity(result: Any) -> float:
         """Parse a similarity value from structural_similarity().
 
+        The bridge normalizes PyO3 StructuralSimResult to a plain dict
+        with key "structural_similarity".
+
         Args:
-            result: The result from RSVS.structural_similarity().
+            result: The result from RsvsBridge.structural_similarity().
 
         Returns:
             A float between 0.0 and 1.0.
         """
+        if isinstance(result, dict):
+            return float(result.get("structural_similarity", result.get("similarity", result.get("score", 0.0))))
+
         if isinstance(result, (int, float)):
             return float(result)
-
-        if isinstance(result, dict):
-            return float(result.get("similarity", result.get("score", 0.0)))
 
         if isinstance(result, str):
             try:
@@ -1230,7 +1239,10 @@ class PatternOutput:
             except ValueError:
                 return 0.0
 
-        # PyO3 object
+        if hasattr(result, "structural_similarity"):
+            return float(result.structural_similarity)
+
+        # Fallback — try other common attributes
         try:
             for attr in ("similarity", "score", "value"):
                 val = getattr(result, attr, None)
@@ -1245,8 +1257,11 @@ class PatternOutput:
     def _parse_composition_list(result: Any) -> list[str]:
         """Parse compositions from senses() or similar results.
 
+        The bridge senses() returns a list of dicts, each with a
+        "compositions" key containing (label, sense_id) tuples.
+
         Args:
-            result: The result from RSVS.senses().
+            result: The result from RsvsBridge.senses().
 
         Returns:
             A list of composition label strings.
@@ -1260,9 +1275,17 @@ class PatternOutput:
                 if isinstance(item, str):
                     compositions.append(item)
                 elif isinstance(item, dict):
-                    label = item.get("label", item.get("composition", ""))
-                    if label:
-                        compositions.append(str(label))
+                    # Bridge sense dict has "compositions" key with tuples
+                    for comp in item.get("compositions", []):
+                        if isinstance(comp, tuple) and len(comp) >= 1:
+                            compositions.append(str(comp[0]))  # (label, sense_id) → label
+                        elif isinstance(comp, str):
+                            compositions.append(comp)
+                    # Also try direct label/composition keys
+                    if not item.get("compositions"):
+                        label = item.get("label", item.get("composition", ""))
+                        if label:
+                            compositions.append(str(label))
                 elif hasattr(item, "label"):
                     compositions.append(str(getattr(item, "label", "")))
             return compositions
@@ -1287,6 +1310,12 @@ class PatternOutput:
             for item in result:
                 if isinstance(item, str):
                     compositions.append(item)
+                elif isinstance(item, dict):
+                    for comp in item.get("compositions", []):
+                        if isinstance(comp, tuple) and len(comp) >= 1:
+                            compositions.append(str(comp[0]))
+                        elif isinstance(comp, str):
+                            compositions.append(comp)
                 elif hasattr(item, "label"):
                     compositions.append(str(getattr(item, "label", "")))
             return compositions
@@ -1298,7 +1327,7 @@ class PatternOutput:
         """Parse a substitution_analysis() result.
 
         Args:
-            result: The result from RSVS.substitution_analysis().
+            result: The result from RsvsBridge.substitution_analysis().
 
         Returns:
             A dict with at least "has_substitution" (bool) and
@@ -1311,8 +1340,8 @@ class PatternOutput:
             return {
                 "has_substitution": bool(result.get("has_substitution", result.get("found", False))),
                 "description": str(result.get("description", result.get("transform", ""))),
-                "transformations": result.get("transformations", result.get("steps", [])),
-                "score": float(result.get("score", result.get("confidence", 0.0))),
+                "transformations": result.get("transformations", result.get("steps", result.get("substitutions", []))),
+                "score": float(result.get("score", result.get("confidence", result.get("structural_similarity", 0.0)))),
             }
 
         if isinstance(result, bool):
@@ -1352,7 +1381,7 @@ class PatternOutput:
         """Parse a compose() result into a string.
 
         Args:
-            result: The result from RSVS.compose().
+            result: The result from RsvsBridge.compose().
 
         Returns:
             A string representation of the composed result.
@@ -1362,6 +1391,10 @@ class PatternOutput:
 
         if isinstance(result, str):
             return result
+
+        if isinstance(result, int):
+            # compose() returns a node ID (int) — use it as confirmation
+            return f"[Composed node ID: {result}]"
 
         if isinstance(result, dict):
             return str(result.get("text", result.get("result", result.get("composed", ""))))
@@ -1382,7 +1415,7 @@ class PatternOutput:
         """Parse a node_info() result into a dict.
 
         Args:
-            result: The result from RSVS.node_info().
+            result: The result from RsvsBridge.node_info().
 
         Returns:
             A dict with node metadata.
@@ -1410,8 +1443,12 @@ class PatternOutput:
     def _is_appraise_negative(result: Any) -> bool:
         """Check if an appraise() result indicates disagreement.
 
+        The bridge returns a plain dict with "verdict" key and
+        "disagree_pct" / "agree_pct" keys. We check the verdict
+        and also consider it negative if disagree_pct > agree_pct.
+
         Args:
-            result: The result from RSVS.appraise().
+            result: The result from RsvsBridge.appraise().
 
         Returns:
             True if the result indicates disagreement.
@@ -1422,15 +1459,26 @@ class PatternOutput:
             return result.lower().strip() in negative_indicators
 
         if isinstance(result, dict):
+            # Check verdict key first
             verdict = result.get("verdict", result.get("result", ""))
             if isinstance(verdict, str):
-                return verdict.lower().strip() in negative_indicators
-            if isinstance(verdict, bool):
-                return not verdict
-            if isinstance(verdict, (int, float)):
-                return float(verdict) < 0.0
+                if verdict.lower().strip() in negative_indicators:
+                    return True
+            elif isinstance(verdict, bool):
+                if not verdict:
+                    return True
+            elif isinstance(verdict, (int, float)):
+                if float(verdict) < 0.0:
+                    return True
 
-        # PyO3 object
+            # Also check disagree_pct > agree_pct as a secondary signal
+            disagree_pct = result.get("disagree_pct", 0.0)
+            agree_pct = result.get("agree_pct", 0.0)
+            if isinstance(disagree_pct, (int, float)) and isinstance(agree_pct, (int, float)):
+                if float(disagree_pct) > float(agree_pct):
+                    return True
+
+        # PyO3 object fallback
         try:
             verdict = getattr(result, "verdict", None)
             if verdict is None:
@@ -1597,10 +1645,10 @@ class PatternOutput:
                         entry["relations"].append(other)
             entry["confidence"] = min(1.0, entry.get("confidence", 0.5) + 0.05)
 
-        # Also ingest into RSVS if available
+        # Also ingest into RSVS via bridge if available
         if self.rsvs_available:
             try:
-                self.rsvs.ingest(text)
+                self._bridge.ingest(text)
             except Exception as exc:
                 logger.warning("RSVS ingest failed: %s", exc)
 
@@ -1628,11 +1676,12 @@ class PatternOutput:
         """Return a status summary of the pattern output layer.
 
         Returns:
-            A dict with RSVS availability, fallback graph size,
-            and history count.
+            A dict with RSVS availability, rust core status, fallback
+            graph size, and history count.
         """
         return {
             "rsvs_available": self.rsvs_available,
+            "is_rust_core": self.is_rust_core,
             "fallback_graph_size": len(self._fallback_graph),
             "history_count": len(self._history),
         }

@@ -9,10 +9,14 @@ Layers:
 3. PredictiveEngine — Prediction + belief update + anomaly detection
 4. PatternOutput — Pattern completion + narrative generation
 5. GeniusPipeline — Wire everything together
+
+Bridge:
+- RsvsBridge — Unified adapter for PyO3 Rust core and Python fallback
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
+from .rsvs_bridge import RsvsBridge, get_bridge, is_rust_core_available
 from .context_layer import ContextLayer
 from .situation_layer import SituationLayer
 from .predictive_engine import PredictiveEngine, Prediction, Anomaly, BeliefUpdate

@@ -25,6 +25,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
+from .rsvs_bridge import RsvsBridge, get_bridge, is_rust_core_available
 from .context_layer import ContextLayer
 from .situation_layer import SituationLayer
 from .predictive_engine import PredictiveEngine, Prediction, Anomaly, BeliefUpdate
@@ -141,12 +142,17 @@ class GeniusPipeline:
             anomaly_threshold: Threshold for anomaly detection (default: 0.3).
             auto_search: Automatically search internet when confidence is low.
         """
-        self._rsvs = rsvs_instance
         self._eta = eta
         self._anomaly_threshold = anomaly_threshold
         self._auto_search = auto_search
 
-        # Initialize all layers
+        # Create a shared bridge so all layers use the same RSVS instance
+        if rsvs_instance is not None:
+            self._bridge = RsvsBridge(rsvs_instance=rsvs_instance)
+        else:
+            self._bridge = get_bridge()
+
+        # Initialize all layers with the shared bridge
         self.context = ContextLayer(rsvs_instance=rsvs_instance)
         self.situation = SituationLayer(rsvs_instance=rsvs_instance)
         self.predictive = PredictiveEngine(
@@ -382,8 +388,9 @@ class GeniusPipeline:
     def get_status(self) -> dict:
         """Get current pipeline status."""
         return {
-            "version": "0.1.0",
-            "rsvs_available": self._is_rsvs_available(),
+            "version": "0.2.0",
+            "rsvs_available": self._bridge.is_available,
+            "is_rust_core": self._bridge.is_rust_core,
             "scope": self.context.get_scope(),
             "conversation_turns": len(self._conversation_history),
             "active_senses": len(self.situation.get_active_senses()),
@@ -445,9 +452,5 @@ class GeniusPipeline:
         return round(score, 3)
 
     def _is_rsvs_available(self) -> bool:
-        """Check if RSVS Rust core is available."""
-        try:
-            from rsvs.rsvs_core import is_rust_core_available
-            return is_rust_core_available()
-        except ImportError:
-            return False
+        """Check if RSVS (Rust core or fallback) is available."""
+        return self._bridge.is_available

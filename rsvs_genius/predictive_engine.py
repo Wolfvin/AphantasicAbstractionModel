@@ -31,6 +31,8 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
+from .rsvs_bridge import RsvsBridge, get_bridge
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -55,33 +57,6 @@ _STOP_WORDS = frozenset({
     "yang", "dan", "dari", "untuk", "dengan", "adalah", "itu",
     "ini", "ke", "di", "pada", "tidak", "akan", "telah", "oleh",
 })
-
-
-# ---------------------------------------------------------------------------
-# RSVS instance helper — shared pattern with other layers
-# ---------------------------------------------------------------------------
-
-def _get_rsvs_instance() -> Any:
-    """Attempt to get an RSVS instance, returning None if unavailable.
-
-    Tries multiple import strategies to be resilient across
-    different installation setups.
-    """
-    # Strategy 1: Direct import from rsvs package
-    try:
-        from rsvs import Rsvs
-        return Rsvs()
-    except Exception:
-        pass
-
-    # Strategy 2: Get singleton from rsvs_core
-    try:
-        from rsvs.rsvs_core import get_rsvs_instance
-        return get_rsvs_instance()
-    except Exception:
-        pass
-
-    return None
 
 
 # ---------------------------------------------------------------------------
@@ -230,8 +205,8 @@ class PredictiveEngine:
     ini active inference — belajar dari kesalahan prediksi.
 
     Attributes:
-        rsvs: The RSVS instance (may be None if core is unavailable).
         rsvs_available: Whether a working RSVS instance is connected.
+        is_rust_core: Whether the Rust core is being used (via bridge).
         eta: Learning rate for belief updates.
         anomaly_threshold: Prediction error threshold for anomaly detection.
     """
@@ -246,18 +221,19 @@ class PredictiveEngine:
 
         Args:
             rsvs_instance: Optional pre-built RSVS instance. If None,
-                the engine will try to obtain one from rsvs.rsvs_core.
+                the engine will try to obtain one via the RsvsBridge.
             eta: Learning rate for belief updates (default 0.1, same as RSVS).
                 Higher values = faster learning but less stable.
             anomaly_threshold: How much prediction error before flagging
                 anomaly (default 0.3). Lower values = more sensitive.
         """
         if rsvs_instance is not None:
-            self.rsvs: Any = rsvs_instance
-            self.rsvs_available = True
+            self._bridge = RsvsBridge(rsvs_instance=rsvs_instance)
         else:
-            self.rsvs = _get_rsvs_instance()
-            self.rsvs_available = self.rsvs is not None
+            self._bridge = get_bridge()
+
+        self.rsvs_available = self._bridge.is_available
+        self.is_rust_core = self._bridge.is_rust_core
 
         self.eta = eta
         self.anomaly_threshold = anomaly_threshold
@@ -279,8 +255,9 @@ class PredictiveEngine:
 
         if self.rsvs_available:
             logger.info(
-                "PredictiveEngine initialized with RSVS core "
-                "(eta=%.3f, threshold=%.3f)", eta, anomaly_threshold
+                "PredictiveEngine initialized with RSVS bridge "
+                "(rust_core=%s, eta=%.3f, threshold=%.3f)",
+                self.is_rust_core, eta, anomaly_threshold
             )
         else:
             logger.info(
@@ -328,7 +305,7 @@ class PredictiveEngine:
                 # Strategy 1: Use context_query() if context provided
                 if context:
                     try:
-                        cq_result = self.rsvs.context_query(concept, context)
+                        cq_result = self._bridge.context_query(concept, context)
                         if cq_result:
                             expected = self._parse_compositions(cq_result)
                             confidence = 0.7  # Context-refined = more confident
@@ -338,7 +315,7 @@ class PredictiveEngine:
                 # Strategy 2: Use senses() as the generative model prediction
                 if not expected:
                     try:
-                        senses = self.rsvs.senses(concept)
+                        senses = self._bridge.senses(concept)
                         if senses:
                             expected = self._parse_compositions(senses)
                             confidence = 0.6
@@ -348,7 +325,7 @@ class PredictiveEngine:
                 # Strategy 3: Use relate() to find connected compositions
                 if not expected:
                     try:
-                        relate_result = self.rsvs.relate(concept)
+                        relate_result = self._bridge.relate(concept)
                         if relate_result:
                             expected = self._parse_compositions(relate_result)
                             confidence = 0.4  # Less direct = less confident
@@ -357,7 +334,7 @@ class PredictiveEngine:
 
                 # Try to get confidence from confidence_map()
                 try:
-                    cmap = self.rsvs.confidence_map()
+                    cmap = self._bridge.confidence_map()
                     if concept in cmap:
                         confidence = max(confidence, float(cmap[concept]))
                 except Exception:
@@ -423,7 +400,7 @@ class PredictiveEngine:
         observed_atoms: list[str] = []
         if self.rsvs_available:
             try:
-                self.rsvs.ingest(text)
+                self._bridge.ingest(text)
             except Exception as exc:
                 logger.warning("RSVS ingest failed during observation: %s", exc)
 
@@ -502,7 +479,7 @@ class PredictiveEngine:
                 try:
                     # Build a statement from the prediction
                     statement = f"{concept} has compositions: {', '.join(expected)}"
-                    appraise_result = self.rsvs.appraise(statement)
+                    appraise_result = self._bridge.appraise(statement)
                     # Parse appraise result — "disagree" means anomaly
                     if self._is_appraise_negative(appraise_result):
                         appraise_disagree = True
@@ -741,7 +718,7 @@ class PredictiveEngine:
     # ------------------------------------------------------------------
 
     def _observe_concept(self, concept: str) -> list[str]:
-        """Get current observed compositions for a concept from RSVS.
+        """Get current observed compositions for a concept via the bridge.
 
         Uses senses() and relate() to determine what the graph
         currently knows about this concept.
@@ -758,14 +735,14 @@ class PredictiveEngine:
         observed: list[str] = []
 
         try:
-            senses = self.rsvs.senses(concept)
+            senses = self._bridge.senses(concept)
             if senses:
                 observed.extend(self._parse_compositions(senses))
         except Exception:
             pass
 
         try:
-            relate_result = self.rsvs.relate(concept)
+            relate_result = self._bridge.relate(concept)
             if relate_result:
                 extra = self._parse_compositions(relate_result)
                 for comp in extra:
@@ -868,13 +845,14 @@ class PredictiveEngine:
     def _is_appraise_negative(result: Any) -> bool:
         """Check if an appraise() result indicates disagreement.
 
-        Handles various result formats from RSVS:
+        Handles various result formats from the bridge:
         - String: "disagree", "contradiction", "false"
-        - Dict with "verdict" or "result" key
-        - PyO3 object with .verdict or .result attribute
+        - Dict with "verdict" key (typical: "agree", "neutral", "disagree")
+        - Dict with "disagree_pct" and "agree_pct" keys — uses percentage
+          comparison as a more robust negative detection
 
         Args:
-            result: The result from RSVS.appraise().
+            result: The result from RsvsBridge.appraise().
 
         Returns:
             True if the result indicates disagreement.
@@ -885,6 +863,14 @@ class PredictiveEngine:
             return result.lower().strip() in negative_indicators
 
         if isinstance(result, dict):
+            # Robust check: compare disagree_pct vs agree_pct
+            disagree_pct = result.get("disagree_pct", 0)
+            agree_pct = result.get("agree_pct", 0)
+            if isinstance(disagree_pct, (int, float)) and isinstance(agree_pct, (int, float)):
+                if float(disagree_pct) > float(agree_pct):
+                    return True
+
+            # Verdict-based check
             verdict = result.get("verdict", result.get("result", ""))
             if isinstance(verdict, str):
                 return verdict.lower().strip() in negative_indicators
@@ -892,20 +878,6 @@ class PredictiveEngine:
                 return not verdict
             if isinstance(verdict, (int, float)):
                 return float(verdict) < 0.0
-
-        # PyO3 object — try attribute access
-        try:
-            verdict = getattr(result, "verdict", None)
-            if verdict is None:
-                verdict = getattr(result, "result", None)
-            if isinstance(verdict, str):
-                return verdict.lower().strip() in negative_indicators
-            if isinstance(verdict, bool):
-                return not verdict
-            if isinstance(verdict, (int, float)):
-                return float(verdict) < 0.0
-        except Exception:
-            pass
 
         return False
 
@@ -915,12 +887,23 @@ class PredictiveEngine:
 
     @staticmethod
     def _parse_compositions(result: Any) -> list[str]:
-        """Parse compositions from various RSVS result formats.
+        """Parse compositions from RsvsBridge result formats.
 
-        Handles dicts, lists, strings, and PyO3 objects.
+        The bridge returns plain dicts/lists (never PyO3 objects):
+
+        - senses() result: list[dict] where each dict has
+          "compositions": [(label, sense_id), ...] — extract labels
+        - relate() result: {"related_nodes": [(id_or_label, score), ...], ...}
+          — extract labels (may be numeric IDs in Rust core mode)
+        - context_query() result: {"scored_atoms": [(label, score), ...],
+          "compositions": [(label, sense_id), ...]}
+
+        Handles both Rust core mode (numeric IDs) and fallback mode
+        (string labels).
 
         Args:
-            result: A result from senses(), relate(), context_query(), etc.
+            result: A result from bridge.senses(), bridge.relate(),
+                bridge.context_query(), etc.
 
         Returns:
             A list of composition label strings.
@@ -930,30 +913,66 @@ class PredictiveEngine:
         if result is None:
             return compositions
 
+        # --- list[dict] format (from senses()) ---
         if isinstance(result, list):
             for item in result:
                 if isinstance(item, str):
                     compositions.append(item)
                 elif isinstance(item, dict):
-                    label = item.get("label", item.get("composition", ""))
-                    if label:
-                        compositions.append(str(label))
-                elif hasattr(item, "label"):
-                    label = getattr(item, "label", None)
-                    if label:
-                        compositions.append(str(label))
+                    # Each sense dict has "compositions": [(label, sense_id), ...]
+                    comp_list = item.get("compositions", [])
+                    if comp_list:
+                        for entry in comp_list:
+                            label = PredictiveEngine._extract_label_from_tuple(entry)
+                            if label:
+                                compositions.append(str(label))
+                    else:
+                        # Fallback: try "label" or "composition" keys
+                        label = item.get("label", item.get("composition", ""))
+                        if label:
+                            compositions.append(str(label))
             return compositions
 
+        # --- dict format (from relate() or context_query()) ---
         if isinstance(result, dict):
-            # Try common key names
-            for key in ("compositions", "senses", "related", "atoms", "nodes"):
+            # context_query() result: "scored_atoms" and "compositions"
+            for key in ("compositions", "scored_atoms"):
                 items = result.get(key, [])
                 if items:
-                    return PredictiveEngine._parse_compositions(items)
+                    for entry in items:
+                        label = PredictiveEngine._extract_label_from_tuple(entry)
+                        if label:
+                            compositions.append(str(label))
+
+            # relate() result: "related_nodes" contains [(id_or_label, score), ...]
+            related_nodes = result.get("related_nodes", [])
+            if related_nodes:
+                for entry in related_nodes:
+                    label = PredictiveEngine._extract_label_from_tuple(entry)
+                    if label:
+                        compositions.append(str(label))
+
+            # Also try "structural_relations" from relate()
+            structural = result.get("structural_relations", [])
+            if structural:
+                for entry in structural:
+                    label = PredictiveEngine._extract_label_from_tuple(entry)
+                    if label and str(label) not in compositions:
+                        compositions.append(str(label))
+
+            # Legacy key names
+            if not compositions:
+                for key in ("senses", "related", "atoms", "nodes"):
+                    items = result.get(key, [])
+                    if items:
+                        return PredictiveEngine._parse_compositions(items)
+
             # If the dict itself looks like a single composition
-            label = result.get("label", result.get("composition", ""))
-            if label:
-                compositions.append(str(label))
+            if not compositions:
+                label = result.get("label", result.get("composition", ""))
+                if label:
+                    compositions.append(str(label))
+
             return compositions
 
         if isinstance(result, str):
@@ -966,26 +985,51 @@ class PredictiveEngine:
                 # Treat as a single composition label
                 return [result] if result.strip() else []
 
-        # PyO3 object — try common attribute names
-        for attr_name in ("compositions", "senses", "related", "atoms", "nodes"):
-            try:
-                items = getattr(result, attr_name, None)
-                if items is not None:
-                    return PredictiveEngine._parse_compositions(list(items))
-            except Exception:
-                pass
-
-        # Try iterating
+        # Try iterating as a last resort
         try:
             for item in result:
                 if isinstance(item, str):
                     compositions.append(item)
-                elif hasattr(item, "label"):
-                    compositions.append(str(getattr(item, "label", "")))
+                elif isinstance(item, (list, tuple)) and len(item) >= 1:
+                    label = item[0]
+                    if label:
+                        compositions.append(str(label))
         except (TypeError, AttributeError):
             pass
 
         return compositions
+
+    @staticmethod
+    def _extract_label_from_tuple(entry: Any) -> str | None:
+        """Extract a label from a tuple like (label, score) or (label, sense_id).
+
+        Handles:
+        - (str_label, score) → str_label
+        - (int_id, score) → str(int_id)  (Rust core mode: numeric IDs)
+        - plain str → str
+        - plain int → str(int)
+        - None → None
+
+        Args:
+            entry: A tuple, str, int, or other value.
+
+        Returns:
+            A string label, or None if nothing could be extracted.
+        """
+        if entry is None:
+            return None
+        if isinstance(entry, str):
+            return entry if entry.strip() else None
+        if isinstance(entry, (int, float)):
+            return str(entry)
+        if isinstance(entry, (list, tuple)) and len(entry) >= 1:
+            first = entry[0]
+            if isinstance(first, str):
+                return first if first.strip() else None
+            if isinstance(first, (int, float)):
+                return str(first)
+            return str(first) if first is not None else None
+        return None
 
     # ------------------------------------------------------------------
     # Internal: Fallback helpers (when RSVS is unavailable)
@@ -1109,6 +1153,7 @@ class PredictiveEngine:
         """
         return {
             "rsvs_available": self.rsvs_available,
+            "is_rust_core": self.is_rust_core,
             "eta": self.eta,
             "anomaly_threshold": self.anomaly_threshold,
             "active_predictions": len(self._active_predictions()),
