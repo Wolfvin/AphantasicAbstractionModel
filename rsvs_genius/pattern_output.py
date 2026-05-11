@@ -32,7 +32,7 @@ import json
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Optional
 
 from .rsvs_bridge import RsvsBridge, get_bridge
 
@@ -178,14 +178,18 @@ class PatternOutput:
         is_rust_core: Whether the Rust core is being used.
     """
 
-    def __init__(self, rsvs_instance: Any | None = None) -> None:
+    def __init__(self, rsvs_instance: Any | None = None, bridge: Optional[RsvsBridge] = None) -> None:
         """Initialize the Pattern Output layer.
 
         Args:
             rsvs_instance: Optional pre-built RSVS instance. If None,
                 the layer will obtain a bridge via get_bridge().
+            bridge: Optional pre-built RsvsBridge instance. If provided,
+                takes precedence over rsvs_instance.
         """
-        if rsvs_instance is not None:
+        if bridge is not None:
+            self._bridge = bridge
+        elif rsvs_instance is not None:
             self._bridge = RsvsBridge(rsvs_instance=rsvs_instance)
         else:
             self._bridge = get_bridge()

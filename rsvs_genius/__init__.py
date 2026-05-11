@@ -12,11 +12,13 @@ Layers:
 
 Bridge:
 - RsvsBridge — Unified adapter for PyO3 Rust core and Python fallback
+- LLMBridge — Generate natural narrative FROM graph reasoning chain
 """
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 from .rsvs_bridge import RsvsBridge, get_bridge, is_rust_core_available
+from .llm_bridge import generate_narrative, generate_narrative_via_sdk, generate_narrative_fallback
 from .context_layer import ContextLayer
 from .situation_layer import SituationLayer
 from .predictive_engine import PredictiveEngine, Prediction, Anomaly, BeliefUpdate

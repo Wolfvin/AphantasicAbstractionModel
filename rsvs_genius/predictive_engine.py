@@ -29,7 +29,7 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Optional
 
 from .rsvs_bridge import RsvsBridge, get_bridge
 
@@ -214,6 +214,7 @@ class PredictiveEngine:
     def __init__(
         self,
         rsvs_instance: Any | None = None,
+        bridge: Optional[RsvsBridge] = None,
         eta: float = _DEFAULT_ETA,
         anomaly_threshold: float = _DEFAULT_ANOMALY_THRESHOLD,
     ) -> None:
@@ -222,12 +223,16 @@ class PredictiveEngine:
         Args:
             rsvs_instance: Optional pre-built RSVS instance. If None,
                 the engine will try to obtain one via the RsvsBridge.
+            bridge: Optional pre-built RsvsBridge instance. If provided,
+                takes precedence over rsvs_instance.
             eta: Learning rate for belief updates (default 0.1, same as RSVS).
                 Higher values = faster learning but less stable.
             anomaly_threshold: How much prediction error before flagging
                 anomaly (default 0.3). Lower values = more sensitive.
         """
-        if rsvs_instance is not None:
+        if bridge is not None:
+            self._bridge = bridge
+        elif rsvs_instance is not None:
             self._bridge = RsvsBridge(rsvs_instance=rsvs_instance)
         else:
             self._bridge = get_bridge()

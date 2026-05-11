@@ -46,14 +46,18 @@ class SituationLayer:
         is_rust_core: Whether the Rust core backend is being used.
     """
 
-    def __init__(self, rsvs_instance: Any | None = None) -> None:
+    def __init__(self, rsvs_instance: Any | None = None, bridge: Optional[RsvsBridge] = None) -> None:
         """Initialize the Situation Layer.
 
         Args:
             rsvs_instance: Optional pre-built RSVS instance. If None,
                 the layer will try to obtain one via the RsvsBridge.
+            bridge: Optional pre-built RsvsBridge instance. If provided,
+                takes precedence over rsvs_instance.
         """
-        if rsvs_instance is not None:
+        if bridge is not None:
+            self._bridge = bridge
+        elif rsvs_instance is not None:
             self._bridge = RsvsBridge(rsvs_instance=rsvs_instance)
         else:
             self._bridge = get_bridge()

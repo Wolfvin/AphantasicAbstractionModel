@@ -3,19 +3,19 @@ GeniusPipeline — Wire semua layer jadi satu sistem
 
 "The Genius Who Remembers Everything"
 
-Analogi: Ini adalah Jin Soun secara keseluruhan — 
+Analogi: Ini adalah Jin Soun secara keseluruhan —
 mulai dari mendengar pertanyaan, mengingat semua yang relevan,
-memahami relasi, mendeteksi anomali, sampai mengeluarkan 
+memahami relasi, mendeteksi anomali, sampai mengeluarkan
 kesimpulan yang bisa diaudit.
 
 Flow:
-    User Input 
-      → Context Layer (internet search jika perlu)
-      → Situation Layer (ingest chat, cari konteks relevan)
-      → RSVS Core (spreading activation, structural analysis)
-      → Predictive Engine (predict, detect anomalies)
-      → Pattern Output (pattern completion + narrative)
-      → Final Output (traceable reasoning chain + confidence)
+    User Input
+      -> Context Layer (internet search jika perlu)
+      -> Situation Layer (ingest chat, cari konteks relevan)
+      -> RSVS Core (spreading activation, structural analysis)
+      -> Predictive Engine (predict, detect anomalies)
+      -> Pattern Output (pattern completion + narrative)
+      -> Final Output (traceable reasoning chain + confidence)
 """
 
 from __future__ import annotations
@@ -26,6 +26,7 @@ from dataclasses import dataclass, field
 from typing import Any, Optional
 
 from .rsvs_bridge import RsvsBridge, get_bridge, is_rust_core_available
+from .llm_bridge import generate_narrative
 from .context_layer import ContextLayer
 from .situation_layer import SituationLayer
 from .predictive_engine import PredictiveEngine, Prediction, Anomaly, BeliefUpdate
@@ -45,7 +46,7 @@ class GeniusResponse:
     """Jawaban utama (naratif)."""
 
     confidence: float
-    """Confidence keseluruhan (0.0–1.0)."""
+    """Confidence keseluruhan (0.0-1.0)."""
 
     reasoning_chain: list[ReasoningStep]
     """Step-by-step reasoning yang bisa ditelusuri."""
@@ -130,37 +131,51 @@ class GeniusPipeline:
     def __init__(
         self,
         rsvs_instance=None,
+        bridge: Optional[RsvsBridge] = None,
         eta: float = 0.1,
         anomaly_threshold: float = 0.3,
         auto_search: bool = False,
+        use_llm: bool = True,
+        language: str = "id",
     ):
         """Initialize the pipeline with all layers.
 
         Args:
             rsvs_instance: Optional RSVS instance. If None, try to create one.
+                Deprecated: prefer passing `bridge` instead.
+            bridge: Optional shared RsvsBridge instance. If provided, all
+                layers will share this bridge (recommended). If None and
+                rsvs_instance is also None, a new bridge is created via
+                get_bridge().
             eta: Learning rate for predictive coding (default: 0.1).
             anomaly_threshold: Threshold for anomaly detection (default: 0.3).
             auto_search: Automatically search internet when confidence is low.
+            use_llm: Whether to use LLM for narrative generation (default: True).
+            language: Output language for narratives ("id" or "en").
         """
         self._eta = eta
         self._anomaly_threshold = anomaly_threshold
         self._auto_search = auto_search
+        self._use_llm = use_llm
+        self._language = language
 
         # Create a shared bridge so all layers use the same RSVS instance
-        if rsvs_instance is not None:
+        if bridge is not None:
+            self._bridge = bridge
+        elif rsvs_instance is not None:
             self._bridge = RsvsBridge(rsvs_instance=rsvs_instance)
         else:
             self._bridge = get_bridge()
 
-        # Initialize all layers with the shared bridge
-        self.context = ContextLayer(rsvs_instance=rsvs_instance)
-        self.situation = SituationLayer(rsvs_instance=rsvs_instance)
+        # Initialize all layers with the SHARED bridge
+        self.context = ContextLayer(bridge=self._bridge)
+        self.situation = SituationLayer(bridge=self._bridge)
         self.predictive = PredictiveEngine(
-            rsvs_instance=rsvs_instance,
+            bridge=self._bridge,
             eta=eta,
             anomaly_threshold=anomaly_threshold,
         )
-        self.pattern = PatternOutput(rsvs_instance=rsvs_instance)
+        self.pattern = PatternOutput(bridge=self._bridge)
 
         # Internal state
         self._conversation_history: list[dict] = []
@@ -306,10 +321,26 @@ class GeniusPipeline:
 
         # ---- Build Response ----
         # Determine the main answer
-        if pattern_result and pattern_result.narrative:
-            answer = pattern_result.narrative
+        if pattern_result and pattern_result.steps:
+            # Use LLM narrative or structured fallback
+            reasoning_chain_dicts = [s.to_dict() for s in pattern_result.steps]
+            evidence_labels = list(dict.fromkeys(
+                n for s in pattern_result.steps for n in s.evidence_nodes
+            ))
+
+            answer = generate_narrative(
+                trigger=question,
+                reasoning_chain=reasoning_chain_dicts,
+                pattern=pattern_result.pattern,
+                evidence_nodes=evidence_labels,
+                confidence=pattern_result.confidence,
+                anomalies=pattern_result.anomalies,
+                language=self._language,
+                use_llm=self._use_llm,
+            )
+
             confidence = pattern_result.confidence
-            reasoning_chain = pattern_result.steps or []
+            reasoning_chain = pattern_result.steps
             pattern_evidence = pattern_result.evidence_chain or []
         else:
             # Fallback: simple answer from situation layer
@@ -346,6 +377,7 @@ class GeniusPipeline:
                 "conversation_turn": len(self._conversation_history),
                 "active_senses_count": len(active_senses),
                 "rsvs_available": self._is_rsvs_available(),
+                "use_llm": self._use_llm,
             },
         )
 
@@ -388,13 +420,15 @@ class GeniusPipeline:
     def get_status(self) -> dict:
         """Get current pipeline status."""
         return {
-            "version": "0.2.0",
+            "version": "0.3.0",
             "rsvs_available": self._bridge.is_available,
             "is_rust_core": self._bridge.is_rust_core,
             "scope": self.context.get_scope(),
             "conversation_turns": len(self._conversation_history),
             "active_senses": len(self.situation.get_active_senses()),
             "active_predictions": len(self.predictive.get_predictions()),
+            "use_llm": self._use_llm,
+            "language": self._language,
         }
 
     # -------------------------------------------------------------------

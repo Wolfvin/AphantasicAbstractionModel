@@ -23,12 +23,13 @@ sys.path.insert(0, "/home/z/my-project/RSVS")
 
 
 def test_bridge():
-    """Test RsvsBridge in fallback mode."""
-    from rsvs_genius.rsvs_bridge import RsvsBridge
+    """Test RsvsBridge — works in both Rust core and fallback mode."""
+    from rsvs_genius.rsvs_bridge import RsvsBridge, is_rust_core_available
 
     bridge = RsvsBridge()
-    assert bridge.is_available, "Bridge should be available (fallback)"
-    assert not bridge.is_rust_core, "Should be in fallback mode"
+    assert bridge.is_available, "Bridge should be available"
+    mode = "Rust core" if bridge.is_rust_core else "fallback"
+    print(f"  Bridge mode: {mode}")
 
     # Test ingest
     stats = bridge.ingest("Snow Plum Pill adalah obat langka dari Mount Hua")
@@ -67,7 +68,7 @@ def test_bridge():
     senses = bridge.senses("raja")
     print(f"  ✓ Bridge senses: {senses}")
 
-    print("  ✅ RsvsBridge (fallback mode) — ALL TESTS PASSED\n")
+    print(f"  ✅ RsvsBridge ({mode} mode) — ALL TESTS PASSED\n")
 
 
 def test_context_layer():
@@ -218,8 +219,9 @@ def test_pipeline():
 
 
 def main():
+    from rsvs_genius.rsvs_bridge import is_rust_core_available
     print("=" * 70)
-    print("RSVS Genius — Smoke Test (Fallback Mode)")
+    print(f"RSVS Genius — Smoke Test ({'Rust Core' if is_rust_core_available() else 'Fallback'} Mode)")
     print("=" * 70)
     print()
 
