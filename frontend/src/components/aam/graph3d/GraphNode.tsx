@@ -56,6 +56,15 @@ const GraphNodeComponent: React.FC<GraphNodeProps> = ({
   const hasConvergence = hasConvergenceLinks(node);
   const convergenceTargets = getConvergenceTargets(node);
 
+  // F-02: Multi-sense indicator — check if node has multiple senses
+  const hasMultiSense = (node.sense?.count ?? 0) > 1 || (node.sense?.senses?.length ?? 0) > 1;
+  const senseCount = node.sense?.count ?? node.sense?.senses?.length ?? 0;
+
+  // F-02: Grounding evidence affects color intensity
+  // Nodes with stronger grounding are more opaque/vivid
+  const groundingIntensity = node.grounding_evidence?.score ?? node.grounding_score ?? -1;
+  const hasGrounding = groundingIntensity >= 0;
+
   // v5.0: Compute effective layer
   const layer = computeNodeLayer(node);
   const layerColor = getLayerColor(layer);
@@ -81,19 +90,22 @@ const GraphNodeComponent: React.FC<GraphNodeProps> = ({
   }, [composite, node.atoms, node.derived_from_node_ids, node.semantic?.derived_from_node_ids, node.composition?.atoms]);
 
   // Materials created with useMemo (mutable for useFrame, but created once)
-  const baseMaterial = useMemo(
-    () =>
-      new THREE.MeshStandardMaterial({
-        color: new THREE.Color(nodeColor),
-        emissive: new THREE.Color(nodeColor),
-        emissiveIntensity: 0.3,
-        metalness: 0.4,
-        roughness: 0.3,
-        transparent: true,
-        opacity: 0.95,
-      }),
-    [nodeColor],
-  );
+  const baseMaterial = useMemo(() => {
+    // F-02: Grounding evidence affects material properties
+    // Well-grounded nodes are more opaque and vivid
+    const groundingOpacity = hasGrounding
+      ? 0.7 + groundingIntensity * 0.3  // 0.7-1.0 range based on grounding
+      : 0.95; // Default opacity
+    return new THREE.MeshStandardMaterial({
+      color: new THREE.Color(nodeColor),
+      emissive: new THREE.Color(nodeColor),
+      emissiveIntensity: hasGrounding ? 0.2 + groundingIntensity * 0.4 : 0.3,
+      metalness: 0.4,
+      roughness: 0.3,
+      transparent: true,
+      opacity: groundingOpacity,
+    });
+  }, [nodeColor, hasGrounding, groundingIntensity]);
 
   const glowMaterial = useMemo(
     () =>
@@ -448,7 +460,7 @@ const GraphNodeComponent: React.FC<GraphNodeProps> = ({
         />
       ))}
 
-      {/* Label */}
+      {/* Label with multi-sense badge */}
       {showLabel && (
         <Billboard follow lockX={false} lockY lockZ={false}>
           <Html
@@ -472,12 +484,56 @@ const GraphNodeComponent: React.FC<GraphNodeProps> = ({
                 whiteSpace: 'nowrap',
                 textOverflow: 'ellipsis',
                 overflow: 'hidden',
-                maxWidth: '140px',
+                maxWidth: '160px',
                 boxShadow: `0 0 8px ${composite ? '#FF80AB20' : atom ? '#69F0AE20' : `${layerColor}20`}`,
                 backdropFilter: 'blur(4px)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
               }}
             >
-              {layerPrefix}{displayLabel}
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{layerPrefix}{displayLabel}</span>
+              {/* F-02: Multi-sense indicator badge */}
+              {hasMultiSense && (
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    minWidth: '14px',
+                    height: '14px',
+                    borderRadius: '7px',
+                    background: 'rgba(128, 216, 255, 0.25)',
+                    color: '#80D8FF',
+                    fontSize: '9px',
+                    fontWeight: 'bold',
+                    padding: '0 3px',
+                    lineHeight: '14px',
+                    flexShrink: 0,
+                  }}
+                >
+                  {senseCount}s
+                </span>
+              )}
+              {/* F-02: Grounding indicator */}
+              {hasGrounding && (
+                <span
+                  style={{
+                    display: 'inline-block',
+                    width: '6px',
+                    height: '6px',
+                    borderRadius: '50%',
+                    background: groundingIntensity > 0.7
+                      ? '#69F0AE'
+                      : groundingIntensity > 0.4
+                        ? '#FFB74D'
+                        : '#FF5252',
+                    flexShrink: 0,
+                    boxShadow: `0 0 4px ${groundingIntensity > 0.7 ? '#69F0AE60' : groundingIntensity > 0.4 ? '#FFB74D60' : '#FF525260'}`,
+                  }}
+                  title={`Grounding: ${(groundingIntensity * 100).toFixed(0)}%`}
+                />
+              )}
             </div>
           </Html>
         </Billboard>

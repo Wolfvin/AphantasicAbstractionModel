@@ -1,4 +1,4 @@
-import type { ChatMessage, GraphSnapshot, RSVSEvent, ComposeResult, StructuralSimilarityResult, SubstitutionAnalysisResult, CompositionPair } from '@/lib/types';
+import type { ChatMessage, GraphSnapshot, RSVSEvent, ComposeResult, StructuralSimilarityResult, SubstitutionAnalysisResult, CompositionPair, RSVSNode } from '@/lib/types';
 export type RSVSMode = 'ingest' | 'appraise' | 'relate' | 'compose' | 'structural_similarity' | 'substitution_analysis' | 'grounding_info' | 'context_query';
 
 export interface BackendIngestResponse {
@@ -229,6 +229,125 @@ export async function contextQuery(
  * Fetch the latest snapshot from the backend.
  * Uses /snapshot endpoint instead of the removed /latest endpoint.
  */
+// ── F-04: Label Resolution Cache ──
+// When the Rust core is active, relate() returns numeric node IDs (u32).
+// We resolve these to labels using the /node-info API endpoint and cache them.
+const labelCache = new Map<number, string>();
+const labelCacheExpiry = new Map<number, number>(); // node_id → timestamp
+const LABEL_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+/**
+ * F-04: Resolve a numeric node ID to its label string.
+ * Uses a local cache to avoid redundant API calls.
+ * Falls back to "#<id>" if resolution fails.
+ */
+async function resolveNodeIdToLabel(nodeId: number): Promise<string> {
+  // Check cache first
+  const cached = labelCache.get(nodeId);
+  const cachedExpiry = labelCacheExpiry.get(nodeId);
+  if (cached !== undefined && cachedExpiry !== undefined && Date.now() < cachedExpiry) {
+    return cached;
+  }
+
+  // Try to resolve via API
+  try {
+    const url = proxyUrl(`node-info?node_id=${nodeId}`);
+    const res = await fetch(url, { method: 'GET' });
+    if (res.ok) {
+      const data = await res.json();
+      const label = data?.label ?? data?.node?.label ?? null;
+      if (label && typeof label === 'string') {
+        labelCache.set(nodeId, label);
+        labelCacheExpiry.set(nodeId, Date.now() + LABEL_CACHE_TTL_MS);
+        return label;
+      }
+    }
+  } catch {
+    // API call failed — use fallback
+  }
+
+  // Fallback: check graph store for the node
+  const fallback = `#${nodeId}`;
+  labelCache.set(nodeId, fallback);
+  labelCacheExpiry.set(nodeId, Date.now() + LABEL_CACHE_TTL_MS);
+  return fallback;
+}
+
+/**
+ * F-04: Resolve numeric IDs in relate results to labels.
+ * Processes the related_nodes and structural_relations arrays.
+ */
+async function resolveRelateLabels(result: {
+  related_nodes: Array<[string | number, number]>;
+  structural_relations?: Array<[string | number, number]>;
+  _pyo3_object?: boolean;
+}): Promise<void> {
+  // If not from PyO3, no resolution needed
+  if (!result._pyo3_object) return;
+
+  // Resolve related_nodes
+  if (Array.isArray(result.related_nodes)) {
+    const resolved = await Promise.all(
+      result.related_nodes.map(async (item) => {
+        if (Array.isArray(item) && item.length >= 2) {
+          const id = item[0];
+          const score = item[1];
+          // If id is numeric, resolve to label
+          if (typeof id === 'number') {
+            const label = await resolveNodeIdToLabel(id);
+            return [label, score] as [string, number];
+          }
+          return item as [string, number];
+        }
+        return item;
+      })
+    );
+    result.related_nodes = resolved;
+  }
+
+  // Resolve structural_relations
+  if (Array.isArray(result.structural_relations)) {
+    const resolved = await Promise.all(
+      result.structural_relations.map(async (item) => {
+        if (Array.isArray(item) && item.length >= 2) {
+          const id = item[0];
+          const score = item[1];
+          if (typeof id === 'number') {
+            const label = await resolveNodeIdToLabel(id);
+            return [label, score] as [string, number];
+          }
+          return item as [string, number];
+        }
+        return item;
+      })
+    );
+    result.structural_relations = resolved;
+  }
+
+  // Also try to resolve labels from nodes already in the graph store
+  // This is a sync fallback — if the node is already loaded locally,
+  // we don't need to hit the API.
+  try {
+    const { useGraphStore } = await import('@/store/aamStore');
+    const nodes = useGraphStore.getState().nodes;
+    for (const item of result.related_nodes) {
+      if (Array.isArray(item) && typeof item[0] === 'string' && item[0].startsWith('#')) {
+        const numericId = parseInt(item[0].slice(1), 10);
+        if (!isNaN(numericId)) {
+          const graphNode = nodes.get(numericId);
+          if (graphNode?.label) {
+            item[0] = graphNode.label;
+            labelCache.set(numericId, graphNode.label);
+            labelCacheExpiry.set(numericId, Date.now() + LABEL_CACHE_TTL_MS);
+          }
+        }
+      }
+    }
+  } catch {
+    // Store not available — ignore
+  }
+}
+
 export async function fetchLatestFromBackend(): Promise<BackendIngestResponse> {
   const url = proxyUrl('snapshot');
   const res = await fetch(url, { method: 'GET' });

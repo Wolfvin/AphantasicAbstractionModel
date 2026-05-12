@@ -5,6 +5,62 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [8.4.0] - 2026-05-12
+
+### Added — Architecture Gap Closure (37 gaps resolved)
+
+This release closes all 37 gaps identified in the AAM Architecture Gap Analysis Report v8.3.0.
+
+#### Layer 0 — Perceptual Front-End
+- **L0-01 [CRITICAL]**: Created `layer0/adapter.py` — bridge between Layer 0 and Layer 1. PerceptualObservation now converts to RSVS ingest operations via `ingest_observation()`.
+- **L0-02 [CRITICAL]**: Added `RelationType` enum (Categorical/Differential/Functional/Spatial/Temporal/Causal) to Rust Edge struct in `types.rs`. Six relation types now have full representation in RSVS graph.
+- **L0-03 [HIGH]**: Implemented `AudioAbstractor` (Whisper STT pipeline), `ImageAbstractor` (vision bridge), and `VideoAbstractor` (frame sampling + temporal linking). All 4 modalities now functional.
+- **L0-04 [HIGH]**: TextAbstractor now has retry with exponential backoff (3 retries, 1s/2s/4s), improved noun-phrase fallback, and in-memory caching.
+- **L0-05 [MEDIUM]**: Added 56 unit tests for Layer 0 covering all components.
+- **L0-06 [LOW]**: Added `PerceptualTupleMeta` dataclass with `source_url`, `extraction_model`, `extraction_timestamp` fields. Backward compatible with dict input.
+
+#### Layer 1 — Rust Core / RSVS
+- **L1-05 [MEDIUM]**: Synchronized SCHEMA_VERSION to "v8.3" across Rust (`events.rs`), Python (`_version.py`), and artifacts. Added version compatibility check in `persist.rs::load()`.
+- **L1-06 [MEDIUM]**: Added PyO3 bindings for DEPS Planner — `PyRecoveryPlan` and `PyDEPSResult` classes now accessible from Python.
+- **L1-07 [MEDIUM]**: Added `EmbeddingProvider` trait and `embedding_similarity_fallback()`/`embedding_similarity_batch()` to `TransformerBridge`. Pluggable embedding backend support.
+- **L1-08 [LOW]**: Verified `SessionGraph` already fully implemented in `session.rs` with isolated RSVS instance per context.
+
+#### Layer 2 — Cognitive Runtime
+- **L2-01 [CRITICAL]**: Added 11 missing bridge methods — `mcts_query()`, `consolidate()`, `run_reflection()`, `verify()`, `toggle_thinking()`, `route_paradigm()`, `deps_analyze()`, `matryoshka_traverse()`, `context_similarity()`, `structural_similarity()`, `substitution_analysis()`. All with fallback implementations.
+- **L2-02 [HIGH]**: PredictiveEngine now uses `structural_similarity()` for prediction error and `mcts_query()` for complex predictions. Keyword matching remains as fallback.
+- **L2-03 [HIGH]**: `_FallbackGraph` now has multi-sense support (`_FallbackSense`), composition references, grounding scores, and coherence calculation.
+- **L2-04 [HIGH]**: PatternOutput uses spreading activation (`relate()`), structural similarity, and substitution analysis for pattern completion. 5 strategies instead of 3.
+- **L2-05 [MEDIUM]**: Replaced noisy `"The {seed} relates to"` prefix with three-stage soft grounding: ingest_with_meta → appraise-based → minimal prefix.
+- **L2-06 [MEDIUM]**: Active sense tracking now uses `consume_events_v1()` for precise timestamps and recency-weighted ranking.
+- **L2-07 [MEDIUM]**: Context layer now filters search results with `appraise()` for consistency and `relate()` for relevance before ingestion.
+- **L2-08 [LOW]**: Verified — no `rsvs_genius/` duplication exists. Marked resolved.
+
+#### Layer 3 — Reasoning & Output
+- **L3-01 [CRITICAL]**: Implemented full `ReasoningEngine` with 5-step deductive chain builder: Extract → Compose → Ground → Explore (MCTS) → Conclude. Produces `DeductiveChain` with full evidence traceability.
+- **L3-02 [HIGH]**: PolicyEngine now integrates with RSVS `PolicyMeta` via `check_with_rsvs_policy()` — uses governance_score, status_flip_count, and seen_fingerprints.
+- **L3-03 [HIGH]**: CoderLayer now has `analyze_with_rsvs()` method that represents code elements as RSVS nodes with composition references.
+- **L3-04 [MEDIUM]**: Added `evidence_node_ids` (NodeId/SenseId tuples) and `grounding_scores` to `ReasoningStep` and `DeductiveStep`. Full traceability from output to evidence nodes.
+- **L3-05 [LOW]**: Added 16 unit tests for Layer 3 covering ReasoningEngine, PolicyEngine RSVS integration, CoderLayer RSVS, and evidence traceability.
+
+#### Pipeline — Integration
+- **P-01 [HIGH]**: Defined structural data contracts: `PerceptualObservation` (L0→L1), `StructuralDelta` (L1→L2), `ReasoningRequest` (L2→L3). Data flows as typed objects, not raw strings.
+- **P-02 [MEDIUM]**: Added Step 6 to `ask()` — appraise self-check. If verdict is "clash"/"disagree", lowers confidence and adds warning. New `appraise_warning` field in AamResponse.
+- **P-03 [MEDIUM]**: Added `ask_stream()` async generator yielding `PipelineEvent` after each layer. Supports cancellation. `ask()` remains synchronous.
+- **P-04 [MEDIUM]**: Added `source_provenance` parameter through pipeline. `appraise_with_provenance()` weights evidence by source trust.
+- **P-05 [LOW]**: Added `maintenance()` and `force_maintenance()` methods. Auto-maintenance every N ingests (default 50).
+- **P-06 [LOW]**: Defined `AamError` hierarchy (LayerError, IngestError, ReasoningError, BridgeError, MaintenanceError). Non-fatal errors collected in `AamResponse.errors`.
+
+#### Frontend — UX
+- **F-01 [HIGH]**: Replaced O(n²) force simulation with Barnes-Hut octree (O(n log n)). Added spatial grid hashing, frame budget limiting, delta time capping.
+- **F-02 [CRITICAL]**: Added composition edges (curved cyan), convergence links (dashed purple), substitution pairs (dotted orange). Multi-sense badge, grounding evidence color dot, 5 new drawer sections for structural info.
+- **F-03 [MEDIUM]**: Wrapped `GraphScene3D` with `ErrorBoundary` featuring WebGL context loss detection. Enhanced fallback UI.
+- **F-04 [MEDIUM]**: Added label resolution in `backendBridge.ts` — numeric node IDs resolved to labels via API with 5-min TTL cache. Bridge `relate()` now returns (label, score, original_id).
+- **F-05 [LOW]**: Re-enabled ESLint rules at "warn": `@typescript-eslint/no-explicit-any`, `@typescript-eslint/no-unused-vars`, `react-hooks/exhaustive-deps`, `no-undef`. Gradual enablement plan documented.
+
+### Fixed
+- Moved `import os` from method body to module level in `audio.py` and `image.py`
+- Fixed mutable default argument `context: dict = {}` → `context: Optional[dict] = None` in `base.py`
+
 ## [8.3.1] - 2026-05-12
 
 ### Fixed

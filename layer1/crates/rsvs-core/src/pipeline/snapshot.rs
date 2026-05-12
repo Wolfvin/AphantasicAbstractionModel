@@ -4,7 +4,7 @@
 
 use super::Rsvs;
 use crate::events::{EventBatch, RuntimeEdge, RuntimeNode, RuntimeSnapshot};
-use crate::types::{CompressionState, EdgeSource, NodeStatus, Tier};
+use crate::types::{CompressionState, EdgeSource, NodeStatus, RelationType, Tier};
 
 // -----------------------------------------------------------------------
 // PipelineStatus — key pipeline metrics
@@ -123,6 +123,7 @@ impl Rsvs {
                     } else {
                         "learned".into()
                     },
+                    relation_type: format!("{:?}", e.relation_type).to_lowercase(),
                 });
             }
         }

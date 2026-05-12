@@ -34,7 +34,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
-from .bridge import RsvsBridge, get_bridge
+from .bridge import AbstractionBridge, RsvsBridge, get_bridge
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +86,10 @@ class ReasoningStep:
         data: Structured data produced by this step.
         evidence_nodes: Which graph nodes were used as evidence.
         confidence: Confidence of this step's output (0.0 - 1.0).
+        evidence_node_ids: Typed references to graph nodes as
+            (NodeId_label, SenseId) tuples for RSVS traceability.
+        grounding_scores: Mapping of evidence node labels to their
+            grounding scores from RSVS senses.
     """
 
     step_type: str
@@ -93,6 +97,8 @@ class ReasoningStep:
     data: dict = field(default_factory=dict)
     evidence_nodes: list[str] = field(default_factory=list)
     confidence: float = 0.5
+    evidence_node_ids: list[tuple[str, str]] = field(default_factory=list)
+    grounding_scores: dict[str, float] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         """Serialize to a plain dict."""
@@ -102,6 +108,11 @@ class ReasoningStep:
             "data": dict(self.data),
             "evidence_nodes": list(self.evidence_nodes),
             "confidence": self.confidence,
+            "evidence_node_ids": [
+                {"node_id": nid, "sense_id": sid}
+                for nid, sid in self.evidence_node_ids
+            ],
+            "grounding_scores": {k: round(v, 4) for k, v in self.grounding_scores.items()},
         }
 
 
@@ -844,7 +855,28 @@ class PatternOutput:
                     )
                     substitutions.append(sub)
 
-        # Strategy 2: Use substitution_analysis() for deeper patterns
+        # Strategy 2 (L2-04): Use relate() for spreading-activation pattern identification
+        # Relate() finds hidden connections between seemingly unrelated nodes
+        if self.rsvs_available and activated_nodes:
+            for node in activated_nodes[:5]:
+                try:
+                    relate_result = self._bridge.relate(node)
+                    if relate_result:
+                        related = relate_result.get("related_nodes", [])
+                        for entry in related[:3]:
+                            if isinstance(entry, (list, tuple)) and len(entry) >= 1:
+                                related_label = str(entry[0])
+                                if related_label not in activated_nodes and related_label not in evidence_nodes:
+                                    evidence_nodes.append(related_label)
+                                    pattern_parts.append(
+                                        f"Spreading activation from '{node}' reveals hidden "
+                                        f"connection to '{related_label}' — this link may "
+                                        f"complete the pattern."
+                                    )
+                except Exception as exc:
+                    logger.debug("relate() for pattern identification failed: %s", exc)
+
+        # Strategy 3: Use substitution_analysis() for deeper patterns
         if self.rsvs_available:
             similar_pairs = cross_ref.get("similar_pairs", [])
             for pair in similar_pairs[:5]:
@@ -864,7 +896,28 @@ class PatternOutput:
                 except Exception as exc:
                     logger.debug("substitution_analysis() failed: %s", exc)
 
-        # Strategy 3: Use compose() to formalize the pattern
+        # Strategy 4 (L2-04): Use structural_similarity() for pattern strength measurement
+        if self.rsvs_available and anomalies:
+            for anomaly in anomalies[:5]:
+                nodes = anomaly.get("nodes", [])
+                if len(nodes) >= 2:
+                    try:
+                        sim_result = self._bridge.structural_similarity(nodes[0], nodes[1])
+                        if sim_result:
+                            sim_val = sim_result.get("structural_similarity", 0.0)
+                            if isinstance(sim_val, (int, float)):
+                                strength = float(sim_val)
+                                if strength > 0.5:
+                                    pattern_parts.append(
+                                        f"Strong structural similarity ({strength:.2f}) between "
+                                        f"'{nodes[0]}' and '{nodes[1]}' confirms pattern "
+                                        f"coherence."
+                                    )
+                                    confidence = min(0.95, confidence + 0.1)
+                    except Exception as exc:
+                        logger.debug("structural_similarity() for pattern strength failed: %s", exc)
+
+        # Strategy 5: Use compose() to formalize the pattern
         if self.rsvs_available and pattern_parts:
             try:
                 # Compose a pattern label from the evidence
@@ -972,6 +1025,23 @@ class PatternOutput:
                     evidence_confidence = sum(confidences) / len(confidences)
             except Exception:
                 pass
+
+        # L2-04: Ground narrative to evidence nodes in graph
+        # Each narrative claim should reference specific graph nodes
+        grounded_evidence: list[dict] = []
+        if self.rsvs_available and evidence:
+            for node_label in evidence[:10]:
+                try:
+                    node_data = self._bridge.node_info(node_label)
+                    if node_data:
+                        grounded_evidence.append({
+                            "label": node_label,
+                            "confidence": node_data.get("confidence", 0.0),
+                            "layer": node_data.get("layer", 0),
+                            "grounding_score": node_data.get("grounding_score", 0.0),
+                        })
+                except Exception:
+                    pass
 
         # Build structured narrative — like a Jin Soun investigation report
         # Analogi: Jin Soun menyusun laporan investigasi yang bisa diaudit.

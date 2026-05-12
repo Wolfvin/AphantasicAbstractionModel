@@ -10,6 +10,7 @@ import { GraphNode } from './GraphNode';
 import { GraphEdge } from './GraphEdge';
 import { useForceLayout } from './ForceGraph';
 import { isCompositeNode, isAtomNode, computeNodeLayer, getLayerColor, getLayerLabel, isInternalRepresentation, hasConvergenceLinks, getConvergenceTargets } from '@/lib/nodeRendering';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 // ── Scene Constants ──
 const BG_COLOR = '#0a0e1a';
@@ -362,40 +363,42 @@ export default function GraphScene3D() {
         background: BG_COLOR,
       }}
     >
-      <Canvas
-        camera={{
-          position: [18, 12, 18],
-          fov: 55,
-          near: 0.1,
-          far: 200,
-        }}
-        gl={{
-          antialias: true,
-          alpha: false,
-          toneMapping: THREE.ACESFilmicToneMapping,
-          toneMappingExposure: 1.2,
-        }}
-        dpr={[1, 2]}
-        style={{ background: BG_COLOR }}
-      >
-        <Suspense fallback={<LoadingFallback />}>
-          <SceneSetup />
-          <GraphContent />
-          <CameraFocusController controlsRef={controlsRef} />
-          <GraphHUD />
-          <OrbitControls
-            ref={controlsRef}
-            enableDamping
-            dampingFactor={0.08}
-            rotateSpeed={0.6}
-            zoomSpeed={0.8}
-            panSpeed={0.5}
-            minDistance={5}
-            maxDistance={60}
-            makeDefault
-          />
-        </Suspense>
-      </Canvas>
+      <ErrorBoundary name="WebGL-Canvas">
+        <Canvas
+          camera={{
+            position: [18, 12, 18],
+            fov: 55,
+            near: 0.1,
+            far: 200,
+          }}
+          gl={{
+            antialias: true,
+            alpha: false,
+            toneMapping: THREE.ACESFilmicToneMapping,
+            toneMappingExposure: 1.2,
+          }}
+          dpr={[1, 2]}
+          style={{ background: BG_COLOR }}
+        >
+          <Suspense fallback={<LoadingFallback />}>
+            <SceneSetup />
+            <GraphContent />
+            <CameraFocusController controlsRef={controlsRef} />
+            <GraphHUD />
+            <OrbitControls
+              ref={controlsRef}
+              enableDamping
+              dampingFactor={0.08}
+              rotateSpeed={0.6}
+              zoomSpeed={0.8}
+              panSpeed={0.5}
+              minDistance={5}
+              maxDistance={60}
+              makeDefault
+            />
+          </Suspense>
+        </Canvas>
+      </ErrorBoundary>
     </div>
   );
 }

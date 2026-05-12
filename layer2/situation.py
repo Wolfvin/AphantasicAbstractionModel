@@ -19,7 +19,7 @@ import logging
 import time
 from typing import Any, Optional
 
-from .bridge import RsvsBridge, get_bridge
+from .bridge import AbstractionBridge, RsvsBridge, get_bridge
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +72,9 @@ class SituationLayer:
         self._active_senses: list[dict] = []
         self._session_start: float = time.time()
         self._last_event_seq: int = 0
+        # L2-06: Event-based sense tracking with recency
+        self._sense_last_seen: dict[str, float] = {}  # label → timestamp
+        self._sense_events: list[dict] = []  # Parsed event log for tracking
 
         if self.rsvs_available:
             # Capture the current event sequence so we only track new events
@@ -354,27 +357,65 @@ class SituationLayer:
     # ------------------------------------------------------------------
 
     def _update_active_senses(self) -> None:
-        """Refresh the active senses list from the RSVS graph.
+        """Refresh the active senses list using event stream (L2-06 fix).
 
-        Called after each message ingestion to keep the active
-        sense tracking up to date.
+        Instead of using confidence_map() as a proxy for "active senses",
+        this method now:
+        1. Consumes events from consume_events_v1() to find node_created,
+           sense_changed, and confidence_changed events
+        2. Tracks actual last-seen timestamps from events
+        3. Uses recency-weighted active sense ranking
         """
         if not self.rsvs_available:
             return
 
         now = time.time()
+
+        # Step 1 (L2-06): Parse events for precise sense tracking
+        try:
+            raw_events = self._bridge.consume_events_v1(after_seq=self._last_event_seq)
+            if raw_events:
+                parsed_events = self._parse_event_stream(raw_events)
+                for event in parsed_events:
+                    event_type = event.get("type", "")
+                    event_label = event.get("label", "")
+                    event_seq = event.get("seq", 0)
+
+                    # Track node creation
+                    if event_type == "node_created" and event_label:
+                        self._sense_last_seen[event_label] = now
+                        self._sense_events.append(event)
+
+                    # Track sense changes
+                    elif event_type == "sense_changed" and event_label:
+                        self._sense_last_seen[event_label] = now
+                        self._sense_events.append(event)
+
+                    # Track confidence changes
+                    elif event_type == "confidence_changed" and event_label:
+                        self._sense_last_seen[event_label] = now
+                        self._sense_events.append(event)
+
+                    # Update last event sequence
+                    if event_seq > self._last_event_seq:
+                        self._last_event_seq = event_seq
+
+                # Keep event log bounded
+                if len(self._sense_events) > 500:
+                    self._sense_events = self._sense_events[-200:]
+        except Exception as exc:
+            logger.debug("Failed to consume events for sense tracking: %s", exc)
+
+        # Step 2: Build active senses with recency weighting
         new_senses: list[dict] = []
 
         try:
             # Get confidence map — high confidence = recently activated
             cmap = self._bridge.confidence_map()
-            # Sort by confidence (descending) and take top entries
+            # Sort by confidence (descending)
             sorted_items = sorted(cmap.items(), key=lambda x: x[1], reverse=True)
 
             for label, confidence in sorted_items[:20]:
-                # Skip if stale
-                # (We approximate "last seen" from the current time;
-                #  in a full implementation, we'd track this precisely)
                 sense_count = 0
                 try:
                     senses = self._bridge.senses(label)
@@ -382,27 +423,32 @@ class SituationLayer:
                 except Exception:
                     pass
 
+                # Use event-based last_seen if available, otherwise approximate
+                last_seen = self._sense_last_seen.get(label, now)
+                staleness = now - last_seen
+
                 new_senses.append({
                     "label": label,
                     "sense_count": sense_count,
                     "confidence": confidence,
-                    "last_seen": now,
-                    "staleness": 0.0,
+                    "last_seen": last_seen,
+                    "staleness": staleness,
                 })
 
         except Exception as exc:
             logger.warning("Failed to update active senses: %s", exc)
             return
 
-        # Merge with existing — update timestamps for already-known senses
+        # Merge with existing — prefer event-based timestamps
         existing_map = {s["label"]: s for s in self._active_senses}
         for sense in new_senses:
             if sense["label"] in existing_map:
-                # Keep the older "last_seen" if it was more recent
                 old = existing_map[sense["label"]]
+                # Use the most recent last_seen from events
                 sense["last_seen"] = max(old["last_seen"], sense["last_seen"])
+                sense["staleness"] = now - sense["last_seen"]
 
-        # Mark staleness for senses not in the new batch
+        # Add senses not in the new batch but not yet stale
         all_labels = {s["label"] for s in new_senses}
         for old_sense in self._active_senses:
             if old_sense["label"] not in all_labels:
@@ -411,7 +457,7 @@ class SituationLayer:
                 if stale_sense["staleness"] < _SENSE_STALENESS_SECONDS:
                     new_senses.append(stale_sense)
 
-        # Sort: active first, then by staleness
+        # Sort: by recency-weighted score (staleness + confidence)
         new_senses.sort(key=lambda s: (s["staleness"], -s["confidence"]))
         self._active_senses = new_senses
 

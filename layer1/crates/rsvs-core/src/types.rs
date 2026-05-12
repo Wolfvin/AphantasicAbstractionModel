@@ -113,6 +113,30 @@ pub enum EdgeSource {
     Composition,
 }
 
+/// L0-02: Relation type for edges — mirrors Python Layer 0 RelationType.
+///
+/// Every edge in the graph now carries what kind of semantic relation it
+/// represents. This information flows from Layer 0 (perceptual abstractors)
+/// through the adapter into Layer 1 (RSVS graph). Default is Categorical
+/// for backward compatibility with existing edges that have no relation type.
+#[non_exhaustive]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub enum RelationType {
+    /// "X is a Y" — categorical / taxonomic relation.
+    #[default]
+    Categorical,
+    /// "X is more/less than Y in dimension D" — comparative relation.
+    Differential,
+    /// "X can do Y" / "X is used for Y" — functional relation.
+    Functional,
+    /// "X is located at Y" — spatial relation.
+    Spatial,
+    /// "X occurs before/after Y" — temporal relation.
+    Temporal,
+    /// "X causes Y" / "X is caused by Y" — causal relation.
+    Causal,
+}
+
 /// A language link between nodes.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LanguageLink {
@@ -304,6 +328,11 @@ pub struct Edge {
     /// Set to 0 for bootstrap edges (never decays — they're structural).
     #[serde(default)]
     pub last_reinforced_batch: usize,
+    /// L0-02: Semantic relation type carried by this edge.
+    /// Mirrors Python Layer 0 RelationType enum. Defaults to Categorical
+    /// for backward compatibility with edges created before this field existed.
+    #[serde(default)]
+    pub relation_type: RelationType,
 }
 
 // ---------------------------------------------------------------------------

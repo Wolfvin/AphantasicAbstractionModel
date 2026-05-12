@@ -9,7 +9,8 @@ use crate::types::{CompositionRef, NodeId};
 /// API version string for event contracts.
 pub const API_VERSION: &str = "v1";
 /// Schema version string for event contracts.
-pub const SCHEMA_VERSION: &str = "v8.1";
+/// v8.3: Synced with Python `__schema_version__ = "v8.3"`.
+pub const SCHEMA_VERSION: &str = "v8.3";
 
 /// Runtime node info (v6.0: compositional with layer).
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -61,6 +62,14 @@ pub struct RuntimeEdge {
     pub weight: f32,
     /// Edge source type ("bootstrap", "learned", or "composition").
     pub source_type: String,
+    /// L0-02: Semantic relation type ("categorical", "differential", etc.).
+    #[serde(default = "default_relation_type_str")]
+    pub relation_type: String,
+}
+
+/// Default value for RuntimeEdge relation_type.
+fn default_relation_type_str() -> String {
+    "categorical".to_string()
 }
 
 /// Full graph snapshot for external consumers (v6.0).

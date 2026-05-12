@@ -10,7 +10,7 @@ Layer 0 meniru proses ini untuk setiap modality input.
 """
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Union
 from enum import Enum
 
 
@@ -30,6 +30,50 @@ class RelationType(Enum):
     CAUSAL       = "causal"        # "menyebabkan Y", "akibat dari Z"
 
 
+# ---------------------------------------------------------------------------
+# L0-06: Structured metadata for PerceptualTuple
+# ---------------------------------------------------------------------------
+
+@dataclass
+class PerceptualTupleMeta:
+    """
+    Structured metadata contract for PerceptualTuple.
+
+    Provides a typed schema instead of an opaque dict, ensuring every tuple
+    carries provenance information. Backward-compatible: accepts plain dict
+    input via from_dict().
+    """
+    source_url: str = ""
+    extraction_model: str = ""
+    extraction_timestamp: float = 0.0
+
+    # Allow additional fields beyond the required ones
+    extra: dict = field(default_factory=dict)
+
+    def to_dict(self) -> dict:
+        """Serialize to a plain dict (for Rust interop / JSON)."""
+        result = {
+            "source_url": self.source_url,
+            "extraction_model": self.extraction_model,
+            "extraction_timestamp": self.extraction_timestamp,
+        }
+        result.update(self.extra)
+        return result
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "PerceptualTupleMeta":
+        """Create from a plain dict — backward compatible with old metadata."""
+        if isinstance(d, PerceptualTupleMeta):
+            return d
+        return cls(
+            source_url=d.get("source_url", ""),
+            extraction_model=d.get("extraction_model", ""),
+            extraction_timestamp=d.get("extraction_timestamp", 0.0),
+            extra={k: v for k, v in d.items()
+                   if k not in ("source_url", "extraction_model", "extraction_timestamp")},
+        )
+
+
 @dataclass
 class PerceptualTuple:
     """
@@ -47,7 +91,18 @@ class PerceptualTuple:
     direction:       str | None = None
     confidence:      float = 1.0
     source_modality: ModalityType = ModalityType.TEXT
-    metadata:        dict = field(default_factory=dict)
+    metadata:        Union[PerceptualTupleMeta, dict] = field(default_factory=PerceptualTupleMeta)
+
+    def __post_init__(self):
+        """Ensure metadata is always PerceptualTupleMeta (backward compat)."""
+        if isinstance(self.metadata, dict):
+            self.metadata = PerceptualTupleMeta.from_dict(self.metadata)
+
+    def get_metadata_dict(self) -> dict:
+        """Get metadata as a plain dict regardless of internal type."""
+        if isinstance(self.metadata, PerceptualTupleMeta):
+            return self.metadata.to_dict()
+        return self.metadata
 
 
 @dataclass
@@ -73,7 +128,7 @@ class BasePerceptualAbstractor:
     """
     modality: ModalityType = NotImplemented
 
-    def abstract(self, raw_input: Any, context: dict = {}) -> PerceptualObservation:
+    def abstract(self, raw_input: Any, context: Optional[dict] = None) -> PerceptualObservation:
         """
         Terima raw input, kembalikan PerceptualObservation.
         TIDAK menyimpan raw input — hanya structured tuples.

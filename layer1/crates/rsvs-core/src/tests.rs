@@ -1191,7 +1191,7 @@ mod autonomy_tests {
 mod graph_tests {
     use crate::error::RsvsError;
     use crate::graph::RsvsGraph;
-    use crate::types::{CompressionState, Edge, EdgeSource, Node, NodeStatus, SemanticMeta, Tier};
+    use crate::types::{CompressionState, Edge, EdgeSource, Node, NodeStatus, RelationType, SemanticMeta, Tier};
 
     #[test]
     fn expand_raw_node_returns_self() {
@@ -1389,6 +1389,7 @@ mod graph_tests {
             weight: 0.5,
             source: EdgeSource::Learned,
             last_reinforced_batch: 0,
+            relation_type: RelationType::Categorical,
         });
         assert!(matches!(result, Err(RsvsError::NodeNotFound { .. })));
     }
@@ -1438,6 +1439,7 @@ mod graph_tests {
             weight: 0.8,
             source: EdgeSource::Learned,
             last_reinforced_batch: 0,
+            relation_type: RelationType::Categorical,
         });
         assert!(result.is_ok());
         assert_eq!(g.edge_count(), 1);
@@ -2021,7 +2023,7 @@ mod persistence_v65_tests {
     use crate::autonomy::{AutonomyConfig, AutonomyEngine, AtomRecord, MemoryClass};
     use crate::persist::{SavedAtomRecord, to_snapshot, from_snapshot};
     use crate::pipeline::{PipelineConfig, Rsvs};
-    use crate::types::{Edge, EdgeSource, Tier};
+    use crate::types::{Edge, EdgeSource, RelationType, Tier};
 
     #[test]
     fn atom_record_access_count_survives_roundtrip() {

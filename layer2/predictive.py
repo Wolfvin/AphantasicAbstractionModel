@@ -31,7 +31,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
-from .bridge import RsvsBridge, get_bridge
+from .bridge import AbstractionBridge, RsvsBridge, get_bridge
 
 logger = logging.getLogger(__name__)
 
@@ -337,6 +337,23 @@ class PredictiveEngine:
                     except Exception as exc:
                         logger.debug("relate() failed: %s", exc)
 
+                # Strategy 4 (L2-02): Use mcts_query() for complex prediction paths
+                # MCTS explores deeper reasoning paths that simple query/relate miss
+                if not expected or confidence < 0.5:
+                    try:
+                        mcts_result = self._bridge.mcts_query(concept, max_depth=3, simulations=50)
+                        if mcts_result:
+                            mcts_atoms = mcts_result.get("scored_atoms", [])
+                            if mcts_atoms:
+                                for atom_entry in mcts_atoms[:10]:
+                                    label = self._extract_label_from_tuple(atom_entry)
+                                    if label and label not in expected:
+                                        expected.append(label)
+                                # Boost confidence if MCTS found results
+                                confidence = max(confidence, 0.5)
+                    except Exception as exc:
+                        logger.debug("mcts_query() failed for prediction: %s", exc)
+
                 # Try to get confidence from confidence_map()
                 try:
                     cmap = self._bridge.confidence_map()
@@ -475,10 +492,10 @@ class PredictiveEngine:
             if not expected and not observed:
                 continue  # Nothing to compare
 
-            # Compute prediction error
-            delta = self._compute_prediction_error(expected, observed)
+            # Compute prediction error (L2-02: uses structural_similarity when available)
+            delta = self._compute_prediction_error(expected, observed, concept)
 
-            # Check with appraise() if RSVS available
+            # Check with appraise() if RSVS available (L2-02: anomaly verification)
             appraise_disagree = False
             if self.rsvs_available and expected:
                 try:
@@ -491,13 +508,29 @@ class PredictiveEngine:
                 except Exception as exc:
                     logger.debug("appraise() failed for '%s': %s", concept, exc)
 
+            # L2-02: Also check structural_similarity between expected and observed
+            structural_anomaly = False
+            if self.rsvs_available and len(expected) > 0 and len(observed) > 0:
+                try:
+                    # Check if the top expected and observed are structurally similar
+                    top_expected = expected[0] if expected else ""
+                    top_observed = observed[0] if observed else ""
+                    if top_expected and top_observed and top_expected != top_observed:
+                        sim = self._bridge.structural_similarity(top_expected, top_observed)
+                        if sim is not None:
+                            sim_val = sim.get("structural_similarity", 0.0)
+                            if isinstance(sim_val, (int, float)) and float(sim_val) < 0.2:
+                                structural_anomaly = True
+                except Exception as exc:
+                    logger.debug("structural_similarity anomaly check failed: %s", exc)
+
             # Determine if this is an anomaly
-            is_anomaly = delta > self.anomaly_threshold or appraise_disagree
+            is_anomaly = delta > self.anomaly_threshold or appraise_disagree or structural_anomaly
 
             if is_anomaly:
-                # Boost delta if appraise also disagrees
+                # Boost delta if appraise or structural analysis also disagrees
                 effective_delta = delta
-                if appraise_disagree and delta < self.anomaly_threshold:
+                if (appraise_disagree or structural_anomaly) and delta < self.anomaly_threshold:
                     effective_delta = self.anomaly_threshold + 0.1
 
                 anomaly = Anomaly(
@@ -762,21 +795,24 @@ class PredictiveEngine:
     # Internal: Prediction error computation
     # ------------------------------------------------------------------
 
-    @staticmethod
     def _compute_prediction_error(
-        expected: list[str], observed: list[str]
+        self,
+        expected: list[str],
+        observed: list[str],
+        concept: str = "",
     ) -> float:
         """Compute the magnitude of prediction error.
 
-        Uses Jaccard distance: 1 - |A ∩ B| / |A ∪ B|
-        where A = expected, B = observed.
+        When RSVS is available, uses structural_similarity() for
+        a more accurate error measurement that considers the graph
+        structure, not just label overlap.
 
-        If both are empty, error is 0 (nothing to be wrong about).
-        If one is empty and the other isn't, error is 1 (complete miss).
+        Falls back to Jaccard distance when RSVS is unavailable.
 
         Args:
             expected: Expected compositions.
             observed: Observed compositions.
+            concept: The concept being evaluated (used for structural_similarity).
 
         Returns:
             A float between 0.0 (perfect match) and 1.0 (complete mismatch).
@@ -786,6 +822,30 @@ class PredictiveEngine:
         if not expected or not observed:
             return 1.0
 
+        # L2-02: Try structural_similarity() first for more accurate error
+        if self.rsvs_available and concept:
+            try:
+                # Compare each expected composition with observed ones
+                # using structural similarity
+                total_sim = 0.0
+                comparisons = 0
+                for exp in expected[:5]:
+                    for obs in observed[:5]:
+                        sim_result = self._bridge.structural_similarity(exp, obs)
+                        if sim_result is not None:
+                            sim_val = sim_result.get("structural_similarity", 0.0)
+                            if isinstance(sim_val, (int, float)):
+                                total_sim += float(sim_val)
+                                comparisons += 1
+
+                if comparisons > 0:
+                    # Average structural similarity → convert to error
+                    avg_sim = total_sim / comparisons
+                    return 1.0 - avg_sim
+            except Exception as exc:
+                logger.debug("structural_similarity() for error computation failed: %s", exc)
+
+        # Fallback: Jaccard distance
         set_a = set(expected)
         set_b = set(observed)
         intersection = set_a & set_b

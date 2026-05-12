@@ -6,7 +6,7 @@ import { useFrame } from '@react-three/fiber';
 import { Line } from '@react-three/drei';
 import * as THREE from 'three';
 import { Line2, LineMaterial } from 'three-stdlib';
-import type { RSVSEdge } from '@/lib/types';
+import type { RSVSEdge, EdgeType } from '@/lib/types';
 import { useGraphStore } from '@/store/aamStore';
 import { isCompositeNode, isAtomNode } from '@/lib/nodeRendering';
 import { lerp } from '@/lib/constants';
@@ -18,10 +18,42 @@ const ARROW_SIZE = 0.25;
 const ARROW_CONE_RADIUS = 0.12;
 const ARROW_CONE_HEIGHT = 0.35;
 
-// Composition edge color — cyan/blue for composition edges
-const COMPOSITION_EDGE_COLOR = '#00BCD4';
-// Regular edge color fallback
+// Edge type colors
+const COMPOSITION_EDGE_COLOR = '#00BCD4';   // Cyan for composition
+const CONVERGENCE_EDGE_COLOR = '#E040FB';    // Purple for convergence
+const SUBSTITUTION_EDGE_COLOR = '#FFB74D';   // Orange for substitution
 const REGULAR_EDGE_COLOR = '#1a3a5c';
+
+// ── Curved line helper for composition references ──
+function computeCurvedPoints(
+  start: THREE.Vector3,
+  end: THREE.Vector3,
+  curvature: number = 0.3,
+  segments: number = 20,
+): THREE.Vector3[] {
+  const mid = new THREE.Vector3().lerpVectors(start, end, 0.5);
+  // Offset the midpoint perpendicular to the line
+  const direction = new THREE.Vector3().subVectors(end, start).normalize();
+  const up = new THREE.Vector3(0, 1, 0);
+  const perpendicular = new THREE.Vector3().crossVectors(direction, up).normalize();
+  // If parallel to up, use a different reference
+  if (perpendicular.lengthSq() < 0.01) {
+    perpendicular.crossVectors(direction, new THREE.Vector3(1, 0, 0)).normalize();
+  }
+  mid.add(perpendicular.multiplyScalar(curvature * start.distanceTo(end)));
+
+  const points: THREE.Vector3[] = [];
+  for (let i = 0; i <= segments; i++) {
+    const t = i / segments;
+    // Quadratic Bezier: B(t) = (1-t)²P0 + 2(1-t)tP1 + t²P2
+    const p = new THREE.Vector3();
+    p.x = (1 - t) * (1 - t) * start.x + 2 * (1 - t) * t * mid.x + t * t * end.x;
+    p.y = (1 - t) * (1 - t) * start.y + 2 * (1 - t) * t * mid.y + t * t * end.y;
+    p.z = (1 - t) * (1 - t) * start.z + 2 * (1 - t) * t * mid.z + t * t * end.z;
+    points.push(p);
+  }
+  return points;
+}
 
 interface GraphEdgeProps {
   edge: RSVSEdge;
@@ -32,7 +64,11 @@ interface GraphEdgeProps {
 
 /**
  * A single edge rendered as a Line with optional arrow for directed edges.
- * Composition edges (atom → composite) render differently: thinner, cyan, pulsing, dashed-style.
+ * Supports multiple edge types:
+ * - Regular: standard straight line
+ * - Composition: curved arrow (atom → composite reference)
+ * - Convergence: dashed purple line (structural equivalence)
+ * - Substitution: orange dotted line
  */
 const GraphEdgeComponent: React.FC<GraphEdgeProps> = ({
   edge,
@@ -55,21 +91,59 @@ const GraphEdgeComponent: React.FC<GraphEdgeProps> = ({
   // Current animated opacity
   const currentOpacityRef = useRef(0);
 
-  // Derived render properties — composition edges get their own color
-  const edgeColor = isCompositionEdge
-    ? COMPOSITION_EDGE_COLOR
-    : (edge.render?.color ?? REGULAR_EDGE_COLOR);
-  const edgeThickness = isCompositionEdge
-    ? Math.max(0.3, (edge.render?.thickness ?? 1) * 0.6)
-    : (edge.render?.thickness ?? 1);
-  const baseOpacity = isCompositionEdge
-    ? Math.max(0.15, (edge.render?.opacity ?? 0.6) * 0.5)
-    : (edge.render?.opacity ?? 0.6);
-  const pulseAmount = isCompositionEdge
+  // Determine edge type — use the edge_type field, fall back to isCompositionEdge prop
+  const edgeType: EdgeType = edge.edge_type ?? (isCompositionEdge ? 'composition' : 'regular');
+  const isConvergenceEdge = edgeType === 'convergence';
+  const isSubstitutionEdge = edgeType === 'substitution';
+  const isCompositionType = edgeType === 'composition';
+
+  // Derived render properties based on edge type
+  const edgeColor = isConvergenceEdge
+    ? CONVERGENCE_EDGE_COLOR
+    : isSubstitutionEdge
+      ? SUBSTITUTION_EDGE_COLOR
+      : isCompositionType
+        ? COMPOSITION_EDGE_COLOR
+        : (edge.render?.color ?? REGULAR_EDGE_COLOR);
+
+  const edgeThickness = isConvergenceEdge || isSubstitutionEdge
+    ? Math.max(0.4, (edge.render?.thickness ?? 1) * 0.7)
+    : isCompositionType
+      ? Math.max(0.3, (edge.render?.thickness ?? 1) * 0.6)
+      : (edge.render?.thickness ?? 1);
+
+  const baseOpacity = isConvergenceEdge
+    ? Math.max(0.2, (edge.render?.opacity ?? 0.5) * 0.6)
+    : isSubstitutionEdge
+      ? Math.max(0.2, (edge.render?.opacity ?? 0.5) * 0.6)
+      : isCompositionType
+        ? Math.max(0.15, (edge.render?.opacity ?? 0.6) * 0.5)
+        : (edge.render?.opacity ?? 0.6);
+
+  const pulseAmount = isCompositionType
     ? Math.max(edge.render?.pulse ?? 0, 0.3)
-    : (edge.render?.pulse ?? 0);
+    : isConvergenceEdge
+      ? Math.max(edge.render?.pulse ?? 0, 0.4)
+      : (edge.render?.pulse ?? 0);
+
   const edgeStatus = edge.status ?? 'stable';
   const isDirected = edge.direction === 'directed';
+
+  // Compute curved points for composition edges
+  const curvedPoints = useMemo(() => {
+    if (isCompositionType) {
+      return computeCurvedPoints(sourcePos, targetPos, 0.25);
+    }
+    return null;
+  }, [sourcePos, targetPos, isCompositionType]);
+
+  // Line points — curved for composition, straight for others
+  const linePoints = useMemo(() => {
+    if (isCompositionType && curvedPoints) {
+      return curvedPoints;
+    }
+    return [sourcePos, targetPos];
+  }, [sourcePos, targetPos, isCompositionType, curvedPoints]);
 
   // Compute midpoint and direction for arrow
   const direction = useMemo(() => {
@@ -80,9 +154,14 @@ const GraphEdgeComponent: React.FC<GraphEdgeProps> = ({
   }, [sourcePos, targetPos]);
 
   const arrowPosition = useMemo(() => {
+    if (isCompositionType && curvedPoints) {
+      // Place arrow at ~80% along the curve
+      const idx = Math.floor(curvedPoints.length * 0.8);
+      return curvedPoints[Math.min(idx, curvedPoints.length - 1)].clone();
+    }
     // Place arrow at ~80% along the edge
     return new THREE.Vector3().lerpVectors(sourcePos, targetPos, 0.82);
-  }, [sourcePos, targetPos]);
+  }, [sourcePos, targetPos, isCompositionType, curvedPoints]);
 
   // Arrow rotation: look along direction
   const arrowQuaternion = useMemo(() => {
@@ -150,10 +229,11 @@ const GraphEdgeComponent: React.FC<GraphEdgeProps> = ({
     // ── Compute target opacity ──
     let targetOpacity = baseOpacity;
 
-    // Pulse animation — more pronounced for composition edges
+    // Pulse animation — type-specific speeds
     if (pulseAmount > 0) {
-      const pulseStrength = isCompositionEdge ? 0.15 : 0.05;
-      const pulse = pulseStrength * pulseAmount * Math.sin(time * (isCompositionEdge ? 3 : 2) * Math.PI);
+      const pulseSpeed = isConvergenceEdge ? 4 : isCompositionType ? 3 : 2;
+      const pulseStrength = isConvergenceEdge ? 0.2 : isCompositionType ? 0.15 : 0.05;
+      const pulse = pulseStrength * pulseAmount * Math.sin(time * pulseSpeed * Math.PI);
       targetOpacity += pulse;
     }
 
@@ -184,8 +264,8 @@ const GraphEdgeComponent: React.FC<GraphEdgeProps> = ({
       }
     }
 
-    // ── Update composition dash line ──
-    if (dashLineRef.current && isCompositionEdge) {
+    // ── Update composition/convergence dash line ──
+    if (dashLineRef.current && (isCompositionType || isConvergenceEdge || isSubstitutionEdge)) {
       const dashMat = dashLineRef.current.material as LineMaterial;
       if (dashMat) {
         dashMat.opacity = Math.max(0, Math.min(1, currentOpacityRef.current * 0.6));
@@ -197,23 +277,19 @@ const GraphEdgeComponent: React.FC<GraphEdgeProps> = ({
 
     // ── Update arrow ──
     if (coneRef.current && isDirected && arrowMaterialRef.current) {
-      const arrowOpacity = Math.max(0, Math.min(1, currentOpacityRef.current * 0.8));
+      // Show arrow for composition and regular directed edges, not for convergence
+      const shouldShowArrow = !isConvergenceEdge && !isSubstitutionEdge;
+      const arrowOpacity = shouldShowArrow
+        ? Math.max(0, Math.min(1, currentOpacityRef.current * 0.8))
+        : 0;
       arrowMaterialRef.current.opacity = arrowOpacity;
-      coneRef.current.visible = spawnComplete || drawProgressRef.current > 0.7;
+      coneRef.current.visible = shouldShowArrow && (spawnComplete || drawProgressRef.current > 0.7);
     }
   });
 
-  // Compute animated points for spawn (draw in from source)
-  const linePoints = useMemo(() => {
-    if (edgeStatus === 'new' && !spawnComplete) {
-      // Will be dynamically updated in useFrame via the drawProgress ref
-    }
-    return [sourcePos, targetPos];
-  }, [sourcePos, targetPos, edgeStatus]);
-
   return (
     <group>
-      {/* Main edge line */}
+      {/* Main edge line — curved for composition, straight for others */}
       <Line
         ref={lineRef}
         points={linePoints}
@@ -227,8 +303,42 @@ const GraphEdgeComponent: React.FC<GraphEdgeProps> = ({
         blending={THREE.AdditiveBlending}
       />
 
-      {/* Composition edge: dashed overlay for visual distinction */}
-      {isCompositionEdge && (
+      {/* Convergence: dashed overlay for structural equivalence */}
+      {isConvergenceEdge && (
+        <Line
+          ref={dashLineRef}
+          points={[sourcePos, targetPos]}
+          color={edgeColor}
+          lineWidth={edgeThickness * 1.2}
+          transparent
+          opacity={baseOpacity * 0.6}
+          dashed
+          dashSize={0.6}
+          gapSize={0.35}
+          depthWrite={false}
+          blending={THREE.AdditiveBlending}
+        />
+      )}
+
+      {/* Substitution: dotted overlay */}
+      {isSubstitutionEdge && (
+        <Line
+          ref={dashLineRef}
+          points={[sourcePos, targetPos]}
+          color={edgeColor}
+          lineWidth={edgeThickness * 0.8}
+          transparent
+          opacity={baseOpacity * 0.6}
+          dashed
+          dashSize={0.3}
+          gapSize={0.2}
+          depthWrite={false}
+          blending={THREE.AdditiveBlending}
+        />
+      )}
+
+      {/* Composition: dashed overlay for visual distinction */}
+      {isCompositionType && (
         <Line
           ref={dashLineRef}
           points={linePoints}
@@ -244,8 +354,8 @@ const GraphEdgeComponent: React.FC<GraphEdgeProps> = ({
         />
       )}
 
-      {/* Arrow for directed edges — hidden for composition edges */}
-      {isDirected && !isCompositionEdge && (
+      {/* Arrow for directed edges — shown for regular and composition, hidden for convergence/substitution */}
+      {isDirected && !isConvergenceEdge && !isSubstitutionEdge && (
         <mesh
           ref={coneRef}
           geometry={coneGeometry}
@@ -259,9 +369,9 @@ const GraphEdgeComponent: React.FC<GraphEdgeProps> = ({
       <Line
         points={linePoints}
         color={edgeColor}
-        lineWidth={edgeThickness * (isCompositionEdge ? 3 : 2.5)}
+        lineWidth={edgeThickness * (isCompositionType ? 3 : isConvergenceEdge ? 3.5 : 2.5)}
         transparent
-        opacity={baseOpacity * (isCompositionEdge ? 0.08 : 0.12)}
+        opacity={baseOpacity * (isCompositionType ? 0.08 : isConvergenceEdge ? 0.1 : 0.12)}
         depthWrite={false}
         blending={THREE.AdditiveBlending}
       />

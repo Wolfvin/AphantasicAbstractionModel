@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { useUIStore, useGraphStore, useModeResultStore } from '@/store/aamStore';
-import type { RSVSNode, Tier, PolicyMeta, LanguageLink, StructuralSimilarityResult, SubstitutionAnalysisResult } from '@/lib/types';
+import type { RSVSNode, Tier, PolicyMeta, LanguageLink, StructuralSimilarityResult, SubstitutionAnalysisResult, CompositionReference, SubstitutionPairInfo, ConvergenceLinkInfo, SenseEntry, GroundingEvidence } from '@/lib/types';
 import { getStatusColor, isCompositeNode, isAtomNode, getAtomCount, computeNodeLayer, getLayerColor, getLayerLabel, buildCompositionChain } from '@/lib/nodeRendering';
 import { NUMERIC_TIER_COLORS as TIER_COLORS, NUMERIC_TIER_LABELS as TIER_LABELS } from '@/lib/constants';
 import AppraisePanel from '@/components/aam/AppraisePanel';
@@ -392,6 +392,259 @@ function SubstitutionAnalysisSection({ result, onSelectNode }: { result: Substit
   );
 }
 
+// ── F-02: Composition References Section ──
+function CompositionReferencesSection({ refs, onSelectNode }: { refs: CompositionReference[]; onSelectNode: (id: number) => void }) {
+  return (
+    <div className="mb-5">
+      <div className="flex items-center gap-2 mb-2">
+        <GitBranch className="w-3.5 h-3.5 text-[#00BCD4]" />
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-[#94a3b8]">Composition References</h3>
+        <Badge className="text-[9px] ml-auto bg-[#00BCD415] text-[#00BCD4] border-[#00BCD430] px-1.5 py-0">
+          {refs.length}
+        </Badge>
+      </div>
+      <div className="space-y-1">
+        {refs.map((ref, i) => (
+          <button
+            key={i}
+            type="button"
+            className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-[#1e293b]/50 transition-colors text-left"
+            onClick={() => onSelectNode(ref.ref_node_id)}
+          >
+            <GitBranch className="w-3 h-3 text-[#00BCD4] shrink-0" />
+            <span className="text-xs text-[#e2e8f0] font-mono truncate flex-1">{ref.ref_label}</span>
+            <div className="w-12 h-1.5 bg-[#0d1520] rounded-full overflow-hidden shrink-0">
+              <div
+                className="h-full rounded-full bg-[#00BCD4]"
+                style={{ width: `${ref.weight * 100}%` }}
+              />
+            </div>
+            <span className="text-[10px] text-[#64748b] font-mono shrink-0">{ref.weight.toFixed(2)}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── F-02: Multi-Sense Information Section ──
+function MultiSenseSection({ node }: { node: RSVSNode }) {
+  const senses = node.sense?.senses;
+  const senseCount = node.sense?.count ?? 0;
+  if (!senses || senses.length === 0) return null;
+
+  return (
+    <div className="mb-5">
+      <div className="flex items-center gap-2 mb-2">
+        <Eye className="w-3.5 h-3.5 text-[#80D8FF]" />
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-[#94a3b8]">Multi-Sense Information</h3>
+        <Badge className="text-[9px] ml-auto bg-[#80D8FF15] text-[#80D8FF] border-[#80D8FF30] px-1.5 py-0">
+          {senseCount} sense{senseCount !== 1 ? 's' : ''}
+        </Badge>
+      </div>
+      <div className="space-y-2">
+        {senses.map((sense) => {
+          const statusColor = sense.status === 'mature' ? '#69F0AE' : sense.status === 'fragile' ? '#FFB74D' : sense.status === 'emerging' ? '#00E5FF' : '#FF5252';
+          return (
+            <div key={sense.sense_id} className="bg-[#0d1520] rounded-lg p-2.5 border border-[#1e293b]">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-xs font-mono font-bold text-[#e2e8f0]">S{sense.sense_id}: {sense.label}</span>
+                <Badge
+                  className="text-[9px] px-1 py-0 shrink-0"
+                  style={{
+                    backgroundColor: `${statusColor}15`,
+                    color: statusColor,
+                    borderColor: 'transparent',
+                  }}
+                >
+                  {sense.status}
+                </Badge>
+              </div>
+              {/* Composition atoms */}
+              {sense.composition.length > 0 && (
+                <div className="text-[10px] text-[#64748b] font-mono mb-1">
+                  atoms: {sense.composition.join(' + ')}
+                </div>
+              )}
+              {/* Confidence & Coherence bars */}
+              <div className="flex gap-3">
+                <div className="flex-1">
+                  <div className="flex justify-between text-[9px] mb-0.5">
+                    <span className="text-[#64748b]">Confidence</span>
+                    <span className="text-[#94a3b8] font-mono">{sense.confidence.toFixed(2)}</span>
+                  </div>
+                  <div className="h-1 bg-[#0a0e18] rounded-full overflow-hidden">
+                    <div className="h-full rounded-full bg-[#69F0AE]" style={{ width: `${sense.confidence * 100}%` }} />
+                  </div>
+                </div>
+                <div className="flex-1">
+                  <div className="flex justify-between text-[9px] mb-0.5">
+                    <span className="text-[#64748b]">Coherence</span>
+                    <span className="text-[#94a3b8] font-mono">{sense.coherence.toFixed(2)}</span>
+                  </div>
+                  <div className="h-1 bg-[#0a0e18] rounded-full overflow-hidden">
+                    <div className="h-full rounded-full bg-[#80D8FF]" style={{ width: `${sense.coherence * 100}%` }} />
+                  </div>
+                </div>
+                {sense.grounding_score !== undefined && (
+                  <div className="flex-1">
+                    <div className="flex justify-between text-[9px] mb-0.5">
+                      <span className="text-[#64748b]">Grounding</span>
+                      <span className="text-[#94a3b8] font-mono">{(sense.grounding_score * 100).toFixed(0)}%</span>
+                    </div>
+                    <div className="h-1 bg-[#0a0e18] rounded-full overflow-hidden">
+                      <div
+                        className="h-full rounded-full"
+                        style={{
+                          backgroundColor: sense.grounding_score > 0.7 ? '#69F0AE' : sense.grounding_score > 0.4 ? '#FFB74D' : '#FF5252',
+                          width: `${sense.grounding_score * 100}%`,
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── F-02: Substitution Pairs Section ──
+function SubstitutionPairsSection({ pairs, onSelectNode }: { pairs: SubstitutionPairInfo[]; onSelectNode: (id: number) => void }) {
+  return (
+    <div className="mb-5">
+      <div className="flex items-center gap-2 mb-2">
+        <Shuffle className="w-3.5 h-3.5 text-[#FFB74D]" />
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-[#94a3b8]">Substitution Pairs</h3>
+        <Badge className="text-[9px] ml-auto bg-[#FFB74D15] text-[#FFB74D] border-[#FFB74D30] px-1.5 py-0">
+          {pairs.length}
+        </Badge>
+      </div>
+      <div className="space-y-2">
+        {pairs.map((pair, i) => (
+          <div key={i} className="bg-[#0d1520] rounded-lg p-2.5 border border-[#1e293b]">
+            <div className="flex items-center justify-center gap-2 mb-1.5">
+              <button
+                type="button"
+                className="px-2 py-0.5 rounded-md bg-[#42A5F510] border border-[#42A5F520] text-[#42A5F5] text-xs font-mono hover:bg-[#42A5F520] transition-colors"
+                onClick={() => onSelectNode(pair.atom_a_id)}
+              >
+                {pair.atom_a_label}
+              </button>
+              <ArrowLeftRight className="w-3 h-3 text-[#FFB74D]" />
+              <button
+                type="button"
+                className="px-2 py-0.5 rounded-md bg-[#66BB6A10] border border-[#66BB6A20] text-[#66BB6A] text-xs font-mono hover:bg-[#66BB6A20] transition-colors"
+                onClick={() => onSelectNode(pair.atom_b_id)}
+              >
+                {pair.atom_b_label}
+              </button>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="flex-1 h-1.5 bg-[#0a0e18] rounded-full overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-[#FFB74D]"
+                  style={{ width: `${pair.substitution_score * 100}%` }}
+                />
+              </div>
+              <span className="text-[10px] text-[#FFB74D] font-mono shrink-0">{pair.substitution_score.toFixed(2)}</span>
+            </div>
+            {/* Highlighted semantic shift */}
+            <div className="text-[10px] text-[#94a3b8] mt-1 font-mono italic">
+              shift: {pair.semantic_shift}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── F-02: Convergence Links Section ──
+function ConvergenceLinksSection({ links, onSelectNode }: { links: ConvergenceLinkInfo[]; onSelectNode: (id: number) => void }) {
+  return (
+    <div className="mb-5">
+      <div className="flex items-center gap-2 mb-2">
+        <GitCompare className="w-3.5 h-3.5 text-[#E040FB]" />
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-[#94a3b8]">Convergence Links</h3>
+        <Badge className="text-[9px] ml-auto bg-[#E040FB15] text-[#E040FB] border-[#E040FB30] px-1.5 py-0">
+          {links.length}
+        </Badge>
+      </div>
+      <div className="space-y-1">
+        {links.map((link, i) => (
+          <button
+            key={i}
+            type="button"
+            className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-[#1e293b]/50 transition-colors text-left"
+            onClick={() => onSelectNode(link.target_id)}
+          >
+            <GitCompare className="w-3 h-3 text-[#E040FB] shrink-0" />
+            <Badge variant="outline" className="text-[9px] border-[#E040FB40] text-[#E040FB] shrink-0 px-1">
+              {link.link_type}
+            </Badge>
+            <span className="text-xs text-[#e2e8f0] font-mono truncate flex-1">↔ {link.target_label}</span>
+            <div className="w-12 h-1.5 bg-[#0d1520] rounded-full overflow-hidden shrink-0">
+              <div
+                className="h-full rounded-full bg-[#E040FB]"
+                style={{ width: `${link.strength * 100}%` }}
+              />
+            </div>
+            <span className="text-[10px] text-[#64748b] font-mono shrink-0">{link.strength.toFixed(2)}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── F-02: Grounding Evidence Section ──
+function GroundingEvidenceSection({ evidence }: { evidence: GroundingEvidence }) {
+  const verdictColor = evidence.verdict === 'well_grounded' ? '#69F0AE' : evidence.verdict === 'needs_review' ? '#FFB74D' : '#FF5252';
+  const verdictLabel = evidence.verdict === 'well_grounded' ? 'Well Grounded' : evidence.verdict === 'needs_review' ? 'Needs Review' : 'Needs Revision';
+
+  return (
+    <div className="mb-5">
+      <div className="flex items-center gap-2 mb-2">
+        <Shield className="w-3.5 h-3.5" style={{ color: verdictColor }} />
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-[#94a3b8]">Grounding Evidence</h3>
+        <Badge
+          className="text-[9px] ml-auto px-1.5 py-0"
+          style={{
+            backgroundColor: `${verdictColor}15`,
+            color: verdictColor,
+            borderColor: `${verdictColor}40`,
+          }}
+        >
+          {verdictLabel}
+        </Badge>
+      </div>
+      <div className="grid grid-cols-2 gap-2 mb-2">
+        <StatCard label="Confirming" value={evidence.confirming_contexts} />
+        <StatCard label="Contradicting" value={evidence.contradicting_contexts} />
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <div className="bg-[#0d1520] rounded-lg p-2 text-center border border-[#1e293b]">
+          <div className="text-sm font-bold" style={{ color: verdictColor }}>{(evidence.score * 100).toFixed(0)}%</div>
+          <div className="text-[9px] uppercase tracking-wider text-[#64748b]">Score</div>
+        </div>
+        <div className="bg-[#0d1520] rounded-lg p-2 text-center border border-[#1e293b]">
+          <div className="text-sm font-bold text-[#e2e8f0]">{evidence.revision_count}</div>
+          <div className="text-[9px] uppercase tracking-wider text-[#64748b]">Revisions</div>
+        </div>
+      </div>
+      {evidence.last_contradiction && (
+        <div className="mt-2 text-[10px] text-[#FF5252] font-mono italic">
+          Last contradiction: {evidence.last_contradiction}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Composition Section (new for compose visualization) ──
 function CompositionSection({ node, onSelectNode }: { node: RSVSNode; onSelectNode: (id: number) => void }) {
   const nodes = useGraphStore((s) => s.nodes);
@@ -759,6 +1012,46 @@ export default function RightNodeDrawer() {
               {isComposite && (
                 <>
                   <CompositionSection node={node} onSelectNode={handleSelectNode} />
+                  <Separator className="bg-[#1e293b] mb-5" />
+                </>
+              )}
+
+              {/* F-02: Composition References */}
+              {node.composition_references && node.composition_references.length > 0 && (
+                <>
+                  <CompositionReferencesSection refs={node.composition_references} onSelectNode={handleSelectNode} />
+                  <Separator className="bg-[#1e293b] mb-5" />
+                </>
+              )}
+
+              {/* F-02: Multi-Sense Information (enhanced sense display) */}
+              {node.sense?.senses && node.sense.senses.length > 1 && (
+                <>
+                  <MultiSenseSection node={node} />
+                  <Separator className="bg-[#1e293b] mb-5" />
+                </>
+              )}
+
+              {/* F-02: Grounding Evidence */}
+              {node.grounding_evidence && (
+                <>
+                  <GroundingEvidenceSection evidence={node.grounding_evidence} />
+                  <Separator className="bg-[#1e293b] mb-5" />
+                </>
+              )}
+
+              {/* F-02: Substitution Pairs */}
+              {node.substitution_pairs && node.substitution_pairs.length > 0 && (
+                <>
+                  <SubstitutionPairsSection pairs={node.substitution_pairs} onSelectNode={handleSelectNode} />
+                  <Separator className="bg-[#1e293b] mb-5" />
+                </>
+              )}
+
+              {/* F-02: Convergence Links */}
+              {node.convergence_links && node.convergence_links.length > 0 && (
+                <>
+                  <ConvergenceLinksSection links={node.convergence_links} onSelectNode={handleSelectNode} />
                   <Separator className="bg-[#1e293b] mb-5" />
                 </>
               )}

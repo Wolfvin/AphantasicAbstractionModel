@@ -12,7 +12,7 @@ use crate::autonomy::ConfidenceUpdateResult;
 use crate::error::RsvsError;
 use crate::sense::IngestResult;
 use crate::types::{
-    CompressionState, Edge, EdgeSource, Node, NodeId, NodeStatus, PolicyMeta, SemanticMeta, Tier,
+    CompressionState, Edge, EdgeSource, Node, NodeId, NodeStatus, PolicyMeta, RelationType, SemanticMeta, Tier,
 };
 use rayon::prelude::*;
 use std::collections::HashSet;
@@ -759,6 +759,7 @@ impl Rsvs {
                             weight: *weight,
                             source: EdgeSource::Learned,
                             last_reinforced_batch: self.batch_counter,
+                            relation_type: RelationType::Categorical,
                         });
                         is_new = true;
                     }

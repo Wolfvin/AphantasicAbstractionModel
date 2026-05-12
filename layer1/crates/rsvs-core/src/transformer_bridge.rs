@@ -8,14 +8,80 @@
 //! - `vectors_to_compositions()`: Convert vector similarity pairs to CompositionRefs
 //! - `attention_weights_to_senses()`: Convert Transformer attention weights to sense compositions
 //! - `explain_vector()`: Trace which compositions contribute to a vector representation
+//! - `EmbeddingProvider` trait: Hook for pluggable embedding backends (v8.3)
+//! - `embedding_similarity_fallback()`: Fallback similarity using embeddings (v8.3)
 //!
 //! v6.0: Initial implementation of the Transformer Bridge concept.
+//! v8.3: Added `EmbeddingProvider` trait and `embedding_similarity_fallback()` for
+//!        pluggable embedding integration.
 
 use crate::graph::RsvsGraph;
 use crate::sense::SenseManager;
 use crate::types::{CompositionRef, NodeId};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+
+// -----------------------------------------------------------------------
+// EmbeddingProvider — v8.3: Pluggable embedding provider trait
+// -----------------------------------------------------------------------
+
+/// Trait for pluggable embedding providers (v8.3).
+///
+/// This trait defines the interface for embedding backends that can
+/// provide vector representations for text tokens. Implementations
+/// can wrap local models, API calls, or pre-computed embedding caches.
+///
+/// The TransformerBridge uses an EmbeddingProvider to compute
+/// embedding-based similarity as a fallback when structural similarity
+/// (Jaccard) is insufficient.
+///
+/// # Example
+///
+/// ```ignore
+/// struct MyEmbedder;
+///
+/// impl EmbeddingProvider for MyEmbedder {
+///     fn embed(&self, text: &str) -> Option<Vec<f32>> {
+///         // Call your embedding model here
+///         Some(vec![0.1, 0.2, 0.3, ...])
+///     }
+///
+///     fn embedding_dim(&self) -> usize { 768 }
+/// }
+///
+/// let bridge = TransformerBridge::new(TransformerBridgeConfig::default());
+/// let provider = MyEmbedder;
+/// let sim = bridge.embedding_similarity_fallback("dog", "anjing", &provider);
+/// ```
+pub trait EmbeddingProvider: Send + Sync {
+    /// Compute the embedding vector for the given text.
+    ///
+    /// Returns `None` if the text cannot be embedded (e.g., empty string,
+    /// model not loaded, API error).
+    fn embed(&self, text: &str) -> Option<Vec<f32>>;
+
+    /// The dimensionality of vectors returned by `embed()`.
+    ///
+    /// Used for validation: vectors of different dimensions cannot be compared.
+    fn embedding_dim(&self) -> usize;
+}
+
+/// A no-op embedding provider that always returns None (v8.3).
+///
+/// Used as the default provider when no real embedding backend is configured.
+/// This ensures the system works without an embedding model — all embedding-based
+/// features gracefully degrade to returning None/0.0.
+pub struct NoOpEmbeddingProvider;
+
+impl EmbeddingProvider for NoOpEmbeddingProvider {
+    fn embed(&self, _text: &str) -> Option<Vec<f32>> {
+        None
+    }
+
+    fn embedding_dim(&self) -> usize {
+        0
+    }
+}
 
 // -----------------------------------------------------------------------
 // TransformerBridgeConfig — configuration with serde support
@@ -263,7 +329,9 @@ impl TransformerBridge {
 /// Compute cosine similarity between two vectors.
 ///
 /// Returns 0.0 if either vector has zero magnitude.
-fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
+///
+/// v8.3: Made public for use by EmbeddingProvider implementations.
+pub fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
     if a.len() != b.len() || a.is_empty() {
         return 0.0;
     }
@@ -276,6 +344,111 @@ fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
         0.0
     } else {
         (dot / (mag_a * mag_b)).clamp(-1.0, 1.0)
+    }
+}
+
+// -----------------------------------------------------------------------
+// v8.3: Embedding-based similarity fallback
+// -----------------------------------------------------------------------
+
+impl TransformerBridge {
+    /// v8.3: Compute embedding-based similarity between two labels as a fallback.
+    ///
+    /// When structural similarity (Jaccard) is insufficient — for example,
+    /// when two nodes have no overlapping atoms but are semantically related
+    /// (e.g., "dog" and "anjing") — this method uses an EmbeddingProvider
+    /// to compute cosine similarity between their vector representations.
+    ///
+    /// Returns `None` if either label cannot be embedded by the provider,
+    /// or if the vectors have mismatched dimensions.
+    ///
+    /// # Arguments
+    /// * `label_a` - First concept label
+    /// * `label_b` - Second concept label
+    /// * `provider` - The embedding provider to use
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let bridge = TransformerBridge::new(TransformerBridgeConfig::default());
+    /// let provider = MyEmbeddingProvider;
+    /// let sim = bridge.embedding_similarity_fallback("dog", "anjing", &provider);
+    /// // sim = Some(0.92) — high cosine similarity despite different labels
+    /// ```
+    pub fn embedding_similarity_fallback(
+        &self,
+        label_a: &str,
+        label_b: &str,
+        provider: &dyn EmbeddingProvider,
+    ) -> Option<f32> {
+        let vec_a = provider.embed(label_a)?;
+        let vec_b = provider.embed(label_b)?;
+
+        // Validate dimensions match
+        if vec_a.len() != vec_b.len() {
+            return None;
+        }
+        if vec_a.is_empty() {
+            return None;
+        }
+
+        let sim = cosine_similarity(&vec_a, &vec_b);
+
+        // Only return if above the bridge's similarity threshold
+        if sim >= self.similarity_threshold {
+            Some(sim)
+        } else {
+            // Below threshold — not similar enough. Still return the score
+            // so the caller can decide, but Some(0.0) would be misleading.
+            // Return None to signal "not similar per bridge config".
+            None
+        }
+    }
+
+    /// v8.3: Batch compute embedding similarities for a query label against
+    /// multiple candidate labels.
+    ///
+    /// Returns a sorted list of (label, similarity) pairs, filtered by the
+    /// bridge's similarity threshold. Useful for finding the best embedding
+    /// match among candidates when structural similarity fails.
+    ///
+    /// # Arguments
+    /// * `query_label` - The label to find matches for
+    /// * `candidate_labels` - Labels to compare against
+    /// * `provider` - The embedding provider to use
+    /// * `top_k` - Maximum number of results to return
+    pub fn embedding_similarity_batch(
+        &self,
+        query_label: &str,
+        candidate_labels: &[String],
+        provider: &dyn EmbeddingProvider,
+        top_k: usize,
+    ) -> Vec<(String, f32)> {
+        let query_vec = match provider.embed(query_label) {
+            Some(v) => v,
+            None => return Vec::new(),
+        };
+
+        let mut results: Vec<(String, f32)> = candidate_labels
+            .iter()
+            .filter_map(|label| {
+                let candidate_vec = provider.embed(label.as_str())?;
+                if candidate_vec.len() != query_vec.len() || candidate_vec.is_empty() {
+                    return None;
+                }
+                let sim = cosine_similarity(&query_vec, &candidate_vec);
+                if sim >= self.similarity_threshold {
+                    Some((label.clone(), sim))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        // Sort by similarity descending
+        results.sort_by(|a, b| b.1.total_cmp(&a.1));
+        results.truncate(top_k);
+        results
     }
 }
 

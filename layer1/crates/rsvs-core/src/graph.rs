@@ -12,7 +12,7 @@
 
 use crate::error::RsvsError;
 use crate::sense::SenseManager;
-use crate::types::{AtomSet, CompositionRef, CompressionState, Edge, EdgeSource, Node, NodeId, SenseId};
+use crate::types::{AtomSet, CompositionRef, CompressionState, Edge, EdgeSource, Node, NodeId, RelationType, SenseId};
 use std::collections::{HashMap, HashSet};
 
 #[derive(Debug)]
@@ -396,6 +396,7 @@ impl RsvsGraph {
             weight: evidence,
             source: EdgeSource::Learned,
             last_reinforced_batch: current_batch,
+            relation_type: RelationType::Categorical,
         };
         let _ = self.insert_edge(edge);
     }

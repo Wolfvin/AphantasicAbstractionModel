@@ -29,6 +29,8 @@ export interface NodeSense {
   grounding_score?: number;
   grounding_evidence?: GroundingEvidence;
   compositions?: CompositionPair[];
+  // Individual sense entries for multi-sense display
+  senses?: SenseEntry[];
 }
 
 export interface NodeMetrics {
@@ -142,6 +144,10 @@ export interface RSVSNode {
   compositions?: CompositionPair[]; // list of [label, sense_id] pairs
   // v8.0: Whether this node is an internal representation (layer 1 bridge)
   internal_representation?: boolean;
+  // Structural information fields for enhanced display
+  composition_references?: CompositionReference[];
+  substitution_pairs?: SubstitutionPairInfo[];
+  convergence_links?: ConvergenceLinkInfo[];
 }
 
 export interface EdgeMetrics {
@@ -177,7 +183,16 @@ export interface RSVSEdge {
   // v4.2 fields
   label?: string;
   evidence?: EdgeEvidence[];
+  // Structural edge types for visual differentiation
+  edge_type?: EdgeType;
 }
+
+// Structural edge types for visual differentiation in the graph
+export type EdgeType =
+  | 'regular'          // Default graph edge
+  | 'composition'      // Atom → Composite reference
+  | 'convergence'      // Structural equivalence link (dashed)
+  | 'substitution';    // Substitution pair connection
 
 export interface AnimationHint {
   priority: AnimationPriority;
@@ -321,6 +336,45 @@ export interface SubstitutionAnalysisResult {
   node_a: { label: string; id: number };
   node_b: { label: string; id: number };
   substitution_pairs: SubstitutionPair[];
+}
+
+// ── Structural Information Types (F-02) ──
+
+/** Individual sense entry for multi-sense display */
+export interface SenseEntry {
+  sense_id: number;
+  label: string;
+  composition: string[];  // labels of composition atoms
+  confidence: number;
+  status: 'mature' | 'fragile' | 'emerging' | 'deprecated';
+  coherence: number;
+  grounding_score?: number;
+}
+
+/** Composition reference: a link from this node to another node it's composed of */
+export interface CompositionReference {
+  ref_node_id: number;
+  ref_label: string;
+  weight: number;
+  sense_id?: number;
+}
+
+/** Substitution pair info: edge difference highlighting */
+export interface SubstitutionPairInfo {
+  atom_a_id: number;
+  atom_a_label: string;
+  atom_b_id: number;
+  atom_b_label: string;
+  substitution_score: number;
+  semantic_shift: string;
+}
+
+/** Convergence link: structural equivalence between nodes */
+export interface ConvergenceLinkInfo {
+  target_id: number;
+  target_label: string;
+  link_type: string;
+  strength: number;
 }
 
 // 3D layout types

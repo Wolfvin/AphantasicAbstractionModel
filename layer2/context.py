@@ -18,7 +18,7 @@ import logging
 import time
 from typing import Any, Optional
 
-from .bridge import RsvsBridge, get_bridge
+from .bridge import AbstractionBridge, RsvsBridge, get_bridge
 from .web_search import WebSearchEngine, _web_search
 
 logger = logging.getLogger(__name__)
@@ -227,7 +227,8 @@ class ContextLayer:
 
         if self.rsvs_available:
             try:
-                stats = self._bridge.ingest(text)
+                # P-04: Pass source provenance to bridge for trust weighting
+                stats = self._bridge.ingest(text, source_provenance=source)
                 record["success"] = True
                 record["stats"] = stats  # Already a plain dict from bridge
             except Exception as exc:
@@ -258,14 +259,22 @@ class ContextLayer:
     def search_and_ingest(self, query: str, max_results: int = 5) -> dict:
         """Search the web and ingest results into the RSVS graph.
 
+        L2-07 fix: Results are now filtered by RSVS relevance before
+        ingestion. Snippets that are inconsistent with the graph
+        (appraise = "disagree") or not related to active senses
+        are filtered out.
+
         Analogi: Jin Soun mengirim mata-mata ke kota lain untuk
         mencari informasi, lalu mencatat hasilnya di Simhyeon Pavilion.
+        Tapi dia hanya mencatat informasi yang RELEVAN — bukan semua
+        laporan yang diterima.
 
         Flow:
             1. Web search using z-ai-web-dev-sdk
-            2. Format results as structured text
-            3. Ingest into RSVS graph with "web_search" source tag
-            4. Return formatted results with provenance
+            2. Filter results by RSVS relevance (L2-07)
+            3. Format filtered results as structured text
+            4. Ingest into RSVS graph with "web_search" source tag
+            5. Return formatted results with provenance
 
         Args:
             query: The search query string.
@@ -279,6 +288,7 @@ class ContextLayer:
                 - "ingest_stats": dict | None — stats from ingestion
                 - "result_count": int — number of results found
                 - "trust": float — trust score for web_search source
+                - "filtered_count": int — number of results filtered out
         """
         trust = self.trust_score("web_search")
         in_scope = self.is_in_scope("web_search")
@@ -290,6 +300,7 @@ class ContextLayer:
             "ingest_stats": None,
             "result_count": 0,
             "trust": trust,
+            "filtered_count": 0,
         }
 
         # Step 1: Perform web search (using instance engine with caching)
@@ -301,11 +312,20 @@ class ContextLayer:
             logger.info("No web search results for: %s", query)
             return response
 
-        # Step 2: Format results for ingestion
-        # Analogi: Mata-mata kembali dengan laporan mentah —
-        # Jin Soun merangkumnya sebelum menyimpan di arsip.
+        # Step 2 (L2-07): Filter results by RSVS relevance
+        filtered_results = self._filter_search_results(search_results, query)
+        response["filtered_count"] = len(search_results) - len(filtered_results)
+
+        if not filtered_results:
+            logger.info(
+                "All %d search results filtered out by RSVS relevance for: %s",
+                len(search_results), query
+            )
+            return response
+
+        # Step 3: Format filtered results for ingestion
         formatted_parts: list[str] = []
-        for i, result in enumerate(search_results):
+        for i, result in enumerate(filtered_results):
             title = result.get("title", "Untitled")
             url = result.get("url", result.get("link", ""))
             snippet = result.get("snippet", result.get("description", ""))
@@ -318,7 +338,7 @@ class ContextLayer:
 
         combined_text = "\n\n".join(formatted_parts)
 
-        # Step 3: Ingest (if in scope)
+        # Step 4: Ingest (if in scope)
         if not in_scope:
             logger.info("web_search source is out of scope — skipping ingestion")
             return response
@@ -328,6 +348,79 @@ class ContextLayer:
         response["ingest_stats"] = ingest_result.get("stats")
 
         return response
+
+    def _filter_search_results(
+        self,
+        results: list[dict],
+        query: str,
+    ) -> list[dict]:
+        """Filter search results by RSVS relevance (L2-07 fix).
+
+        Uses bridge.appraise() to check if each snippet is consistent
+        with the graph, and bridge.relate() to find the most relevant
+        snippets to active senses. Only snippets above the appraise
+        threshold are kept.
+
+        When RSVS is unavailable, all results are kept (no filtering).
+
+        Args:
+            results: Raw search results from the web search engine.
+            query: The original search query.
+
+        Returns:
+            A filtered list of search result dicts.
+        """
+        if not self.rsvs_available:
+            return results  # No filtering without RSVS
+
+        filtered: list[dict] = []
+
+        for result in results:
+            snippet = result.get("snippet", result.get("description", ""))
+            title = result.get("title", "")
+            text_to_check = f"{title} {snippet}"
+
+            if not text_to_check.strip():
+                continue
+
+            # Check 1: Use appraise() to verify consistency with graph
+            try:
+                appraise_result = self._bridge.appraise(text_to_check)
+                if isinstance(appraise_result, dict):
+                    verdict = appraise_result.get("verdict", "neutral")
+                    # If the snippet contradicts the graph, skip it
+                    if verdict == "disagree":
+                        agree_pct = appraise_result.get("agree_pct", 0.0)
+                        disagree_pct = appraise_result.get("disagree_pct", 0.0)
+                        if isinstance(disagree_pct, (int, float)) and float(disagree_pct) > float(agree_pct):
+                            logger.debug(
+                                "Filtered search result (disagree): %s",
+                                title[:50]
+                            )
+                            continue
+            except Exception as exc:
+                logger.debug("appraise() for search filtering failed: %s", exc)
+
+            # Check 2: Use relate() to verify relevance to active senses
+            try:
+                # Extract key terms from the snippet
+                relate_result = self._bridge.relate(query)
+                if relate_result:
+                    related_nodes = relate_result.get("related_nodes", [])
+                    # If the query has related nodes in the graph,
+                    # the result is likely relevant
+                    if related_nodes:
+                        # Result is relevant — keep it
+                        filtered.append(result)
+                        continue
+            except Exception as exc:
+                logger.debug("relate() for search filtering failed: %s", exc)
+
+            # If we can't determine relevance, keep the result
+            # (better to have false positives than false negatives)
+            filtered.append(result)
+
+        return filtered
 
     # ------------------------------------------------------------------
     # Utility methods

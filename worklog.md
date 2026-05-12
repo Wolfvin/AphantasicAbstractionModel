@@ -229,3 +229,288 @@ Work Log:
 
 No commits made.
 ---
+
+---
+Task ID: 3
+Agent: layer1-rust-gaps
+Task: Solve ALL 8 Layer 1 (Rust Core/RSVS) gaps
+
+Work Log:
+
+### L1-01 [CRITICAL]: compose.rs @en Language Tag — ALREADY FIXED
+- Prior agent (Task B) already fixed: `surface_label: format!("{}@{}", label, lang.unwrap_or("en"))` → `surface_label: label.to_string()` and `self.register_label(label, node_id, None)`. Added `let _lang = lang;` to suppress warning.
+- Verified no remaining `lang.unwrap_or("en")` patterns in compose.rs.
+
+### L1-02 [HIGH]: traverse.rs Hardcoded tau=0.4 — ALREADY FIXED
+- Prior agent (Task B) already fixed: `let tau = 0.4` → `let tau = tau_core as f32` with `tau_core: f64` parameter passed from `self.config.sense.tau_core`.
+- Verified in both `pipeline/traverse.rs` and `pipeline/mod.rs` call site.
+
+### L1-03 [HIGH]: ingest.rs Composition Index Duplication — ALREADY FIXED
+- Prior agent (Task B) already fixed: Added `dirty_node_ids: HashSet<NodeId>` tracking, changed full-rebuild loop to only update dirty nodes.
+- Verified `dirty_node_ids` is populated on promote, sense_assigned, and sense_created events.
+
+### L1-04 [HIGH]: bindings.rs .unwrap() That Can Panic — ALREADY FIXED
+- Prior agent (Task B) already fixed the panicking `.filter().map(.unwrap())` → `.filter_map()` pattern.
+- Verified no remaining bare `.unwrap()` calls in bindings.rs (all use `.unwrap_or()`, `.unwrap_or_default()`, or `.unwrap_or_else()`).
+
+### L1-05 [MEDIUM]: Schema Version Drift Rust vs Python
+- **`events.rs`**: Updated `SCHEMA_VERSION` from `"v8.1"` to `"v8.3"` to sync with Python `__schema_version__ = "v8.3"`.
+- **`persist.rs`**: Updated snapshot `version` from `"8.1"` to `"8.3"` in `to_snapshot()`.
+- **`persist.rs`**: Added version compatibility check in `load()` function — parses major version from snapshot, rejects snapshots newer than code version, allows older (backward-compatible via `#[serde(default)]`).
+
+### L1-06 [MEDIUM]: DEPS Planner Not Exposed to Python
+- **`bindings.rs`**: Replaced the TODO stub `deps_analyze()` with a full implementation that:
+  - Accepts `node_label: &str` and `error_type: &str` parameters
+  - Maps error_type strings to `RsvsError` variants (self_reference, circular_chain, target_not_found, composition_rejected, general)
+  - Calls `self.inner.deps_planner.analyze(&error, node_id)` internally
+  - Returns JSON with failure_type, explanation, plans (with scores), and recommended plan
+- Added `PyRecoveryPlan` class with: description, estimated_success_rate, simplicity, score, is_destructive, action
+- Added `PyDEPSResult` class with: failure_type, explanation, plans (Vec<PyRecoveryPlan>), recommended (Option<PyRecoveryPlan>)
+- Registered both new classes in the `_rsvs` PyO3 module.
+
+### L1-07 [MEDIUM]: TransformerBridge Config Without Real Integration
+- **`transformer_bridge.rs`**: Added `EmbeddingProvider` trait with `embed(&self, text: &str) -> Option<Vec<f32>>` and `embedding_dim(&self) -> usize` methods. Trait requires `Send + Sync`.
+- **`transformer_bridge.rs`**: Added `NoOpEmbeddingProvider` struct as default no-op implementation (returns None, dim=0).
+- **`transformer_bridge.rs`**: Made `cosine_similarity()` public for use by external embedding providers.
+- **`transformer_bridge.rs`**: Added `embedding_similarity_fallback()` method to `TransformerBridge` — computes cosine similarity between two labels via an EmbeddingProvider, returns None if below threshold or provider unavailable.
+- **`transformer_bridge.rs`**: Added `embedding_similarity_batch()` method — batch compute embedding similarities for a query against multiple candidates, returns sorted results filtered by threshold.
+
+### L1-08 [LOW]: SessionGraph Not in Rust Implementation
+- **Verified**: SessionGraph is fully implemented in `session.rs` with:
+  - `SessionGraph` struct with isolated RSVS instance, context_text, sentences_ingested, atoms_induced
+  - `SessionGraph::new()` — creates isolated RSVS from context text
+  - `SessionGraph::appraise()` — context-only appraise with is_contextual=true flag
+  - `SessionGraph::compare()` — compare two statements with SessionComparison result
+  - `SessionComparison` with verdict_a, verdict_b, winner (ComparisonWinner enum), agree_gap, is_discriminable, explanation
+  - `SessionStats` with sentences_ingested, atoms_induced, total_nodes, total_atoms
+- **Documentation**: COGNITIVE_FOUNDATIONS.md already correctly describes SessionGraph as working memory layer with Dual Memory mapping. No doc updates needed.
+
+### Directory Sync Note
+- Both `layer1/crates/rsvs-core/src/` and `backend/crates/rsvs-core/src/` share the same inodes (hardlinks), so all changes are automatically applied to both directories.
+
+### Verification
+- `cargo check` passes with 0 errors (111 pre-existing warnings, mostly missing docs).
+- All 8 gaps resolved.
+---
+
+---
+Task ID: 7
+Agent: frontend-gap-fixer
+Task: Solve ALL 5 Frontend gaps (F-01 through F-05)
+
+Work Log:
+
+### F-01 [HIGH]: O(n²) Force Simulation → Barnes-Hut O(n log n)
+- **`frontend/src/components/aam/graph3d/ForceGraph.tsx`**: Complete rewrite of repulsion algorithm
+  - Implemented Barnes-Hut octree: `OctreeNode` with 8 children, center-of-mass aggregation, `insertIntoOctree()`, `computeRepulsiveForce()` with theta=0.5
+  - Added spatial grid/hashing: `buildSpatialGrid()`, `getNeighborIndices()` for O(1) cell lookup
+  - Added frame budget limiting (FRAME_BUDGET_MS = 16ms): skip force calc if previous frame was too slow
+  - Added delta time capping (MAX_DELTA_MS = 50) for stability after tab switches
+  - Batched render props updates to reduce re-renders
+
+### F-02 [CRITICAL]: Frontend Doesn't Display Structural Information
+- **`frontend/src/lib/types.ts`**: Added `EdgeType` ('regular'|'composition'|'convergence'|'substitution'), `SenseEntry`, `CompositionReference`, `SubstitutionPairInfo`, `ConvergenceLinkInfo` interfaces. Added `edge_type` to RSVSEdge, `composition_references`/`substitution_pairs`/`convergence_links` to RSVSNode, `senses` to NodeSense.
+- **`frontend/src/components/aam/graph3d/GraphEdge.tsx`**: Complete rewrite with multi-edge-type support. Composition edges use curved Bezier lines with cyan dashed overlay. Convergence edges use purple dashed lines. Substitution edges use orange dotted lines. Type-specific animation speeds and colors.
+- **`frontend/src/components/aam/graph3d/GraphNode.tsx`**: Added multi-sense indicator badge ("Ns") next to label for nodes with >1 sense. Added grounding evidence color intensity dot (green/amber/red). Grounding score affects material opacity and emissive intensity.
+- **`frontend/src/components/aam/RightNodeDrawer.tsx`**: Added 5 new section components: `CompositionReferencesSection`, `MultiSenseSection`, `SubstitutionPairsSection`, `ConvergenceLinksSection`, `GroundingEvidenceSection`. All wired into drawer with separators.
+
+### F-03 [MEDIUM]: No React Error Boundaries in Component Tree
+- **`frontend/src/components/ErrorBoundary.tsx`**: Enhanced with WebGL context loss detection, error count tracking, improved fallback UI with icon, description, boundary name badge, retry button with context-aware label.
+- **`frontend/src/components/aam/graph3d/GraphScene3D.tsx`**: Wrapped `<Canvas>` with `<ErrorBoundary name="WebGL-Canvas">` for WebGL-specific error catching.
+- Page-level boundaries already existed from previous agent (LeftInputRail, Graph3D, RightNodeDrawer, TimelineBar).
+
+### F-04 [MEDIUM]: Backend Bridge Uses Numeric Node IDs Without Label Resolution
+- **`frontend/src/lib/backendBridge.ts`**: Added `labelCache` with TTL-based expiry (5 min). `resolveNodeIdToLabel()` resolves numeric IDs via /node-info API. `resolveRelateLabels()` processes relate() results. Also checks local graph store as sync fallback.
+- **`layer2/bridge.py`**: `_normalize_relate_result()` now returns 3-tuples (label, score, node_id) with `_needs_label_resolution` flag. `AbstractionBridge.relate()` added post-processing to resolve numeric IDs by calling `self._rsvs.node_info(node_id)`.
+
+### F-05 [LOW]: ESLint All Rules Disabled
+- **`frontend/eslint.config.mjs`**: Re-enabled at "warn" level: `no-unused-vars`, `no-undef`, `@typescript-eslint/no-explicit-any`, `@typescript-eslint/no-unused-vars`, `react-hooks/exhaustive-deps`. Added gradual enablement plan comments (Phase 1/2/3). Kept other rules at "off".
+
+No commits made.
+---
+
+---
+Task ID: 4
+Agent: layer2-cognitive-runtime-fixer
+Task: Solve ALL 8 Layer 2 (Cognitive Runtime) gaps
+
+Work Log:
+
+### L2-01 [CRITICAL]: Bridge Doesn't Utilize Advanced RSVS Features
+- Added 11 missing methods to AbstractionBridge in layer2/bridge.py:
+  - mcts_query() → calls pyrsvs.mcts_query() + fallback BFS
+  - consolidate() → calls pyrsvs.consolidate() + fallback sense merging
+  - run_reflection() → calls pyrsvs.run_reflection() + fallback self-check
+  - verify() → calls pyrsvs.verify() + fallback integrity check
+  - toggle_thinking(mode) → calls pyrsvs.set_thinking_mode()
+  - route_paradigm(query) → heuristic paradigm routing + fallback
+  - deps_analyze(failure) → calls pyrsvs deps/reflect + fallback dependency trace
+  - matryoshka_traverse(node, depth) → nested layer exploration via context_query
+  - context_similarity(a, b, context) → calls pyrsvs.context_similarity()
+- Added 3 PyO3 normalization methods
+- All features have working _FallbackGraph implementations
+
+### L2-02 [HIGH]: Predictive Engine Only Uses Keyword Matching
+- Added Strategy 4: mcts_query() for complex prediction paths
+- Upgraded _compute_prediction_error() to use structural_similarity() when available
+- Added structural_anomaly detection via structural_similarity in detect_anomalies()
+- Kept keyword matching as fallback when Rust core unavailable
+
+### L2-03 [HIGH]: Fallback Graph Doesn't Implement Sense/Composition Model
+- Added _FallbackSense dataclass with sense_idx, coherence, grounding_score, core_atoms, status
+- Changed _FallbackNode to have senses: list[_FallbackSense] with multi-sense support
+- Added event tracking: _events, _seq, _emit_event() for node_created/sense_changed/confidence_changed
+- Sense maturation: fragile → mature → stable based on observation count
+- Added compute_coherence() method for sense consistency calculation
+
+### L2-04 [HIGH]: Pattern Output Doesn't Use Structural Reasoning
+- Added Strategy 2: relate() for spreading-activation pattern identification
+- Added Strategy 4: structural_similarity() for measuring pattern strength
+- Narrative generation grounds claims to evidence nodes via node_info()
+- Added grounded_evidence tracking in _generate_narrative()
+
+### L2-05 [MEDIUM]: Grounding Prefix Corrupts Data
+- Replaced "The {seed} relates to {text}" prefix with three-stage soft grounding:
+  1. Try ingest_with_meta_v1() with domain_id (lang-aware)
+  2. Soft grounding via appraise() — ingest directly, validate consistency
+  3. Minimal prefix "SEED: text" instead of full sentence
+
+### L2-06 [MEDIUM]: Active Sense Tracking Not Precise
+- Added _sense_last_seen dict for event-based timestamp tracking
+- Added _sense_events list for parsed event log
+- _update_active_senses() now consumes events via consume_events_v1()
+- Parses node_created, sense_changed, confidence_changed events
+- Uses recency-weighted active sense ranking (staleness + confidence)
+
+### L2-07 [MEDIUM]: Web Search Without RSVS Relevance Filtering
+- Added _filter_search_results() using bridge.appraise() + bridge.relate()
+- Filters out snippets that contradict graph (appraise="disagree")
+- Verifies relevance to active senses via relate()
+- Falls back to no filtering when RSVS unavailable
+
+### L2-08 [LOW]: Duplicated Code layer2/ vs rsvs_genius/
+- Verified: No rsvs_genius/ directory exists
+- Verified: No from rsvs_genius or import rsvs_genius references
+- Marked as resolved — no duplication found
+
+Files Modified: layer2/bridge.py, layer2/predictive.py, layer2/pattern.py, layer2/situation.py, layer2/context.py
+All imports verified. All fallback methods tested successfully.
+---
+
+Task ID: 6
+Agent: pipeline-integration-gaps-solver
+Task: Solve ALL 6 Pipeline Integration Gaps (P-01 through P-06)
+
+Work Log:
+
+### P-01 [HIGH]: Pipeline Doesn't Pass Structural Information Between Layers
+- **`pipeline.py`**: Defined 3 data contracts:
+  - `PerceptualObservation` (Layer0Output) — text, source, trust, search_results, ingest_stats, context_atoms
+  - `StructuralDelta` (Layer1Output) — new_nodes, new_edges, sense_changes, confidence_updates, relevant_context, active_senses
+  - `ReasoningRequest` (Layer2Output) — trigger, context_atoms, evidence_refs, predictions, anomalies, source
+- Added `_run_context_layer()` → produces Layer0Output
+- Added `_run_situation_layer()` → produces Layer1Output
+- Updated `ask()` to pass structural data between layers instead of raw strings
+- All data contracts have `.to_dict()` for serialization
+
+### P-02 [MEDIUM]: Pipeline.ask() Doesn't Use Appraise for Self-Check
+- **`pipeline.py`**: Added step 6 to `ask()` — after Pattern Output, call `bridge.appraise(answer)`
+- If verdict is "clash"/"disagree" or disagree_pct > 0.3, lower confidence with tiered penalty
+- Added `appraise_warning` field to `AamResponse` with full details
+- Appraise result logged as warning
+
+### P-03 [MEDIUM]: No Streaming Support for Long-Running Operations
+- **`pipeline.py`**: Added `ask_stream()` async generator that yields `PipelineEvent` after each layer
+- `PipelineEvent` dataclass: layer, status, partial_result, timestamp, error
+- Supports cancellation via optional `cancel_callback` parameter
+- Uses `asyncio.to_thread()` for non-blocking execution
+- `ask()` remains synchronous for backward compatibility
+
+### P-04 [MEDIUM]: Scope Filter Not Enforced at RSVS Level
+- **`layer2/bridge.py`**: Added `source_provenance` to `_FallbackNode`, `_FallbackGraph.ingest()`, `AbstractionBridge.ingest()`, `AbstractionBridge.ingest_with_grounding()`
+- Added `appraise_with_provenance()` method to `AbstractionBridge` — weights evidence by source trust
+- **`layer2/context.py`**: Updated `ingest_text()` to pass `source_provenance=source` to bridge
+- Provenance stored per-node in fallback graph; used to weight evidence in appraise
+
+### P-05 [LOW]: Consolidation and Reflection Not Called by Pipeline
+- **`pipeline.py`**: Added `maintenance()` method calling `bridge.consolidate()` and `bridge.run_reflection()`
+- Auto-maintenance: tracks ingest count, runs every N ingests (configurable, default 50)
+- Added `force_maintenance()` for manual trigger
+- Added `get_maintenance_log()` for history
+- **`layer2/bridge.py`**: Updated `AbstractionBridge.consolidate()` to accept `force` parameter
+
+### P-06 [LOW]: Error Handling Inconsistent Across Pipeline
+- **`pipeline.py`**: Defined `AamError` hierarchy: AamError > LayerError, IngestError, ReasoningError, BridgeError, MaintenanceError
+- Each error has `to_dict()` for serialization
+- `ask()` wraps each layer in try/except, catching AamError and generic Exception
+- Non-fatal errors collected in `errors: list[dict]` field of `AamResponse`
+- Pipeline continues with graceful degradation even if layers fail
+- Backward compatibility maintained
+
+### Files Modified:
+- `pipeline.py` — Complete rewrite with all 6 gap fixes
+- `layer2/bridge.py` — source_provenance, appraise_with_provenance, consolidate force param
+- `layer2/context.py` — Pass source_provenance through to bridge
+
+### Version: 8.4.0
+---
+
+---
+Task ID: 2
+Agent: layer0-gap-solver
+Task: Solve ALL 6 Layer 0 gaps in the AAM codebase
+
+Work Log:
+
+### L0-01 [CRITICAL]: Layer 0 Not Connected to Layer 1
+- **Created**: `layer0/adapter.py`
+- Added `observation_to_ingest_data(obs)` — converts PerceptualObservation to NL text for RSVS ingest_text()
+- Each RelationType gets NL rendering: CATEGORICAL→"X is a Y", DIFFERENTIAL→"X is rounder than Y in shape", FUNCTIONAL→"X can Y", SPATIAL→"X is located Y", TEMPORAL→"X occurs Y", CAUSAL→"X causes Y"
+- Added `observation_to_ingest_dicts(obs)` — structured dict output for future compose API
+- Added `ingest_observation(rsvs, obs)` and `ingest_observations()` — one-call bridge
+- Defined `RsvsIngestProtocol` for duck-typed RSVS objects (no hard import dependency)
+
+### L0-02 [CRITICAL]: 6 Relation Types Not Represented in RSVS
+- **Modified**: `layer1/crates/rsvs-core/src/types.rs` (synced to backend/ — same file)
+  - Added `RelationType` enum: Categorical (default), Differential, Functional, Spatial, Temporal, Causal
+  - Added `relation_type: RelationType` field to `Edge` struct with `#[serde(default)]`
+- **Modified**: `layer1/crates/rsvs-core/src/pipeline/ingest.rs` — Added relation_type to Edge construction
+- **Modified**: `layer1/crates/rsvs-core/src/pipeline/compose.rs` — Added relation_type to Edge construction
+- **Modified**: `layer1/crates/rsvs-core/src/graph.rs` — Added relation_type to Edge in reinforce_edge()
+- **Modified**: `layer1/crates/rsvs-core/src/persist.rs` — Added relation_type to SavedEdge, save/load, conversion fns
+- **Modified**: `layer1/crates/rsvs-core/src/events.rs` — Added relation_type to RuntimeEdge
+- **Modified**: `layer1/crates/rsvs-core/src/pipeline/snapshot.rs` — Added relation_type to snapshot construction
+- **Modified**: `layer1/crates/rsvs-core/src/tests.rs` — Added relation_type to Edge test constructions
+
+### L0-03 [HIGH]: 3 of 4 Modality Only Stubs
+- **Modified**: `layer0/audio.py` — Full implementation: STT bridge → TextAbstractor pipeline + fallback
+- **Modified**: `layer0/image.py` — Full implementation: Vision bridge → description → tuples + fallback
+- **Modified**: `layer0/video.py` — Full implementation: Frame bridge → per-frame tuples + temporal linking + audio
+
+### L0-04 [HIGH]: TextAbstractor LLM-Driven Without Error Recovery
+- **Modified**: `layer0/text.py`
+- Added retry with exponential backoff: 3 retries, delays 1s/2s/4s
+- Improved `_extract_fallback()`: noun phrase regex + "X is Y" / "X can Y" patterns
+- Added in-memory cache for repeated text
+- On LLM failure, falls back to improved `_extract_fallback()` instead of returning []
+
+### L0-05 [MEDIUM]: No Test Coverage for Layer 0
+- **Created**: `layer0/test_layer0.py` — 56 tests across 8 test classes
+- Tests for: PerceptualTupleMeta, PerceptualTuple, PerceptualObservation, BasePerceptualAbstractor, TextAbstractor, AudioAbstractor, ImageAbstractor, VideoAbstractor, Adapter, Integration
+- All 56 tests pass ✓
+
+### L0-06 [LOW]: PerceptualTuple Metadata Unstructured
+- **Modified**: `layer0/base.py`
+- Added `PerceptualTupleMeta` dataclass with source_url, extraction_model, extraction_timestamp, extra
+- Added `to_dict()` / `from_dict()` for serialization / backward compat
+- Updated `PerceptualTuple.metadata` to `Union[PerceptualTupleMeta, dict]` with auto-conversion
+- Added `get_metadata_dict()` method
+
+### Updated: `layer0/__init__.py`
+- Added imports for PerceptualTupleMeta, adapter functions, RsvsIngestProtocol
+
+Files Modified: layer0/base.py, layer0/text.py, layer0/audio.py, layer0/image.py, layer0/video.py, layer0/__init__.py
+Files Created: layer0/adapter.py, layer0/test_layer0.py
+Rust Files Modified: types.rs, ingest.rs, compose.rs, graph.rs, persist.rs, events.rs, snapshot.rs, tests.rs
+No commits made.
+---

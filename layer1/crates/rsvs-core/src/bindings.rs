@@ -392,6 +392,63 @@ impl PyReflectionResult {
     }
 }
 
+/// A single recovery plan from DEPS analysis (v8.3).
+#[pyclass(get_all)]
+#[derive(Clone, Debug)]
+pub struct PyRecoveryPlan {
+    /// Human-readable description of the plan.
+    pub description: String,
+    /// Estimated success rate (0.0–1.0).
+    pub estimated_success_rate: f32,
+    /// Simplicity score (0.0–1.0).
+    pub simplicity: f32,
+    /// Composite score: 60% success + 40% simplicity.
+    pub score: f32,
+    /// Whether this plan modifies the graph.
+    pub is_destructive: bool,
+    /// The action type as a string.
+    pub action: String,
+}
+
+#[pymethods]
+impl PyRecoveryPlan {
+    fn __repr__(&self) -> String {
+        format!(
+            "RecoveryPlan('{}', success={:.0}%, score={:.2}, destructive={})",
+            self.description,
+            self.estimated_success_rate * 100.0,
+            self.score,
+            self.is_destructive
+        )
+    }
+}
+
+/// Result of a DEPS failure recovery analysis (v8.3).
+#[pyclass(get_all)]
+#[derive(Clone, Debug)]
+pub struct PyDEPSResult {
+    /// The failure type classification.
+    pub failure_type: String,
+    /// Human-readable explanation of why the failure occurred.
+    pub explanation: String,
+    /// Available recovery plans, sorted by score (best first).
+    pub plans: Vec<PyRecoveryPlan>,
+    /// The recommended plan (highest score), if any.
+    pub recommended: Option<PyRecoveryPlan>,
+}
+
+#[pymethods]
+impl PyDEPSResult {
+    fn __repr__(&self) -> String {
+        format!(
+            "DEPSResult(type={}, plans={}, recommended={})",
+            self.failure_type,
+            self.plans.len(),
+            self.recommended.is_some()
+        )
+    }
+}
+
 /// Grounding evidence for a sense (v6.0).
 ///
 /// Tracks the full evidence trail for composition verification,
@@ -1464,13 +1521,60 @@ impl PyRsvs {
         }).to_string())
     }
 
-    /// Analyze dependencies for failure recovery using the DEPS planner.
+    /// v8.3: Analyze dependencies for failure recovery using the DEPS planner.
     ///
-    /// Returns a JSON string with the DEPS analysis result,
-    /// or None if no analysis could be produced.
-    fn deps_analyze(&self) -> Option<String> {
-        // TODO: implement full DEPS analysis binding
-        None
+    /// Given a node label and an error type, runs the DEPS (Describe-Explain-Plan-Select)
+    /// planner to generate recovery plans with estimated success rates.
+    ///
+    /// # Arguments
+    /// * `node_label` - The label of the node where the error occurred
+    /// * `error_type` - The error type: "self_reference", "circular_chain",
+    ///   "target_not_found", "sense_limit", "insufficient_divergence",
+    ///   "traversal_leaf", "low_confidence", "grounding_failure", or "general"
+    ///
+    /// Returns a JSON string with the DEPS analysis result, or None if
+    /// the node was not found.
+    fn deps_analyze(&self, node_label: &str, error_type: &str) -> Option<String> {
+        let node_id = *self.inner.token_to_id.get(node_label)?;
+
+        let error = match error_type {
+            "self_reference" => RsvsError::CircularRef { from: node_id, to: node_id },
+            "circular_chain" => RsvsError::CircularRef { from: node_id, to: node_id.wrapping_add(1) },
+            "target_not_found" => RsvsError::NodeNotFound { id: node_id },
+            "composition_rejected" => RsvsError::CompositionRejected {
+                reason: format!("DEPS analysis requested for node {}", node_id),
+            },
+            _ => RsvsError::Pipeline(format!("DEPS analysis: {}", error_type)),
+        };
+
+        let result = self.inner.deps_planner.analyze(&error, node_id);
+
+        let plans_json: Vec<serde_json::Value> = result.plans.iter().map(|p| {
+            serde_json::json!({
+                "description": p.description,
+                "estimated_success_rate": p.estimated_success_rate,
+                "simplicity": p.simplicity,
+                "score": p.score(),
+                "is_destructive": p.is_destructive,
+                "action": format!("{:?}", p.action),
+            })
+        }).collect();
+
+        let recommended = result.recommended.as_ref().map(|p| serde_json::json!({
+            "description": p.description,
+            "estimated_success_rate": p.estimated_success_rate,
+            "simplicity": p.simplicity,
+            "score": p.score(),
+            "is_destructive": p.is_destructive,
+            "action": format!("{:?}", p.action),
+        }));
+
+        Some(serde_json::json!({
+            "failure_type": format!("{:?}", result.failure_type),
+            "explanation": result.explanation,
+            "plans": plans_json,
+            "recommended": recommended,
+        }).to_string())
     }
 
     /// Detect convergence in the graph (structural equivalence between nodes).
@@ -1520,5 +1624,8 @@ fn _rsvs(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyMCTSResult>()?;
     m.add_class::<PyConsolidationResult>()?;
     m.add_class::<PyReflectionResult>()?;
+    // v8.3 additions
+    m.add_class::<PyRecoveryPlan>()?;
+    m.add_class::<PyDEPSResult>()?;
     Ok(())
 }

@@ -15,7 +15,7 @@
 use super::Rsvs;
 use crate::error::RsvsError;
 use crate::types::{
-    CompositionRef, CompressionState, Edge, EdgeSource, Node, NodeId, NodeStatus, SemanticMeta,
+    CompositionRef, CompressionState, Edge, EdgeSource, Node, NodeId, NodeStatus, RelationType, SemanticMeta,
     Tier,
 };
 
@@ -239,6 +239,7 @@ impl Rsvs {
                 weight: 1.0,
                 source: EdgeSource::Composition,
                 last_reinforced_batch: 0, // Composition edges never decay
+                relation_type: RelationType::Categorical,
             };
             self.graph.insert_edge(edge)?;
         }

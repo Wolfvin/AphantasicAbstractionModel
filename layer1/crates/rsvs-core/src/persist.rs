@@ -22,7 +22,7 @@ use crate::sense::{GroundingEvidence, Sense, SenseConfig, SenseManager, SenseSta
 use crate::transformer_bridge::TransformerBridgeConfig;
 use crate::types::{
     CompositionRef, CompressionState, Edge, EdgeSource, Node, NodeId, NodeStatus, PolicyMeta,
-    SemanticMeta, Tier,
+    RelationType, SemanticMeta, Tier,
 };
 
 // -----------------------------------------------------------------------
@@ -83,6 +83,10 @@ pub struct SavedEdge {
     /// v6.5: Batch number when this edge was last reinforced.
     #[serde(default)]
     pub last_reinforced_batch: usize,
+    /// L0-02: Semantic relation type carried by this edge.
+    /// Missing in pre-v9.0 snapshots — defaults to "categorical".
+    #[serde(default = "default_relation_type")]
+    pub relation_type: String,
 }
 
 /// Serializable mirror of a `CompositionRef` for JSON persistence.
@@ -289,6 +293,11 @@ fn default_inactivity_ttl() -> usize {
     50
 }
 
+/// Default value for relation_type (L0-02) — backward compatible.
+fn default_relation_type() -> String {
+    "categorical".to_string()
+}
+
 /// Serializable entry for freq_map: (node_id, sense_id, frequency).
 /// Vec is used instead of HashMap because CompositionRef isn't a simple key.
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -410,6 +419,30 @@ fn pair_key(a: &str, b: &str) -> String {
     }
 }
 
+/// Convert RelationType to lowercase string for persistence.
+fn relation_type_to_str(rt: &RelationType) -> &'static str {
+    match rt {
+        RelationType::Categorical => "categorical",
+        RelationType::Differential => "differential",
+        RelationType::Functional => "functional",
+        RelationType::Spatial => "spatial",
+        RelationType::Temporal => "temporal",
+        RelationType::Causal => "causal",
+    }
+}
+
+/// Convert string to RelationType for deserialization. Defaults to Categorical.
+fn str_to_relation_type(s: &str) -> RelationType {
+    match s {
+        "differential" => RelationType::Differential,
+        "functional" => RelationType::Functional,
+        "spatial" => RelationType::Spatial,
+        "temporal" => RelationType::Temporal,
+        "causal" => RelationType::Causal,
+        _ => RelationType::Categorical,
+    }
+}
+
 // -----------------------------------------------------------------------
 // Save
 // -----------------------------------------------------------------------
@@ -482,6 +515,7 @@ pub fn to_snapshot(rsvs: &Rsvs) -> RsvsSnapshot {
                 weight: e.weight,
                 source: format!("{:?}", e.source).to_lowercase(),
                 last_reinforced_batch: e.last_reinforced_batch,
+                relation_type: relation_type_to_str(&e.relation_type).to_string(),
             });
         }
     }
@@ -585,7 +619,7 @@ pub fn to_snapshot(rsvs: &Rsvs) -> RsvsSnapshot {
     };
 
     RsvsSnapshot {
-        version: "8.1".to_string(),
+        version: "8.3".to_string(),
         total_contexts: rsvs.total_contexts,
         token_to_id: rsvs.token_to_id.clone(),
         next_node_id: rsvs.graph.next_id,
@@ -611,11 +645,35 @@ pub fn to_snapshot(rsvs: &Rsvs) -> RsvsSnapshot {
 // -----------------------------------------------------------------------
 
 /// Load the full RSVS state from a JSON file.
+///
+/// v8.3: Added schema version check. Warns if the snapshot version
+/// is older than the current code version but still loads (backward compatible).
+/// Returns an error only for incompatible version differences.
 pub fn load(path: &Path) -> Result<Rsvs, RsvsError> {
     let file = File::open(path).map_err(|e| RsvsError::Persistence(e.to_string()))?;
     let reader = BufReader::new(file);
     let snapshot: RsvsSnapshot =
         serde_json::from_reader(reader).map_err(|e| RsvsError::Persistence(e.to_string()))?;
+
+    // v8.3: Schema version compatibility check.
+    // The snapshot version is a string like "8.1", "8.3", etc.
+    // We parse the major version and only reject if there's a major version mismatch.
+    let code_version: u32 = 8; // Current major version
+    let snap_major: u32 = snapshot
+        .version
+        .split('.')
+        .next()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0);
+
+    if snap_major > code_version {
+        return Err(RsvsError::Persistence(format!(
+            "Snapshot version {} is newer than this code ({}). Please upgrade.",
+            snapshot.version, code_version
+        )));
+    }
+    // Minor version mismatches are OK — we use #[serde(default)] for new fields.
+
     Ok(from_snapshot(snapshot))
 }
 
@@ -690,12 +748,14 @@ pub fn from_snapshot(snap: RsvsSnapshot) -> Rsvs {
         } else {
             EdgeSource::Learned
         };
+        let relation_type = str_to_relation_type(&se.relation_type);
         graph.edges.entry(se.from).or_default().push(Edge {
             from: se.from,
             to: se.to,
             weight: se.weight,
             source,
             last_reinforced_batch: se.last_reinforced_batch, // v6.5: Preserve reinforcement info
+            relation_type,
         });
     }
 
