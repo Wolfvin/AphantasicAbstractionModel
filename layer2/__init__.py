@@ -18,6 +18,14 @@ Bridge:
 __version__ = "1.0.0-alpha"
 
 from .bridge import AbstractionBridge, RsvsBridge, get_bridge, is_rust_core_available
+from .embedding import (
+    EmbeddingProvider,
+    SentenceTransformerProvider,
+    OpenAIProvider,
+    FallbackEmbeddingProvider,
+    get_embedding_provider,
+    cosine_similarity,
+)
 from .llm import generate_narrative, generate_narrative_via_sdk, generate_narrative_fallback
 from .context import ContextLayer
 from .situation import SituationLayer

@@ -7,9 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [8.5.0] - 2026-05-12
 
-### Added — English-First Conversion & Bug Fixes
+### Added — English-First Conversion, Bug Fixes & Architecture Upgrades
 
-This release converts the system from Indonesian-focused to English-first, adds CI/CD automation, fixes a critical MCTS argument bug, and adds accuracy/convergence test suites.
+This release converts the system from Indonesian-focused to English-first, adds CI/CD automation, fixes a critical MCTS argument bug, adds accuracy/convergence test suites, and resolves all remaining P1–P3 architecture gaps.
+
+#### P1 — Architecture Gaps Resolved
+
+- **P1-1 [DRY Violations]**: Refactored `layer3/policy.py` (1389→212 lines, 85% reduction) and `layer3/coder.py` (1671→298 lines, 82% reduction) to import from `layer2` and extend with thin `DeductivePolicyEngine` and `DeductiveCoderLayer` subclasses. ~3200 lines of duplication eliminated.
+- **P1-2 [Import Style]**: Analyzed cross-package imports. Relative imports (`..layer2`) don't work because `layer2/` and `layer3/` are sibling directories with the project root on `sys.path`. Kept absolute imports with documented rationale.
+- **P1-3 [Convergence API]**: Added `AbstractionBridge.detect_convergence(max_pairs=500)` — calls Rust `convergence_detect()` when available, falls back to Jaccard-based pair detection. Added `GET /detect-convergence` FastAPI endpoint with rate limiting.
+- **P1-4 [LLM Security]**: Replaced `subprocess.run(["node", "-e", js_code])` with Python SDK call via `z_ai_web_dev_sdk.ZAI`. Node.js fallback now uses JSON stdin instead of string-interpolated command-line args. 3 retries with exponential backoff.
+- **P1-5 [Version Sync]**: Bumped all versions to 8.5.0: `__init__.py`, `pipeline.py`, `_version.py` (version + schema + api), `events.rs` SCHEMA_VERSION, `persist.rs` snapshot version. `layer3/__init__.py` bumped to 1.2.0.
+
+#### P2 — Important Gaps Resolved
+
+- **P2-6 [Embedding Provider]**: Created `layer2/embedding.py` with `EmbeddingProvider` ABC, `SentenceTransformerProvider`, `OpenAIProvider`, `FallbackEmbeddingProvider` (hash-based, no external deps), `cosine_similarity()`, and `get_embedding_provider()` factory. Auto-detects best available provider.
+- **P2-7 [Fallback Graph Sharing]**: Removed internal `_fallback_graph` dicts from `pattern.py` and `predictive.py`. Both now delegate to `self._bridge` which always has `_FallbackGraph` when Rust core is unavailable. Eliminates state inconsistency.
+- **P2-8 [Cognitive Persistence]**: Added `save()`/`load()`/`save_to_dict()`/`load_from_dict()` to `SituationLayer` and `PredictiveEngine`. Created `layer2/persistence.py` with `save_pipeline_state()` and `load_pipeline_state()` using atomic writes and schema versioning.
+
+#### P3 — Nice-to-Have Gaps Resolved
+
+- **P3-9 [Call Graph Extraction]**: Added `CallGraph` dataclass and `extract_call_graph()` to `CoderLayer`. AST-based extraction for Python (resolves `foo()`, `obj.method()`, `self.validate()`), regex-based for Rust/Go/JavaScript. Call relationships ingested as "calls" composition edges in RSVS.
+- **P3-10 [Multi-language Corpus]**: Added `CORPUS_ID` (9 Indonesian domains, 90 sentences) alongside `CORPUS_EN`. `get_corpus(lang)` and `get_aligned_sentences()` for cross-language alignment. Added `benchmark_cross_language_convergence()` to eval.py.
 
 #### Bug Fix — Critical
 - **GAP-5 [CRITICAL]**: Fixed MCTS argument mismatch in `layer3/reasoning.py:_build_explore_step()`. The call `mcts_query(trigger_concept, context_atoms, max_simulations=5, max_depth=3)` was passing a list as `max_depth`. Fixed to `mcts_query(node_label=trigger_concept, max_depth=3, simulations=20)` matching the bridge signature `mcts_query(node_label, max_depth=3, simulations=100)`.

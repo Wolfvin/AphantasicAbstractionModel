@@ -847,6 +847,74 @@ class _FallbackGraph:
         return weighted * frag_penalty
 
     # ------------------------------------------------------------------
+    # Convergence detection (P1-3)
+    # ------------------------------------------------------------------
+
+    def _fallback_detect_convergence(self, max_pairs: int = 500) -> dict:
+        """Fallback convergence detection: structural similarity across nodes.
+
+        Finds nodes with structurally similar sense compositions that
+        may represent the same concept across different languages or contexts.
+
+        Args:
+            max_pairs: Maximum number of pairs to evaluate.
+
+        Returns:
+            Dict with pairs_found, convergence_pairs, and source.
+        """
+        # Sort nodes by confidence (descending) and take top 50
+        sorted_nodes = sorted(
+            self._nodes.items(),
+            key=lambda item: item[1].confidence,
+            reverse=True,
+        )[:50]
+
+        convergence_pairs: list[dict] = []
+        pairs_checked = 0
+
+        for i, (label_a, node_a) in enumerate(sorted_nodes):
+            if len(convergence_pairs) >= max_pairs:
+                break
+            for label_b, node_b in sorted_nodes[i + 1:]:
+                if len(convergence_pairs) >= max_pairs:
+                    break
+                if pairs_checked >= max_pairs:
+                    break
+
+                # Skip if labels are identical or one is a substring of the other
+                if label_a == label_b or label_a in label_b or label_b in label_a:
+                    continue
+
+                pairs_checked += 1
+
+                # Compute Jaccard similarity of compositions
+                set_a = set(node_a.compositions)
+                set_b = set(node_b.compositions)
+
+                if not set_a and not set_b:
+                    continue
+
+                shared = set_a & set_b
+                union = set_a | set_b
+                similarity = len(shared) / len(union) if union else 0.0
+
+                # Only include pairs with meaningful similarity (threshold > 0.3)
+                # and different labels (indicates potential convergence)
+                if similarity > 0.3:
+                    convergence_pairs.append({
+                        "node_a": label_a,
+                        "node_b": label_b,
+                        "similarity": similarity,
+                        "shared_compositions": list(shared),
+                    })
+
+        return {
+            "pairs_found": len(convergence_pairs),
+            "convergence_pairs": convergence_pairs,
+            "source": "fallback",
+        }
+
+    # ------------------------------------------------------------------
     # Keyword extraction
     # ------------------------------------------------------------------
 
@@ -911,6 +979,8 @@ class AbstractionBridge:
         self._primed: bool = False
         # Rotating seed word cycle for ingest_with_grounding()
         self._seed_cycle = itertools.cycle(SEED_LABELS)
+        # P2-6: Embedding provider for semantic similarity (lazy-init)
+        self._embedding_provider: Any = None  # EmbeddingProvider | None
 
         if rsvs_instance is not None:
             self._rsvs = rsvs_instance
@@ -1297,18 +1367,75 @@ class AbstractionBridge:
         return result
 
     def structural_similarity(self, a: str, b: str) -> Optional[dict]:
-        """Compute structural similarity between two concepts."""
+        """Compute structural similarity between two concepts.
+
+        When an embedding provider is available (P2-6), augments the
+        graph-based similarity with embedding cosine similarity for
+        more accurate semantic comparison.
+        """
+        # P2-6: Try embedding-based similarity first as a supplement
+        embedding_sim: Optional[float] = None
+        provider = self._get_or_init_embedding_provider()
+        if provider is not None:
+            try:
+                from .embedding import cosine_similarity
+                emb_a = provider.embed(a)
+                emb_b = provider.embed(b)
+                embedding_sim = cosine_similarity(emb_a, emb_b)
+            except Exception as exc:
+                logger.debug("Embedding-based similarity failed: %s", exc)
+
         if self.is_rust_core:
             try:
                 result = self._rsvs.structural_similarity(a, b)
                 if result is None:
+                    # Even if RSVS returns None, we can still return embedding sim
+                    if embedding_sim is not None:
+                        return {
+                            "structural_similarity": embedding_sim,
+                            "shared": [],
+                            "only_a": [],
+                            "only_b": [],
+                            "embedding_similarity": embedding_sim,
+                        }
                     return None
-                return self._normalize_structural_sim(result)
+                normed = self._normalize_structural_sim(result)
+                # Blend graph-based and embedding similarity
+                if embedding_sim is not None:
+                    graph_sim = normed.get("structural_similarity", 0.0)
+                    blended = 0.6 * graph_sim + 0.4 * embedding_sim
+                    normed["structural_similarity"] = blended
+                    normed["embedding_similarity"] = embedding_sim
+                    normed["graph_similarity"] = graph_sim
+                return normed
             except Exception as exc:
                 logger.debug("RSVS structural_similarity failed: %s", exc)
+                if embedding_sim is not None:
+                    return {
+                        "structural_similarity": embedding_sim,
+                        "shared": [],
+                        "only_a": [],
+                        "only_b": [],
+                        "embedding_similarity": embedding_sim,
+                    }
                 return None
 
-        return self._fallback.structural_similarity(a, b)  # type: ignore[union-attr]
+        result = self._fallback.structural_similarity(a, b)  # type: ignore[union-attr]
+        if result is not None and embedding_sim is not None:
+            graph_sim = result.get("structural_similarity", 0.0)
+            blended = 0.6 * graph_sim + 0.4 * embedding_sim
+            result["structural_similarity"] = blended
+            result["embedding_similarity"] = embedding_sim
+            result["graph_similarity"] = graph_sim
+        elif result is None and embedding_sim is not None:
+            result = {
+                "structural_similarity": embedding_sim,
+                "shared": [],
+                "only_a": [],
+                "only_b": [],
+                "embedding_similarity": embedding_sim,
+            }
+        return result
 
     def substitution_analysis(self, a: str, b: str) -> Optional[dict]:
         """Analyze what substitution transforms concept A into concept B."""
@@ -1656,6 +1783,11 @@ class AbstractionBridge:
     def context_similarity(self, a: str, b: str, context: list[str]) -> Optional[float]:
         """Compute context-weighted similarity between two concepts.
 
+        When an embedding provider is available (P2-6), blends the
+        graph-based similarity with embedding cosine similarity.
+        Context atoms boost embedding similarity when they appear in
+        both concept embeddings.
+
         Args:
             a: First concept label.
             b: Second concept label.
@@ -1664,14 +1796,149 @@ class AbstractionBridge:
         Returns:
             A float similarity score, or None if concepts not found.
         """
+        # P2-6: Try embedding-based similarity
+        embedding_sim: Optional[float] = None
+        provider = self._get_or_init_embedding_provider()
+        if provider is not None:
+            try:
+                from .embedding import cosine_similarity
+                emb_a = provider.embed(a)
+                emb_b = provider.embed(b)
+                base_emb_sim = cosine_similarity(emb_a, emb_b)
+                # Context boost: embed context and compute alignment
+                if context:
+                    context_text = " ".join(context)
+                    emb_ctx = provider.embed(context_text)
+                    ctx_a = cosine_similarity(emb_ctx, emb_a)
+                    ctx_b = cosine_similarity(emb_ctx, emb_b)
+                    # Boost if context aligns with both concepts
+                    context_boost = min(ctx_a, ctx_b) * 0.2
+                    embedding_sim = min(1.0, base_emb_sim + context_boost)
+                else:
+                    embedding_sim = base_emb_sim
+            except Exception as exc:
+                logger.debug("Embedding context_similarity failed: %s", exc)
+
+        graph_sim: Optional[float] = None
         if self.is_rust_core:
             try:
-                return self._rsvs.context_similarity(a, b, context)
+                graph_sim = self._rsvs.context_similarity(a, b, context)
             except Exception as exc:
                 logger.debug("RSVS context_similarity failed: %s", exc)
-                return None
 
-        return self._fallback.context_similarity(a, b, context)  # type: ignore[union-attr]
+        if graph_sim is None and not self.is_rust_core:
+            graph_sim = self._fallback.context_similarity(a, b, context)  # type: ignore[union-attr]
+
+        # Blend results
+        if graph_sim is not None and embedding_sim is not None:
+            return 0.6 * graph_sim + 0.4 * embedding_sim
+        if embedding_sim is not None:
+            return embedding_sim
+        return graph_sim
+
+    def detect_convergence(self, max_pairs: int = 500) -> dict:
+        """Detect structural convergence across nodes in the graph.
+
+        Finds nodes with structurally similar sense compositions that
+        may represent the same concept across different languages or contexts.
+
+        When the Rust core is available, calls its convergence_detect()
+        method. Otherwise, falls back to a Jaccard-based structural
+        similarity check between all pairs of high-confidence nodes.
+
+        Args:
+            max_pairs: Maximum number of pairs to evaluate/return.
+
+        Returns:
+            Dict with:
+                - "pairs_found": int — number of convergent pairs detected
+                - "convergence_pairs": list of dicts with
+                    {node_a, node_b, similarity, shared_compositions}
+                - "source": "rust_core" or "fallback"
+        """
+        if self.is_rust_core:
+            try:
+                result = self._rsvs.convergence_detect()
+                if result is not None:
+                    # Rust core returns a JSON string
+                    if isinstance(result, str):
+                        parsed = json.loads(result)
+                    elif isinstance(result, dict):
+                        parsed = result
+                    else:
+                        parsed = {"pairs": []}
+
+                    # Normalize Rust core result to standard format
+                    raw_pairs = parsed.get("pairs", [])
+                    convergence_pairs = []
+                    for p in raw_pairs[:max_pairs]:
+                        if isinstance(p, dict):
+                            convergence_pairs.append({
+                                "node_a": p.get("a", ""),
+                                "node_b": p.get("b", ""),
+                                "similarity": p.get("overlap", 0.0),
+                                "shared_compositions": [],
+                                "linked": p.get("linked", False),
+                            })
+
+                    return {
+                        "pairs_found": len(convergence_pairs),
+                        "convergence_pairs": convergence_pairs,
+                        "source": "rust_core",
+                    }
+            except Exception as exc:
+                logger.debug("RSVS convergence_detect failed, using fallback: %s", exc)
+
+        return self._fallback._fallback_detect_convergence(max_pairs=max_pairs)  # type: ignore[union-attr]
+
+    # ------------------------------------------------------------------
+    # Embedding provider management (P2-6)
+    # ------------------------------------------------------------------
+
+    def set_embedding_provider(self, provider: Any) -> None:
+        """Set the embedding provider for semantic similarity.
+
+        Args:
+            provider: An ``EmbeddingProvider`` instance (from
+                ``layer2.embedding``), or ``None`` to disable
+                embedding-augmented similarity.
+        """
+        self._embedding_provider = provider
+        if provider is not None:
+            logger.info(
+                "Embedding provider set: %s (dim=%d)",
+                provider.name, provider.dim,
+            )
+        else:
+            logger.info("Embedding provider cleared")
+
+    def get_embedding_provider(self) -> Any:
+        """Return the current embedding provider, or None."""
+        return self._embedding_provider
+
+    def _get_or_init_embedding_provider(self) -> Any:
+        """Lazily initialise the embedding provider on first use.
+
+        Uses ``FallbackEmbeddingProvider`` as the default if no
+        provider has been explicitly set.  The fallback provider
+        requires zero external dependencies.
+        """
+        if self._embedding_provider is not None:
+            return self._embedding_provider
+
+        # Lazy-init: try to get a real provider, fall back to hashing
+        try:
+            from .embedding import get_embedding_provider
+            self._embedding_provider = get_embedding_provider()
+        except Exception as exc:
+            logger.debug("Failed to init embedding provider: %s", exc)
+            try:
+                from .embedding import FallbackEmbeddingProvider
+                self._embedding_provider = FallbackEmbeddingProvider()
+            except Exception:
+                self._embedding_provider = None
+
+        return self._embedding_provider
 
     # ------------------------------------------------------------------
     # PyO3 normalization methods

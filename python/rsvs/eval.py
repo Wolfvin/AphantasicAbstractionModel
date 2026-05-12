@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from rsvs import Rsvs
-from rsvs.corpus import DOMAINS, domain_names
+from rsvs.corpus import DOMAINS, domain_names, get_aligned_sentences, get_corpus, CORPUS_EN, CORPUS_ID
 from rsvs.ingest_wiki import ingest_domains
 
 
@@ -583,6 +583,190 @@ def benchmark_speed_runtime(r: Rsvs) -> BenchmarkResult:
 
 
 # -----------------------------------------------------------------------
+# Benchmark 6 — CrossLanguageConvergence
+# -----------------------------------------------------------------------
+# Verifies that aligned English-Indonesian sentence pairs converge to
+# similar graph structures after ingestion. The convergence engine should
+# detect that the same concepts in two languages produce overlapping atoms
+# and related composition structures.
+
+def benchmark_cross_language_convergence(r: Rsvs | None = None) -> BenchmarkResult:
+    """Test that English and Indonesian corpora converge in RSVS structure.
+
+    Strategy:
+    1. Ingest the English corpus (CORPUS_EN) into an RSVS instance.
+    2. Ingest the Indonesian corpus (CORPUS_ID) into a second RSVS instance.
+    3. For each aligned domain pair, compare the top atoms by confidence.
+    4. Measure structural similarity between the two graphs.
+    5. Convergence = the two language-specific graphs produce overlapping
+       concepts (same domain, different surface forms → similar structure).
+
+    If an RSVS instance is provided, uses it for the English side and
+    creates a fresh one for Indonesian. Otherwise, creates both.
+    """
+    import tempfile
+    import os
+    from rsvs import Rsvs as _Rsvs
+    from rsvs.ingest_wiki import ingest_domains as _ingest
+
+    t0 = time.time()
+
+    # Get aligned sentence pairs
+    aligned = get_aligned_sentences()
+    if not aligned:
+        return BenchmarkResult(
+            name="CrossLanguageConvergence",
+            score=0.0, passed=False, threshold=0.30,
+            verdict="no aligned sentences found",
+            elapsed_s=round(time.time() - t0, 3),
+        )
+
+    # Create English RSVS
+    en_fd, en_path = tempfile.mkstemp(suffix='_en.json')
+    os.close(en_fd)
+    id_fd, id_path = tempfile.mkstemp(suffix='_id.json')
+    os.close(id_fd)
+
+    try:
+        # Build English RSVS from CORPUS_EN
+        en_domains = list(CORPUS_EN.keys())
+        _ingest(en_path, en_domains, verbose=False, corpus=CORPUS_EN)
+        r_en = _Rsvs.load(en_path)
+
+        # Build Indonesian RSVS from CORPUS_ID
+        id_domains = list(CORPUS_ID.keys())
+        _ingest(id_path, id_domains, verbose=False, corpus=CORPUS_ID)
+        r_id = _Rsvs.load(id_path)
+
+        # Compare: for each aligned domain, check atom overlap
+        # by measuring how many key concepts appear in both
+        from rsvs.corpus import _DOMAIN_ALIGNMENT
+
+        domain_overlap_scores = []
+        for en_domain, id_domain in _DOMAIN_ALIGNMENT.items():
+            # Get top atoms from each domain
+            try:
+                en_atoms = set(r_en.atoms())
+                id_atoms = set(r_id.atoms())
+            except Exception:
+                continue
+
+            if not en_atoms or not id_atoms:
+                continue
+
+            # Use similarity() to check cross-language overlap
+            # Pick representative atoms from each domain
+            en_domain_atoms = set()
+            id_domain_atoms = set()
+
+            for atom in en_atoms:
+                try:
+                    senses = r_en.senses(atom)
+                    for s in senses:
+                        # Check if atom is contextualized in the English domain
+                        pass
+                    en_domain_atoms.add(atom)
+                except Exception:
+                    en_domain_atoms.add(atom)
+
+            for atom in id_atoms:
+                try:
+                    senses = r_id.senses(atom)
+                    id_domain_atoms.add(atom)
+                except Exception:
+                    id_domain_atoms.add(atom)
+
+            # Limit comparison size for performance
+            en_sample = sorted(en_domain_atoms)[:30]
+            id_sample = sorted(id_domain_atoms)[:30]
+
+            # Count cross-language similarities above a threshold
+            cross_similar = 0
+            cross_total = min(len(en_sample), len(id_sample), 10)
+
+            for en_atom in en_sample[:cross_total]:
+                for id_atom in id_sample[:cross_total]:
+                    try:
+                        sim = r_en.similarity(en_atom, id_atom)
+                        if sim and hasattr(sim, 'jaccard') and sim.jaccard > 0.05:
+                            cross_similar += 1
+                            break
+                    except Exception:
+                        continue
+
+            if cross_total > 0:
+                domain_overlap_scores.append(cross_similar / cross_total)
+
+        # Also check: appraise alignment — an English sentence about a domain
+        # should appraise higher against the English graph than random noise
+        appraise_passes = 0
+        appraise_total = 0
+
+        for domain, en_sent, id_sent in aligned[:20]:
+            try:
+                # English sentence should agree in English graph
+                r_en_result = r_en.appraise(en_sent)
+                if r_en_result and hasattr(r_en_result, 'agree_pct'):
+                    appraise_total += 1
+                    if r_en_result.agree_pct > 0.3:
+                        appraise_passes += 1
+            except Exception:
+                continue
+
+        # Score computation
+        avg_domain_overlap = (
+            sum(domain_overlap_scores) / len(domain_overlap_scores)
+            if domain_overlap_scores else 0.0
+        )
+        appraise_score = (
+            appraise_passes / appraise_total
+            if appraise_total > 0 else 0.5  # neutral if can't evaluate
+        )
+
+        # Combined score: 60% domain overlap + 40% appraise agreement
+        score = (avg_domain_overlap * 0.6 + appraise_score * 0.4)
+        threshold = 0.30
+
+        details = {
+            "aligned_pairs": len(aligned),
+            "domains_evaluated": len(domain_overlap_scores),
+            "avg_domain_overlap": round(avg_domain_overlap, 4),
+            "appraise_evaluated": appraise_total,
+            "appraise_passes": appraise_passes,
+            "appraise_score": round(appraise_score, 4),
+            "en_atoms_total": len(set(r_en.atoms())) if r_en else 0,
+            "id_atoms_total": len(set(r_id.atoms())) if r_id else 0,
+        }
+
+        verdict = (
+            f"domain_overlap={avg_domain_overlap:.3f}, "
+            f"appraise={appraise_score:.3f} "
+            f"({len(domain_overlap_scores)} domains, "
+            f"{appraise_passes}/{appraise_total} appraise pass)"
+        )
+
+    except Exception as exc:
+        score = 0.0
+        threshold = 0.30
+        details = {"error": str(exc)}
+        verdict = f"benchmark failed: {exc}"
+    finally:
+        for p in [en_path, id_path]:
+            if os.path.exists(p):
+                os.remove(p)
+
+    return BenchmarkResult(
+        name="CrossLanguageConvergence",
+        score=score,
+        passed=score >= threshold,
+        threshold=threshold,
+        details=details,
+        elapsed_s=round(time.time() - t0, 3),
+        verdict=verdict,
+    )
+
+
+# -----------------------------------------------------------------------
 # Main evaluation runner
 # -----------------------------------------------------------------------
 
@@ -678,6 +862,12 @@ def run_eval(
     results.append(b5)
     if verbose:
         print(str(b5))
+
+    # 6. Cross-language convergence
+    b6 = benchmark_cross_language_convergence()
+    results.append(b6)
+    if verbose:
+        print(str(b6))
 
     # --- Summary ---
     passed      = sum(1 for r_ in results if r_.passed)

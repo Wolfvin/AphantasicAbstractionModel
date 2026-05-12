@@ -24,6 +24,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
+# P1-2: Cross-package imports use absolute style (layer2 is a sibling package)
 from layer2.bridge import RsvsBridge, get_bridge
 from layer2.pattern import PatternResult, ReasoningStep
 

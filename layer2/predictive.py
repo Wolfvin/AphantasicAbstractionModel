@@ -26,6 +26,7 @@ benang merah. Bukan sekadar mengingat, tapi BELAJAR dari kesalahan prediksi.
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 from dataclasses import dataclass, field
@@ -254,9 +255,8 @@ class PredictiveEngine:
         # Populated during observe_and_update()
         self._observed: dict[str, list[str]] = {}
 
-        # Fallback knowledge store — used when RSVS is not available
-        # Maps concept → {compositions, confidence}
-        self._fallback_graph: dict[str, dict] = {}
+        # P2-7: Removed self._fallback_graph — now delegates to self._bridge
+        # which always has a _FallbackGraph when Rust core is unavailable.
 
         if self.rsvs_available:
             logger.info(
@@ -1103,10 +1103,10 @@ class PredictiveEngine:
     def _fallback_predict(
         self, concept: str, context: list[str]
     ) -> tuple[list[str], float]:
-        """Predict compositions without RSVS using the fallback graph.
+        """Predict compositions without RSVS using the bridge's fallback graph.
 
-        Uses simple keyword matching and the internal fallback graph
-        to produce a rough prediction.
+        P2-7: Delegates to self._bridge which always has a _FallbackGraph
+        when the Rust core is unavailable, ensuring consistent state.
 
         Args:
             concept: The concept to predict.
@@ -1115,65 +1115,76 @@ class PredictiveEngine:
         Returns:
             A tuple of (expected_compositions, confidence).
         """
-        # Check fallback graph
-        if concept in self._fallback_graph:
-            entry = self._fallback_graph[concept]
-            compositions = entry.get("compositions", [])
-            confidence = entry.get("confidence", 0.5)
+        # Delegate to bridge.query() for composition lookup
+        try:
+            query_result = self._bridge.query(concept)
+            if query_result is not None:
+                compositions = []
+                # Extract composition labels from query result
+                comp_list = query_result.get("compositions", [])
+                for entry in comp_list:
+                    if isinstance(entry, (list, tuple)) and len(entry) >= 1:
+                        compositions.append(str(entry[0]))
+                    elif isinstance(entry, str):
+                        compositions.append(entry)
+                # Get confidence from the query result
+                grounding = query_result.get("grounding_score", 0.5)
+                confidence = max(0.5, grounding)
 
-            # Boost confidence if context matches
-            if context:
-                context_match = sum(
-                    1 for c in context
-                    if c.lower() in concept.lower() or concept.lower() in c.lower()
-                )
-                if context_match > 0:
-                    confidence = min(1.0, confidence + 0.1 * context_match)
+                # Boost confidence if context matches
+                if context:
+                    context_match = sum(
+                        1 for c in context
+                        if c.lower() in concept.lower() or concept.lower() in c.lower()
+                    )
+                    if context_match > 0:
+                        confidence = min(1.0, confidence + 0.1 * context_match)
 
-            return list(compositions), confidence
+                return compositions, confidence
+        except Exception as exc:
+            logger.debug("bridge.query() in _fallback_predict failed: %s", exc)
+
+        # Also try relate() for broader connections
+        try:
+            relate_result = self._bridge.relate(concept)
+            if relate_result is not None:
+                related = relate_result.get("related_nodes", [])
+                compositions = []
+                for entry in related:
+                    if isinstance(entry, (list, tuple)) and len(entry) >= 1:
+                        compositions.append(str(entry[0]))
+                    elif isinstance(entry, str):
+                        compositions.append(entry)
+                if compositions:
+                    return compositions, 0.4
+        except Exception as exc:
+            logger.debug("bridge.relate() in _fallback_predict failed: %s", exc)
 
         # No prior knowledge — return empty prediction with low confidence
         return [], 0.3
 
     def _fallback_ingest(self, text: str, source: str = "observation") -> None:
-        """Ingest text into the fallback graph when RSVS is unavailable.
+        """Ingest text into the bridge's fallback graph when RSVS is unavailable.
 
-        Extracts keywords and builds simple associations in the
-        internal fallback graph.
+        P2-7: Delegates to self._bridge.ingest() which always has a
+        _FallbackGraph when the Rust core is unavailable, ensuring
+        consistent state across all modules.
 
         Args:
             text: The text to ingest.
-            source: Source identifier.
+            source: Source provenance identifier.
         """
-        atoms = self._fallback_atomize(text)
-        if not atoms:
-            return
-
-        # Create/update entries for each atom
-        for atom in atoms:
-            if atom not in self._fallback_graph:
-                self._fallback_graph[atom] = {
-                    "compositions": [],
-                    "confidence": 0.5,
-                    "sources": [],
-                }
-
-            # Add other atoms as compositions (simple co-occurrence)
-            entry = self._fallback_graph[atom]
-            for other in atoms:
-                if other != atom and other not in entry["compositions"]:
-                    entry["compositions"].append(other)
-            entry["sources"].append(source)
-
-            # Slight confidence boost for being observed
-            entry["confidence"] = min(1.0, entry["confidence"] + 0.05)
+        try:
+            self._bridge.ingest(text, source_provenance=source)
+        except Exception as exc:
+            logger.warning("bridge.ingest() in _fallback_ingest failed: %s", exc)
 
     @staticmethod
     def _fallback_atomize(text: str) -> list[str]:
         """Extract keywords from text for fallback mode.
 
-        Splits text into words and returns the "interesting" ones
-        (length > 3, not common stop words).
+        P2-7: Uses the bridge's keyword extraction when available,
+        otherwise falls back to local stop-word filtering.
 
         Args:
             text: Input text to atomize.
@@ -1181,14 +1192,198 @@ class PredictiveEngine:
         Returns:
             A list of word-level "atoms".
         """
+        # Try to use bridge's keyword extraction
+        try:
+            from .bridge import _FallbackGraph
+            return _FallbackGraph._extract_keywords(text)
+        except Exception:
+            pass
+
+        # Local fallback
         words = text.lower().split()
-        # Remove punctuation
         cleaned = []
         for w in words:
             w = w.strip(".,;:!?\"'()[]{}")
             if len(w) > 3 and w not in _STOP_WORDS:
                 cleaned.append(w)
         return cleaned[:20]
+
+    # ------------------------------------------------------------------
+    # Persistence (P2-8: Cognitive persistence)
+    # ------------------------------------------------------------------
+
+    _PERSIST_SCHEMA_VERSION = "1.0"
+
+    def save_to_dict(self) -> dict:
+        """Serialize cognitive state to a plain dict (in-memory).
+
+        Saves `_predictions`, `_belief_updates`, `_anomalies`, `_observed`,
+        `eta`, `anomaly_threshold`, and the fallback graph.  The RSVS
+        bridge / graph itself is NOT serialized — only the Layer-2
+        cognitive state.
+
+        Returns:
+            A dict containing the full serializable state.
+        """
+        return {
+            "schema_version": self._PERSIST_SCHEMA_VERSION,
+            "eta": self.eta,
+            "anomaly_threshold": self.anomaly_threshold,
+            "predictions": [p.to_dict() for p in self._predictions],
+            "belief_updates": [b.to_dict() for b in self._belief_updates],
+            "anomalies": [a.to_dict() for a in self._anomalies],
+            "observed": self._observed,
+            "fallback_graph_size": 0,  # P2-7: state lives in bridge
+        }
+
+    def load_from_dict(self, data: dict) -> None:
+        """Restore cognitive state from a plain dict (in-memory).
+
+        Restores `_predictions`, `_belief_updates`, `_anomalies`,
+        `_observed`, `eta`, `anomaly_threshold`, and the fallback graph.
+        Existing state is replaced.
+
+        Args:
+            data: A dict previously returned by `save_to_dict()`.
+        """
+        if not isinstance(data, dict):
+            logger.warning("load_from_dict: expected dict, got %s", type(data).__name__)
+            return
+
+        # Schema compatibility check
+        saved_version = data.get("schema_version", "0.0")
+        if saved_version != self._PERSIST_SCHEMA_VERSION:
+            logger.warning(
+                "load_from_dict: schema version mismatch (saved=%s, current=%s). "
+                "Proceeding with best-effort restore.",
+                saved_version, self._PERSIST_SCHEMA_VERSION,
+            )
+
+        self.eta = data.get("eta", _DEFAULT_ETA)
+        self.anomaly_threshold = data.get("anomaly_threshold", _DEFAULT_ANOMALY_THRESHOLD)
+
+        # Reconstruct predictions
+        self._predictions = []
+        for p_dict in data.get("predictions", []):
+            if isinstance(p_dict, dict):
+                self._predictions.append(Prediction(
+                    concept=p_dict.get("concept", ""),
+                    expected_compositions=p_dict.get("expected_compositions", []),
+                    confidence=p_dict.get("confidence", 0.5),
+                    context=p_dict.get("context", []),
+                    timestamp=p_dict.get("timestamp", time.strftime("%Y-%m-%dT%H:%M:%S")),
+                ))
+
+        # Reconstruct belief updates
+        self._belief_updates = []
+        for b_dict in data.get("belief_updates", []):
+            if isinstance(b_dict, dict):
+                self._belief_updates.append(BeliefUpdate(
+                    concept=b_dict.get("concept", ""),
+                    old_confidence=b_dict.get("old_confidence", 0.5),
+                    new_confidence=b_dict.get("new_confidence", 0.5),
+                    direction=b_dict.get("direction", "confirm"),
+                    reason=b_dict.get("reason", ""),
+                    evidence=b_dict.get("evidence", []),
+                    timestamp=b_dict.get("timestamp", time.strftime("%Y-%m-%dT%H:%M:%S")),
+                ))
+
+        # Reconstruct anomalies
+        self._anomalies = []
+        for a_dict in data.get("anomalies", []):
+            if isinstance(a_dict, dict):
+                self._anomalies.append(Anomaly(
+                    concept=a_dict.get("concept", ""),
+                    expected=a_dict.get("expected", []),
+                    observed=a_dict.get("observed", []),
+                    delta=a_dict.get("delta", 0.0),
+                    description=a_dict.get("description", ""),
+                ))
+
+        self._observed = data.get("observed", {})
+        # P2-7: _fallback_graph removed — state now lives in the bridge.
+        # Backward compat: if old data contains fallback_graph entries,
+        # ingest them into the bridge so they aren't lost.
+        old_graph = data.get("fallback_graph", {})
+        if old_graph and isinstance(old_graph, dict):
+            for concept, entry in old_graph.items():
+                try:
+                    # Re-ingest each concept to populate the bridge's fallback graph
+                    comps = entry.get("compositions", [])
+                    if comps:
+                        self._bridge.ingest(f"{concept} {' '.join(comps)}")
+                except Exception as exc:
+                    logger.debug("Failed to migrate old fallback_graph entry '%s': %s", concept, exc)
+
+        logger.info(
+            "PredictiveEngine state restored: %d predictions, %d belief updates, "
+            "%d anomalies, %d observed concepts",
+            len(self._predictions), len(self._belief_updates),
+            len(self._anomalies), len(self._observed),
+        )
+
+    def save(self, path: str) -> dict:
+        """Save cognitive state to a JSON file.
+
+        Args:
+            path: Filesystem path to write the JSON file.
+
+        Returns:
+            A summary dict with stats about what was saved.
+        """
+        data = self.save_to_dict()
+        summary: dict = {
+            "path": path,
+            "predictions": len(self._predictions),
+            "belief_updates": len(self._belief_updates),
+            "anomalies": len(self._anomalies),
+            "observed_concepts": len(self._observed),
+            "eta": self.eta,
+            "anomaly_threshold": self.anomaly_threshold,
+            "schema_version": self._PERSIST_SCHEMA_VERSION,
+            "success": False,
+        }
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False, default=str)
+            summary["success"] = True
+            logger.info("PredictiveEngine state saved to %s", path)
+        except (OSError, TypeError) as exc:
+            summary["error"] = str(exc)
+            logger.error("PredictiveEngine save failed: %s", exc)
+        return summary
+
+    def load(self, path: str) -> dict:
+        """Load cognitive state from a JSON file.
+
+        Args:
+            path: Filesystem path to read the JSON file from.
+
+        Returns:
+            A summary dict with stats about what was loaded.
+        """
+        summary: dict = {
+            "path": path,
+            "predictions": 0,
+            "belief_updates": 0,
+            "anomalies": 0,
+            "success": False,
+        }
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            self.load_from_dict(data)
+            summary["predictions"] = len(self._predictions)
+            summary["belief_updates"] = len(self._belief_updates)
+            summary["anomalies"] = len(self._anomalies)
+            summary["observed_concepts"] = len(self._observed)
+            summary["schema_version"] = data.get("schema_version", "unknown")
+            summary["success"] = True
+            logger.info("PredictiveEngine state loaded from %s", path)
+        except (OSError, json.JSONDecodeError, TypeError) as exc:
+            summary["error"] = str(exc)
+            logger.error("PredictiveEngine load failed: %s", exc)
+        return summary
 
     # ------------------------------------------------------------------
     # Reset / utility
@@ -1206,7 +1401,7 @@ class PredictiveEngine:
         self._belief_updates = []
         self._anomalies = []
         self._observed = {}
-        self._fallback_graph = {}
+        # P2-7: _fallback_graph removed — state now lives in the bridge
         logger.info("PredictiveEngine reset — all internal state cleared")
 
     def status(self) -> dict:
@@ -1225,5 +1420,5 @@ class PredictiveEngine:
             "total_belief_updates": len(self._belief_updates),
             "total_anomalies": len(self._anomalies),
             "current_beliefs": self.get_current_beliefs(),
-            "fallback_graph_size": len(self._fallback_graph),
+            "fallback_graph_size": 0,  # P2-7: state lives in bridge
         }

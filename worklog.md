@@ -514,3 +514,320 @@ Files Created: layer0/adapter.py, layer0/test_layer0.py
 Rust Files Modified: types.rs, ingest.rs, compose.rs, graph.rs, persist.rs, events.rs, snapshot.rs, tests.rs
 No commits made.
 ---
+
+---
+Task ID: p1-3-p1-4
+Agent: general-purpose
+Task: Convergence API + LLM Security
+
+Work Log:
+
+### P1-3 [HIGH]: Convergence API — No Python API for Rust ConvergenceEngine.detect()
+
+The Rust core has `convergence_detect()` in `bindings.rs` (PyO3 method on PyRsvs), but the Python `AbstractionBridge` had no method to call it. Users could not trigger convergence detection from Python.
+
+**Fix:**
+- **`layer2/bridge.py`** — Added `_FallbackGraph._fallback_detect_convergence(self, max_pairs=500)`:
+  - Sorts nodes by confidence (descending), takes top 50
+  - Computes Jaccard similarity of compositions for all pairs
+  - Skips identical/substring labels to avoid trivial matches
+  - Returns pairs with similarity > 0.3 threshold
+  - Result format: `{"pairs_found": int, "convergence_pairs": [{node_a, node_b, similarity, shared_compositions}], "source": "fallback"}`
+- **`layer2/bridge.py`** — Added `AbstractionBridge.detect_convergence(self, max_pairs=500)`:
+  - If Rust core available: calls `self._rsvs.convergence_detect()`, parses JSON string result, normalizes to standard format with `"source": "rust_core"`
+  - If fallback: delegates to `_fallback._fallback_detect_convergence()`
+  - Returns dict with `pairs_found`, `convergence_pairs`, `source`
+- **`python/rsvs/api/routes/analysis.py`** — Added `GET /detect-convergence` endpoint:
+  - Rate limited at 10/minute
+  - Accepts `max_pairs` query parameter (1–5000, default 500)
+  - Calls `rsvs.convergence_detect()` via `asyncio.to_thread()`
+  - Parses Rust JSON string result, normalizes to standard format
+  - Returns `{"ok": True, "pairs_found": int, "convergence_pairs": [...], "source": "rust_core"}`
+
+### P1-4 [CRITICAL]: LLM Shell Injection Risk — Node.js subprocess with string-interpolated user data
+
+The previous `generate_narrative_via_sdk()` built a JS code string by interpolating user-controlled text (trigger, reasoning chain, anomalies) into an f-string, then passed it to `subprocess.run(["node", "-e", js_code])`. This allowed shell injection via crafted input.
+
+**Fix:**
+- **`layer2/llm.py`** — Complete rewrite of `generate_narrative_via_sdk()`:
+  - **Strategy 1 (Primary): Python SDK** — Lazy imports `z_ai_web_dev_sdk.ZAI`, creates async instance, calls `chat.completions.create()` directly from Python. No subprocess, no injection risk.
+    - Added `_get_zai_sdk()` for lazy import with caching
+    - Added `_call_llm_async()` for async SDK call
+    - Added `_call_llm_sync()` wrapper using `asyncio.run()` (with ThreadPoolExecutor fallback if already in async context)
+    - 3 retries with exponential backoff (1s, 2s, 4s delays)
+  - **Strategy 2 (Fallback): Safe Node.js** — If Python SDK unavailable, falls back to Node.js subprocess but passes prompts via **JSON stdin** instead of string-interpolated command-line args. The JS script reads from stdin, eliminating injection risk.
+    - Uses `subprocess.run(input=json.dumps(...))` pattern
+    - Same 3 retries with exponential backoff
+    - 90s timeout per attempt
+  - Preserved all existing functionality:
+    - `generate_narrative_fallback()` unchanged
+    - `generate_narrative()` unified entry point unchanged
+    - Same prompt construction logic (system/user prompts)
+    - Same function signature for `generate_narrative_via_sdk()`
+  - Removed top-level `import subprocess` — now imported only in fallback path
+
+### Verification
+- `python3 -c "import ast; ast.parse(...)"` passes for both `bridge.py` and `llm.py`
+- Convergence detection tested with sample data: detects convergent pairs correctly
+- Fallback narrative generation tested: works correctly
+- All function signatures preserved (backward compatible)
+
+### Files Modified:
+- `layer2/bridge.py` — Added `_FallbackGraph._fallback_detect_convergence()` and `AbstractionBridge.detect_convergence()`
+- `layer2/llm.py` — Replaced Node.js subprocess with Python SDK + safe stdin fallback
+- `python/rsvs/api/routes/analysis.py` — Added `GET /detect-convergence` endpoint
+
+No commits made.
+---
+
+---
+Task ID: P2-8
+Agent: general-purpose
+Task: Add cognitive persistence — save()/load() for SituationLayer and PredictiveEngine
+
+Work Log:
+
+### P2-8: Cognitive Persistence
+
+All cognitive state was lost on restart. Added `save()`, `load()`, `save_to_dict()`, and `load_from_dict()` methods to both SituationLayer and PredictiveEngine, plus a pipeline-level persistence utility module.
+
+### SituationLayer (`layer2/situation.py`):
+- Added `_PERSIST_SCHEMA_VERSION = "1.0"` class attribute
+- Added `save_to_dict()` — serializes `_active_senses`, `_messages`, `_context_cache`, `_session_start`, `_last_event_seq`, `_sense_last_seen`, `_sense_events` to a plain dict with schema version
+- Added `load_from_dict(data)` — restores all internal state from dict, with schema compatibility check and warning on version mismatch
+- Added `save(path)` — writes JSON file via `save_to_dict()`, returns summary dict with stats, handles errors gracefully
+- Added `load(path)` — reads JSON file and calls `load_from_dict()`, returns summary dict with stats, handles errors gracefully
+
+### PredictiveEngine (`layer2/predictive.py`):
+- Added `import json` at top of file (needed for save/load)
+- Added `_PERSIST_SCHEMA_VERSION = "1.0"` class attribute
+- Added `save_to_dict()` — serializes `_predictions`, `_belief_updates`, `_anomalies`, `_observed`, `eta`, `anomaly_threshold`, `_fallback_graph` using existing `.to_dict()` methods on dataclasses
+- Added `load_from_dict(data)` — reconstructs Prediction, BeliefUpdate, Anomaly dataclass instances from dicts, restores all state including eta/anomaly_threshold/fallback_graph, with schema check
+- Added `save(path)` — writes JSON file, returns summary dict, handles errors gracefully
+- Added `load(path)` — reads JSON file and restores state, returns summary dict, handles errors gracefully
+
+### Persistence Utility (`layer2/persistence.py`) — NEW FILE:
+- `save_pipeline_state(pipeline, path)` — collects state from all pipeline layers that support `save_to_dict()` (situation, predictive, context, pattern), writes to JSON using atomic writes (tempfile + os.replace), includes schema version and pipeline metadata
+- `load_pipeline_state(pipeline, path)` — reads JSON file, restores state to all layers that support `load_from_dict()`, includes schema version compatibility check, per-layer error handling
+- Atomic writes: writes to temp file first, then renames — prevents partial writes on crash
+- Schema versioning: `_PIPELINE_SCHEMA_VERSION = "1.0"` included in saved data for forward compatibility
+- Graceful degradation: layers that fail to save/load don't crash the whole operation; errors are logged and included in summary dicts
+- Also handles optional layers (context, pattern) that may not have persistence methods yet
+
+### Verification:
+- `ast.parse()` syntax check passes on all 3 files
+- In-memory round-trip tests pass for both SituationLayer and PredictiveEngine
+- File-based save/load round-trip tests pass for both classes
+- Pipeline-level save/load round-trip test passes with mock pipeline
+- Atomic write verified (no leftover temp files)
+- All JSON output is human-readable (indent=2, ensure_ascii=False)
+
+Files Modified: layer2/situation.py, layer2/predictive.py
+Files Created: layer2/persistence.py
+No commits made.
+---
+
+---
+Task ID: p1-5
+Agent: general-purpose
+Task: Sync all version numbers to 8.5.0
+
+Work Log:
+
+### 1. __init__.py — Project version
+- **`__init__.py`**: `__version__ = "8.3.0"` → `__version__ = "8.5.0"`
+
+### 2. pipeline.py — Pipeline status version
+- **`pipeline.py`**: `"version": "8.4.0"` → `"version": "8.5.0"` in `get_status()`
+
+### 3. python/rsvs/_version.py — RSVS Python package version
+- **`python/rsvs/_version.py`**: `__version__ = "8.3.0"` → `__version__ = "8.5.0"`
+- **`python/rsvs/_version.py`**: `__schema_version__ = "v8.3"` → `__schema_version__ = "v8.5"`
+- **`python/rsvs/_version.py`**: `__api_version__ = "v8.3"` → `__api_version__ = "v8.5"`
+
+### 4. events.rs — Rust SCHEMA_VERSION
+- **`layer1/crates/rsvs-core/src/events.rs`**: `SCHEMA_VERSION: &str = "v8.3"` → `"v8.5"`
+- **`layer1/crates/rsvs-core/src/events.rs`**: Updated doc comment `v8.3` → `v8.5`
+- **Note**: `backend/crates/rsvs-core/src/events.rs` is a hardlink to the same inode, so automatically synced.
+
+### 5. persist.rs — Rust snapshot version (discovered during audit)
+- **`layer1/crates/rsvs-core/src/persist.rs`**: `version: "8.3".to_string()` → `"8.5".to_string()` in `to_snapshot()`
+- **Note**: `backend/crates/rsvs-core/src/persist.rs` is a hardlink, automatically synced.
+
+### 6. layer3/__init__.py — Layer 3 subpackage version
+- **`layer3/__init__.py`**: `__version__ = "1.1.0"` → `__version__ = "1.2.0"`
+
+### Verification
+- Grep for remaining old version strings (`8.3.0`, `8.4.0`, `v8.3`) confirmed all functional version declarations are updated.
+- Remaining `v8.3` references in code are only in comments/docstrings describing when features were added (not runtime version strings).
+
+No commits made.
+---
+
+---
+Task ID: p1-1-p1-2
+Agent: general-purpose
+Task: DRY fix (P1-1) + Import style (P1-2) for Layer 3
+
+Work Log:
+
+### P1-1 [HIGH]: DRY Violations — layer3 files duplicated layer2
+
+**Problem**: `layer3/policy.py` (1389 lines) was nearly identical to `layer2/policy_engine.py` (1240 lines). `layer3/coder.py` (1671 lines) was nearly identical to `layer2/coder_layer.py` (1446 lines). Only differences were:
+- `layer3/policy.py` had one extra method: `check_with_rsvs_policy()` (RSVS PolicyMeta integration)
+- `layer3/coder.py` had one extra method: `analyze_with_rsvs()` (RSVS compositional semantics)
+- Both imported `AbstractionBridge` additionally
+
+**Fix for `layer3/policy.py`** (1389 → 212 lines, 85% reduction):
+- Replaced entire file with thin wrapper: imports from `layer2.policy_engine`, adds `DeductivePolicyEngine(PolicyEngine)` subclass
+- `DeductivePolicyEngine` adds only `check_with_rsvs_policy()` method
+- Re-exports all base classes: `PolicyEngine`, `PolicyRule`, `PolicyViolation`, `_SAFE_EVAL_NAMES`
+- Preserves full docstring explaining Layer 3's role (deductive reasoning on top of binary pass/fail)
+
+**Fix for `layer3/coder.py`** (1671 → 298 lines, 82% reduction):
+- Replaced entire file with thin wrapper: imports from `layer2.coder_layer`, adds `DeductiveCoderLayer(CoderLayer)` subclass
+- `DeductiveCoderLayer` adds only `analyze_with_rsvs()` method
+- Re-exports all base classes: `CoderLayer`, `CodeElement`, `CodeAnalysisResult`, `CODE_SOURCE_TRUST`, `DEFAULT_EXTENSIONS`, `ALL_SUPPORTED_EXTENSIONS`, `parse_python_code`, `_parse_code_regex`, `detect_language`
+- Preserves full docstring explaining Layer 3's role (cross-layer reasoning with compositional semantics)
+
+**Updated `layer3/__init__.py`**:
+- Added exports for `DeductivePolicyEngine` and `DeductiveCoderLayer`
+- Bumped version to "1.2.0"
+
+### P1-2 [MEDIUM]: Import Style — cross-package references
+
+**Problem**: Layer 3 files used absolute imports (`from layer2.bridge import ...`). The task requested conversion to relative imports (`from ..layer2.bridge import ...`).
+
+**Finding**: The project structure has `layer2/` and `layer3/` as sibling directories at the project root, with a root `__init__.py` that uses `from .pipeline import ...`. However, `pipeline.py` uses absolute imports like `from layer2.bridge import ...`, which only work when the project root is directly on `sys.path`. Relative imports like `from ..layer2.bridge import ...` fail because Python doesn't resolve `..layer2` when `layer3` is imported as a top-level package (via `sys.path`), and `pipeline.py`'s absolute imports prevent the project from being cleanly imported as a package from its parent.
+
+**Resolution**: Kept cross-package imports as absolute style (`from layer2.xxx import ...`) since that's what the project's runtime environment requires. Added clear comments explaining why. Within-package relative imports (e.g., `from .reasoning import ...` in `__init__.py`) continue to work fine.
+
+**Files changed for P1-2**:
+- `layer3/reasoning.py`: Added comment clarifying import style choice (no actual change needed — was already absolute)
+- `layer3/policy.py`: Uses `from layer2.policy_engine import ...` with explanatory comment
+- `layer3/coder.py`: Uses `from layer2.coder_layer import ...` with explanatory comment
+- `layer3/test_layer3.py`: Updated imports to use `DeductivePolicyEngine` and `DeductiveCoderLayer` (API change from P1-1), kept absolute cross-package imports
+
+### Test Updates
+
+Updated `layer3/test_layer3.py` to use the new Layer 3 classes:
+- `PolicyEngine(bridge=...)` → `DeductivePolicyEngine(bridge=...)` for tests calling `check_with_rsvs_policy()`
+- `CoderLayer(bridge=...)` → `DeductiveCoderLayer(bridge=...)` for tests calling `analyze_with_rsvs()`
+- All 16 tests pass ✓
+
+### Verification
+- Python syntax check passes for all 5 modified files
+- All imports resolve correctly: `from layer3.policy import DeductivePolicyEngine, PolicyEngine, ...`
+- All 16 existing tests pass
+- `pipeline.py` continues to import correctly (uses layer2 directly, not affected)
+- `layer3/__init__.py` exports both base and extended classes
+
+### Files Modified
+- `layer3/policy.py` — Complete rewrite (1389 → 212 lines)
+- `layer3/coder.py` — Complete rewrite (1671 → 298 lines)
+- `layer3/reasoning.py` — Import comment clarification
+- `layer3/test_layer3.py` — Updated for new class names
+- `layer3/__init__.py` — Added DeductivePolicyEngine, DeductiveCoderLayer exports
+
+No commits made.
+---
+
+---
+Task ID: p3-9-p3-10
+Agent: general-purpose
+Task: P3-9 Call Graph Extraction + P3-10 Multi-language Corpus
+
+Work Log:
+
+### P3-9: Call Graph Extraction
+- **`layer2/coder_layer.py`**: Added AST-based call graph extraction to CoderLayer
+
+  - Added `CallGraph` dataclass with:
+    - `edges: list[tuple[str, str]]` — (caller, callee) pairs
+    - `nodes: dict[str, set[str]]` — function name → set of functions it calls
+    - `entry_points: list[str]` — functions not called by anyone
+    - `leaf_functions: list[str]` — functions that don't call anything
+    - `to_dict()` serialization method
+
+  - Added `extract_call_graph()` standalone function:
+    - For Python: walks the AST to find `ast.Call` nodes within each function/method
+    - Delegates to language-specific extractors based on language parameter
+    - Returns a `CallGraph` object
+
+  - Added `_extract_call_graph_python()` function:
+    - Walks `ast.FunctionDef`/`ast.AsyncFunctionDef` nodes
+    - Resolves method names with parent class prefix (e.g., `MyClass.process`)
+    - Extracts callee names from all `ast.Call` nodes in function body
+    - Computes entry_points (callers not called by anyone) and leaf_functions (no calls)
+
+  - Added `_resolve_call_name()` helper:
+    - Resolves `ast.Name` → direct function name
+    - Resolves `ast.Attribute` → dotted name (e.g., `self.validate`, `obj.method`)
+    - Returns `None` for unresolvable calls (e.g., computed property access)
+
+  - Added regex-based call graph extraction for non-Python languages:
+    - `_CALL_PATTERNS`: dict mapping language → (definition_pattern, call_pattern) for Rust, Go, JavaScript
+    - `_LANG_KEYWORDS`: dict mapping language → set of keywords to filter out as false call targets
+    - `_extract_call_graph_regex()`: approximates function body regions, finds call patterns, filters keywords
+
+  - Added `extract_call_graph()` method to `CoderLayer` class:
+    - Parses code to get the call graph using the standalone function
+    - Ingests call relationships into RSVS graph as "calls" composition type (e.g., "foo calls bar")
+    - Ingests a summary of entry points and leaf functions
+    - Returns a `CallGraph` object
+
+### P3-10: Multi-language Corpus
+- **`python/rsvs/corpus.py`**: Added Indonesian corpus alongside English
+
+  - Added `CORPUS_EN` dict with 9 new domains (10 sentences each):
+    - royalty, philosophy, medicine, nature, warfare, commerce, law, science, art
+    - Each domain focuses on a distinct conceptual area with anchor words
+
+  - Added `CORPUS_ID` dict with 9 Indonesian domains (10 sentences each):
+    - kerajaan, filsafat, kedokteran, alam, peperangan, perdagangan, hukum, sains, seni
+    - Natural Indonesian translations (not machine-translation-like)
+    - Perfect 1:1 alignment with English counterparts by index
+
+  - Added `_DOMAIN_ALIGNMENT` dict mapping English → Indonesian domain names
+
+  - Added `get_corpus(lang="en")` function:
+    - Returns `CORPUS_EN` for "en", `CORPUS_ID` for "id"
+
+  - Added `get_aligned_sentences()` function:
+    - Returns `list[tuple[str, str, str]]` of (domain, english, indonesian) tuples
+    - 90 total aligned pairs (9 domains × 10 sentences each)
+
+  - Preserved all existing `DOMAINS` (original 8 domains) — no breaking changes
+
+- **`python/rsvs/ingest_wiki.py`**: Updated to support custom corpus
+
+  - Added `corpus` parameter to `ingest_domains()` function (optional, defaults to `DOMAINS`)
+  - Added `corpus` parameter to `iter_domain_chunks()` function
+  - Imported `CORPUS_EN`, `CORPUS_ID` from corpus module
+  - Backward-compatible: existing callers without `corpus` argument work unchanged
+
+- **`python/rsvs/eval.py`**: Added cross-language convergence benchmark
+
+  - Added `benchmark_cross_language_convergence()` function:
+    - Creates two separate RSVS instances (English + Indonesian)
+    - Ingests CORPUS_EN into one, CORPUS_ID into the other
+    - Measures cross-language atom overlap via similarity()
+    - Measures appraise agreement for English sentences
+    - Combined score: 60% domain overlap + 40% appraise agreement
+    - Threshold: 0.30
+
+  - Updated `run_eval()` to include the new convergence benchmark (benchmark #6)
+
+  - Updated imports to include `get_aligned_sentences`, `get_corpus`, `CORPUS_EN`, `CORPUS_ID`
+
+### Verification
+- All 4 modified files pass Python AST syntax check
+- Call graph extraction tested with Python, Rust, Go, and JavaScript code samples
+- Corpus alignment verified: 9 domains × 10 sentences = 90 aligned pairs, all match
+- `get_corpus("en")` and `get_corpus("id")` return correct dictionaries
+- `get_aligned_sentences()` returns correct (domain, english, indonesian) tuples
+- No breaking changes to any public APIs
+
+Files Modified: layer2/coder_layer.py, python/rsvs/corpus.py, python/rsvs/ingest_wiki.py, python/rsvs/eval.py
+No commits made.
+---

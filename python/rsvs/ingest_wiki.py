@@ -19,7 +19,7 @@ import time
 from pathlib import Path
 from collections.abc import Iterator
 
-from .corpus import DOMAINS, get_domain_text, domain_names
+from .corpus import DOMAINS, get_domain_text, domain_names, CORPUS_EN, CORPUS_ID
 
 
 # -----------------------------------------------------------------------
@@ -56,9 +56,16 @@ DOMAIN_ARTICLES = {
 # Text chunks — yield sentence-level batches for streaming ingest
 # -----------------------------------------------------------------------
 
-def iter_domain_chunks(domain: str, chunk_size: int = 5) -> Iterator[str]:
-    """Yield batches of `chunk_size` sentences for a domain."""
-    sentences = DOMAINS.get(domain, [])
+def iter_domain_chunks(domain: str, chunk_size: int = 5, corpus: dict | None = None) -> Iterator[str]:
+    """Yield batches of `chunk_size` sentences for a domain.
+
+    Args:
+        domain: Domain name to look up.
+        chunk_size: Number of sentences per chunk.
+        corpus: Optional corpus dict to use instead of DOMAINS.
+    """
+    source = corpus if corpus is not None else DOMAINS
+    sentences = source.get(domain, [])
     for i in range(0, len(sentences), chunk_size):
         chunk = sentences[i : i + chunk_size]
         yield " ".join(chunk)
@@ -73,9 +80,19 @@ def ingest_domains(
     domains: list[str],
     chunk_size: int = 5,
     verbose: bool = True,
+    corpus: dict | None = None,
 ) -> dict:
     """
     Ingest the given domains into an RSVS database.
+
+    Args:
+        db_path: Path to the RSVS database file.
+        domains: List of domain names to ingest.
+        chunk_size: Number of sentences per ingest chunk.
+        verbose: Whether to print progress.
+        corpus: Optional corpus dict to use instead of DOMAINS.
+            Pass CORPUS_EN or CORPUS_ID for multi-language ingestion.
+
     Returns a summary dict with stats per domain.
     """
     from rsvs import Rsvs
@@ -93,14 +110,15 @@ def ingest_domains(
     summary = {}
 
     for domain_idx, domain in enumerate(domains, 1):
-        if domain not in DOMAINS:
+        source = corpus if corpus is not None else DOMAINS
+        if domain not in source:
             print(f"  ⚠ Unknown domain: {domain!r} — skipping", file=sys.stderr)
             continue
 
         r.set_domain(domain_idx)
         if verbose:
             print(f"\n[{domain_idx}/{len(domains)}] Domain: {domain!r} "
-                  f"({len(DOMAINS[domain])} sentences)")
+                  f"({len(source[domain])} sentences)")
 
         domain_stats = {
             "sentences": 0,
@@ -110,7 +128,7 @@ def ingest_domains(
         }
 
         t0 = time.time()
-        for chunk in iter_domain_chunks(domain, chunk_size):
+        for chunk in iter_domain_chunks(domain, chunk_size, corpus=corpus):
             stats = r.ingest(chunk)
             domain_stats["sentences"]     += stats.sentences_processed
             domain_stats["atoms_promoted"] += stats.atoms_promoted

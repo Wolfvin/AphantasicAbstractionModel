@@ -208,9 +208,8 @@ class PatternOutput:
         self.rsvs_available = self._bridge.is_available
         self.is_rust_core = self._bridge.is_rust_core
 
-        # Fallback graph for when RSVS is unavailable
-        # Maps concept → {compositions: [...], relations: [...], confidence: float}
-        self._fallback_graph: dict[str, dict] = {}
+        # P2-7: Removed self._fallback_graph — now delegates to self._bridge
+        # which always has a _FallbackGraph when Rust core is unavailable.
 
         # History of processed triggers
         self._history: list[PatternResult] = []
@@ -1644,22 +1643,40 @@ class PatternOutput:
         related: list[str] = []
 
         # Direct lookup in fallback graph
-        if concept in self._fallback_graph:
-            entry = self._fallback_graph[concept]
-            related.extend(entry.get("compositions", []))
-            related.extend(entry.get("relations", []))
+        # P2-7: Use bridge instead of internal fallback graph
+        try:
+            relate_result = self._bridge.relate(concept)
+            if relate_result and isinstance(relate_result, dict):
+                for key in ("related_nodes", "structural_relations"):
+                    nodes = relate_result.get(key, [])
+                    for entry in nodes:
+                        if isinstance(entry, tuple) and len(entry) >= 1:
+                            label = str(entry[0])
+                        elif isinstance(entry, str):
+                            label = entry
+                        else:
+                            continue
+                        if label not in related:
+                            related.append(label)
+        except Exception as exc:
+            logger.debug("bridge.relate() in _fallback_find_related failed: %s", exc)
 
-        # Fuzzy match — check if any graph key contains the concept
-        concept_lower = concept.lower()
-        for key in self._fallback_graph:
-            if concept_lower in key.lower() or key.lower() in concept_lower:
-                if key != concept and key not in related:
-                    entry = self._fallback_graph[key]
-                    related.append(key)
-                    related.extend(
-                        c for c in entry.get("compositions", [])
-                        if c not in related
-                    )
+        # Fuzzy match via bridge query
+        try:
+            query_result = self._bridge.query(concept)
+            if query_result and isinstance(query_result, dict):
+                atoms = query_result.get("atoms", [])
+                for entry in atoms:
+                    if isinstance(entry, tuple) and len(entry) >= 1:
+                        label = str(entry[0])
+                    elif isinstance(entry, str):
+                        label = entry
+                    else:
+                        continue
+                    if label not in related:
+                        related.append(label)
+        except Exception as exc:
+            logger.debug("bridge.query() in _fallback_find_related failed: %s", exc)
 
         return list(dict.fromkeys(related))[:20]  # Deduplicate, limit
 
@@ -1672,8 +1689,21 @@ class PatternOutput:
         Returns:
             A list of composition labels.
         """
-        if concept in self._fallback_graph:
-            return self._fallback_graph[concept].get("compositions", [])
+        # P2-7: Use bridge instead of internal fallback graph
+        try:
+            senses = self._bridge.senses(concept)
+            if senses and isinstance(senses, list):
+                compositions = []
+                for sense in senses:
+                    if isinstance(sense, dict):
+                        for comp in sense.get("compositions", []):
+                            if isinstance(comp, tuple) and len(comp) >= 1:
+                                compositions.append(str(comp[0]))
+                            elif isinstance(comp, str):
+                                compositions.append(comp)
+                return compositions
+        except Exception as exc:
+            logger.debug("bridge.senses() in _fallback_get_compositions failed: %s", exc)
         return []
 
     def _fallback_get_node_info(self, concept: str) -> dict:
@@ -1685,8 +1715,13 @@ class PatternOutput:
         Returns:
             A dict with node metadata.
         """
-        if concept in self._fallback_graph:
-            return dict(self._fallback_graph[concept])
+        # P2-7: Use bridge instead of internal fallback graph
+        try:
+            info = self._bridge.node_info(concept)
+            if info and isinstance(info, dict):
+                return info
+        except Exception as exc:
+            logger.debug("bridge.node_info() in _fallback_get_node_info failed: %s", exc)
         return {"label": concept, "source": "fallback"}
 
     @staticmethod
@@ -1742,25 +1777,13 @@ class PatternOutput:
         Args:
             text: The text to ingest.
         """
-        # Always ingest into fallback graph
-        atoms = self._fallback_extract_concepts(text)
-        for atom in atoms:
-            if atom not in self._fallback_graph:
-                self._fallback_graph[atom] = {
-                    "compositions": [],
-                    "relations": [],
-                    "confidence": 0.5,
-                }
-            entry = self._fallback_graph[atom]
-            for other in atoms:
-                if other != atom:
-                    if other not in entry["compositions"]:
-                        entry["compositions"].append(other)
-                    if other not in entry["relations"]:
-                        entry["relations"].append(other)
-            entry["confidence"] = min(1.0, entry.get("confidence", 0.5) + 0.05)
+        # P2-7: Always ingest into bridge (which handles both Rust and fallback)
+        try:
+            self._bridge.ingest(text)
+        except Exception as exc:
+            logger.warning("Bridge ingest in ingest_for_context failed: %s", exc)
 
-        # Also ingest into RSVS via bridge if available
+        # Also ingest into RSVS via bridge if available (same call, idempotent)
         if self.rsvs_available:
             try:
                 self._bridge.ingest(text)
@@ -1783,7 +1806,7 @@ class PatternOutput:
         Analogi: Jin Soun mengosongkan meja kerja untuk kasus baru.
         Simhyeon Pavilion tetap utuh.
         """
-        self._fallback_graph = {}
+        # P2-7: _fallback_graph removed — state now lives in the bridge
         self._history = []
         logger.info("PatternOutput reset — all internal state cleared")
 
@@ -1797,6 +1820,6 @@ class PatternOutput:
         return {
             "rsvs_available": self.rsvs_available,
             "is_rust_core": self.is_rust_core,
-            "fallback_graph_size": len(self._fallback_graph),
+            "fallback_graph_size": 0,  # P2-7: state lives in bridge
             "history_count": len(self._history),
         }

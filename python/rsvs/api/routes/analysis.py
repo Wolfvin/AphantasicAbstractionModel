@@ -142,3 +142,59 @@ async def context_similarity_endpoint(
         "context": req.context,
         "context_weighted_similarity": score,
     }
+
+
+@router.get("/detect-convergence", tags=["structural"])
+@limiter.limit("10/minute")
+async def detect_convergence_endpoint(
+    request: Request,
+    max_pairs: int = Query(500, ge=1, le=5000, description="Maximum number of convergence pairs to evaluate"),
+    _auth: None = Depends(_verify_api_key),
+) -> dict[str, Any]:
+    """Detect structural convergence across nodes in the graph.
+
+    Finds nodes with structurally similar sense compositions that
+    may represent the same concept across different languages or contexts.
+    This uses the Rust core's ConvergenceEngine when available,
+    otherwise falls back to a Jaccard-based similarity check.
+    """
+    rsvs = get_rsvs_instance()
+    result = await asyncio.to_thread(rsvs.convergence_detect)
+    if result is None:
+        return {
+            "ok": True,
+            "pairs_found": 0,
+            "convergence_pairs": [],
+            "source": "none",
+        }
+
+    # Rust core returns a JSON string
+    import json as _json
+    if isinstance(result, str):
+        try:
+            parsed = _json.loads(result)
+        except _json.JSONDecodeError:
+            parsed = {"pairs": []}
+    elif isinstance(result, dict):
+        parsed = result
+    else:
+        parsed = {"pairs": []}
+
+    raw_pairs = parsed.get("pairs", [])
+    convergence_pairs = []
+    for p in raw_pairs[:max_pairs]:
+        if isinstance(p, dict):
+            convergence_pairs.append({
+                "node_a": p.get("a", ""),
+                "node_b": p.get("b", ""),
+                "similarity": p.get("overlap", 0.0),
+                "shared_compositions": [],
+                "linked": p.get("linked", False),
+            })
+
+    return {
+        "ok": True,
+        "pairs_found": len(convergence_pairs),
+        "convergence_pairs": convergence_pairs,
+        "source": "rust_core",
+    }

@@ -9,8 +9,8 @@ use crate::types::{CompositionRef, NodeId};
 /// API version string for event contracts.
 pub const API_VERSION: &str = "v1";
 /// Schema version string for event contracts.
-/// v8.3: Synced with Python `__schema_version__ = "v8.3"`.
-pub const SCHEMA_VERSION: &str = "v8.3";
+/// v8.5: Synced with Python `__schema_version__ = "v8.5"`.
+pub const SCHEMA_VERSION: &str = "v8.5";
 
 /// Runtime node info (v6.0: compositional with layer).
 #[derive(Debug, Clone, Serialize, Deserialize)]

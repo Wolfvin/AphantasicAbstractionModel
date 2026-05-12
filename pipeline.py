@@ -1040,7 +1040,7 @@ class AamPipeline:
     def get_status(self) -> dict:
         """Get current pipeline status."""
         return {
-            "version": "8.4.0",
+            "version": "8.5.0",
             "rsvs_available": self._bridge.is_available,
             "is_rust_core": self._bridge.is_rust_core,
             "scope": self.context.get_scope(),

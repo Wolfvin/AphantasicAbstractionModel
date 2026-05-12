@@ -331,3 +331,317 @@ def get_all_text() -> str:
 
 def domain_names():
     return list(DOMAINS.keys())
+
+
+# ---------------------------------------------------------------------------
+# Multi-language corpus — English + Indonesian aligned sentences
+# for cross-language convergence testing
+# ---------------------------------------------------------------------------
+
+# 9 domains covering distinct conceptual areas with natural translations.
+# These domains are designed for convergence detection: the same concepts
+# expressed in two languages should converge to the same RSVS structure.
+
+CORPUS_EN: dict[str, list[str]] = {
+    # --- Domain: royalty (kings, queens, kingdoms) ---
+    "royalty": [
+        "The king rules over the kingdom with wisdom and authority.",
+        "The queen advises the king on matters of state and diplomacy.",
+        "A kingdom thrives when the ruler governs with justice and fairness.",
+        "The throne passes from the king to the eldest prince by tradition.",
+        "The royal court gathers nobles who serve the king and the queen.",
+        "A crown symbolizes the power and responsibility of the monarch.",
+        "The king commands the army to defend the kingdom from invaders.",
+        "The queen oversees the education of the young princesses and princes.",
+        "Royal decrees carry the weight of law throughout the kingdom.",
+        "The kingdom celebrates when the king returns victorious from battle.",
+    ],
+
+    # --- Domain: philosophy (existence, meaning, truth) ---
+    "philosophy": [
+        "Truth is the ultimate goal of philosophical inquiry and reflection.",
+        "Existence precedes essence according to existentialist philosophy.",
+        "The meaning of life has been debated by thinkers for millennia.",
+        "Reason and logic form the foundation of philosophical argument.",
+        "Wisdom emerges from questioning the nature of reality and knowledge.",
+        "Ethics examines what constitutes a good and virtuous life.",
+        "Consciousness remains one of the deepest mysteries in philosophy.",
+        "The search for truth requires doubt and rigorous examination.",
+        "Free will and determinism present a fundamental philosophical tension.",
+        "A philosopher seeks understanding beyond mere opinion and belief.",
+    ],
+
+    # --- Domain: medicine (disease, treatment, healing) ---
+    "medicine": [
+        "The physician diagnoses the disease through careful examination and testing.",
+        "Treatment must address the root cause rather than merely suppressing symptoms.",
+        "Healing requires both medical intervention and the body's natural recovery.",
+        "Prevention of disease is more effective than any cure after onset.",
+        "The patient follows the prescribed regimen to recover from illness.",
+        "Surgery is sometimes necessary when medicine alone cannot heal the wound.",
+        "Antibiotics fight bacterial infection but cannot treat viral disease.",
+        "The hospital provides specialized care for severe and critical conditions.",
+        "Research into new treatments advances the frontier of modern medicine.",
+        "A diagnosis confirms the nature of the disease and guides therapy.",
+    ],
+
+    # --- Domain: nature (rivers, mountains, forests) ---
+    "nature": [
+        "The river carves a path through the mountain over thousands of years.",
+        "Ancient forests shelter countless species within their dense canopy.",
+        "The mountain stands as a silent witness to the passage of ages.",
+        "A forest purifies the air and regulates the flow of the river.",
+        "The valley lies between two mountain ranges fed by a winding river.",
+        "Nature balances growth and decay in an endless cycle of renewal.",
+        "The river nourishes the forest and the forest protects the river.",
+        "Wildlife depends on the forest for shelter and the river for water.",
+        "The mountain ecosystem supports life from base to snow-covered peak.",
+        "Seasons transform the forest and change the rhythm of the river.",
+    ],
+
+    # --- Domain: warfare (strategy, battle, defense) ---
+    "warfare": [
+        "Strategy determines the outcome of battle before the first shot is fired.",
+        "Defense requires fortified positions and well-trained disciplined soldiers.",
+        "The general devises a strategy to outmaneuver the enemy in battle.",
+        "A siege tests the endurance of both the attacker and the defense.",
+        "Victory in battle depends on preparation and superior strategy.",
+        "The army strengthens its defense along the vulnerable frontier.",
+        "Intelligence and deception are essential elements of warfare strategy.",
+        "A battle can turn when one side gains a decisive strategic advantage.",
+        "The defense holds the line while the reserves prepare a counterattack.",
+        "Throughout history warfare has driven innovation in strategy and technology.",
+    ],
+
+    # --- Domain: commerce (trade, market, exchange) ---
+    "commerce": [
+        "Trade connects distant regions through the exchange of goods and services.",
+        "The market sets the price through the balance of supply and demand.",
+        "Merchants facilitate commerce by bridging producers and consumers.",
+        "An exchange of value is the fundamental transaction in any market.",
+        "Commerce flourishes when trade routes are safe and regulations are fair.",
+        "The market rewards efficiency and punishes waste in competitive trade.",
+        "International trade expands the market beyond domestic borders.",
+        "A fair exchange requires transparency and trust between trading partners.",
+        "Commerce drives prosperity by enabling specialization and innovation.",
+        "The market adjusts prices to reflect changes in supply and demand.",
+    ],
+
+    # --- Domain: law (justice, regulation, contract) ---
+    "law": [
+        "Justice is the foundation upon which the rule of law stands.",
+        "A contract binds the parties to their agreed obligations and rights.",
+        "Regulation ensures that commerce operates within fair and lawful bounds.",
+        "The court interprets the law and delivers justice to the parties.",
+        "A legal contract must be voluntary and supported by consideration.",
+        "Regulation protects the public from harm and unjust business practices.",
+        "The judge applies the law impartially to achieve justice in each case.",
+        "A breach of contract entitles the injured party to a legal remedy.",
+        "Law evolves through legislation and judicial interpretation over time.",
+        "Justice requires that the law treat all persons with equal dignity.",
+    ],
+
+    # --- Domain: science (experiment, theory, discovery) ---
+    "science": [
+        "An experiment tests a hypothesis under controlled and repeatable conditions.",
+        "A theory explains observations and predicts the outcome of future experiments.",
+        "Discovery advances scientific knowledge by revealing previously unknown phenomena.",
+        "The scientific method requires that every theory be falsifiable by experiment.",
+        "A well-designed experiment minimizes bias and isolates the variable of interest.",
+        "A robust theory withstands repeated experimental testing and peer scrutiny.",
+        "Discovery often emerges at the boundary where existing theories break down.",
+        "Science progresses through cycles of hypothesis experiment and refinement.",
+        "Replication of an experiment by independent researchers confirms a discovery.",
+        "A paradigm shift occurs when a new theory replaces an established framework.",
+    ],
+
+    # --- Domain: art (beauty, creation, expression) ---
+    "art": [
+        "Beauty in art arises from the harmony of form color and composition.",
+        "Creation transforms raw material and emotion into a work of art.",
+        "Expression through art communicates what words alone cannot convey.",
+        "The artist pursues beauty through deliberate and intuitive creation.",
+        "Art challenges perception and invites the viewer into new expression.",
+        "Creation in art requires both technical skill and emotional depth.",
+        "Expression is the soul of art and beauty is its visible form.",
+        "Throughout history art has served as a vehicle for cultural expression.",
+        "The creation of art demands patience vision and a sensitivity to beauty.",
+        "Art endures because expression and beauty resonate across generations.",
+    ],
+}
+
+CORPUS_ID: dict[str, list[str]] = {
+    # --- Domain: kerajaan (raja, ratu, kerajaan) ---
+    "kerajaan": [
+        "Raja memerintah kerajaan dengan kebijaksanaan dan kewibawaan.",
+        "Ratu memberikan nasihat kepada raja dalam urusan negara dan diplomasi.",
+        "Sebuah kerajaan makmur jika penguasa memerintah dengan keadilan.",
+        "Takhta diwariskan dari raja kepada putra mahkota berdasarkan tradisi.",
+        "Pengadilan kerajaan mengumpulkan para bangsawan yang mengabdi pada raja dan ratu.",
+        "Mahkota melambangkan kekuasaan dan tanggung jawab seorang penguasa.",
+        "Raja memerintahkan pasukan untuk mempertahankan kerajaan dari penjajah.",
+        "Ratu mengawasi pendidikan para putri dan putra kerajaan.",
+        "Titah kerajaan membawa kekuatan hukum di seluruh kerajaan.",
+        "Kerajaan merayakan ketika raja kembali menang dari medan perang.",
+    ],
+
+    # --- Domain: filsafat (keberadaan, makna, kebenaran) ---
+    "filsafat": [
+        "Kebenaran adalah tujuan akhir dari penyelidikan dan perenungan filsafat.",
+        "Keberadaan mendahului hakikat menurut filsafat eksistensialisme.",
+        "Makna kehidupan telah diperdebatkan oleh para pemikir selama ribuan tahun.",
+        "Akal dan logika membentuk landasan argumen filsafat.",
+        "Kebijaksanaan muncul dari mempertanyakan hakikat kenyataan dan pengetahuan.",
+        "Etika mengkaji apa yang membentuk kehidupan yang baik dan bermoral.",
+        "Kesadaran tetap menjadi salah satu misteri terdalam dalam filsafat.",
+        "Pencarian kebenaran memerlukan keraguan dan pemeriksaan yang ketat.",
+        "Kehendak bebas dan determinisme menimbulkan ketegangan filsafat yang mendasar.",
+        "Seorang filsuf mencari pemahaman melampaui sekadar pendapat dan keyakinan.",
+    ],
+
+    # --- Domain: kedokteran (penyakit, pengobatan, penyembuhan) ---
+    "kedokteran": [
+        "Dokter mendiagnosis penyakit melalui pemeriksaan dan pengujian yang cermat.",
+        "Pengobatan harus mengatasi akar penyebab bukan sekadar meredakan gejala.",
+        "Penyembuhan memerlukan intervensi medis dan pemulihan alami tubuh.",
+        "Pencegahan penyakit lebih efektif daripada pengobatan setelah serangan.",
+        "Pasien menjalani resep yang diberikan untuk sembuh dari sakit.",
+        "Pembedahan kadang diperlukan jika obat saja tidak dapat menyembuhkan luka.",
+        "Antibiotik melawan infeksi bakteri namun tidak dapat mengobati penyakit virus.",
+        "Rumah sakit menyediakan perawatan khusus untuk kondisi yang parah dan kritis.",
+        "Penelitian pengobatan baru memajukan batas kemajuan ilmu kedokteran modern.",
+        "Diagnosis memastikan sifat penyakit dan menuntun jalannya terapi.",
+    ],
+
+    # --- Domain: alam (sungai, gunung, hutan) ---
+    "alam": [
+        "Sungai mengukir jalan menembus gunung selama ribuan tahun.",
+        "Hutan kuno menaungi ribuan spesies di bawah kanopinya yang lebat.",
+        "Gunung berdiri sebagai saksi bisu atas berlalunya zaman.",
+        "Hutan menyaring udara dan mengatur aliran sungai.",
+        "Lembah terletak di antara dua pegunungan yang dialiri sungai berkelok.",
+        "Alam menyeimbangkan pertumbuhan dan kematian dalam siklus pembaruan yang tiada henti.",
+        "Sungai memelihara hutan dan hutan melindungi sungai.",
+        "Satwa liar bergantung pada hutan untuk tempat berlindung dan sungai untuk air.",
+        "Ekosistem gunung mendukung kehidupan dari kaki hingga puncak bersalju.",
+        "Musim mengubah hutan dan mengubah irama aliran sungai.",
+    ],
+
+    # --- Domain: peperangan (strategi, pertempuran, pertahanan) ---
+    "peperangan": [
+        "Strategi menentukan hasil pertempuran sebelum tembakan pertama dilepaskan.",
+        "Pertahanan memerlukan posisi yang diperkuat dan prajurit yang terlatih disiplin.",
+        "Jenderal merancang strategi untuk mengakali musuh dalam pertempuran.",
+        "Pengepungan menguji ketahanan baik penyerang maupun pertahanan.",
+        "Kemenangan dalam pertempuran bergantung pada persiapan dan strategi yang unggul.",
+        "Pasukan memperkuat pertahanan di sepanjang perbatasan yang rentan.",
+        "Intelijen dan tipu daya adalah unsur penting dalam strategi peperangan.",
+        "Pertempuran dapat berbalik jika salah satu pihak memperoleh keunggulan strategis.",
+        "Pertahanan memegang garis sementara cadangan mempersiapkan serangan balik.",
+        "Sepanjang sejarah peperangan telah mendorong inovasi strategi dan teknologi.",
+    ],
+
+    # --- Domain: perdagangan (niaga, pasar, pertukaran) ---
+    "perdagangan": [
+        "Niaga menghubungkan daerah yang jauh melalui pertukaran barang dan jasa.",
+        "Pasar menetapkan harga melalui keseimbangan penawaran dan permintaan.",
+        "Pedagang memfasilitasi perdagangan dengan menjembatani produsen dan konsumen.",
+        "Pertukaran nilai adalah transaksi mendasar di setiap pasar.",
+        "Perdagangan berkembang jika jalur niaga aman dan regulasi adil.",
+        "Pasar menghargai efisiensi dan menghukum pemborosan dalam niaga yang kompetitif.",
+        "Perdagangan internasional memperluas pasar melampaui batas domestik.",
+        "Pertukaran yang adil memerlukan transparansi dan kepercayaan antara mitra niaga.",
+        "Perdagangan mendorong kemakmuran dengan memungkinkan spesialisasi dan inovasi.",
+        "Pasar menyesuaikan harga untuk mencerminkan perubahan penawaran dan permintaan.",
+    ],
+
+    # --- Domain: hukum (keadilan, regulasi, kontrak) ---
+    "hukum": [
+        "Keadilan adalah landasan tempat supremasi hukum berdiri.",
+        "Kontrak mengikat para pihak pada kewajiban dan hak yang disepakati.",
+        "Regulasi memastikan bahwa perdagangan berjalan dalam batas yang adil dan sah.",
+        "Pengadilan menafsirkan hukum dan memberikan keadilan kepada para pihak.",
+        "Kontrak hukum harus bersifat sukarela dan didukung oleh pertimbangan.",
+        "Regulasi melindungi masyarakat dari kerugian dan praktik bisnis yang tidak adil.",
+        "Hakim menerapkan hukum secara tidak memihak untuk mencapai keadilan.",
+        "Pelanggaran kontrak memberikan hak kepada pihak yang dirugikan untuk ganti rugi.",
+        "Hukum berkembang melalui undang-undang dan interpretasi yudisial seiring waktu.",
+        "Keadilan menghendaki hukum memperlakukan semua orang dengan martabat yang setara.",
+    ],
+
+    # --- Domain: sains (eksperimen, teori, penemuan) ---
+    "sains": [
+        "Eksperimen menguji hipotesis dalam kondisi terkendali dan dapat diulang.",
+        "Teori menjelaskan pengamatan dan memprediksi hasil eksperimen yang akan datang.",
+        "Penemuan memajukan pengetahuan ilmiah dengan mengungkap fenomena yang belum diketahui.",
+        "Metode ilmiah mengharuskan setiap teori dapat difalsifikasi oleh eksperimen.",
+        "Eksperimen yang dirancang dengan baik meminimalkan bias dan mengisolasi variabel.",
+        "Teori yang kokoh bertahan terhadap pengujian eksperimental dan tinjauan sejawat.",
+        "Penemuan sering muncul di batas tempat teori yang ada runtuh.",
+        "Sains maju melalui siklus hipotesis eksperimen dan penyempurnaan.",
+        "Replikasi eksperimen oleh peneliti independen mengkonfirmasi suatu penemuan.",
+        "Pergeseran paradigma terjadi jika teori baru menggantikan kerangka yang mapan.",
+    ],
+
+    # --- Domain: seni (keindahan, penciptaan, ekspresi) ---
+    "seni": [
+        "Keindahan dalam seni lahir dari harmoni bentuk warna dan komposisi.",
+        "Penciptaan mengubah bahan mentah dan emosi menjadi karya seni.",
+        "Ekspresi melalui seni menyampaikan apa yang tidak bisa dikatakan kata-kata saja.",
+        "Seniman mengejar keindahan melalui penciptaan yang disengaja dan intuitif.",
+        "Seni menantang persepsi dan mengajak pengamat ke dalam ekspresi baru.",
+        "Penciptaan dalam seni menuntut keterampilan teknis dan kedalaman emosional.",
+        "Ekspresi adalah jiwa seni dan keindahan adalah wujud kasarnya.",
+        "Sepanjang sejarah seni telah menjadi wadah ekspresi budaya.",
+        "Penciptaan seni menuntut kesabaran visi dan kepekaan terhadap keindahan.",
+        "Seni bertahan karena ekspresi dan keindahan bergema lintas generasi.",
+    ],
+}
+
+# Domain alignment: maps English domain name → Indonesian domain name
+_DOMAIN_ALIGNMENT: dict[str, str] = {
+    "royalty": "kerajaan",
+    "philosophy": "filsafat",
+    "medicine": "kedokteran",
+    "nature": "alam",
+    "warfare": "peperangan",
+    "commerce": "perdagangan",
+    "law": "hukum",
+    "science": "sains",
+    "art": "seni",
+}
+
+
+def get_corpus(lang: str = "en") -> dict[str, list[str]]:
+    """Return the corpus for the given language.
+
+    Args:
+        lang: Language code — "en" for English, "id" for Indonesian.
+
+    Returns:
+        Dictionary mapping domain names to lists of sentences.
+    """
+    if lang == "id":
+        return dict(CORPUS_ID)
+    return dict(CORPUS_EN)
+
+
+def get_aligned_sentences() -> list[tuple[str, str, str]]:
+    """Return aligned English-Indonesian sentence pairs.
+
+    Each tuple is (domain, english_sentence, indonesian_sentence) where
+    domain is the English domain name. The sentences are aligned by index
+    within each domain, creating perfect translation pairs for testing
+    convergence detection across languages.
+
+    Returns:
+        List of (domain, english, indonesian) tuples.
+    """
+    result: list[tuple[str, str, str]] = []
+    for en_domain, id_domain in _DOMAIN_ALIGNMENT.items():
+        en_sentences = CORPUS_EN.get(en_domain, [])
+        id_sentences = CORPUS_ID.get(id_domain, [])
+        # Align by index — both should have the same number of sentences
+        for i in range(min(len(en_sentences), len(id_sentences))):
+            result.append((en_domain, en_sentences[i], id_sentences[i]))
+    return result

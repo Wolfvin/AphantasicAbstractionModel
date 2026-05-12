@@ -12,12 +12,14 @@ Tests for all Layer 3 components:
 import sys
 import os
 
-# Ensure project root is on sys.path so layer2/layer3 imports work
+# Ensure project root is on sys.path so layer2/layer3/pipeline imports work
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+# P1-1: Import DeductivePolicyEngine / DeductiveCoderLayer (Layer 3 extensions)
+# P1-2: Use same-package relative where possible, absolute for cross-package
 from layer3.reasoning import ReasoningEngine, DeductiveChain, DeductiveStep
-from layer3.policy import PolicyEngine, PolicyRule, PolicyViolation
-from layer3.coder import CoderLayer, CodeElement, CodeAnalysisResult
+from layer3.policy import DeductivePolicyEngine, PolicyEngine, PolicyRule, PolicyViolation
+from layer3.coder import DeductiveCoderLayer, CoderLayer, CodeElement, CodeAnalysisResult
 from layer2.pattern import PatternResult, ReasoningStep
 from layer2.bridge import RsvsBridge, _FallbackGraph
 from pipeline import AamResponse
@@ -242,7 +244,8 @@ def test_reasoning_engine_build_chain_empty_pattern():
 def test_policy_engine_check_with_rsvs_policy_no_meta():
     """Test check_with_rsvs_policy() when no PolicyMeta is available."""
     bridge = _make_bridge()
-    engine = PolicyEngine(bridge=bridge)
+    # P1-1: Use DeductivePolicyEngine for check_with_rsvs_policy()
+    engine = DeductivePolicyEngine(bridge=bridge)
 
     # Add a simple rule
     engine.add_rule(PolicyRule(
@@ -293,7 +296,7 @@ def test_policy_engine_check_with_rsvs_policy_with_meta():
         def ingest(self, text):
             return {"success": True}
 
-    engine = PolicyEngine(bridge=MockBridge())
+    engine = DeductivePolicyEngine(bridge=MockBridge())
 
     engine.add_rule(PolicyRule(
         rule_id="TEST_002",
@@ -328,7 +331,7 @@ def test_policy_engine_check_with_rsvs_policy_stability():
         def query(self, text, context=""): return None
         def ingest(self, text): return {"success": True}
 
-    engine = PolicyEngine(bridge=LowFlipBridge())
+    engine = DeductivePolicyEngine(bridge=LowFlipBridge())
     result = engine.check_with_rsvs_policy("stable_entity")
 
     assert result["instability_flag"] is False  # 2 flips ≤ 3
@@ -343,7 +346,8 @@ def test_policy_engine_check_with_rsvs_policy_stability():
 def test_coder_layer_analyze_with_rsvs_basic():
     """Test analyze_with_rsvs() with simple Python code."""
     bridge = _make_bridge()
-    coder = CoderLayer(bridge=bridge)
+    # P1-1: Use DeductiveCoderLayer for analyze_with_rsvs()
+    coder = DeductiveCoderLayer(bridge=bridge)
 
     code = '''
 def hello(name):
@@ -372,7 +376,7 @@ class Greeter:
 def test_coder_layer_analyze_with_rsvs_empty_code():
     """Test analyze_with_rsvs() with empty code."""
     bridge = _make_bridge()
-    coder = CoderLayer(bridge=bridge)
+    coder = DeductiveCoderLayer(bridge=bridge)
 
     result = coder.analyze_with_rsvs("", bridge=bridge)
 
@@ -384,7 +388,7 @@ def test_coder_layer_analyze_with_rsvs_empty_code():
 def test_coder_layer_analyze_with_rsvs_non_python():
     """Test analyze_with_rsvs() with non-Python code (regex fallback)."""
     bridge = _make_bridge()
-    coder = CoderLayer(bridge=bridge)
+    coder = DeductiveCoderLayer(bridge=bridge)
 
     rust_code = '''
 pub fn calculate(x: i32, y: i32) -> i32 {

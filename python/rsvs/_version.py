@@ -5,6 +5,6 @@ This avoids the version drift problem where different files declare
 different version numbers.
 """
 
-__version__ = "8.3.0"
-__schema_version__ = "v8.3"
-__api_version__ = "v8.3"
+__version__ = "8.5.0"
+__schema_version__ = "v8.5"
+__api_version__ = "v8.5"

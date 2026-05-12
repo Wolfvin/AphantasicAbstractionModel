@@ -204,6 +204,40 @@ class CodeAnalysisResult:
 
 
 # ---------------------------------------------------------------------------
+# Call graph data structures
+# ---------------------------------------------------------------------------
+
+@dataclass
+class CallGraph:
+    """A directed call graph representing caller → callee relationships.
+
+    The CoderLayer can parse code structure (functions, classes) but cannot
+    reason about who-calls-whom. This data structure captures behavioral
+    relationships: for each function/method, which other functions it calls.
+
+    Attributes:
+        edges: List of (caller, callee) pairs representing call relationships.
+        nodes: Dict mapping function name → set of functions it calls.
+        entry_points: Functions not called by anyone (potential entry points).
+        leaf_functions: Functions that don't call anything (leaves of the graph).
+    """
+
+    edges: list[tuple[str, str]] = field(default_factory=list)
+    nodes: dict[str, set[str]] = field(default_factory=dict)
+    entry_points: list[str] = field(default_factory=list)
+    leaf_functions: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        """Serialize to a plain dict."""
+        return {
+            "edges": list(self.edges),
+            "nodes": {k: sorted(v) for k, v in self.nodes.items()},
+            "entry_points": list(self.entry_points),
+            "leaf_functions": list(self.leaf_functions),
+        }
+
+
+# ---------------------------------------------------------------------------
 # Code parsing functions
 # ---------------------------------------------------------------------------
 
@@ -607,6 +641,257 @@ def detect_language(code: str, filename: str = "") -> str:
 
     # Default
     return "unknown"
+
+
+# ---------------------------------------------------------------------------
+# Call graph extraction
+# ---------------------------------------------------------------------------
+
+def extract_call_graph(
+    code: str,
+    source: str = "code_snippet",
+    language: str = "python",
+) -> CallGraph:
+    """Extract a call graph from source code.
+
+    For Python: walks the AST to find Call nodes within each function/method.
+    For other languages (Rust, Go, JavaScript): uses regex-based heuristics.
+
+    The call graph captures behavioral relationships — who calls whom —
+    complementing the structural layout that parse_python_code provides.
+
+    Args:
+        code: Source code string.
+        source: Source identifier.
+        language: Programming language (default "python").
+
+    Returns:
+        A CallGraph with caller → callee relationships.
+    """
+    if language == "python":
+        return _extract_call_graph_python(code, source)
+    else:
+        return _extract_call_graph_regex(code, source, language)
+
+
+def _extract_call_graph_python(code: str, source: str) -> CallGraph:
+    """Extract call graph from Python code using AST analysis.
+
+    Walks each function/method body, finds all ast.Call nodes,
+    and records the callee name. Handles direct calls (foo()),
+    method calls (obj.method()), and attribute calls (module.func()).
+    """
+    edges: list[tuple[str, str]] = []
+    nodes: dict[str, set[str]] = {}
+
+    try:
+        tree = ast.parse(code)
+    except SyntaxError as exc:
+        logger.warning("Failed to parse Python code for call graph: %s", exc)
+        return CallGraph()
+
+    # Collect all function/method definitions and their call targets
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+
+        # Determine the caller name (include parent class if method)
+        caller = node.name
+        # Walk parents to find enclosing class
+        for parent in ast.walk(tree):
+            if isinstance(parent, ast.ClassDef):
+                for child in parent.body:
+                    if child is node:
+                        caller = f"{parent.name}.{node.name}"
+                        break
+
+        callees: set[str] = set()
+
+        # Walk the function body for Call nodes
+        for child in ast.walk(node):
+            if isinstance(child, ast.Call):
+                callee_name = _resolve_call_name(child)
+                if callee_name and callee_name != caller:
+                    callees.add(callee_name)
+
+        nodes[caller] = callees
+        for callee in callees:
+            edges.append((caller, callee))
+
+    # Compute entry points and leaf functions
+    all_callees = {callee for _, callee in edges}
+    all_callers = set(nodes.keys())
+
+    entry_points = sorted(all_callers - all_callees)
+    leaf_functions = sorted({c for c, calls in nodes.items() if not calls})
+
+    return CallGraph(
+        edges=edges,
+        nodes=nodes,
+        entry_points=entry_points,
+        leaf_functions=leaf_functions,
+    )
+
+
+def _resolve_call_name(call_node: ast.Call) -> str | None:
+    """Resolve the name of a function being called from an ast.Call node.
+
+    Handles:
+        - Direct calls: foo()  → "foo"
+        - Attribute calls: obj.method()  → "obj.method"
+        - Module calls: module.func()  → "module.func"
+    """
+    func = call_node.func
+    if isinstance(func, ast.Name):
+        return func.id
+    elif isinstance(func, ast.Attribute):
+        # Build dotted name: obj.method, self.process, etc.
+        parts = []
+        current = func
+        while isinstance(current, ast.Attribute):
+            parts.append(current.attr)
+            current = current.value
+        if isinstance(current, ast.Name):
+            parts.append(current.id)
+        parts.reverse()
+        return ".".join(parts)
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Regex-based call graph extraction for non-Python languages
+# ---------------------------------------------------------------------------
+
+# Patterns to find function definitions and their body calls
+_CALL_PATTERNS: dict[str, tuple[re.Pattern, re.Pattern]] = {
+    "javascript": (
+        # Function definition
+        re.compile(
+            r"(?:function\s+(\w+)\s*\([^)]*\)|(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s+)?(?:\([^)]*\))\s*=>)",
+            re.MULTILINE,
+        ),
+        # Call within a function body (simplified: name followed by parens)
+        re.compile(r"(?<!\w)(\w+)\s*\(", re.MULTILINE),
+    ),
+    "rust": (
+        # Function definition
+        re.compile(
+            r"(?:pub\s+)?(?:async\s+)?fn\s+(\w+)\s*(?:<[^>]*>)?\s*\([^)]*\)",
+            re.MULTILINE,
+        ),
+        # Call within a function body
+        re.compile(r"(?<!\w)(\w+)\s*\(", re.MULTILINE),
+    ),
+    "go": (
+        # Function definition
+        re.compile(
+            r"func\s+(?:\([^)]*\)\s*)?(\w+)\s*\([^)]*\)",
+            re.MULTILINE,
+        ),
+        # Call within a function body
+        re.compile(r"(?<!\w)(\w+)\s*\(", re.MULTILINE),
+    ),
+}
+
+# Language-specific keywords to exclude from call targets
+_LANG_KEYWORDS: dict[str, set[str]] = {
+    "javascript": {
+        "if", "else", "for", "while", "do", "switch", "case", "break",
+        "continue", "return", "try", "catch", "finally", "throw", "new",
+        "typeof", "instanceof", "in", "of", "function", "const", "let",
+        "var", "class", "extends", "import", "export", "default", "from",
+        "async", "await", "yield", "true", "false", "null", "undefined",
+        "this", "super", "delete", "void",
+    },
+    "rust": {
+        "if", "else", "for", "while", "loop", "match", "break",
+        "continue", "return", "let", "mut", "fn", "struct", "enum",
+        "impl", "trait", "pub", "use", "mod", "crate", "self", "super",
+        "where", "as", "in", "ref", "move", "async", "await", "unsafe",
+        "extern", "type", "const", "static", "true", "false", "Some",
+        "None", "Ok", "Err", "Vec", "Box", "String", "println", "format",
+        "eprintln", "panic", "assert", "unwrap", "expect", "clone",
+        "new", "default", "from", "into", "to_string", "as_ref", "as_mut",
+    },
+    "go": {
+        "if", "else", "for", "range", "switch", "case", "break",
+        "continue", "return", "func", "struct", "interface", "map",
+        "chan", "go", "select", "defer", "fallthrough", "default",
+        "package", "import", "type", "var", "const", "true", "false",
+        "nil", "make", "new", "len", "cap", "append", "copy", "delete",
+        "close", "panic", "recover", "print", "println", "error",
+        "string", "int", "float64", "bool", "byte", "rune",
+    },
+}
+
+
+def _extract_call_graph_regex(
+    code: str,
+    source: str,
+    language: str,
+) -> CallGraph:
+    """Extract call graph from non-Python code using regex heuristics.
+
+    This is less precise than AST-based extraction but works for Rust,
+    Go, and JavaScript where we don't have a full parser.
+
+    Strategy:
+    1. Find all function definitions using language-specific patterns.
+    2. For each function, approximate its body region (between this def
+       and the next, or end of file).
+    3. Find all call-like patterns in the body region.
+    4. Filter out language keywords and the function's own name.
+    """
+    if language not in _CALL_PATTERNS:
+        return CallGraph()
+
+    def_pattern, call_pattern = _CALL_PATTERNS[language]
+    keywords = _LANG_KEYWORDS.get(language, set())
+
+    edges: list[tuple[str, str]] = []
+    nodes: dict[str, set[str]] = {}
+
+    # Find all function definitions with their positions
+    func_defs: list[tuple[str, int, int]] = []  # (name, start, end)
+    for match in def_pattern.finditer(code):
+        name = match.group(1) or (match.group(2) if match.lastindex and match.lastindex >= 2 else None)
+        if name:
+            start = match.start()
+            func_defs.append((name, start, match.end()))
+
+    # Approximate function body regions and find calls
+    for i, (func_name, func_start, func_header_end) in enumerate(func_defs):
+        # Body extends to the next function definition or end of file
+        if i + 1 < len(func_defs):
+            body_end = func_defs[i + 1][1]
+        else:
+            body_end = len(code)
+
+        body = code[func_header_end:body_end]
+        callees: set[str] = set()
+
+        for call_match in call_pattern.finditer(body):
+            callee = call_match.group(1)
+            if callee and callee not in keywords and callee != func_name:
+                callees.add(callee)
+
+        nodes[func_name] = callees
+        for callee in callees:
+            edges.append((func_name, callee))
+
+    # Compute entry points and leaf functions
+    all_callees = {callee for _, callee in edges}
+    all_callers = set(nodes.keys())
+
+    entry_points = sorted(all_callers - all_callees)
+    leaf_functions = sorted({c for c, calls in nodes.items() if not calls})
+
+    return CallGraph(
+        edges=edges,
+        nodes=nodes,
+        entry_points=entry_points,
+        leaf_functions=leaf_functions,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1327,6 +1612,74 @@ class CoderLayer:
             "files": list(self._files.keys()),
             "elements": element_list,
         }
+
+    # ==================================================================
+    # Call graph extraction
+    # ==================================================================
+
+    def extract_call_graph(
+        self,
+        code: str,
+        language: str = "python",
+        source: str = "code_snippet",
+    ) -> CallGraph:
+        """Extract and ingest a call graph from source code.
+
+        Parses code to extract caller → callee relationships, then ingests
+        those relationships into the RSVS graph as "calls" composition edges.
+        This gives the CoderLayer behavioral understanding beyond structural
+        layout — not just "what functions exist" but "who calls whom".
+
+        Analogi: Jin Soun tidak hanya menghafal teknik dari buku — dia juga
+        memahami URUTAN teknik mana yang mengarah ke teknik lain.
+
+        Args:
+            code: Source code string.
+            language: Programming language (default "python").
+                Use "auto" for automatic detection.
+            source: Source identifier.
+
+        Returns:
+            A CallGraph object with caller → callee relationships.
+        """
+        # Detect language if auto
+        if language == "auto":
+            language = detect_language(code, filename=source)
+
+        # Extract the call graph
+        graph = extract_call_graph(code, source=source, language=language)
+
+        # Ingest call relationships into RSVS as "calls" composition type
+        if self.rsvs_available and graph.edges:
+            for caller, callee in graph.edges:
+                call_text = f"{caller} calls {callee}"
+                try:
+                    self._bridge.ingest(call_text)
+                except Exception as exc:
+                    logger.debug(
+                        "RSVS ingest failed for call edge '%s → %s': %s",
+                        caller, callee, exc,
+                    )
+
+            # Also ingest a summary of the call graph structure
+            summary_parts = []
+            if graph.entry_points:
+                summary_parts.append(f"entry_points: {', '.join(graph.entry_points[:10])}")
+            if graph.leaf_functions:
+                summary_parts.append(f"leaf_functions: {', '.join(graph.leaf_functions[:10])}")
+            if summary_parts:
+                summary_text = f"call_graph: {'; '.join(summary_parts)}. source: {source}"
+                try:
+                    self._bridge.ingest(summary_text)
+                except Exception as exc:
+                    logger.debug("RSVS ingest failed for call graph summary: %s", exc)
+
+        logger.info(
+            "CoderLayer.extract_call_graph(): %d edges, %d nodes from %s (%s)",
+            len(graph.edges), len(graph.nodes), source, language,
+        )
+
+        return graph
 
     # ==================================================================
     # Internal helpers

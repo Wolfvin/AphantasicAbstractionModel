@@ -353,6 +353,142 @@ class SituationLayer:
         return []
 
     # ------------------------------------------------------------------
+    # Persistence (P2-8: Cognitive persistence)
+    # ------------------------------------------------------------------
+
+    _PERSIST_SCHEMA_VERSION = "1.0"
+
+    def save_to_dict(self) -> dict:
+        """Serialize cognitive state to a plain dict (in-memory).
+
+        Saves `_active_senses`, `_message_history` (i.e. `_messages`),
+        `_context_cache` (derived from recent relevant context), plus
+        session metadata.  The RSVS bridge / graph itself is NOT
+        serialized — only the Layer-2 cognitive state.
+
+        Returns:
+            A dict containing the full serializable state.
+        """
+        # Build a lightweight context cache from the last few queries
+        context_cache: dict[str, list[dict]] = {}
+        for msg in self._messages[-_DEFAULT_ACTIVE_WINDOW:]:
+            label = msg.get("content", "")[:60]
+            if label:
+                try:
+                    ctx = self._fallback_relevant_context(msg["content"], top_k=3)
+                    if ctx:
+                        context_cache[label] = ctx
+                except Exception:
+                    pass
+
+        return {
+            "schema_version": self._PERSIST_SCHEMA_VERSION,
+            "active_senses": self._active_senses,
+            "messages": self._messages,
+            "context_cache": context_cache,
+            "session_start": self._session_start,
+            "last_event_seq": self._last_event_seq,
+            "sense_last_seen": self._sense_last_seen,
+            "sense_events": self._sense_events[-200:],  # Keep bounded
+        }
+
+    def load_from_dict(self, data: dict) -> None:
+        """Restore cognitive state from a plain dict (in-memory).
+
+        Restores `_active_senses`, `_messages`, `_context_cache`, and
+        associated metadata.  Existing state is replaced.
+
+        Args:
+            data: A dict previously returned by `save_to_dict()`.
+        """
+        if not isinstance(data, dict):
+            logger.warning("load_from_dict: expected dict, got %s", type(data).__name__)
+            return
+
+        # Schema compatibility check
+        saved_version = data.get("schema_version", "0.0")
+        if saved_version != self._PERSIST_SCHEMA_VERSION:
+            logger.warning(
+                "load_from_dict: schema version mismatch (saved=%s, current=%s). "
+                "Proceeding with best-effort restore.",
+                saved_version, self._PERSIST_SCHEMA_VERSION,
+            )
+
+        self._active_senses = data.get("active_senses", [])
+        self._messages = data.get("messages", [])
+        self._session_start = data.get("session_start", time.time())
+        self._last_event_seq = data.get("last_event_seq", 0)
+        self._sense_last_seen = data.get("sense_last_seen", {})
+        self._sense_events = data.get("sense_events", [])
+
+        # Restore context cache (for downstream use)
+        self._context_cache = data.get("context_cache", {})
+
+        logger.info(
+            "SituationLayer state restored: %d messages, %d active senses, %d cached contexts",
+            len(self._messages), len(self._active_senses),
+            len(getattr(self, "_context_cache", {})),
+        )
+
+    def save(self, path: str) -> dict:
+        """Save cognitive state to a JSON file.
+
+        Args:
+            path: Filesystem path to write the JSON file.
+
+        Returns:
+            A summary dict with stats about what was saved.
+        """
+        data = self.save_to_dict()
+        summary: dict = {
+            "path": path,
+            "messages": len(self._messages),
+            "active_senses": len(self._active_senses),
+            "sense_last_seen_entries": len(self._sense_last_seen),
+            "sense_events": len(self._sense_events),
+            "schema_version": self._PERSIST_SCHEMA_VERSION,
+            "success": False,
+        }
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False, default=str)
+            summary["success"] = True
+            logger.info("SituationLayer state saved to %s", path)
+        except (OSError, TypeError) as exc:
+            summary["error"] = str(exc)
+            logger.error("SituationLayer save failed: %s", exc)
+        return summary
+
+    def load(self, path: str) -> dict:
+        """Load cognitive state from a JSON file.
+
+        Args:
+            path: Filesystem path to read the JSON file from.
+
+        Returns:
+            A summary dict with stats about what was loaded.
+        """
+        summary: dict = {
+            "path": path,
+            "messages": 0,
+            "active_senses": 0,
+            "success": False,
+        }
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            self.load_from_dict(data)
+            summary["messages"] = len(self._messages)
+            summary["active_senses"] = len(self._active_senses)
+            summary["schema_version"] = data.get("schema_version", "unknown")
+            summary["success"] = True
+            logger.info("SituationLayer state loaded from %s", path)
+        except (OSError, json.JSONDecodeError, TypeError) as exc:
+            summary["error"] = str(exc)
+            logger.error("SituationLayer load failed: %s", exc)
+        return summary
+
+    # ------------------------------------------------------------------
     # Internal: Active sense management
     # ------------------------------------------------------------------
 
