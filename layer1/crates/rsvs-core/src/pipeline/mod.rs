@@ -25,7 +25,7 @@ use crate::events::{API_VERSION, SCHEMA_VERSION};
 use crate::graph::RsvsGraph;
 use crate::seed;
 use crate::sense::SenseManager;
-use crate::types::{AtomSet, ContextQueryResult, NodeId, SenseId, Tier, TraversalConfig};
+use crate::types::{AtomSet, ContextQueryResult, NodeId, NodeStatus, SenseId, Tier, TraversalConfig};
 
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -582,6 +582,53 @@ impl Rsvs {
             &context_ids,
             &adjusted_config,
             &self.token_to_id,
+            self.config.sense.tau_core as f64,
         ))
+    }
+
+    // -------------------------------------------------------------------
+    // v8.2: Pruning for unbounded HashMap growth
+    // -------------------------------------------------------------------
+
+    /// Prune deprecated entries from `atom_sets`, `token_to_id`, and `senses`.
+    ///
+    /// Over time, nodes may become Deprecated (confidence fell below threshold,
+    /// status transitioned to Deprecated by the autonomy engine). These nodes
+    /// still occupy space in the main HashMaps. This method removes entries
+    /// where the node has been deprecated, freeing memory.
+    ///
+    /// Returns the number of entries removed across all HashMaps.
+    ///
+    /// Should be called periodically (e.g., after every N ingests, or when
+    /// total node count exceeds a threshold).
+    pub fn prune_deprecated(&mut self) -> usize {
+        // Collect deprecated node IDs from the autonomy engine
+        let deprecated_ids: HashSet<NodeId> = self.autonomy.records
+            .iter()
+            .filter(|(_, rec)| matches!(rec.status, NodeStatus::Deprecated))
+            .map(|(&id, _)| id)
+            .collect();
+
+        let mut removed = 0;
+
+        for &id in &deprecated_ids {
+            // Remove from senses
+            if self.senses.remove(&id).is_some() {
+                removed += 1;
+            }
+
+            // Remove from atom_sets (need label, look it up from graph)
+            if let Some(node) = self.graph.get_node(id) {
+                let label = node.label.clone();
+                if self.atom_sets.remove(&label).is_some() {
+                    removed += 1;
+                }
+                if self.token_to_id.remove(&label).is_some() {
+                    removed += 1;
+                }
+            }
+        }
+
+        removed
     }
 }

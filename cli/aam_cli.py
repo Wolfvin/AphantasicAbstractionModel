@@ -29,6 +29,9 @@ DEFAULT_ATOM_DIR = Path(
 def _http_json(method: str, url: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
     data = None
     headers = {"Content-Type": "application/json"}
+    api_key = os.environ.get("RSVS_API_KEY")
+    if api_key:
+        headers["X-API-Key"] = api_key
     if payload is not None:
         data = json.dumps(payload).encode("utf-8")
 

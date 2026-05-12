@@ -5,8 +5,6 @@
 //! thinking mode, paradigm router, spreading activation, neurosym verification,
 //! DEPS recovery, and entity candidates.
 
-#![allow(missing_docs)]
-
 use crate::error::RsvsError;
 use crate::events::{API_VERSION, SCHEMA_VERSION};
 use pyo3::exceptions::PyValueError;
@@ -1369,8 +1367,7 @@ impl PyRsvs {
                 "rules_total": rule_results.len(),
                 "rules_failed": failed,
                 "feedback": rule_results.iter()
-                    .filter(|r| r.feedback.is_some())
-                    .map(|r| r.feedback.clone().unwrap())
+                    .filter_map(|r| r.feedback.clone())
                     .collect::<Vec<_>>()
             }));
         }
@@ -1437,6 +1434,69 @@ impl PyRsvs {
             "Rsvs(nodes={}, contexts={}, warmed_up={})",
             s.total_atoms, s.total_contexts, s.warmed_up
         )
+    }
+
+    // -------------------------------------------------------------------
+    // v8.2: Stub bindings for missing features
+    // -------------------------------------------------------------------
+
+    /// Run self-evaluation reflection on all senses.
+    ///
+    /// Returns a JSON string with the reflection result summary,
+    /// or None if no reflection actions were produced.
+    fn reflect(&mut self) -> Option<String> {
+        let actions = self.inner.reflection.reflect(
+            &self.inner.senses,
+            &self.inner.config.sense,
+        );
+        if actions.is_empty() {
+            return None;
+        }
+        let actions_total = actions.len();
+        let actions_applied = self.inner.reflection.apply_actions(
+            &mut self.inner.senses,
+            &actions,
+            &self.inner.config.sense,
+        );
+        Some(serde_json::json!({
+            "actions_total": actions_total,
+            "actions_applied": actions_applied,
+        }).to_string())
+    }
+
+    /// Analyze dependencies for failure recovery using the DEPS planner.
+    ///
+    /// Returns a JSON string with the DEPS analysis result,
+    /// or None if no analysis could be produced.
+    fn deps_analyze(&self) -> Option<String> {
+        // TODO: implement full DEPS analysis binding
+        None
+    }
+
+    /// Detect convergence in the graph (structural equivalence between nodes).
+    ///
+    /// Returns a JSON string with convergence detection results,
+    /// or None if no convergent pairs were found.
+    fn convergence_detect(&mut self) -> Option<String> {
+        let results = self.inner.convergence.detect(
+            &mut self.inner.graph,
+            &self.inner.senses,
+            &self.inner.stats_db,
+        );
+        if results.is_empty() {
+            return None;
+        }
+        let summary: Vec<serde_json::Value> = results.iter().map(|r| {
+            let label_a = self.inner.graph.get_node(r.node_a).map(|n| n.label.clone()).unwrap_or_default();
+            let label_b = self.inner.graph.get_node(r.node_b).map(|n| n.label.clone()).unwrap_or_default();
+            serde_json::json!({
+                "a": label_a,
+                "b": label_b,
+                "overlap": r.overlap_score,
+                "linked": r.linked,
+            })
+        }).collect();
+        Some(serde_json::json!({ "pairs": summary }).to_string())
     }
 }
 

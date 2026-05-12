@@ -28,8 +28,8 @@ The server runs on `0.0.0.0:8000` by default.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `RSVS_HOST` | `0.0.0.0` | Server bind address |
-| `RSVS_PORT` | `8000` | Server bind port |
+| `RSVS_HOST` | `0.0.0.0` | Server bind address (alias: `RSVS_BRIDGE_HOST`) |
+| `RSVS_PORT` | `8000` | Server bind port (alias: `RSVS_BRIDGE_PORT`) |
 | `RSVS_API_KEY` | — | API key for authentication |
 | `RSVS_SESSION_SECRET` | — | Session secret for production |
 | `RSVS_ALLOWED_ORIGINS` | — | CORS allowed origins (comma-separated) |

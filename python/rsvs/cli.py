@@ -29,7 +29,7 @@ from pathlib import Path
 # -----------------------------------------------------------------------
 
 DEFAULT_DB    = "rsvs.json"
-VERSION       = "6.0.0"
+from ._version import __version__; VERSION = __version__
 BANNER        = f"RSVS v{VERSION} — Recursive Symbolic Vocabulary System"
 
 # -----------------------------------------------------------------------

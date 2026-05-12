@@ -4,11 +4,11 @@ build-backend = "maturin"
 
 [project]
 name = "rsvs"
-version = "6.0.0"
+version = "8.3.0"
 description = "Recursive Symbolic Vocabulary System — compositional symbolic engine with structural meaning, sense-level compositions, and autonomous tiered memory lifecycle"
 readme = "README.md"
-license = {text = "MIT"}
-requires-python = ">=3.12"
+license = {text = "MIT OR Apache-2.0"}
+requires-python = ">=3.11"
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -29,7 +29,11 @@ Documentation = "https://github.com/Wolfvin/SymbolicPuzzle3D/blob/main/ARCHITECT
 Changelog = "https://github.com/Wolfvin/SymbolicPuzzle3D/releases"
 Issues = "https://github.com/Wolfvin/SymbolicPuzzle3D/issues"
 
-dependencies = "fastapi>=0.110, uvicorn[standard]>=0.29, slowapi>=0.1.9"
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "slowapi>=0.1.9",
+]
 
 [project.optional-dependencies]
 dev = [

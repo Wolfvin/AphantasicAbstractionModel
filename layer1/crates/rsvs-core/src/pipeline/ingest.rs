@@ -15,6 +15,7 @@ use crate::types::{
     CompressionState, Edge, EdgeSource, Node, NodeId, NodeStatus, PolicyMeta, SemanticMeta, Tier,
 };
 use rayon::prelude::*;
+use std::collections::HashSet;
 
 // -----------------------------------------------------------------------
 // IngestStats — what happened during one ingest call
@@ -56,6 +57,10 @@ impl Rsvs {
     pub fn ingest_text(&mut self, text: &str) -> Result<IngestStats, RsvsError> {
         let mut stats = IngestStats::default();
         let correlation_id = self.next_correlation_id();
+
+        // Track which node IDs were modified during this ingest for incremental
+        // composition_index updates (replaces full-rebuild on every ingest).
+        let mut dirty_node_ids: HashSet<NodeId> = HashSet::new();
 
         // v8.1: REMOVED detect_language — surface_label is now display-only.
         // The system is language-agnostic; adding @lang tags to surface_label
@@ -169,6 +174,7 @@ impl Rsvs {
                 crate::sense::SenseManager::new(self.config.sense.clone()),
             );
             stats.atoms_promoted += 1;
+            dirty_node_ids.insert(id);
             self.emit_event(
                 &correlation_id,
                 "node_created",
@@ -283,6 +289,7 @@ impl Rsvs {
                 let sense_event: Option<serde_json::Value> = match ingest_result {
                     IngestResult::Assigned(idx) => {
                         stats.sense_assigned += 1;
+                        dirty_node_ids.insert(token_id);
                         Some(serde_json::json!({
                             "id": token_id,
                             "sense_idx": idx,
@@ -291,6 +298,7 @@ impl Rsvs {
                     }
                     IngestResult::Created(idx) => {
                         stats.sense_created += 1;
+                        dirty_node_ids.insert(token_id);
                         // Update node layer if this sense has a higher layer
                         if let Some(node) = self.graph.get_node_mut(token_id) {
                             // v8.0 PHASE 3: Enforce Layer 1 semantics.
@@ -604,9 +612,9 @@ impl Rsvs {
         // this ingest batch. The `composition_index.rebuild()` is now only
         // called during consolidation (bulk operations).
         //
-        // For the newly promoted nodes, they have no previous compositions,
-        // so we just add their new entries.
-        for &token_id in self.token_to_id.values() {
+        // Only update the composition_index for dirty nodes (those whose
+        // senses were modified or created during this ingest).
+        for &token_id in &dirty_node_ids {
             if let Some(sm) = self.senses.get(&token_id) {
                 for sense in &sm.senses {
                     if !sense.compositions.is_empty() {

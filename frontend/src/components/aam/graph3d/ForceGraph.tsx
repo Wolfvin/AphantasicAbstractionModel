@@ -121,6 +121,7 @@ export function useForceLayout(): void {
     tickFnRef.current = () => {
       const currentNodes = useGraphStore.getState().nodes;
       const currentEdges = useGraphStore.getState().edges;
+      const currentBatchUpdatePositions = useGraphStore.getState().batchUpdatePositions;
       const currentUpdateNode = useGraphStore.getState().updateNode;
 
       const nodeList = Array.from(currentNodes.values());
@@ -414,6 +415,7 @@ export function useForceLayout(): void {
 
       // Update velocities with damping and apply forces
       let totalKineticEnergy = 0;
+      const positionUpdates = new Map<number, { x: number; y: number; z: number }>();
 
       for (const node of nodeList) {
         const vel = velocities[node.id];
@@ -457,10 +459,23 @@ export function useForceLayout(): void {
           z: pos.z + vel.vz,
         };
 
+        // Collect position for batch update
+        positionUpdates.set(node.id, newPos);
+      }
+
+      // Apply all position updates in a single Zustand batch
+      if (positionUpdates.size > 0) {
+        currentBatchUpdatePositions(positionUpdates);
+      }
+
+      // Update render props (size, color, glow) for non-seed nodes that moved
+      for (const node of nodeList) {
+        if (node.is_seed) continue;
+        const newPos = positionUpdates.get(node.id);
+        if (!newPos) continue;
+
         // Compute render props from nodeRendering utility
         const renderProps = computeNodeRenderProps(node);
-        const edgeRenderProps = computeEdgeRenderProps(node.confidence);
-
         currentUpdateNode(node.id, {
           render: {
             ...node.render,

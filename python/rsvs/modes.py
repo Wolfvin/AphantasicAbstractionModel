@@ -330,7 +330,7 @@ def _run_relate_rust(
             if relate_result is not None:
                 used_token = token
                 break
-        except Exception:
+        except (AttributeError, TypeError, ValueError, KeyError):
             continue
 
     if relate_result is not None:

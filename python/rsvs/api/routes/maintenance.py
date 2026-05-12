@@ -6,12 +6,11 @@ thinking modes, MCTS queries, verification, and autonomous operations.
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Request
-from slowapi import Limiter
 
-from ...protocols import RsvsCoreProtocol
 from ...rsvs_core import get_rsvs_instance
 from ..deps import _verify_api_key, limiter
 from ..schemas import (
@@ -29,8 +28,8 @@ router = APIRouter()
 @limiter.limit("30/minute")
 async def pending_removals_endpoint(request: Request, _auth: None = Depends(_verify_api_key)) -> dict[str, Any]:
     """v6.2: Get list of nodes that require approval before removal."""
-    rsvs: RsvsCoreProtocol = get_rsvs_instance()
-    pending = rsvs.pending_removals()
+    rsvs = get_rsvs_instance()
+    pending = await asyncio.to_thread(rsvs.pending_removals)
     return {"ok": True, "pending_removals": pending}
 
 
@@ -42,8 +41,8 @@ async def entity_candidates_endpoint(
     _auth: None = Depends(_verify_api_key),
 ) -> dict[str, Any]:
     """v6.3: Return entity candidates based on learned centrality + diversity scoring."""
-    rsvs: RsvsCoreProtocol = get_rsvs_instance()
-    candidates = rsvs.entity_candidates(top_k)
+    rsvs = get_rsvs_instance()
+    candidates = await asyncio.to_thread(rsvs.entity_candidates, top_k)
     return {
         "ok": True,
         "candidates": [
@@ -61,8 +60,8 @@ async def set_domain_attention_endpoint(
     _auth: None = Depends(_verify_api_key),
 ) -> dict[str, Any]:
     """v6.3.1: Set per-domain attention weights (α, β, γ)."""
-    rsvs: RsvsCoreProtocol = get_rsvs_instance()
-    rsvs.set_domain_attention(req.domain_id, req.alpha, req.beta, req.gamma)
+    rsvs = get_rsvs_instance()
+    await asyncio.to_thread(rsvs.set_domain_attention, req.domain_id, req.alpha, req.beta, req.gamma)
     return {
         "ok": True,
         "domain_id": req.domain_id,
@@ -81,9 +80,9 @@ async def thinking_mode_endpoint(
     _auth: None = Depends(_verify_api_key),
 ) -> dict[str, Any]:
     """v6.5: Set or query the ThinkingToggle mode."""
-    rsvs: RsvsCoreProtocol = get_rsvs_instance()
+    rsvs = get_rsvs_instance()
     force_mode = {"auto": -1, "non_thinking": 0, "thinking": 1}.get(req.mode, -1)
-    rsvs.set_thinking_mode(force_mode)
+    await asyncio.to_thread(rsvs.set_thinking_mode, force_mode)
     return {
         "ok": True,
         "mode": req.mode,
@@ -99,8 +98,9 @@ async def mcts_query_endpoint(
     _auth: None = Depends(_verify_api_key),
 ) -> dict[str, Any]:
     """v6.5: MCTS-style traversal query for complex disambiguation."""
-    rsvs: RsvsCoreProtocol = get_rsvs_instance()
-    result = rsvs.mcts_query(
+    rsvs = get_rsvs_instance()
+    result = await asyncio.to_thread(
+        rsvs.mcts_query,
         req.concept,
         req.context_atoms,
         req.max_simulations,
@@ -131,8 +131,8 @@ async def consolidate_endpoint(
     _auth: None = Depends(_verify_api_key),
 ) -> dict[str, Any]:
     """v6.5: Trigger manual consolidation of the knowledge graph."""
-    rsvs: RsvsCoreProtocol = get_rsvs_instance()
-    result = rsvs.consolidate(req.force)
+    rsvs = get_rsvs_instance()
+    result = await asyncio.to_thread(rsvs.consolidate, req.force)
     return {
         "ok": True,
         "senses_merged": getattr(result, "senses_merged", 0),
@@ -150,8 +150,8 @@ async def verify_endpoint(
     _auth: None = Depends(_verify_api_key),
 ) -> dict[str, Any]:
     """v6.5: Neuro-symbolic verification of a node's compositions."""
-    rsvs: RsvsCoreProtocol = get_rsvs_instance()
-    result = rsvs.verify(req.label, req.max_iterations)
+    rsvs = get_rsvs_instance()
+    result = await asyncio.to_thread(rsvs.verify, req.label, req.max_iterations)
     return {
         "ok": True,
         "label": req.label,
@@ -170,8 +170,8 @@ async def composition_index_stats_endpoint(
     _auth: None = Depends(_verify_api_key),
 ) -> dict[str, Any]:
     """v6.5: Get statistics about the composition reverse index."""
-    rsvs: RsvsCoreProtocol = get_rsvs_instance()
-    stats = rsvs.composition_index_stats()
+    rsvs = get_rsvs_instance()
+    stats = await asyncio.to_thread(rsvs.composition_index_stats)
     return {
         "ok": True,
         "total_entries": getattr(stats, "total_entries", 0),
@@ -186,8 +186,8 @@ async def reflection_endpoint(
     _auth: None = Depends(_verify_api_key),
 ) -> dict[str, Any]:
     """v6.5: Trigger a sense reflection cycle."""
-    rsvs: RsvsCoreProtocol = get_rsvs_instance()
-    result = rsvs.run_reflection()
+    rsvs = get_rsvs_instance()
+    result = await asyncio.to_thread(rsvs.run_reflection)
     return {
         "ok": True,
         "actions_total": getattr(result, "actions_total", 0),

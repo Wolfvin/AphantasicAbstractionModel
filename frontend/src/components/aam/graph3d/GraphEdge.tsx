@@ -9,6 +9,7 @@ import { Line2, LineMaterial } from 'three-stdlib';
 import type { RSVSEdge } from '@/lib/types';
 import { useGraphStore } from '@/store/aamStore';
 import { isCompositeNode, isAtomNode } from '@/lib/nodeRendering';
+import { lerp } from '@/lib/constants';
 
 // ── Constants ──
 const LERP_FACTOR = 0.08;
@@ -267,9 +268,5 @@ const GraphEdgeComponent: React.FC<GraphEdgeProps> = ({
     </group>
   );
 };
-
-function lerp(a: number, b: number, t: number): number {
-  return a + (b - a) * t;
-}
 
 export const GraphEdge = React.memo(GraphEdgeComponent);

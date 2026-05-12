@@ -43,6 +43,7 @@ interface GraphState {
   getAtomNodes: (nodeId: number) => RSVSNode[];
   getCompositeNodesForAtom: (atomId: number) => RSVSNode[];
   computeJaccardSimilarity: (nodeIdA: number, nodeIdB: number) => number;
+  batchUpdatePositions: (positions: Map<number, { x: number; y: number; z: number }>) => void;
 }
 
 export const useGraphStore = create<GraphState>((set, get) => ({
@@ -212,6 +213,22 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     const union = new Set([...setA, ...setB]);
 
     return union.size === 0 ? 0 : intersection.size / union.size;
+  },
+
+  batchUpdatePositions: (positions: Map<number, { x: number; y: number; z: number }>) => {
+    set((state) => {
+      const newNodes = new Map(state.nodes);
+      positions.forEach((pos, id) => {
+        const node = newNodes.get(id);
+        if (node?.render) {
+          newNodes.set(id, {
+            ...node,
+            render: { ...node.render, position: pos },
+          });
+        }
+      });
+      return { nodes: newNodes };
+    });
   },
 }));
 

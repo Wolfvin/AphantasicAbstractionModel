@@ -126,7 +126,7 @@ result = r.appraise(text: str) -> AppraiseResult
 |-------|------|-------------|
 | `agree_pct` | `float` | Percentage of supporting evidence |
 | `disagree_pct` | `float` | Percentage of contradicting evidence |
-| `verdict` | `str` | "agree" or "disagree" |
+| `verdict` | `str` | "agree", "mixed", or "disagree" |
 | `evidence` | `list[tuple[str, float]]` | Supporting/contradicting nodes with scores |
 | `convergence_info` | `list[tuple[str, float]]` | Convergent evidence paths |
 

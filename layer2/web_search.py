@@ -184,36 +184,24 @@ class WebSearchEngine:
         return None
 
     # ------------------------------------------------------------------
-    # Subprocess fallback (string interpolation — legacy approach)
+    # Subprocess fallback (JSON stdin/stdout — safe communication)
     # ------------------------------------------------------------------
 
     def _search_via_subprocess(self, query: str, num: int) -> Optional[list[dict]]:
-        """Fallback search using string-interpolated Node.js call.
+        """Fallback search using JSON stdin/stdout for safe communication.
 
-        This is the original approach, kept as a last resort. It is
-        fragile with complex queries due to string escaping.
+        Uses the same _SUBPROCESS_SCRIPT as _search_via_sdk but as a
+        secondary fallback when the primary SDK path fails. This avoids
+        the command-injection risk of string-interpolated shell args.
 
         Returns:
             List of result dicts, or None if search failed.
         """
         try:
-            safe_query = (
-                query.replace("\\", "\\\\")
-                .replace('"', '\\"')
-                .replace("'", "\\'")
-            )
+            payload = json.dumps({"query": query, "num": num})
             result = subprocess.run(
-                [
-                    "node", "-e",
-                    f"""
-const ZAI = require('z-ai-web-dev-sdk').default;
-(async () => {{
-  const zai = await ZAI.create();
-  const r = await zai.functions.invoke("web_search", {{query: "{safe_query}", num: {num}}});
-  console.log(JSON.stringify(r));
-}})();
-""",
-                ],
+                ["node", "-e", _SUBPROCESS_SCRIPT],
+                input=payload,
                 capture_output=True,
                 text=True,
                 timeout=30,
@@ -222,14 +210,17 @@ const ZAI = require('z-ai-web-dev-sdk').default;
                 parsed = json.loads(result.stdout)
                 if isinstance(parsed, list):
                     return parsed
+                logger.warning("Fallback returned non-list: %s", type(parsed).__name__)
+            if result.stderr.strip():
+                logger.debug("Fallback search stderr: %s", result.stderr.strip()[:200])
         except FileNotFoundError:
-            logger.debug("Node.js not found — subprocess search unavailable")
+            logger.debug("Node.js not found — fallback search unavailable")
         except subprocess.TimeoutExpired:
-            logger.warning("Subprocess search timed out for query: %s", query)
+            logger.warning("Fallback search timed out for query: %s", query)
         except json.JSONDecodeError as exc:
-            logger.warning("Failed to parse subprocess search results: %s", exc)
+            logger.warning("Failed to parse fallback search results: %s", exc)
         except Exception as exc:
-            logger.warning("Subprocess search failed: %s", exc)
+            logger.warning("Fallback search failed: %s", exc)
         return None
 
     # ------------------------------------------------------------------

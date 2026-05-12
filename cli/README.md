@@ -5,7 +5,7 @@ CLI tool for agents/operators to use RSVS without the UI.
 ## Quick Start
 
 ```bash
-cd backend
+cd layer1
 python -m rsvs.fastapi_server
 ```
 
@@ -13,13 +13,13 @@ In another terminal:
 
 ```bash
 cd cli
-python3 rsvs_agent_cli.py health
-python3 rsvs_agent_cli.py run --mode ingest --text "water flows through porous stone" --summary
-python3 rsvs_agent_cli.py run --mode appraise --text "water is solid" --summary
-python3 rsvs_agent_cli.py run --mode relate --text "water stone" --top-k 10 --view detail --summary
-python3 rsvs_agent_cli.py latest --mode relate --view detail --summary
-python3 rsvs_agent_cli.py atom-ls
-python3 rsvs_agent_cli.py atom-show appraise
+python3 aam_cli.py health
+python3 aam_cli.py run --mode ingest --text "water flows through porous stone" --summary
+python3 aam_cli.py run --mode appraise --text "water is solid" --summary
+python3 aam_cli.py run --mode relate --text "water stone" --top-k 10 --view detail --summary
+python3 aam_cli.py latest --mode relate --view detail --summary
+python3 aam_cli.py atom-ls
+python3 aam_cli.py atom-show appraise
 ```
 
 ## Commands

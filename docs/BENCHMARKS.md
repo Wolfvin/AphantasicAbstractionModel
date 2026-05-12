@@ -16,7 +16,7 @@
 
 ## 1. Overview of Criterion Benchmarks
 
-RSVS uses [Criterion.rs](https://bheisler.github.io/criterion.rs/book/criterion_rs.html) for statistical benchmarking with rigorous confidence intervals. All benchmarks live in `backend/crates/rsvs-core/benches/rsvs_bench.rs`.
+RSVS uses [Criterion.rs](https://bheisler.github.io/criterion.rs/book/criterion_rs.html) for statistical benchmarking with rigorous confidence intervals. All benchmarks live in `layer1/crates/rsvs-core/benches/rsvs_bench.rs`.
 
 ### Benchmark Suite
 
@@ -53,14 +53,14 @@ pipeline_ingest_text (~800 µs)
 ### Running All Benchmarks
 
 ```bash
-cd backend
+cd layer1
 cargo bench
 ```
 
 ### Running a Specific Benchmark
 
 ```bash
-cd backend
+cd layer1
 cargo bench --bench rsvs_bench -- jaccard
 cargo bench --bench rsvs_bench -- npmi
 cargo bench --bench rsvs_bench -- cooc
@@ -100,7 +100,7 @@ benchmark:
       uses: actions/upload-artifact@v4
       with:
         name: criterion-benchmarks
-        path: backend/target/criterion/
+        path: layer1/target/criterion/
         retention-days: 30
 ```
 

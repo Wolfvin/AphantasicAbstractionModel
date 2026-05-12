@@ -27,7 +27,7 @@ info = r.node_info(label: str) -> NodeInfo
 | `is_seed` | `bool` | Whether this is an immutable seed atom |
 | `is_locked` | `bool` | Whether the node is protected from deletion |
 | `is_stable` | `bool` | Whether the node has reached Stable status |
-| `compression_state` | `str` | "raw", "compressed", or "composed" |
+| `compression_state` | `str` | "raw" or "compressed" |
 | `layer` | `int` | Compositional depth |
 | `atoms` | `list[int]` | Atom set as NodeId list |
 | `derived_from_node_ids` | `list[int]` | Source nodes for compressed/derived nodes |

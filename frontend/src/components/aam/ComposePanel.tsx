@@ -13,13 +13,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { useUIStore, useGraphStore } from '@/store/aamStore';
 import type { ComposeResult, RSVSNode, Tier, CompositionPair } from '@/lib/types';
-
-// ── Tier Colors ──
-const TIER_COLORS: Record<Tier, string> = {
-  1: '#00E5FF',
-  2: '#FFB74D',
-  3: '#FF5252',
-};
+import { NUMERIC_TIER_COLORS as TIER_COLORS } from '@/lib/constants';
 
 // ── Compose Result Panel (shown in RightNodeDrawer) ──
 interface ComposePanelProps {

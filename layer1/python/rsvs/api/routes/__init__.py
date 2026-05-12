@@ -1,1 +1,0 @@
-"""RSVS API routes package."""

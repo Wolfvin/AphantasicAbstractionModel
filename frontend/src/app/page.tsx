@@ -4,6 +4,7 @@ import React, { useEffect, useCallback, useState, useRef, Suspense } from 'react
 import dynamic from 'next/dynamic';
 import { Skeleton } from '@/components/ui/skeleton';
 import LeftInputRail from '@/components/aam/LeftInputRail';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import GraphHUD from '@/components/aam/GraphHUD';
 import { useUIStore, useGraphStore, useAnimationStore, useTimelineStore, useChatStore, useModeResultStore } from '@/store/aamStore';
 import { fetchLatestFromBackend } from '@/lib/backendBridge';
@@ -278,7 +279,9 @@ export default function RSVSApp() {
         >
           {!isLeftRailCollapsed && (
             <div className="h-full border-r border-[#1e293b]">
-              <LeftInputRail />
+              <ErrorBoundary name="LeftInputRail">
+                <LeftInputRail />
+              </ErrorBoundary>
             </div>
           )}
         </div>
@@ -288,9 +291,11 @@ export default function RSVSApp() {
           {isBackendLoading ? (
             <LoadingGraph />
           ) : (
-            <Suspense fallback={<GraphSkeleton />}>
-              <GraphScene3D />
-            </Suspense>
+            <ErrorBoundary name="Graph3D">
+              <Suspense fallback={<GraphSkeleton />}>
+                <GraphScene3D />
+              </Suspense>
+            </ErrorBoundary>
           )}
           <GraphHUD />
           <EmptyState />
@@ -299,11 +304,15 @@ export default function RSVSApp() {
         </div>
 
         {/* Right Drawer (rendered by RightNodeDrawer component, overlays) */}
-        <RightNodeDrawer />
+        <ErrorBoundary name="RightNodeDrawer">
+          <RightNodeDrawer />
+        </ErrorBoundary>
       </div>
 
       {/* Timeline Bar */}
-      <TimelineBar />
+      <ErrorBoundary name="TimelineBar">
+        <TimelineBar />
+      </ErrorBoundary>
 
       {/* Search Dialog */}
       <SearchDialog />

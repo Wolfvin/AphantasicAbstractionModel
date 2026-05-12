@@ -19,7 +19,7 @@ export const metadata: Metadata = {
   keywords: ["RSVS", "neural graph", "3D visualization", "symbolic AI", "knowledge graph"],
   authors: [{ name: "RSVS Team" }],
   icons: {
-    icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
+    icon: "/logo.svg",
   },
 };
 

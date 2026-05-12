@@ -128,7 +128,7 @@ def main() -> None:
     reload = os.environ.get("RSVS_DEV_RELOAD", "0") == "1"
     uvicorn.run(
         "rsvs.fastapi_server:app",
-        host=os.environ.get("RSVS_HOST", "0.0.0.0"),
+        host=os.environ.get("RSVS_HOST", "127.0.0.1"),
         port=int(os.environ.get("RSVS_PORT", "8000")),
         reload=reload,
     )

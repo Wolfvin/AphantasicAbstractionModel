@@ -106,6 +106,7 @@ impl Rsvs {
         compositions: Vec<CompositionRef>,
         lang: Option<&str>,
     ) -> Result<NodeId, RsvsError> {
+        let _lang = lang; // v8.1: language tag no longer used for surface_label
         // 1. Validate all composition targets exist in the graph
         for comp in &compositions {
             if self.graph.get_node(comp.node_id).is_none() {
@@ -208,7 +209,7 @@ impl Rsvs {
         let node = Node {
             id: 0,
             label: label.to_string(),
-            surface_label: format!("{}@{}", label, lang.unwrap_or("en")),
+            surface_label: label.to_string(),
             kind: "node".to_string(),
             tier: Tier::Tier2,
             confidence: avg_confidence as f32,
@@ -244,7 +245,7 @@ impl Rsvs {
 
         // 6. Register in lookup tables
         // v7.2: Use register_label to keep token_to_id and graph.label_to_id in sync
-        self.register_label(label, node_id, Some(&format!("{}@{}", label, lang.unwrap_or("en"))));
+        self.register_label(label, node_id, None);
         self.atom_sets.insert(label.to_string(), comp_node_ids);
 
         // Register with autonomy engine

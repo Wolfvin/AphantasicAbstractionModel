@@ -15,21 +15,10 @@ import { Separator } from '@/components/ui/separator';
 import { useUIStore, useGraphStore, useModeResultStore } from '@/store/aamStore';
 import type { RSVSNode, Tier, PolicyMeta, LanguageLink, StructuralSimilarityResult, SubstitutionAnalysisResult } from '@/lib/types';
 import { getStatusColor, isCompositeNode, isAtomNode, getAtomCount, computeNodeLayer, getLayerColor, getLayerLabel, buildCompositionChain } from '@/lib/nodeRendering';
+import { NUMERIC_TIER_COLORS as TIER_COLORS, NUMERIC_TIER_LABELS as TIER_LABELS } from '@/lib/constants';
 import AppraisePanel from '@/components/aam/AppraisePanel';
 import RelatePanel from '@/components/aam/RelatePanel';
 import ComposePanel from '@/components/aam/ComposePanel';
-
-const TIER_COLORS: Record<Tier, string> = {
-  1: '#00E5FF',
-  2: '#FFB74D',
-  3: '#FF5252',
-};
-
-const TIER_LABELS: Record<Tier, string> = {
-  1: 'T1 — Stable',
-  2: 'T2 — Alert',
-  3: 'T3 — Critical',
-};
 
 const STATUS_STYLES: Record<string, { color: string; label: string }> = {
   new: { color: '#B388FF', label: 'New' },

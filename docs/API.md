@@ -2,7 +2,7 @@
 
 > Complete HTTP API documentation for the RSVS Bridge Server (Schema v4.2, API v1)
 
-**Base URL**: `http://127.0.0.1:8000` (configurable via `RSVS_BRIDGE_HOST` and `RSVS_BRIDGE_PORT`)
+**Base URL**: `http://127.0.0.1:8000` (configurable via `RSVS_HOST` and `RSVS_PORT`; aliases `RSVS_BRIDGE_HOST` and `RSVS_BRIDGE_PORT` are also accepted)
 
 **Content-Type**: All requests and responses use `application/json; charset=utf-8`
 
@@ -1051,7 +1051,7 @@ RsvsError (base)
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `RSVS_BRIDGE_HOST` | `127.0.0.1` | Server bind address |
-| `RSVS_BRIDGE_PORT` | `8000` | Server bind port |
+| `RSVS_HOST` | `127.0.0.1` | Server bind address (alias: `RSVS_BRIDGE_HOST`) |
+| `RSVS_PORT` | `8000` | Server bind port (alias: `RSVS_BRIDGE_PORT`) |
 | `RSVS_ATOM_OUTPUT_DIR` | `../atom` | Artifact output directory |
 | `RSVS_ATTENTION_CONFIG` | — | Path to JSON config for attention weights override |

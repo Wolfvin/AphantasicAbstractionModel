@@ -8,6 +8,7 @@ import * as THREE from 'three';
 import type { RSVSNode } from '@/lib/types';
 import { useGraphStore, useUIStore } from '@/store/aamStore';
 import { isCompositeNode, isAtomNode, getAtomCount, computeNodeLayer, getLayerColor, buildCompositionChain, isInternalRepresentation, hasConvergenceLinks, getConvergenceTargets } from '@/lib/nodeRendering';
+import { lerp } from '@/lib/constants';
 
 // ── Animation constants ──
 const SPAWN_DURATION_MS = 500;
@@ -22,10 +23,6 @@ interface GraphNodeProps {
   onClick: (nodeId: number) => void;
   onHover: (nodeId: number | null) => void;
   onDoubleClick: (nodeId: number) => void;
-}
-
-function lerp(a: number, b: number, t: number): number {
-  return a + (b - a) * t;
 }
 
 const GraphNodeComponent: React.FC<GraphNodeProps> = ({

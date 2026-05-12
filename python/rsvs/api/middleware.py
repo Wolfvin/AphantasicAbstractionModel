@@ -1,20 +1,30 @@
-"""Request size limit middleware for RSVS API."""
+"""Request size limit middleware for RSVS API.
+
+Reads the actual request body (including chunked transfers) and enforces
+a maximum size limit. This prevents the chunked-transfer-encoding bypass
+where Content-Length is absent and the body exceeds the limit.
+"""
 
 from __future__ import annotations
 
-from fastapi import Request
-from fastapi.responses import JSONResponse
+from starlette.requests import Request
+from starlette.responses import Response
 
 MAX_REQUEST_SIZE = 1_000_000  # 1MB
 
 
 async def limit_request_size(request: Request, call_next):
-    cl = request.headers.get("content-length")
-    if cl is not None:
-        try:
-            if int(cl) > MAX_REQUEST_SIZE:
-                return JSONResponse(status_code=413, content={"error": "request_too_large"})
-        except ValueError:
-            return JSONResponse(status_code=400, content={"error": "invalid_content_length"})
+    # Read and accumulate the request body, enforcing size limit
+    body = b""
+    async for chunk in request.stream():
+        body += chunk
+        if len(body) > MAX_REQUEST_SIZE:
+            return Response(content="Request body too large", status_code=413)
+
+    # Re-create the request with the consumed body
+    async def receive():
+        return {"type": "http.request", "body": body}
+
+    request._receive = receive
     response = await call_next(request)
     return response

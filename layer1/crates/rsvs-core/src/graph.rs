@@ -156,12 +156,15 @@ impl RsvsGraph {
         let atoms_a = self.expand(a);
         let atoms_b = self.expand(b);
 
+        // Use HashSet for O(1) lookup instead of Vec::contains (O(N))
+        let set_b: HashSet<NodeId> = atoms_b.iter().copied().collect();
+
         let mut shared = vec![];
         let mut only_a = vec![];
         let mut only_b = atoms_b.clone();
 
         for &atom in &atoms_a {
-            if atoms_b.contains(&atom) {
+            if set_b.contains(&atom) {
                 shared.push(atom);
                 only_b.retain(|&x| x != atom);
             } else {

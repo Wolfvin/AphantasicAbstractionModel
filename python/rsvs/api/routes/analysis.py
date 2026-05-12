@@ -6,16 +6,14 @@ of the knowledge graph.
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query, Request
-from slowapi import Limiter
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
-from ...protocols import RsvsCoreProtocol
 from ...rsvs_core import get_rsvs_instance
 from ..deps import _verify_api_key, limiter
 from ..schemas import ContextQueryRequest, ContextSimilarityRequest, SimilarityRequest
-from fastapi import HTTPException
 
 router = APIRouter()
 
@@ -23,8 +21,8 @@ router = APIRouter()
 @router.post("/similarity")
 @limiter.limit("30/minute")
 async def similarity_endpoint(request: Request, req: SimilarityRequest, _auth: None = Depends(_verify_api_key)) -> dict[str, Any]:
-    rsvs: RsvsCoreProtocol = get_rsvs_instance()
-    sim = rsvs.similarity(req.label_a, req.label_b)
+    rsvs = get_rsvs_instance()
+    sim = await asyncio.to_thread(rsvs.similarity, req.label_a, req.label_b)
     if sim is None:
         raise HTTPException(status_code=404, detail=f"No similarity result for '{req.label_a}' vs '{req.label_b}' — one or both labels not found")
     sim_dict = {
@@ -45,8 +43,8 @@ async def structural_similarity_endpoint(
     _auth: None = Depends(_verify_api_key),
 ) -> dict[str, Any]:
     """Get structural similarity between two labels."""
-    rsvs: RsvsCoreProtocol = get_rsvs_instance()
-    sim_result = rsvs.structural_similarity(a, b)
+    rsvs = get_rsvs_instance()
+    sim_result = await asyncio.to_thread(rsvs.structural_similarity, a, b)
     return {
         "ok": True,
         "a": a,
@@ -71,8 +69,8 @@ async def substitution_analysis_endpoint(
     _auth: None = Depends(_verify_api_key),
 ) -> dict[str, Any]:
     """Get substitution analysis between two labels."""
-    rsvs: RsvsCoreProtocol = get_rsvs_instance()
-    sub_result = rsvs.substitution_analysis(a, b)
+    rsvs = get_rsvs_instance()
+    sub_result = await asyncio.to_thread(rsvs.substitution_analysis, a, b)
 
     raw_substitutions = list(getattr(sub_result, "substitutions", []))
     substitutions = [
@@ -97,8 +95,9 @@ async def substitution_analysis_endpoint(
 @limiter.limit("30/minute")
 async def context_query_endpoint(request: Request, req: ContextQueryRequest, _auth: None = Depends(_verify_api_key)) -> dict[str, Any]:
     """Context-aware depth-controlled query (v6.1)."""
-    rsvs: RsvsCoreProtocol = get_rsvs_instance()
-    result = rsvs.context_query(
+    rsvs = get_rsvs_instance()
+    result = await asyncio.to_thread(
+        rsvs.context_query,
         req.concept,
         req.context_atoms,
         req.max_depth,
@@ -132,8 +131,8 @@ async def context_similarity_endpoint(
     _auth: None = Depends(_verify_api_key),
 ) -> dict[str, Any]:
     """v6.2: Context-weighted similarity between two concepts."""
-    rsvs: RsvsCoreProtocol = get_rsvs_instance()
-    score = rsvs.context_similarity(req.concept_a, req.concept_b, req.context)
+    rsvs = get_rsvs_instance()
+    score = await asyncio.to_thread(rsvs.context_similarity, req.concept_a, req.concept_b, req.context)
     if score is None:
         return {"ok": True, "concept_a": req.concept_a, "concept_b": req.concept_b, "context": req.context, "context_weighted_similarity": None}
     return {

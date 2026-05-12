@@ -59,6 +59,15 @@ function getSessionSecret(): string {
   const bytes = Buffer.alloc(32);
   require('crypto').randomFillSync(bytes);
   _resolvedSecret = bytes.toString('hex');
+
+  if (!IS_DEMO_MODE && !process.env.RSVS_SESSION_SECRET) {
+    console.error(
+      "⚠️ CRITICAL: RSVS_SESSION_SECRET is not set in non-demo mode. " +
+      "Sessions are using an ephemeral key and will be invalid after restart. " +
+      "Set RSVS_SESSION_SECRET in your environment."
+    );
+  }
+
   return _resolvedSecret;
 }
 

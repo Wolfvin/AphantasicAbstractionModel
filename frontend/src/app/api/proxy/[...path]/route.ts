@@ -2,9 +2,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import {
   SESSION_COOKIE,
   ALLOWED_ORIGINS,
-  IS_DEMO_MODE,
   verifySignedCookie,
 } from '@/lib/proxyAuth';
+
+const IS_DEMO_MODE = process.env.RSVS_DEMO_MODE === '1' || !process.env.RSVS_BACKEND_URL;
+
+if (!process.env.RSVS_BACKEND_URL && process.env.RSVS_DEMO_MODE !== '1') {
+  console.warn(
+    '⚠️ RSVS_BACKEND_URL is not set. Running in demo mode. ' +
+    'Set RSVS_BACKEND_URL or explicitly set RSVS_DEMO_MODE=1 to suppress this warning.'
+  );
+}
 
 const BACKEND_URL = process.env.RSVS_BACKEND_URL || '';
 const API_KEY = process.env.RSVS_API_KEY || '';

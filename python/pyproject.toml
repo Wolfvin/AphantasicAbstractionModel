@@ -69,7 +69,7 @@ all = [
 rsvs = "rsvs.cli:main"
 
 [tool.maturin]
-manifest-path = "../backend/crates/rsvs-core/Cargo.toml"
+manifest-path = "../layer1/crates/rsvs-core/Cargo.toml"
 python-source = "python"
 features = ["pyo3/extension-module"]
 module-name = "rsvs._rsvs"

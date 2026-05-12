@@ -11,9 +11,7 @@ import { useUIStore, useGraphStore } from '@/store/aamStore';
 import { DemoControls } from './TimelineBar';
 import type { ViewMode, Tier } from '@/lib/types';
 import { getLayerColorEntries } from '@/lib/nodeRendering';
-
-const TIER_COLORS: Record<Tier, string> = { 1: '#00E5FF', 2: '#FFB74D', 3: '#FF5252' };
-const TIER_LABELS: Record<Tier, string> = { 1: 'Tier 1 — Stable', 2: 'Tier 2 — Alert', 3: 'Tier 3 — Critical' };
+import { NUMERIC_TIER_COLORS as TIER_COLORS, NUMERIC_TIER_LABELS as TIER_LABELS } from '@/lib/constants';
 
 const VIEW_MODES: { mode: ViewMode; label: string; icon: React.ReactNode }[] = [
   { mode: 'explore', label: 'Explore', icon: <Eye className="w-3.5 h-3.5" /> },

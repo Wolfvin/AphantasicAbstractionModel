@@ -6,6 +6,7 @@ and enriched-field helpers.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -45,11 +46,16 @@ async def _verify_api_key(api_key: str = Security(_api_key_header)) -> None:
 # --- Rate limiter ---
 
 def _rate_limit_key(request: Request) -> str:
-    """Rate limit by API key when available, otherwise by IP address."""
+    """Rate limit by hashed API key when available, otherwise by IP address.
+
+    The API key is SHA-256 hashed (truncated to 16 hex chars) so that
+    the rate-limiter storage never holds the raw key.
+    """
     api_key = request.headers.get("X-API-Key")
     if api_key:
-        return f"key:{api_key}"
-    return get_remote_address(request)
+        hashed = hashlib.sha256(api_key.encode()).hexdigest()[:16]
+        return f"key:{hashed}"
+    return f"key:anonymous:{get_remote_address(request)}"
 
 
 limiter = Limiter(key_func=_rate_limit_key)

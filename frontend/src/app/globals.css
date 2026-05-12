@@ -79,24 +79,8 @@
 }
 
 .dark {
-  --background: #060a12;
-  --foreground: #e2e8f0;
-  --card: #0a0e18;
-  --card-foreground: #e2e8f0;
-  --popover: #0a0e18;
-  --popover-foreground: #e2e8f0;
-  --primary: #00E5FF;
-  --primary-foreground: #060a12;
-  --secondary: #1e293b;
-  --secondary-foreground: #e2e8f0;
-  --muted: #1e293b;
-  --muted-foreground: #64748b;
-  --accent: #1e293b;
-  --accent-foreground: #e2e8f0;
-  --destructive: #FF5252;
-  --border: #1e293b;
-  --input: #1e293b;
-  --ring: #00E5FF;
+  /* Dark mode uses the same palette as :root — this app is dark-only. */
+  /* If a separate light theme is needed, define distinct values here. */
 }
 
 @layer base {

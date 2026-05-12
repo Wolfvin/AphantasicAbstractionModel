@@ -8,6 +8,7 @@ events, CORS, authentication, rate limiting, input validation, and error handlin
 import pytest
 from starlette.testclient import TestClient
 from rsvs.fastapi_server import app
+from rsvs._version import __version__
 
 
 @pytest.fixture
@@ -27,7 +28,7 @@ class TestHealthEndpoint:
         assert resp.status_code == 200
         body = resp.json()
         assert body["status"] == "ok"
-        assert body["version"] == "6.0.0"
+        assert body["version"] == __version__
 
     def test_health_has_cors(self, client):
         """CORS middleware adds headers when Origin is from allowed list."""
@@ -51,7 +52,7 @@ class TestRootEndpoint:
         assert resp.status_code == 200
         body = resp.json()
         assert body["name"] == "RSVS"
-        assert body["version"] == "6.0.0"
+        assert body["version"] == __version__
         assert "docs" in body
 
 
@@ -567,11 +568,11 @@ class TestVersionV61:
         resp = client.get("/health")
         assert resp.status_code == 200
         body = resp.json()
-        assert body["version"] == "6.1.0"
+        assert body["version"] == __version__
 
     def test_root_reports_v61(self, client):
         """Root endpoint should report v6.1.0."""
         resp = client.get("/")
         assert resp.status_code == 200
         body = resp.json()
-        assert body["version"] == "6.1.0"
+        assert body["version"] == __version__

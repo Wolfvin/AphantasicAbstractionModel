@@ -66,3 +66,11 @@ coverage.xml
 
 # Agent development context (not for repo)
 agent-ctx/
+
+# Runtime data
+atom/*.json
+atom/*.jsonl
+layer1/atom/*.jsonl
+layer1/python/atom/*.jsonl
+frontend/db/*.db
+cli/__pycache__/

@@ -38,7 +38,7 @@ import {
 import { cn } from '@/lib/utils';
 import { useChatStore, useUIStore, useGraphStore, useTimelineStore, useModeResultStore } from '@/store/aamStore';
 import { generateChatMessages, generateTimelineEvents } from '@/lib/mockData';
-import { runModeToBackend, composeToBackend } from '@/lib/backendBridge';
+import { runModeToBackend, composeToBackend, RSVSMode as FullRSVSMode } from '@/lib/backendBridge';
 import type { ChatMessage, MessageType, AppraiseResult, AppraiseVerdict, RelateResult, ComposeResult } from '@/lib/types';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { ComposeFormPanel } from '@/components/aam/ComposePanel';
@@ -66,7 +66,8 @@ interface MessageStyleConfig {
   iconColor: string;
   align: string;
 }
-type RSVSMode = 'ingest' | 'appraise' | 'relate' | 'compose';
+
+type RSVSMode = Extract<FullRSVSMode, 'ingest' | 'appraise' | 'relate' | 'compose'>;
 
 const MODE_LABEL: Record<RSVSMode, string> = {
   ingest: 'Ingest',
@@ -490,6 +491,8 @@ export default function LeftInputRail({
 
   // ── Simulated system response (development/demo only) ──
   const ingestTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const appraiseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const relateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const simulateIngestResponse = useCallback(
     (correlationId: string) => {
@@ -548,15 +551,25 @@ export default function LeftInputRail({
       if (ingestTimeoutRef.current) {
         clearTimeout(ingestTimeoutRef.current);
       }
+      if (appraiseTimeoutRef.current) {
+        clearTimeout(appraiseTimeoutRef.current);
+      }
+      if (relateTimeoutRef.current) {
+        clearTimeout(relateTimeoutRef.current);
+      }
     };
   }, []);
 
   // ── Simulated appraise response (demo mode) ──
   const simulateAppraiseResponse = useCallback(
     (correlationId: string, text: string) => {
+      if (appraiseTimeoutRef.current) {
+        clearTimeout(appraiseTimeoutRef.current);
+      }
+
       const delay = 800 + Math.random() * 800;
 
-      setTimeout(() => {
+      appraiseTimeoutRef.current = setTimeout(() => {
         const nodes = useGraphStore.getState().nodes;
         const allNodes = Array.from(nodes.values());
 
@@ -608,6 +621,7 @@ export default function LeftInputRail({
         });
 
         setLoading(false);
+        appraiseTimeoutRef.current = null;
       }, delay);
     },
     [addMessage, setLoading],
@@ -616,9 +630,13 @@ export default function LeftInputRail({
   // ── Simulated relate response (demo mode) ──
   const simulateRelateResponse = useCallback(
     (correlationId: string, text: string) => {
+      if (relateTimeoutRef.current) {
+        clearTimeout(relateTimeoutRef.current);
+      }
+
       const delay = 800 + Math.random() * 800;
 
-      setTimeout(() => {
+      relateTimeoutRef.current = setTimeout(() => {
         const nodes = useGraphStore.getState().nodes;
         const edges = useGraphStore.getState().edges;
         const allNodes = Array.from(nodes.values());
@@ -668,6 +686,7 @@ export default function LeftInputRail({
         });
 
         setLoading(false);
+        relateTimeoutRef.current = null;
       }, delay);
     },
     [addMessage, setLoading],

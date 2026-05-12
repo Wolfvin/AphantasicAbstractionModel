@@ -5,4 +5,4 @@ Folder ini untuk output hasil proses backend (snapshot, events, report, exported
 Contoh output:
 - `snapshot-*.json`
 - `events-*.jsonl`
-- `verdict-*.json`
+- `appraise-*.json`

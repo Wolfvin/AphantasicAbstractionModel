@@ -62,6 +62,7 @@ pub fn traverse(
     context_atoms: &AtomSet,
     config: &TraversalConfig,
     _token_to_id: &HashMap<String, NodeId>,
+    tau_core: f64,
 ) -> ContextQueryResult {
     let mut visited: HashSet<(NodeId, SenseId)> = HashSet::new();
     let mut cycles_detected: usize = 0;
@@ -170,7 +171,7 @@ pub fn traverse(
     // Also score core atoms (from freq_counts) that aren't already in compositions
     let comp_node_ids: HashSet<NodeId> =
         sense.compositions.iter().map(|c| c.node_id).collect();
-    let tau = 0.4; // Default tau_core
+    let tau = tau_core as f32;
     for &atom_id in sense.freq_counts.keys() {
         if comp_node_ids.contains(&atom_id) {
             continue; // Already scored via P(a|S,q)
@@ -246,6 +247,7 @@ pub fn traverse(
         &mut cycles_detected,
         1, // starting depth
         &prev_scores,
+        tau_core,
     );
 
     ContextQueryResult {
@@ -282,6 +284,7 @@ fn traverse_recursive(
     cycles_detected: &mut usize,
     current_depth: usize,
     prev_scores: &HashMap<NodeId, f32>,
+    _tau_core: f64,
 ) -> (usize, HaltReason) {
     // Safety net: max_depth reached
     if current_depth >= config.max_depth {
@@ -351,6 +354,7 @@ fn traverse_recursive(
                             cycles_detected,
                             current_depth + 1,
                             &current_scores,
+                            _tau_core,
                         );
                     }
                 }

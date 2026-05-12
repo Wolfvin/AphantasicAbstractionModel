@@ -139,7 +139,7 @@ Version 8.3 represents the maturation of the language-agnostic architecture intr
 
 ## 3. Rust Core Architecture
 
-The Rust core (`backend/crates/rsvs-core/`) is the computational heart of RSVS. It performs all graph operations, sense induction, attention scoring, traversal, verification, and persistence. It has zero I/O or HTTP dependencies — all external communication flows through the Python bridge via PyO3 FFI.
+The Rust core (`layer1/crates/rsvs-core/`) is the computational heart of RSVS. It performs all graph operations, sense induction, attention scoring, traversal, verification, and persistence. It has zero I/O or HTTP dependencies — all external communication flows through the Python bridge via PyO3 FFI.
 
 ### 3.1 `lib.rs` — Entry Point and Re-exports
 

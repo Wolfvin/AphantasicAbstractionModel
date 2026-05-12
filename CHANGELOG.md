@@ -5,6 +5,39 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [8.3.1] - 2026-05-12
+
+### Fixed
+- **Infrastructure**: Created `backend → layer1` symlink to fix broken CI/CD, Docker, Makefile, and pip install
+- **Security**: Changed default bind address from `0.0.0.0` to `127.0.0.1`
+- **Security**: Hashed API keys in rate limiter storage to prevent key leakage
+- **Security**: Fixed command injection risk in web_search.py subprocess fallback
+- **Security**: Replaced external CDN favicon with local asset
+- **Rust Core**: Fixed compose() adding `@en` language tag contradicting language-agnostic design
+- **Rust Core**: Fixed hardcoded `tau=0.4` in traverse engine — now uses config value
+- **Rust Core**: Fixed panicking `unwrap()` in PyO3 bindings
+- **Rust Core**: Fixed composition index duplication on every ingest
+- **Rust Core**: Optimized O(N²) similarity to O(N) using HashSet
+- **Python**: Wrapped blocking Rust calls with `asyncio.to_thread()` in async handlers
+- **Python**: Fixed request size limit bypass via chunked transfer encoding
+- **Python**: Added API key authentication to CLI
+- **Python**: Fixed test version mismatches (6.0.0 → 8.3.0)
+- **Python**: Fixed PEP 621 violation in layer1/pyproject.toml
+- **Frontend**: Added React Error Boundaries around major UI sections
+- **Frontend**: Fixed demo mode auth bypass — added explicit RSVS_DEMO_MODE flag
+- **Frontend**: Fixed setTimeout without cleanup in simulate functions
+- **Frontend**: Consolidated duplicated constants (TIER_COLORS, lerp, RSVSMode)
+- **Frontend**: Added batch position updates for force layout animation
+- **Docs**: Updated all path references from `backend/` to `layer1/`
+- **Docs**: Fixed stale filename references in CLI README
+- **Docs**: Fixed schema version inconsistencies
+- **Versions**: Synchronized all version numbers to 8.3.0
+
+### Removed
+- Deleted stale `rsvs_genius/` directory (v0.5.0 copy of `layer2/`)
+- Deleted stale `layer1/python/rsvs/` directory (v6.0.0 copy of `python/rsvs/`)
+- Removed external CDN dependency for favicon
+
 ## [8.3.0] - 2026-05-06
 
 ### Added

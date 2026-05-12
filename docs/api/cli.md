@@ -107,8 +107,9 @@ rsvs replay-events --db my_graph.json --after-seq 100 --limit 50
 
 ### `rsvs serve`
 
-Start the FastAPI server.
+> **Note**: This command is not yet implemented. To start the FastAPI server, use `python -m rsvs.fastapi_server` instead. See [server.md](server.md) for details.
 
 ```bash
-rsvs serve --host 0.0.0.0 --port 8000
+# Not yet available as a CLI subcommand — use this instead:
+python -m rsvs.fastapi_server
 ```

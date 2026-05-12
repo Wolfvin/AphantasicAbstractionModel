@@ -15,7 +15,7 @@ Inspired by Aphantasia: the cognitive condition where no visual imagery
 is stored — only relational structure. This is how AAM remembers.
 """
 
-__version__ = "1.0.0-alpha"
+__version__ = "8.3.0"
 __name_full__ = "Aphantasic Abstraction Model"
 __name_short__ = "AAM"
 

@@ -4,7 +4,7 @@ type: software
 title: "AphantasicAbstractionModel"
 authors:
   - name: "Wolfvin"
-    orcid: "0000-0000-0000-0000"
+    orcid: ""  # Add your ORCID here
 abstract: >
   RSVS is a compositional symbolic meaning engine with a Rust core and
   Python API. It provides traceable, compositional sense definitions,

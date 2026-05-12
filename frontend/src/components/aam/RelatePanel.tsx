@@ -11,15 +11,10 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import type { RelateResult, RelateNode, RelateEdge, Tier, StructuralRelation } from '@/lib/types';
+import { NUMERIC_TIER_COLORS as TIER_COLORS } from '@/lib/constants';
 import { useUIStore } from '@/store/aamStore';
 
 // ── Tier / Kind Styling ──
-const TIER_COLORS: Record<Tier, string> = {
-  1: '#00E5FF',
-  2: '#FFB74D',
-  3: '#FF5252',
-};
-
 const KIND_STYLE = { color: '#69F0AE', label: 'Node' };
 
 // ── Structural Relation Row (v5.0) ──

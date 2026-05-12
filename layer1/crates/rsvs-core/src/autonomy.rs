@@ -638,6 +638,13 @@ impl AutonomyEngine {
         self.changelog
             .push(format!("update:{}:{:.4}->{:.4}", id, old, proposed));
 
+        // v8.2: Cap changelog growth at 1000 entries to prevent unbounded memory use.
+        // Trim oldest entries when the cap is exceeded.
+        if self.changelog.len() > 1000 {
+            let drain = self.changelog.len() - 1000;
+            self.changelog.drain(0..drain);
+        }
+
         ConfidenceUpdateResult::Updated {
             old,
             new: proposed,

@@ -146,7 +146,7 @@ graph TB
 | Tier | Language | Responsibility |
 |------|----------|----------------|
 | Rust Core | Rust 1.75+ | All computational logic: graph, attention, autonomy, sense, persistence |
-| Python Bridge | Python 3.12+ | HTTP layer, schema validation, artifact I/O, mode dispatch |
+| Python Bridge | Python 3.11+ | HTTP layer, schema validation, artifact I/O, mode dispatch |
 | Frontend | TypeScript | 3D visualization, user interaction, state management |
 
 ---

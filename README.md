@@ -418,7 +418,7 @@ For the full theoretical foundation, see **[COGNITIVE_FOUNDATIONS.md](docs/COGNI
 
 RSVS follows a three-tier architecture with strict separation of concerns:
 
-- **Rust Core** (`backend/crates/rsvs-core/src/`): All computational logic lives here -- graph storage, attention scoring, sense management, autonomy lifecycle, pipeline orchestration, MCTS, consolidation, reflection, and persistence. The core has no HTTP, no file I/O, and no Python dependencies. It compiles independently and exposes a pure Rust API.
+- **Rust Core** (`layer1/crates/rsvs-core/src/`): All computational logic lives here -- graph storage, attention scoring, sense management, autonomy lifecycle, pipeline orchestration, MCTS, consolidation, reflection, and persistence. The core has no HTTP, no file I/O, and no Python dependencies. It compiles independently and exposes a pure Rust API.
 
 - **Python Bridge** (`python/rsvs/`): The Python layer provides the PyO3 bindings (compiled from Rust via maturin), FastAPI server, CLI tool, validation, and artifact persistence. No computation happens in Python -- it delegates everything to the Rust core. The Python package is typed (PEP 561) and ships with `.pyi` stubs for IDE support.
 
@@ -447,7 +447,7 @@ Representative benchmarks (Apple M2 Pro, Criterion.rs):
 Run benchmarks yourself:
 
 ```bash
-cd backend && cargo bench
+cd layer1 && cargo bench
 ```
 
 For detailed benchmark methodology and scaling characteristics, see [BENCHMARKS.md](docs/BENCHMARKS.md).

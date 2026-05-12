@@ -5,6 +5,7 @@ import type {
   RSVSNode, RSVSEdge, RSVSEvent, ChatMessage, TimelineEvent,
   Tier, SourceType, NodeStatus, EdgeStatus,
 } from '@/lib/types';
+import { NUMERIC_TIER_COLORS as TIER_COLORS } from '@/lib/constants';
 
 const ATOM_LABELS = [
   'neural', 'synapse', 'cortex', 'quantum', 'entropy', 'vector', 'tensor',
@@ -62,12 +63,6 @@ function generatePosition(): { x: number; y: number; z: number } {
     z: rand(-20, 20),
   };
 }
-
-const TIER_COLORS: Record<Tier, string> = {
-  1: '#00E5FF',  // Cyan - stable, cool
-  2: '#FFB74D',  // Warm amber
-  3: '#FF5252',  // Critical red
-};
 
 const COMPOSITE_COLORS = [
   '#B388FF', '#69F0AE', '#FF80AB', '#80D8FF', '#FFD740',
