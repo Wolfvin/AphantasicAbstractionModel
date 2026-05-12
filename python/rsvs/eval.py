@@ -110,15 +110,41 @@ class EvalReport:
 # Uses WordNet-style relatedness judgments encoded in the corpus.
 
 SIMILARITY_TRIPLES = [
-    # (anchor, related, unrelated) — based on corpus co-occurrence patterns
-    ("solid",    "hard",      "liquid"),
-    ("solid",    "material",  "water"),
-    ("water",    "liquid",    "rock"),
-    ("rock",     "solid",     "water"),
-    ("material", "hard",      "water"),
-    ("hard",     "solid",     "liquid"),
-    ("energy",   "heat",      "water"),
-    ("heat",     "energy",    "solid"),
+    # geology / materials (existing — keep)
+    ("solid",    "hard",       "liquid"),
+    ("solid",    "material",   "water"),
+    ("water",    "liquid",     "rock"),
+    ("rock",     "solid",      "water"),
+    ("material", "hard",       "water"),
+    ("hard",     "solid",      "liquid"),
+    ("energy",   "heat",       "water"),
+    ("heat",     "energy",     "solid"),
+
+    # biology / physics (cross-domain)
+    ("cell",     "organism",   "rock"),
+    ("organism", "species",    "metal"),
+    ("force",    "energy",     "cell"),
+    ("light",    "wave",       "rock"),
+
+    # profession (new domain)
+    ("doctor",   "patient",    "crop"),
+    ("doctor",   "hospital",   "field"),
+    ("farmer",   "crop",       "patient"),
+    ("teacher",  "student",    "crop"),
+
+    # technology (new domain)
+    ("computer", "processor",  "crop"),
+    ("software", "data",       "farmer"),
+    ("network",  "computer",   "patient"),
+    ("data",     "software",   "mountain"),
+
+    # history (new domain)
+    ("empire",   "ruler",      "software"),
+    ("war",      "empire",     "crop"),
+
+    # society (new domain)
+    ("law",      "government", "crop"),
+    ("citizen",  "law",        "processor"),
 ]
 
 def benchmark_similarity_rank(r: Rsvs) -> BenchmarkResult:
@@ -274,8 +300,8 @@ def benchmark_sense_coherence(r: Rsvs) -> BenchmarkResult:
 # This validates the confidence update mechanism.
 
 # Expected ordering: cross-domain atoms > single-domain atoms
-CROSS_DOMAIN_ATOMS  = ["solid", "material", "energy", "hard", "water"]
-SINGLE_DOMAIN_ATOMS = ["granite", "basalt", "glacier", "voltage", "polymer"]
+CROSS_DOMAIN_ATOMS  = ["energy", "material", "water", "force", "data"]
+SINGLE_DOMAIN_ATOMS = ["processor", "emperor", "chromosome", "basalt", "polymer"]
 
 def benchmark_confidence_growth(r: Rsvs) -> BenchmarkResult:
     t0 = time.time()
@@ -332,6 +358,85 @@ def benchmark_confidence_growth(r: Rsvs) -> BenchmarkResult:
         threshold=threshold,
         details=details,
         elapsed_s=round(time.time() - t0, 3),
+        verdict=verdict,
+    )
+
+
+# -----------------------------------------------------------------------
+# Benchmark 3b — Discriminability
+# -----------------------------------------------------------------------
+# Verifies that appraise(true_statement) > appraise(false_statement)
+# for domain-appropriate vs domain-inappropriate statements.
+
+DISCRIMINABILITY_PAIRS = [
+    ("doctor treats patients",    "doctor plants crops",         "hospital"),
+    ("farmer grows crops",        "farmer treats patients",      "field"),
+    ("teacher explains lessons",  "teacher harvests crops",      "student"),
+    ("computer processes data",   "computer grows crops",        "software"),
+    ("software runs on computer", "software treats patients",    "processor"),
+    ("empire controls territory", "empire treats patients",      "ruler"),
+    ("war is armed conflict",     "war grows crops",             "military"),
+    ("cell is unit of life",      "cell processes data",         "organism"),
+    ("species reproduce",         "species run on processors",   "biology"),
+    ("force changes motion",      "force grows crops",           "energy"),
+    ("energy exists in forms",    "energy treats patients",      "heat"),
+]
+
+def benchmark_discriminability(r) -> BenchmarkResult:
+    """Verifies that appraise(true_statement) > appraise(false_statement)."""
+    import time as _time
+    t0 = _time.time()
+    passed_pairs = []
+    failed_pairs = []
+    skipped = 0
+
+    for true_stmt, false_stmt, ctx in DISCRIMINABILITY_PAIRS:
+        try:
+            r_true  = r.appraise(true_stmt)
+            r_false = r.appraise(false_stmt)
+        except Exception:
+            skipped += 1
+            continue
+
+        if r_true is None or r_false is None:
+            skipped += 1
+            continue
+
+        gap = r_true.agree_pct - r_false.agree_pct
+        if gap > 0:
+            passed_pairs.append((true_stmt, false_stmt, gap))
+        else:
+            failed_pairs.append((true_stmt, false_stmt, gap))
+
+    evaluated = len(passed_pairs) + len(failed_pairs)
+    score = len(passed_pairs) / evaluated if evaluated > 0 else 0.0
+    threshold = 0.60
+
+    details = {
+        "evaluated_pairs": evaluated,
+        "skipped": skipped,
+        "passed_pairs": len(passed_pairs),
+        "failed_pairs": len(failed_pairs),
+    }
+    for i, (t, f, gap) in enumerate(passed_pairs[:3]):
+        details[f"pass_{i}"] = f"gap={gap:+.1f}pp: '{t[:30]}' > '{f[:30]}'"
+    for i, (t, f, gap) in enumerate(failed_pairs[:2]):
+        details[f"fail_{i}"] = f"gap={gap:+.1f}pp: '{t[:30]}' <= '{f[:30]}'"
+
+    avg_gap = (sum(g for _, _, g in passed_pairs) / len(passed_pairs)
+               if passed_pairs else 0.0)
+
+    verdict = (f"{len(passed_pairs)}/{evaluated} pairs discriminable, "
+               f"avg_gap={avg_gap:+.1f}pp" if evaluated > 0
+               else "no pairs evaluated")
+
+    return BenchmarkResult(
+        name="Discriminability",
+        score=score,
+        passed=score >= threshold,
+        threshold=threshold,
+        details=details,
+        elapsed_s=round(_time.time() - t0, 3),
         verdict=verdict,
     )
 
@@ -548,6 +653,12 @@ def run_eval(
     results.append(b3)
     if verbose:
         print(str(b3))
+
+    # 3b. Discriminability
+    b3b = benchmark_discriminability(r)
+    results.append(b3b)
+    if verbose:
+        print(str(b3b))
 
     # 4. Adaptive threshold
     if compare_adaptive:

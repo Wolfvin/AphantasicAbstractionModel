@@ -4,11 +4,12 @@
 //! any manual ontology or pre-defined compositions.
 //!
 //! Key design decisions:
-//! - Uses custom_seeds that include common Indonesian connector words
-//!   (yang, di, dan, adalah, untuk, dengan, pada, dari, ke, itu, ini,
-//!    tidak, sangat, setiap, sudah, seperti, sebuah, seorang)
-//!   These are functional words that appear across all Indonesian sentences,
-//!   enabling sentence-level grounding for ANY Indonesian text.
+//! - Uses custom_seeds that include common English functional/grammatical words
+//!   (the, is, are, was, a, an, of, in, and, to, that, it,
+//!    by, with, for, from, has, have, be, been, not, as, or, at,
+//!    its, which, when, can)
+//!   These are functional words that appear across all English sentences,
+//!   enabling sentence-level grounding for ANY English text.
 //! - Zero manual composition definitions
 //! - All knowledge auto-induced from co-occurrence patterns in free text
 //! - Contradiction detection from structural meaning, not string matching
@@ -105,16 +106,16 @@ fn print_verdict(label: &str, v: &AppraiseVerdict) {
     println!("    Explanation: {}", v.explanation);
 }
 
-/// Custom seeds: 24 epistemological primitives + Indonesian functional words.
+/// Custom seeds: 24 epistemological primitives + English functional words.
 ///
-/// The Indonesian functional words (yang, di, dan, etc.) act as "glue" tokens
-/// that appear in nearly every Indonesian sentence. This enables sentence-level
-/// grounding: when a sentence contains "yang" (which it almost always does),
+/// The English functional words (the, is, are, was, etc.) act as "glue" tokens
+/// that appear in nearly every English sentence. This enables sentence-level
+/// grounding: when a sentence contains "the" (which it almost always does),
 /// ALL tokens in that sentence become groundable, and entity detection can
 /// promote them.
 ///
 /// This is NOT manual ontology — these are FUNCTIONAL words, not CONTENT words.
-/// The content (dokter, petani, gunung, etc.) is 100% auto-induced from text.
+/// The content (doctor, farmer, mountain, etc.) is 100% auto-induced from text.
 fn make_config() -> PipelineConfig {
     let custom_seeds: Vec<String> = vec![
         // Epistemological primitives (original 24)
@@ -124,38 +125,38 @@ fn make_config() -> PipelineConfig {
         "memory".into(), "attention".into(), "value".into(), "agent".into(),
         "goal".into(), "risk".into(), "trust".into(), "identity".into(),
         "language".into(), "meaning".into(), "action".into(), "feedback".into(),
-        // Indonesian functional words (grounding gate untuk teks Indonesia)
-        "yang".into(), "di".into(), "dan".into(), "adalah".into(),
-        "untuk".into(), "dengan".into(), "pada".into(), "dari".into(),
-        "ke".into(), "itu".into(), "ini".into(), "tidak".into(),
-        "sangat".into(), "setiap".into(), "sudah".into(), "seperti".into(),
-        "sebuah".into(), "seorang".into(), "oleh".into(), "juga".into(),
-        "atau".into(), "bisa".into(), "lebih".into(), "dalam".into(),
-        "telah".into(), "akan".into(), "ada".into(), "banyak".into(),
+        // English functional/grammatical words (grounding gate for English text)
+        "the".into(), "is".into(), "are".into(), "was".into(),
+        "a".into(), "an".into(), "of".into(), "in".into(),
+        "and".into(), "to".into(), "that".into(), "it".into(),
+        "by".into(), "with".into(), "for".into(), "from".into(),
+        "has".into(), "have".into(), "be".into(), "been".into(),
+        "not".into(), "as".into(), "or".into(), "at".into(),
+        "its".into(), "which".into(), "when".into(), "can".into(),
     ];
 
-    // Tuned SenseInductionConfig untuk short corpus
+    // Tuned SenseInductionConfig for short corpus
     let mut induction = rsvs::sense::SenseInductionConfig::default();
-    induction.tau_overlap = 0.5;              // was 0.8 — terlalu ketat untuk sparse graph
-    induction.tau_compress = 0.15;            // was 0.3 — buang terlalu banyak komposisi
-    induction.composition_min_confidence = 0.15; // was 0.3 — terlalu tinggi early-stage
+    induction.tau_overlap = 0.5;              // was 0.8 — too strict for sparse graph
+    induction.tau_compress = 0.15;            // was 0.3 — drops too many compositions
+    induction.composition_min_confidence = 0.15; // was 0.3 — too high for early-stage
 
     // Tuned SenseConfig
     let mut sense = rsvs::sense::SenseConfig::default();
-    sense.theta_assign = 0.20;               // was 0.30 — context lebih mudah di-assign ke sense
-    sense.gamma_stopword = 0.85;             // was 0.70 — content words tidak kena filter
+    sense.theta_assign = 0.20;               // was 0.30 — contexts easier to assign to senses
+    sense.gamma_stopword = 0.85;             // was 0.70 — content words not filtered
     sense.induction = induction;
 
     // Tuned AttentionConfig
     let mut attention = rsvs::attention::AttentionConfig::default();
-    attention.min_cooc = 1;                  // was 2 — di corpus kecil, cooc=1 tetap penting
+    attention.min_cooc = 1;                  // was 2 — in small corpus, cooc=1 still matters
 
     PipelineConfig {
-        entity_promote_n: 2,                 // was 3 — threshold lebih rendah untuk short corpus
+        entity_promote_n: 2,                 // was 3 — lower threshold for short corpus
         custom_seeds: Some(custom_seeds),
         sense,
         attention,
-        tau_entity_learned: 0.10,            // was 0.15 — lebih mudah promote via learned score
+        tau_entity_learned: 0.10,            // was 0.15 — easier to promote via learned score
         ..PipelineConfig::default()
     }
 }
@@ -170,96 +171,142 @@ fn main() {
     let mut rsvs = Rsvs::new(make_config()).expect("Failed to initialize RSVS");
 
     let initial_nodes = rsvs.status().total_nodes;
-    println!("\n  Initialized with {} seed nodes (52 epistemological + Indonesian functional)",
+    println!("\n  Initialized with {} seed nodes (52 epistemological + English functional)",
         initial_nodes);
 
     // ==================================================================
-    // PART 1: Ingest REAL free text — Indonesian Wikipedia-style passages
+    // PART 1: Ingest REAL free text — 6 English domains
     // ==================================================================
-    section("PART 1: Ingest Real Free Text (Indonesian)");
+    section("PART 1: Ingest Real Free Text (English)");
 
-    // Budi the doctor — rich, repeated context
-    let cerita_budi = vec![
-        "Budi adalah seorang dokter yang bekerja di rumah sakit.",
-        "Setiap hari Budi menyembuhkan pasien dengan memberikan obat-obatan.",
-        "Rumah sakit tempat Budi bekerja sangat besar dan modern.",
-        "Budi sangat dihormati karena keahliannya menyembuhkan orang sakit.",
-        "Budi menggunakan alat medis modern untuk memeriksa pasien.",
-        "Obat yang diberikan Budi membantu pasien sembuh dengan cepat.",
-        "Rumah sakit Budi memiliki ruangan bersih dan perawat yang ramah.",
-        "Budi sudah bekerja sebagai dokter selama lima belas tahun.",
-        "Pasien-pasien Budi sangat percaya pada kemampuannya.",
-        "Budi selalu datang pagi ke rumah sakit untuk memeriksa pasien.",
-        "Dokter Budi memberikan resep obat kepada pasien yang sakit.",
-        "Budi melakukan operasi di rumah sakit dengan alat medis.",
-        "Rumah sakit tempat dokter Budi bekerja sangat terkenal.",
-        "Budi mengobati pasien dengan obat yang tepat setiap hari.",
-        "Perawat di rumah sakit membantu dokter Budi merawat pasien.",
+    // Domain 1: Alice the doctor
+    // Anchor: doctor / patient / hospital / medicine / treat
+    let domain_doctor = vec![
+        "Alice is a doctor who works at the hospital.",
+        "Every day Alice treats patients by prescribing medicine.",
+        "The hospital where Alice works is very large and modern.",
+        "Alice is highly respected for her skill in treating sick people.",
+        "Alice uses modern medical equipment to examine patients.",
+        "The medicine that Alice prescribes helps patients recover quickly.",
+        "Alice's hospital has clean rooms and friendly nurses.",
+        "Alice has worked as a doctor for fifteen years.",
+        "Alice's patients trust her abilities completely.",
+        "Alice always arrives early at the hospital to check on patients.",
+        "Doctor Alice gives prescriptions to sick patients.",
+        "Alice performs surgery at the hospital with medical tools.",
+        "The hospital where Doctor Alice works is very famous.",
+        "Alice treats patients with the right medicine every day.",
+        "Nurses at the hospital help Doctor Alice care for patients.",
     ];
 
-    // Siti the farmer — contrasting domain
-    let cerita_siti = vec![
-        "Siti adalah seorang petani yang tinggal di desa.",
-        "Siti menanam padi di sawah setiap musim tanam.",
-        "Sawah Siti sangat luas dan menghasilkan banyak padi.",
-        "Siti bangun pagi untuk pergi ke sawah mencabut rumput.",
-        "Padi yang ditanam Siti menjadi sumber makanan bagi desa.",
-        "Siti menggunakan cangkul dan sabit untuk mengolah sawah.",
-        "Desa Siti terletak di kaki gunung yang sangat subur.",
-        "Siti menjual hasil panennya di pasar tradisional.",
-        "Petani seperti Siti bergantung pada musim hujan.",
-        "Siti sudah menjadi petani sejak masih muda.",
-        "Sawah petani Siti menghasilkan padi yang sangat banyak.",
-        "Siti menanam padi di sawah dengan cangkul dan sabit.",
-        "Desa tempat petani Siti tinggal sangat subur dan indah.",
-        "Siti pergi ke sawah setiap pagi untuk menanam padi.",
-        "Padi dari sawah Siti dijual di pasar oleh petani.",
+    // Domain 2: Bob the farmer
+    // Anchor: farmer / field / crop / harvest / plant
+    let domain_farmer = vec![
+        "Bob is a farmer who lives in the countryside.",
+        "Bob plants crops in the field every planting season.",
+        "Bob's field is very large and produces abundant crops.",
+        "Bob wakes up early to go to the field and remove weeds.",
+        "The crops that Bob plants are a source of food for the village.",
+        "Bob uses a hoe and a sickle to work the field.",
+        "Bob's village is located at the foot of a very fertile mountain.",
+        "Bob sells his harvest at the traditional market.",
+        "Farmers like Bob depend on the rainy season.",
+        "Bob has been a farmer since he was young.",
+        "Farmer Bob's field yields very abundant crops.",
+        "Bob plants crops in the field with a hoe and a sickle.",
+        "The village where Farmer Bob lives is very fertile and beautiful.",
+        "Bob goes to the field every morning to plant crops.",
+        "The crops from Bob's field are sold at the market by the farmer.",
     ];
 
-    // Gunung — natural phenomena
-    let cerita_gunung = vec![
-        "Gunung adalah bentuk alam yang menjulang tinggi di atas tanah.",
-        "Gunung terbentuk dari pergerakan lempeng bumi selama jutaan tahun.",
-        "Pegunungan memiliki udara dingin dan tipis di puncaknya.",
-        "Banyak sungai bermula dari mata air di gunung.",
-        "Gunung berapi bisa meletus dan mengeluarkan lava panas.",
-        "Hutan di lereng gunung menjadi habitat banyak hewan.",
-        "Pendaki gunung harus membawa perlengkapan hangat.",
-        "Gunung tertinggi di dunia adalah Everest.",
-        "Erupsi gunung berapi menghasilkan abu vulkanik.",
-        "Tanah di kaki gunung sangat subur untuk pertanian.",
-        "Gunung memiliki puncak yang tinggi dan lereng yang curam.",
-        "Lereng gunung ditutupi hutan yang sangat lebat.",
-        "Puncak gunung memiliki udara yang dingin dan tipis.",
-        "Gunung berapi mengeluarkan lava panas saat meletus.",
-        "Hutan di gunung menjadi habitat hewan yang beragam.",
+    // Domain 3: Clara the teacher
+    // Anchor: teacher / student / school / lesson / learn
+    let domain_teacher = vec![
+        "Clara is a teacher who teaches at the school.",
+        "Every day Clara teaches mathematics to her students.",
+        "Clara's school is located in the center of the city.",
+        "Clara is very patient in teaching students who have difficulty learning.",
+        "Textbooks are Clara's main tool for teaching lessons.",
+        "Clara has been teaching at the school for ten years.",
+        "Clara's students really enjoy her way of teaching.",
+        "Teacher Clara always arrives early at school every day.",
+        "Clara gives assignments to students to learn mathematics.",
+        "The school where Teacher Clara teaches is very well known in the city.",
+        "Students at the school respect Teacher Clara for her dedication.",
+        "Clara prepares lessons every evening for the next school day.",
+        "Teacher Clara helps students understand difficult mathematics problems.",
+        "The classroom where Clara teaches is always clean and organized.",
+        "Clara has taught many students during her years at the school.",
     ];
 
-    // Laut — marine domain
-    let cerita_laut = vec![
-        "Laut adalah wilayah perairan asin yang sangat luas.",
-        "Ikan-ikan hidup di laut dan menjadi sumber makanan.",
-        "Nelayan pergi ke laut untuk menangkap ikan.",
-        "Gelombang laut terbentuk karena angin dan gravitasi bulan.",
-        "Terumbu karang di laut menjadi rumah bagi ikan kecil.",
-        "Laut dalam memiliki tekanan yang sangat tinggi.",
-        "Kapal mengarungi laut untuk mengangkut barang antar negara.",
-        "Air laut mengandung garam sehingga tidak bisa diminum langsung.",
-        "Badai di laut sangat berbahaya bagi kapal kecil.",
-        "Ekosistem laut sangat beragam dari plankton hingga paus biru.",
-        "Nelayan menangkap ikan di laut dengan kapal dan jaring.",
-        "Laut memiliki gelombang yang terbentuk dari angin.",
-        "Ikan di laut menjadi makanan yang ditangkap nelayan.",
-        "Kapal berlayar di laut untuk mengangkut barang antar negara.",
-        "Air laut mengandung garam dan tidak bisa diminum.",
+    // Domain 4: Computers / technology
+    // Anchor: computer / data / software / processor / network
+    let domain_tech = vec![
+        "A computer is a machine that processes data electronically.",
+        "Computer programs are written in programming languages.",
+        "The internet connects computers all over the world.",
+        "Data is stored in the memory of the computer.",
+        "The processor is the brain of the computer that performs calculations.",
+        "A computer screen displays visual information to the user.",
+        "The keyboard and mouse are input devices for the computer.",
+        "A server is a computer that provides network services.",
+        "An algorithm is a set of steps to solve a problem.",
+        "Software consists of programs that run on the computer.",
+        "Computers process data with a very fast processor.",
+        "Computer memory stores data and running programs.",
+        "The screen displays information from the computer to the user.",
+        "A server provides network services for other computers.",
+        "Computer programs are written with algorithms and programming languages.",
     ];
 
-    // Ingest all stories
-    let all_text: Vec<&str> = cerita_budi
+    // Domain 5: History
+    // Anchor: empire / ruler / war / trade / civilization
+    let domain_history = vec![
+        "The Roman Empire was one of the greatest civilizations in history.",
+        "Rulers of empires commanded vast armies across continents.",
+        "Wars between empires reshaped the borders of the ancient world.",
+        "Trade routes connected distant civilizations and spread ideas.",
+        "A ruler often expanded territory through war and conquest.",
+        "The civilization flourished when trade brought wealth and knowledge.",
+        "Empires rose and fell as rulers gained and lost power.",
+        "War was a constant threat to every ancient civilization.",
+        "Rulers imposed taxes on trade to fund their armies and empires.",
+        "The empire's civilization was built on conquest and commerce.",
+        "Ancient rulers led their civilizations through periods of war and peace.",
+        "Trade between empires exchanged goods and culture and technology.",
+        "A powerful ruler could unite an entire civilization under one empire.",
+        "Wars devastated trade routes and weakened empires over time.",
+        "The ruler's legacy shaped the civilization long after the empire fell.",
+    ];
+
+    // Domain 6: Mountains / nature
+    // Anchor: mountain / peak / forest / rock / elevation
+    let domain_mountain = vec![
+        "A mountain is a natural formation that rises high above the ground.",
+        "Mountains are formed by the movement of tectonic plates over millions of years.",
+        "Mountain ranges have cold and thin air at their peaks.",
+        "Many rivers originate from springs in the mountains.",
+        "Volcanic mountains can erupt and release hot lava.",
+        "Forests on mountain slopes provide habitat for many animals.",
+        "Mountain climbers must bring warm equipment to reach the peak.",
+        "The highest mountain in the world is Everest.",
+        "Volcanic eruptions produce volcanic ash and rock.",
+        "The soil at the foot of a mountain is very fertile for farming.",
+        "A mountain has a high peak and steep slopes of rock.",
+        "Mountain slopes are covered with very dense forests.",
+        "The peak of a mountain has cold and thin air at high elevation.",
+        "Volcanic mountains release hot lava and rock when they erupt.",
+        "Forests on mountains are home to diverse wildlife and dense trees.",
+    ];
+
+    // Ingest all domains
+    let all_text: Vec<&str> = domain_doctor
         .iter()
-        .chain(cerita_siti.iter())
-        .chain(cerita_gunung.iter())
-        .chain(cerita_laut.iter())
+        .chain(domain_farmer.iter())
+        .chain(domain_teacher.iter())
+        .chain(domain_tech.iter())
+        .chain(domain_history.iter())
+        .chain(domain_mountain.iter())
         .copied()
         .collect();
 
@@ -309,63 +356,66 @@ fn main() {
     // ==================================================================
     section("PART 2: Auto-Induced Appraise (verbose — with explanation)");
 
-    // TRUE statement about Budi — should agree
-    let v1 = rsvs.appraise_verbose("Budi bekerja di rumah sakit sebagai dokter");
-    print_verdict("Statement 1 (TRUE): 'Budi bekerja di rumah sakit sebagai dokter'", &v1);
+    // --- Domain 1: Doctor (Alice) ---
+    let v1 = rsvs.appraise_verbose("Alice treats patients at the hospital");
+    print_verdict("Doctor-TRUE: 'Alice treats patients at the hospital'", &v1);
 
-    // FALSE statement — Budi is NOT a farmer
-    let v2 = rsvs.appraise_verbose("Budi adalah seorang petani yang menanam padi di sawah");
-    print_verdict("Statement 2 (FALSE): 'Budi adalah seorang petani yang menanam padi di sawah'", &v2);
+    let v2 = rsvs.appraise_verbose("Alice plants crops in the field");
+    print_verdict("Doctor-FALSE: 'Alice plants crops in the field'", &v2);
 
-    // AMBIGUOUS — semantically consistent but vague
-    let _v3 = rsvs.appraise_verbose("Budi bekerja membantu orang lain setiap hari");
-    // (v3 not used in summary, prefix with _)
+    let v3 = rsvs.appraise_verbose("Alice rules an empire through war and conquest");
+    print_verdict("Doctor-CROSS: 'Alice rules an empire through war and conquest'", &v3);
 
-    // WRONG person — Siti is a farmer, not a doctor
-    let v4 = rsvs.appraise_verbose("Siti menyembuhkan pasien di rumah sakit");
-    print_verdict("Statement 4 (WRONG person): 'Siti menyembuhkan pasien di rumah sakit'", &v4);
+    // --- Domain 2: Farmer (Bob) ---
+    let v4 = rsvs.appraise_verbose("Bob plants crops in the field");
+    print_verdict("Farmer-TRUE: 'Bob plants crops in the field'", &v4);
 
-    // TRUE about Siti
-    let v5 = rsvs.appraise_verbose("Siti menanam padi di sawah");
-    print_verdict("Statement 5 (TRUE about Siti): 'Siti menanam padi di sawah'", &v5);
+    let v5 = rsvs.appraise_verbose("Bob treats patients at the hospital");
+    print_verdict("Farmer-FALSE: 'Bob treats patients at the hospital'", &v5);
 
-    // Cross-domain confusion
-    let v6 = rsvs.appraise_verbose("Gunung mengeluarkan obat untuk pasien");
-    print_verdict("Statement 6 (CROSS-DOMAIN): 'Gunung mengeluarkan obat untuk pasien'", &v6);
+    let v6 = rsvs.appraise_verbose("Bob processes data with a computer processor");
+    print_verdict("Farmer-CROSS: 'Bob processes data with a computer processor'", &v6);
 
-    // TRUE about gunung
-    let v7 = rsvs.appraise_verbose("Gunung memiliki puncak yang tinggi");
-    print_verdict("Statement 7 (TRUE about gunung): 'Gunung memiliki puncak yang tinggi'", &v7);
+    // --- Domain 3: Teacher (Clara) ---
+    let v7 = rsvs.appraise_verbose("Clara teaches students at the school");
+    print_verdict("Teacher-TRUE: 'Clara teaches students at the school'", &v7);
+
+    let v8 = rsvs.appraise_verbose("Clara plants crops in the field");
+    print_verdict("Teacher-FALSE: 'Clara plants crops in the field'", &v8);
+
+    let v9 = rsvs.appraise_verbose("Clara rules an empire through war and trade");
+    print_verdict("Teacher-CROSS: 'Clara rules an empire through war and trade'", &v9);
 
     // ==================================================================
     // PART 3: SessionGraph — Dual Memory (Working Graph)
     // ==================================================================
     section("PART 3: SessionGraph — Dual Memory (Working Graph)");
 
-    // Graph knows nothing about Andi the teacher
-    let context_andi = "Andi adalah seorang guru yang mengajar di sekolah. \
-        Setiap hari Andi mengajarkan matematika kepada siswa-siswanya. \
-        Sekolah Andi terletak di pusat kota. Andi sangat sabar mengajar \
-        siswa yang kesulitan belajar. Buku pelajaran adalah alat utama Andi. \
-        Andi sudah mengajar di sekolah selama sepuluh tahun. \
-        Siswa-siswa Andi sangat menyukai cara mengajarnya. \
-        Guru Andi selalu datang pagi ke sekolah setiap hari. \
-        Andi memberikan tugas kepada siswa untuk belajar matematika. \
-        Sekolah tempat guru Andi mengajar sangat terkenal di kota.";
+    // Graph knows nothing about David the musician
+    let context_david = "David is a musician who performs at the concert hall. \
+        Every day David practices the piano for several hours. \
+        The concert hall where David performs is very famous. \
+        David is known for his beautiful piano melodies. \
+        A piano is David's main instrument for performing. \
+        David has been a musician for twenty years. \
+        Audiences love David's performances at the concert hall. \
+        Musician David always arrives early to rehearse before concerts. \
+        David composes new songs for his piano performances. \
+        The concert hall where Musician David plays is always full.";
 
     let nodes_before = rsvs.status().total_nodes;
 
-    let session = SessionGraph::new(context_andi, make_config())
+    let session = SessionGraph::new(context_david, make_config())
         .expect("session failed");
 
     println!("\n  Session stats: {} sentences, {} atoms induced",
         session.stats().sentences_ingested,
         session.stats().atoms_induced);
 
-    // Gunakan compare() untuk contradiction detection
+    // Use compare() for contradiction detection
     let comparison = session.compare(
-        "Andi mengajar di sekolah",
-        "Andi menangkap ikan di laut",
+        "David plays the piano at the concert hall",
+        "David treats patients at the hospital",
     );
     println!("\n  Comparison: {}", comparison.explanation);
     println!("  TRUE  ({:.1}% agree): {}", comparison.verdict_a.agree_pct,
@@ -375,16 +425,16 @@ fn main() {
     println!("  Discriminable: {}", comparison.is_discriminable);
 
     // Individual verdicts for detailed output
-    let c1 = session.appraise("Andi mengajar di sekolah");
-    print_verdict("Context-TRUE: 'Andi mengajar di sekolah'", &c1);
+    let c1 = session.appraise("David plays the piano at the concert hall");
+    print_verdict("Context-TRUE: 'David plays the piano at the concert hall'", &c1);
 
-    let c2 = session.appraise("Andi menangkap ikan di laut");
-    print_verdict("Context-FALSE: 'Andi menangkap ikan di laut'", &c2);
+    let c2 = session.appraise("David treats patients at the hospital");
+    print_verdict("Context-FALSE: 'David treats patients at the hospital'", &c2);
 
-    let _c3 = session.appraise("Andi bekerja dengan orang lain setiap hari");
+    let _c3 = session.appraise("David works with other people every day");
 
-    let c4 = session.appraise("Andi menanam padi di sawah");
-    print_verdict("Context-FALSE2: 'Andi menanam padi di sawah'", &c4);
+    let c4 = session.appraise("David plants crops in the field");
+    print_verdict("Context-FALSE2: 'David plants crops in the field'", &c4);
 
     // Verify graph untouched — drop session explicitly
     drop(session);
@@ -393,98 +443,46 @@ fn main() {
     assert_eq!(nodes_before, nodes_after, "MAIN GRAPH MODIFIED — isolation broken!");
 
     // ==================================================================
-    // PART 4: Random word test — new domain auto-induced
+    // PART 4: Simple appraise — remaining domains
     // ==================================================================
-    section("PART 4: Random Word Test — Technology Domain");
+    section("PART 4: Appraise — Technology, History, Mountains");
 
-    let teks_teknologi = vec![
-        "Komputer adalah mesin yang memproses data secara elektronik.",
-        "Program komputer ditulis dalam bahasa pemrograman.",
-        "Internet menghubungkan komputer di seluruh dunia.",
-        "Data disimpan di dalam memori komputer.",
-        "Prosesor adalah otak dari komputer yang melakukan perhitungan.",
-        "Layar komputer menampilkan informasi visual kepada pengguna.",
-        "Keyboard dan mouse adalah alat input untuk komputer.",
-        "Server adalah komputer yang menyediakan layanan jaringan.",
-        "Algoritma adalah langkah-langkah untuk menyelesaikan masalah.",
-        "Perangkat lunak adalah program yang berjalan di komputer.",
-        "Komputer memproses data dengan prosesor yang sangat cepat.",
-        "Memori komputer menyimpan data dan program yang berjalan.",
-        "Layar menampilkan informasi dari komputer kepada pengguna.",
-        "Server menyediakan layanan jaringan untuk komputer lain.",
-        "Program komputer ditulis dengan algoritma dan bahasa pemrograman.",
-    ];
+    // --- Domain 4: Computers/technology ---
+    let t1 = rsvs.appraise("A computer processes data with software");
+    print_appraise("Tech-TRUE: 'A computer processes data with software'", &t1);
 
-    let stats_tech = rsvs.ingest_text(&teks_teknologi.join(" ")).expect("Ingest tech failed");
-    println!("\n  Ingested {} tech sentences", stats_tech.sentences_processed);
-    println!("  New atoms: {} (auto-induced)", stats_tech.atoms_promoted);
-    println!("  New compositions: {}", stats_tech.compositions_induced);
+    let t2 = rsvs.appraise("A computer plants crops in the field");
+    print_appraise("Tech-FALSE: 'A computer plants crops in the field'", &t2);
 
-    // TRUE about computers
-    let t1 = rsvs.appraise("Komputer memproses data secara elektronik");
-    print_appraise("Tech-TRUE: 'Komputer memproses data secara elektronik'", &t1);
+    let t3 = rsvs.appraise("A computer erupts and releases hot lava from the mountain");
+    print_appraise("Tech-CROSS: 'A computer erupts and releases hot lava from the mountain'", &t3);
 
-    // FALSE — mixing domains
-    let t2 = rsvs.appraise("Komputer menanam padi di sawah");
-    print_appraise("Tech-FALSE (cross-domain): 'Komputer menanam padi di sawah'", &t2);
+    // --- Domain 5: History ---
+    let h1 = rsvs.appraise("The ruler commanded armies across the empire");
+    print_appraise("History-TRUE: 'The ruler commanded armies across the empire'", &h1);
 
-    // FALSE — wrong attributes
-    let t3 = rsvs.appraise("Prosesor adalah alat untuk menangkap ikan di laut");
-    print_appraise("Tech-FALSE (wrong attr): 'Prosesor adalah alat untuk menangkap ikan di laut'", &t3);
+    let h2 = rsvs.appraise("The ruler treats patients at the hospital");
+    print_appraise("History-FALSE: 'The ruler treats patients at the hospital'", &h2);
 
-    // Partial truth
-    let t4 = rsvs.appraise("Komputer membutuhkan data dan memori");
-    print_appraise("Tech-PARTIAL: 'Komputer membutuhkan data dan memori'", &t4);
+    let h3 = rsvs.appraise("The ruler processes data with a computer processor");
+    print_appraise("History-CROSS: 'The ruler processes data with a computer processor'", &h3);
+
+    // --- Domain 6: Mountains/nature ---
+    let m1 = rsvs.appraise("The mountain has a high peak covered with forest");
+    print_appraise("Mountain-TRUE: 'The mountain has a high peak covered with forest'", &m1);
+
+    let m2 = rsvs.appraise("The mountain teaches students at the school");
+    print_appraise("Mountain-FALSE: 'The mountain teaches students at the school'", &m2);
+
+    let m3 = rsvs.appraise("The mountain prescribes medicine to patients at the hospital");
+    print_appraise("Mountain-CROSS: 'The mountain prescribes medicine to patients at the hospital'", &m3);
 
     // ==================================================================
-    // PART 5: Cross-domain contradiction detection
+    // PART 5: Relate — auto-discovered relationships
     // ==================================================================
-    section("PART 5: Cross-Domain Contradiction Detection");
+    section("PART 5: Auto-Discovered Relationships (Relate)");
 
-    let teks_sejarah = vec![
-        "Indonesia merdeka pada tahun 1945 setelah penjajahan Jepang.",
-        "Soekarno adalah proklamator kemerdekaan Indonesia.",
-        "Bendera Indonesia berwarna merah dan putih.",
-        "Indonesia adalah negara kepulauan terbesar di dunia.",
-        "Bahasa Indonesia adalah bahasa resmi negara Indonesia.",
-        "Jakarta adalah ibukota negara Indonesia.",
-        "Indonesia pernah dijajah oleh Belanda selama 350 tahun.",
-        "Pancasila adalah dasar negara Indonesia.",
-        "Rakyat Indonesia berjuang merebut kemerdekaan.",
-        "Proklamasi kemerdekaan dibacakan di Jalan Pegangsaan Timur.",
-        "Indonesia adalah negara yang merdeka pada tahun 1945.",
-        "Soekarno memproklamirkan kemerdekaan Indonesia pada tahun 1945.",
-        "Negara Indonesia memiliki ibukota Jakarta.",
-        "Indonesia berjuang merebut kemerdekaan dari penjajahan.",
-        "Bendera merah putih adalah bendera negara Indonesia.",
-    ];
-
-    let stats_hist = rsvs.ingest_text(&teks_sejarah.join(" ")).expect("Ingest history failed");
-    println!("\n  Ingested {} history sentences", stats_hist.sentences_processed);
-    println!("  New atoms: {} (auto-induced)", stats_hist.atoms_promoted);
-
-    // TRUE about history
-    let h1 = rsvs.appraise("Indonesia merdeka pada tahun 1945");
-    print_appraise("History-TRUE: 'Indonesia merdeka pada tahun 1945'", &h1);
-
-    // FALSE — wrong year
-    let h2 = rsvs.appraise("Indonesia merdeka pada tahun 1990");
-    print_appraise("History-FALSE: 'Indonesia merdeka pada tahun 1990'", &h2);
-
-    // Cross-domain confusion
-    let h3 = rsvs.appraise("Soekarno menanam padi di sawah");
-    print_appraise("Cross-domain-FALSE: 'Soekarno menanam padi di sawah'", &h3);
-
-    // Partially true
-    let h4 = rsvs.appraise("Indonesia adalah negara yang besar");
-    print_appraise("History-PARTIAL: 'Indonesia adalah negara yang besar'", &h4);
-
-    // ==================================================================
-    // PART 6: Relate — auto-discovered relationships
-    // ==================================================================
-    section("PART 6: Auto-Discovered Relationships (Relate)");
-
-    for concept in &["dokter", "petani", "gunung", "laut", "komputer", "indonesia", "padi", "obat"] {
+    for concept in &["doctor", "farmer", "teacher", "computer", "empire", "mountain", "hospital", "field"] {
         match rsvs.relate(concept) {
             Some(result) => {
                 let top: Vec<String> = result
@@ -520,12 +518,12 @@ fn main() {
 
     println!("\n  1. ZERO manual compositions — all auto-induced from free text");
     println!("     - No ontology engineering, no WordNet-style hand-crafting");
-    println!("     - Custom seeds are FUNCTIONAL words (yang, di, dan), not content");
-    println!("     - Content words (dokter, petani, gunung) are 100% auto-induced");
+    println!("     - Custom seeds are FUNCTIONAL words (the, is, are, was), not content");
+    println!("     - Content words (doctor, farmer, mountain) are 100% auto-induced");
 
     println!("\n  2. Contradiction detection from STRUCTURAL meaning, not string match");
-    println!("     - 'Budi petani' vs 'Budi dokter' — different structure detected");
-    println!("     - Cross-domain confusion detected (Soekarno + sawah = novel)");
+    println!("     - 'Alice farmer' vs 'Alice doctor' — different structure detected");
+    println!("     - Cross-domain confusion detected (ruler + hospital = novel)");
 
     println!("\n  3. SessionGraph (Dual Memory) — working graph isolated from long-term");
     println!("     - SessionGraph: volatile, per-context, auto-induced");
@@ -536,39 +534,42 @@ fn main() {
     println!("     - Confidence gap + [CONFIDENT/AMBIGUOUS/CONTEXTUAL] labels");
 
     println!("\n  5. Works on ANY text — not just hand-crafted examples");
-    println!("     - Indonesian stories, tech, history — all auto-induced");
+    println!("     - English stories, tech, history — all auto-induced");
     println!("     - New domains can be added at any time");
 
     // Prove with numbers (using verbose verdict data)
     println!("\n  --- Numeric Summary ---");
-    println!("  Budi(TRUE)  agree: {:.1}%  vs  Budi(FALSE) agree: {:.1}%",
+    println!("  Doctor(TRUE)   agree: {:.1}%  vs  Doctor(FALSE)   agree: {:.1}%",
         v1.agree_pct, v2.agree_pct);
-    println!("  Siti(TRUE)  agree: {:.1}%  vs  Siti(FALSE) agree: {:.1}%",
-        v5.agree_pct, v4.agree_pct);
-    println!("  Andi(TRUE)  agree: {:.1}%  vs  Andi(FALSE) agree: {:.1}%",
+    println!("  Farmer(TRUE)   agree: {:.1}%  vs  Farmer(FALSE)   agree: {:.1}%",
+        v4.agree_pct, v5.agree_pct);
+    println!("  Teacher(TRUE)  agree: {:.1}%  vs  Teacher(FALSE)  agree: {:.1}%",
+        v7.agree_pct, v8.agree_pct);
+    println!("  Session(TRUE)  agree: {:.1}%  vs  Session(FALSE)  agree: {:.1}%",
         c1.agree_pct, c2.agree_pct);
-    println!("  Tech(TRUE)  agree: {:.1}%  vs  Tech(FALSE) agree: {:.1}%",
+    println!("  Tech(TRUE)     agree: {:.1}%  vs  Tech(FALSE)     agree: {:.1}%",
         t1.agree_pct, t2.agree_pct);
-    println!("  History(TRUE) agree: {:.1}%  vs  History(FALSE) agree: {:.1}%",
+    println!("  History(TRUE)  agree: {:.1}%  vs  History(FALSE)  agree: {:.1}%",
         h1.agree_pct, h2.agree_pct);
-    println!("  Gunung(TRUE) agree: {:.1}%  vs  Gunung(CROSS) agree: {:.1}%",
-        v7.agree_pct, v6.agree_pct);
+    println!("  Mountain(TRUE) agree: {:.1}%  vs  Mountain(FALSE) agree: {:.1}%",
+        m1.agree_pct, m2.agree_pct);
 
     // The key proof: TRUE statements consistently score higher than FALSE
-    let true_avg = (v1.agree_pct + v5.agree_pct + c1.agree_pct + t1.agree_pct + h1.agree_pct + v7.agree_pct) / 6.0;
-    let false_avg = (v2.agree_pct + v4.agree_pct + c2.agree_pct + t2.agree_pct + h2.agree_pct + v6.agree_pct) / 6.0;
+    let true_avg = (v1.agree_pct + v4.agree_pct + v7.agree_pct + c1.agree_pct + t1.agree_pct + h1.agree_pct + m1.agree_pct) / 7.0;
+    let false_avg = (v2.agree_pct + v5.agree_pct + v8.agree_pct + c2.agree_pct + t2.agree_pct + h2.agree_pct + m2.agree_pct) / 7.0;
     println!("\n  TRUE avg: {:.1}%  vs  FALSE avg: {:.1}%  →  gap: {:.1} pp",
         true_avg, false_avg, true_avg - false_avg);
 
     // Discriminability per domain
     println!("\n  --- Discriminability per Domain ---");
     let domains = vec![
-        ("Budi(dokter)", v1.agree_pct, v2.agree_pct),
-        ("Siti(petani)", v5.agree_pct, v4.agree_pct),
-        ("Andi(guru)", c1.agree_pct, c2.agree_pct),
-        ("Komputer", t1.agree_pct, t2.agree_pct),
-        ("Sejarah", h1.agree_pct, h2.agree_pct),
-        ("Gunung", v7.agree_pct, v6.agree_pct),
+        ("Doctor(Alice)", v1.agree_pct, v2.agree_pct),
+        ("Farmer(Bob)", v4.agree_pct, v5.agree_pct),
+        ("Teacher(Clara)", v7.agree_pct, v8.agree_pct),
+        ("Musician(David)", c1.agree_pct, c2.agree_pct),
+        ("Computers", t1.agree_pct, t2.agree_pct),
+        ("History", h1.agree_pct, h2.agree_pct),
+        ("Mountains", m1.agree_pct, m2.agree_pct),
     ];
 
     let mut all_pass = true;

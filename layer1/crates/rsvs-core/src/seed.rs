@@ -1,22 +1,19 @@
-//! Seed graph bootstrap (v8.0)
+//! Seed atoms — the epistemological primitives that form the axiomatic
+//! foundation of every RSVS knowledge graph.
 //!
-//! Loads seed atoms into the graph at startup. Uses 24 epistemological
-//! seed primitives — language-AGNOSTIC concept nodes at layer 0.
+//! 24 seed atoms are always present from initialization and can never
+//! be removed. They represent the most fundamental concepts from which
+//! all other meaning is composed.
 //!
-//! v8.0 — Language-Agnostic Seeds:
-//! - Removed Indonesian seed atoms ("ada", "entitas", etc.) which
-//!   contradicted the language-agnostic design. Seeds are now PURE
-//!   concept primitives identified by NodeId, not by linguistic labels.
-//! - Seed `surface_label` no longer carries a language tag (@en).
-//!   Seeds are language-agnostic; their labels are display-only.
-//! - Grounding happens via structural composition to seed NodeIds,
-//!   not via string matching to seed labels. See `seed_node_ids`.
-//! - "anjing" (ID) and "dog" (EN) will naturally converge to the
-//!   same seed NodeIds through structural composition overlap.
+//! The system is language-agnostic: these labels happen to be English,
+//! but the structural relationships hold across any language. Custom
+//! seed sets (including functional words for a specific language) can
+//! be provided via `PipelineConfig::custom_seeds`.
 //!
-//! These nodes have confidence=1.0, Tier=Tier1, status=Stable,
-//! is_seed=true, is_locked=true, and cannot be removed.
-//! All nodes above the seed layer emerge from data.
+//! Default seeds (24):
+//! exists, entity, relation, state, change, time, space, cause, effect,
+//! context, signal, pattern, memory, attention, value, agent, goal,
+//! risk, trust, identity, language, meaning, action, feedback
 
 use crate::error::RsvsError;
 use crate::graph::RsvsGraph;
@@ -93,8 +90,8 @@ const SEED_DISPLAY_SYMBOLS: &[&str] = &[
 ///   `surface_label` is set equal to `label` (language-agnostic).
 /// - Each seed also gets a `display_symbol` stored in the fingerprint
 ///   field (as a hash of the symbol string) for 3D visualization.
-/// - No Indonesian seeds are added — convergence handles cross-language
-///   equivalence automatically via structural composition overlap.
+/// - Cross-language equivalence is handled automatically via
+///   structural composition overlap, without duplicate seed sets.
 ///
 /// # Errors
 ///
@@ -175,8 +172,8 @@ pub fn bootstrap(
 }
 
 /// Public list of seed atom labels — used by pipeline for grounding checks.
-/// v8.0: Language-agnostic — no Indonesian seeds. Only 24 epistemological
-/// primitives. Grounding via composition to these NodeIds, not string labels.
+/// Language-agnostic — 24 epistemological primitives only.
+/// Grounding via composition to these NodeIds, not string labels.
 pub const SEED_LABEL_LIST: &[&str] = &[
     "exists",
     "entity",
@@ -270,7 +267,8 @@ mod tests {
         assert!(map.contains_key("entity"));
         assert!(map.contains_key("relation"));
         assert!(map.contains_key("feedback"));
-        // v8.0: No Indonesian seeds — they were a contradiction
+        // Cross-language equivalence emerges from structural composition,
+        // not from duplicate seed sets per language.
         assert!(!map.contains_key("ada"));
         assert!(!map.contains_key("entitas"));
         assert!(!map.contains_key("sebab"));

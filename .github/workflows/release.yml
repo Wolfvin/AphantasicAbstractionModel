@@ -1,8 +1,8 @@
 # ──────────────────────────────────────────────────────────────────────
-#  RSVS — Release
+#  RSVS — Release Pipeline
 #  Builds wheels (manylinux / macOS / Windows), sdist, publishes to
-#  PyPI via Trusted Publisher (OIDC), pushes Docker image to ghcr.io,
-#  and creates a GitHub Release with changelog excerpt.
+#  PyPI via Trusted Publisher (OIDC), and creates a GitHub Release
+#  with changelog excerpt.
 # ──────────────────────────────────────────────────────────────────────
 
 name: Release
@@ -52,7 +52,7 @@ jobs:
             manylinux: ""
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
 
       - name: Build wheel
         uses: PyO3/maturin-action@v1
@@ -62,10 +62,9 @@ jobs:
           manylinux: ${{ matrix.manylinux || 'auto' }}
           args: --release --out ../dist
           rust-toolchain: stable
-          # maturin-action reads python/pyproject.toml automatically
 
       - name: Upload wheel artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: wheel-${{ matrix.target }}
           path: dist
@@ -76,7 +75,7 @@ jobs:
     name: Build sdist
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
 
       - name: Build sdist
         uses: PyO3/maturin-action@v1
@@ -87,7 +86,7 @@ jobs:
           rust-toolchain: stable
 
       - name: Upload sdist artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: sdist
           path: dist
@@ -104,7 +103,7 @@ jobs:
 
     steps:
       - name: Download all artifacts
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@v4
         with:
           path: dist
           merge-multiple: true
@@ -115,50 +114,13 @@ jobs:
           command: upload
           args: dist/* --skip-existing
 
-  # ── Docker image → ghcr.io ──────────────────────────────────────────
-  docker:
-    name: Docker → ghcr.io
-    needs: [build-wheels]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Docker meta
-        id: meta
-        uses: docker/metadata-action@v6
-        with:
-          images: ghcr.io/${{ github.repository }}
-          tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
-            type=sha
-
-      - name: Log in to ghcr.io
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build and push
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: ./Dockerfile
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          build-args: |
-            BUILDKIT_INLINE_CACHE=1
-
   # ── GitHub Release ──────────────────────────────────────────────────
   github-release:
     name: Create GitHub Release
     needs: [build-wheels, build-sdist]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0          # need full history for changelog extraction
 
@@ -182,13 +144,13 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@v4
         with:
           path: dist
           merge-multiple: true
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@v2
         with:
           name: RSVS v${{ steps.changelog.outputs.version }}
           body_path: _release_body.md

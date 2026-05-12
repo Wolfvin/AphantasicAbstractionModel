@@ -428,8 +428,9 @@ class ReasoningEngine:
         if bridge.is_available and context_atoms:
             try:
                 mcts_result = bridge.mcts_query(
-                    trigger_concept, context_atoms,
-                    max_simulations=5, max_depth=3,
+                    node_label=trigger_concept,
+                    max_depth=3,
+                    simulations=20,
                 )
                 if mcts_result:
                     if isinstance(mcts_result, dict):

@@ -1,22 +1,19 @@
-//! RSVS TUI v9.0 — Split-View with Confidence Heatmap + Relation Panel
+//! RSVS TUI v8.3 — Recursive Symbolic Vocabulary System (English Configuration)
 //!
-//! Layout (Option C):
-//! ┌─ ATOMS ─────────────────┐┌─ SELECTED: dokter ──────────┐
-//! │ ●● dokter      [0.82] ██││ Layer: 1                    │
-//! │ ●● petani      [0.71] █▓││ Tier:  Stable               │
-//! │ ○  gunung      [0.65] █▓││ Senses: 2                   │
-//! │ ○  laut        [0.44] █░││ Compositions:               │
-//! │ ·  sejarah     [0.21] ░ ││  → agent    (seed)          │
-//! │ ·  padi        [0.18] ░ ││  → rumah    (0.71)          │
-//! │                         ││ Related:                    │
-//! │ [↑↓] navigate [Enter]   ││  pasien(0.88) perawat(0.72) │
-//! └─────────────────────────┘└─────────────────────────────┘
-//!
-//! ┌─ OUTPUT ──────────────────────────────────────────────────┐
-//! │ (command output from ingest, appraise, etc.)              │
-//! └───────────────────────────────────────────────────────────┘
-//! ┌ NORMAL > _                                               ┐
-//! │ [I]ngest [A]ppraise [C]ontext [R]elate [Q]uit [?]help   │
+//! Layout:
+//! ┌─ RSVS v8.3 — Recursive Symbolic Vocabulary System [NORMAL] ────────────┐
+//! ├─ STATUS (20%) ─────────┐┌─ OUTPUT (80%) ──────────────────────────────┐
+//! │ ●● doctor     [0.82] ██││ Ingest complete                            │
+//! │ ●● farmer     [0.71] █▓││   sentences: 3 | atoms: 5 | senses: 2/4   │
+//! │ ○  mountain   [0.65] █▓││ ─────────────────────────────────────────── │
+//! │ ○  sea        [0.44] █░││ Appraise: consistent (78.0% agree)         │
+//! │ ·  history    [0.21] ░ ││ ─────────────────────────────────────────── │
+//! │ ·  rice       [0.18] ░ ││                                            │
+//! │                        ││                                            │
+//! │ Atoms: 24  Edges: 12  ││                                            │
+//! └────────────────────────┘└────────────────────────────────────────────┘
+//! ┌ NORMAL > _                                                            ┐
+//! [I]ngest [A]ppraise [C]ontext [R]elate [Q]uit [?]help
 
 use crossterm::{
     event::{self, Event, KeyCode, KeyEventKind},
@@ -38,15 +35,77 @@ use rsvs::session::SessionGraph;
 use std::io;
 
 // ---------------------------------------------------------------------------
+// English configuration
+// ---------------------------------------------------------------------------
+
+/// Create a PipelineConfig tuned for English text processing.
+///
+/// Uses 24 epistemological seed atoms plus 28 English functional words
+/// as custom seeds, with parameters optimized for English language input.
+fn make_english_config() -> PipelineConfig {
+    // 24 epistemological seed atoms
+    let epistemological_seeds = vec![
+        "exists", "entity", "relation", "state", "change",
+        "time", "space", "cause", "effect", "context",
+        "signal", "pattern", "memory", "attention", "value",
+        "agent", "goal", "risk", "trust", "identity",
+        "language", "meaning", "action", "feedback",
+    ];
+
+    // 28 English functional words
+    let english_functional_words = vec![
+        "the", "is", "are", "was", "a", "an", "of", "in",
+        "and", "to", "that", "it", "by", "with", "for", "from",
+        "has", "have", "be", "been", "not", "as", "or", "at",
+        "its", "which", "when", "can",
+    ];
+
+    // Combine: 24 epistemological + 28 functional = 52 custom seeds
+    let mut custom_seeds: Vec<String> = epistemological_seeds
+        .iter()
+        .map(|s| s.to_string())
+        .chain(english_functional_words.iter().map(|s| s.to_string()))
+        .collect();
+    // Deduplicate (the functional words "the", "a", etc. are not in the seed list,
+    // but be safe)
+    custom_seeds.sort();
+    custom_seeds.dedup();
+
+    let mut attention = rsvs::AttentionConfig::default();
+    attention.min_cooc = 1; // English: lower min_cooc for smaller corpora
+
+    let mut sense = rsvs::SenseConfig::default();
+    sense.theta_assign = 0.20;
+    sense.gamma_stopword = 0.85;
+    sense.induction.tau_overlap = 0.5;
+    sense.induction.tau_compress = 0.15;
+    sense.induction.composition_min_confidence = 0.15;
+
+    PipelineConfig {
+        attention,
+        sense,
+        autonomy: rsvs::AutonomyConfig::default(),
+        entity_promote_n: 2,
+        seed_labels: vec![], // overridden by custom_seeds
+        current_domain: 1,
+        custom_seeds: Some(custom_seeds),
+        traversal: rsvs::TraversalConfig::default(),
+        tau_entity_learned: 0.10,
+        alpha_entity: 0.5,
+        beta_entity: 0.5,
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Atom info for the left panel
 // ---------------------------------------------------------------------------
 
-/// Simplified atom info for display in the ATOMS panel.
+/// Simplified atom info for display in the STATUS panel.
 #[derive(Debug, Clone)]
 struct AtomInfo {
     label: String,
     confidence: f32,
-    tier_str: String,      // "Stable", "Candidate", "New", "Deprecated", "Quarantine"
+    tier_str: String,      // "stable", "candidate", "new", "deprecated", "quarantine"
     layer: u32,
     sense_count: usize,
     is_seed: bool,
@@ -143,12 +202,27 @@ impl std::fmt::Display for Mode {
     }
 }
 
+/// Border color per mode for visual feedback.
+fn mode_border_color(mode: &Mode) -> Color {
+    match mode {
+        Mode::Normal => Color::White,
+        Mode::Insert => Color::Green,
+        Mode::Appraise => Color::Yellow,
+        Mode::ContextStep1 | Mode::ContextStep2 => Color::Magenta,
+        Mode::Relate => Color::Blue,
+        Mode::Help => Color::Cyan,
+    }
+}
+
 struct App {
     rsvs: Rsvs,
     mode: Mode,
     input: String,
+    context_buf: String,
     output: Vec<Line<'static>>,
-    context_buffer: String,
+    scroll: usize,
+    status_atoms: usize,
+    status_edges: usize,
     // Atom browser state
     atoms: Vec<AtomInfo>,
     selected_atom: usize,
@@ -159,21 +233,23 @@ struct App {
 
 impl App {
     fn new() -> Self {
-        let config = PipelineConfig {
-            entity_promote_n: 3,
-            ..PipelineConfig::default()
-        };
+        let config = make_english_config();
         let rsvs = Rsvs::new(config).expect("Failed to initialize RSVS");
         let atoms = snapshot_to_atoms(&rsvs);
+        let status_atoms = atoms.len();
+        let status_edges = rsvs.graph.edge_count();
         Self {
             rsvs,
             mode: Mode::Normal,
             input: String::new(),
+            context_buf: String::new(),
             output: vec![Line::from(Span::styled(
-                "RSVS v9.0 TUI ready. Press ? for help. ↑↓ to browse atoms.",
+                "RSVS v8.3 TUI ready. Press ? for help.",
                 Style::default().fg(Color::Cyan),
             ))],
-            context_buffer: String::new(),
+            scroll: 0,
+            status_atoms,
+            status_edges,
             atoms,
             selected_atom: 0,
             atom_scroll: 0,
@@ -181,16 +257,19 @@ impl App {
         }
     }
 
-    fn refresh_atoms(&mut self) {
+    fn refresh_status(&mut self) {
         self.atoms = snapshot_to_atoms(&self.rsvs);
         if self.selected_atom >= self.atoms.len() && !self.atoms.is_empty() {
             self.selected_atom = self.atoms.len() - 1;
         }
+        self.status_atoms = self.atoms.len();
+        self.status_edges = self.rsvs.graph.edge_count();
     }
 
     fn push_output(&mut self, lines: Vec<Line<'static>>) {
         self.output.extend(lines);
         self.output_scroll = 0;
+        self.scroll = 0;
     }
 
     fn process_input(&mut self, input: String) {
@@ -205,7 +284,7 @@ impl App {
                     match self.rsvs.ingest_text(&input) {
                         Ok(stats) => {
                             self.push_output(format_ingest_result(&stats));
-                            self.refresh_atoms();
+                            self.refresh_status();
                         }
                         Err(e) => {
                             self.push_output(vec![Line::from(Span::styled(
@@ -237,7 +316,7 @@ impl App {
                     ))]);
                     self.mode = Mode::Normal;
                 } else {
-                    self.context_buffer = input;
+                    self.context_buf = input;
                     self.push_output(vec![Line::from(Span::styled(
                         "Context saved. Now enter the statement to test:",
                         Style::default().fg(Color::Cyan),
@@ -252,7 +331,8 @@ impl App {
                         Style::default().fg(Color::Yellow),
                     ))]);
                 } else {
-                    match SessionGraph::new(&self.context_buffer, self.rsvs.config.clone()) {
+                    // Use SessionGraph for isolated contextual appraisal
+                    match SessionGraph::new(&self.context_buf, self.rsvs.config.clone()) {
                         Ok(session) => {
                             let sstats = session.stats();
                             self.push_output(vec![Line::from(Span::styled(
@@ -262,10 +342,10 @@ impl App {
                                 ),
                                 Style::default().fg(Color::DarkGray),
                             ))]);
-                            let ctx_preview = if self.context_buffer.len() > 60 {
-                                format!("[Context] {}...", &self.context_buffer[..60])
+                            let ctx_preview = if self.context_buf.len() > 60 {
+                                format!("[Context] {}...", &self.context_buf[..60])
                             } else {
-                                format!("[Context] {}", self.context_buffer)
+                                format!("[Context] {}", self.context_buf)
                             };
                             self.push_output(vec![Line::from(Span::styled(
                                 ctx_preview,
@@ -274,6 +354,7 @@ impl App {
                             self.push_output(vec![Line::from(Span::raw(
                                 "─".repeat(60),
                             ))]);
+                            // Isolated contextual appraisal via SessionGraph::appraise
                             let verdict = session.appraise(&input);
                             self.push_output(format_verdict_result(
                                 &verdict,
@@ -292,7 +373,7 @@ impl App {
                         }
                     }
                 }
-                self.context_buffer.clear();
+                self.context_buf.clear();
                 self.mode = Mode::Normal;
             }
             Mode::Relate => {
@@ -338,7 +419,7 @@ impl App {
             }
             KeyCode::Char('c') => {
                 self.mode = Mode::ContextStep1;
-                self.context_buffer.clear();
+                self.context_buf.clear();
                 self.push_output(vec![Line::from(Span::styled(
                     "CONTEXT mode — Step 1: enter story/context:",
                     Style::default().fg(Color::Magenta),
@@ -387,7 +468,7 @@ impl App {
 // ---------------------------------------------------------------------------
 
 /// Map confidence (0.0–1.0) to a visual bar string using block characters.
-/// 8 characters wide: ██ = full, ▓ = three-quarters, ░ = quarter, space = empty
+/// 8 characters wide: full block = full, three-quarters, half, quarter, space = empty
 fn confidence_bar(confidence: f32, width: usize) -> String {
     let total_units = width * 8; // each char has 8 sub-units
     let filled = (confidence * total_units as f32).round() as usize;
@@ -396,16 +477,16 @@ fn confidence_bar(confidence: f32, width: usize) -> String {
 
     for _ in 0..width {
         if remaining >= 8 {
-            bar.push('\u{2588}'); // █ full block
+            bar.push('\u{2588}'); // full block
             remaining -= 8;
         } else if remaining >= 6 {
-            bar.push('\u{2593}'); // ▓ three-quarters
+            bar.push('\u{2593}'); // three-quarters
             remaining = 0;
         } else if remaining >= 4 {
-            bar.push('\u{2592}'); // ▒ half
+            bar.push('\u{2592}'); // half
             remaining = 0;
         } else if remaining >= 2 {
-            bar.push('\u{2591}'); // ░ quarter
+            bar.push('\u{2591}'); // quarter
             remaining = 0;
         } else {
             bar.push(' ');
@@ -414,7 +495,7 @@ fn confidence_bar(confidence: f32, width: usize) -> String {
     bar
 }
 
-/// Tier bullet: ●● = Stable, ● = Candidate, ○ = New, · = Deprecated/Quarantine
+/// Tier bullet: double-circle = Stable, circle = Candidate, open-circle = New, dot = Deprecated/Quarantine
 fn tier_bullet(status: &str) -> (&'static str, Color) {
     match status {
         "stable" => ("\u{25cf}\u{25cf}", Color::Green),   // ●●
@@ -621,58 +702,54 @@ fn format_relate_result(result: &RelateResult, rsvs: &Rsvs) -> Vec<Line<'static>
 
 fn ui(f: &mut Frame, app: &App) {
     let size = f.area();
+    let border_color = mode_border_color(&app.mode);
 
-    // Main layout: top (split view + output), middle (input), bottom (footer)
-    let top_height = size.height.saturating_sub(5); // 3 for input + 1 for footer + 1 margin
+    // Main layout: header, body, input bar, footer
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(top_height), // main area
+            Constraint::Length(1),          // header
+            Constraint::Min(8),             // body (status + output)
             Constraint::Length(3),          // input bar
             Constraint::Length(1),          // footer
         ])
         .split(size);
 
-    // Split main area into: top-half (atom browser) + bottom-half (output)
-    let atom_browser_height = (top_height / 2).max(8);
-    let main_chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(atom_browser_height), // atom browser
-            Constraint::Min(4),                     // output
-        ])
-        .split(chunks[0]);
+    // ── Header ──
+    let header_text = format!(
+        " RSVS v8.3 \u{2014} Recursive Symbolic Vocabulary System [{}]",
+        app.mode
+    );
+    let header_color = match app.mode {
+        Mode::Normal => Color::Cyan,
+        Mode::Insert => Color::Green,
+        Mode::Appraise => Color::Yellow,
+        Mode::ContextStep1 | Mode::ContextStep2 => Color::Magenta,
+        Mode::Relate => Color::Blue,
+        Mode::Help => Color::Cyan,
+    };
+    let header = Paragraph::new(Line::from(Span::styled(
+        header_text,
+        Style::default()
+            .fg(header_color)
+            .add_modifier(Modifier::BOLD),
+    )));
+    f.render_widget(header, chunks[0]);
 
-    // ── Atom Browser: Left (ATOMS) | Right (SELECTED) ──
-    let browser_chunks = Layout::default()
+    // ── Body: 20% left status | 80% right output ──
+    let body_chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
-            Constraint::Length(28), // ATOMS panel
-            Constraint::Min(20),    // SELECTED panel
+            Constraint::Percentage(20), // STATUS panel
+            Constraint::Percentage(80), // OUTPUT panel
         ])
-        .split(main_chunks[0]);
+        .split(chunks[1]);
 
-    render_atoms_panel(f, app, browser_chunks[0]);
-    render_selected_panel(f, app, browser_chunks[1]);
-
-    // ── Output panel ──
-    let output_paragraph = Paragraph::new(app.output.clone())
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .title(Span::styled(
-                    " OUTPUT ",
-                    Style::default()
-                        .fg(Color::White)
-                        .add_modifier(Modifier::BOLD),
-                )),
-        )
-        .wrap(Wrap { trim: false })
-        .scroll((app.output_scroll, 0));
-    f.render_widget(output_paragraph, main_chunks[1]);
+    render_status_panel(f, app, body_chunks[0], border_color);
+    render_output_panel(f, app, body_chunks[1], border_color);
 
     // ── Input bar ──
-    render_input_bar(f, app, chunks[1]);
+    render_input_bar(f, app, chunks[2]);
 
     // ── Footer ──
     let footer = match app.mode {
@@ -682,12 +759,12 @@ fn ui(f: &mut Frame, app: &App) {
         )),
         _ => {
             Line::from(Span::styled(
-                " [I]ngest [A]ppraise [C]ontext [R]elate [Q]uit [?]help | \u{2191}\u{2193} browse atoms | Enter=relate ",
+                " [I]ngest [A]ppraise [C]ontext [R]elate [Q]uit [?]help | \u{2191}\u{2193} browse | Enter=relate ",
                 Style::default().fg(Color::DarkGray),
             ))
         }
     };
-    f.render_widget(Paragraph::new(footer), chunks[2]);
+    f.render_widget(Paragraph::new(footer), chunks[3]);
 
     // ── Help overlay ──
     if app.mode == Mode::Help {
@@ -695,18 +772,19 @@ fn ui(f: &mut Frame, app: &App) {
     }
 }
 
-fn render_atoms_panel(f: &mut Frame, app: &App, area: Rect) {
+fn render_status_panel(f: &mut Frame, app: &App, area: Rect, border_color: Color) {
     let inner_height = area.height.saturating_sub(2) as usize; // minus borders
     let mut lines: Vec<Line<'static>> = Vec::new();
 
     // Calculate scroll offset to keep selected item visible
-    let scroll = if app.selected_atom >= inner_height {
-        app.selected_atom - inner_height + 1
+    let scroll = if app.selected_atom >= inner_height.saturating_sub(3) {
+        app.selected_atom.saturating_sub(inner_height.saturating_sub(4))
     } else {
         0
     };
 
-    let visible_range = scroll..(scroll + inner_height).min(app.atoms.len());
+    let visible_end = (scroll + inner_height.saturating_sub(3)).min(app.atoms.len());
+    let visible_range = scroll..visible_end;
 
     for idx in visible_range {
         let atom = &app.atoms[idx];
@@ -716,10 +794,12 @@ fn render_atoms_panel(f: &mut Frame, app: &App, area: Rect) {
 
         let is_selected = idx == app.selected_atom;
 
-        let label_display = if atom.label.len() > 10 {
-            format!("{:.10}", atom.label)
+        // Truncate label to fit in narrow panel
+        let max_label_len = 8;
+        let label_display = if atom.label.len() > max_label_len {
+            format!("{:.max_label_len$}", atom.label, max_label_len = max_label_len)
         } else {
-            format!("{:<10}", atom.label)
+            format!("{:<max_label_len$}", atom.label, max_label_len = max_label_len)
         };
 
         let line = if is_selected {
@@ -761,26 +841,31 @@ fn render_atoms_panel(f: &mut Frame, app: &App, area: Rect) {
     }
 
     // Pad with empty lines if not enough atoms
-    while lines.len() < inner_height {
+    while lines.len() < inner_height.saturating_sub(3) {
         lines.push(Line::from(""));
     }
 
-    // Navigation hint at the bottom
-    if !app.atoms.is_empty() {
-        let hint = format!(" \u{2191}\u{2193} nav  [Enter] relate ");
-        lines.push(Line::from(Span::styled(
-            hint,
-            Style::default().fg(Color::DarkGray),
-        )));
-    }
+    // Status summary at the bottom
+    lines.push(Line::from(Span::raw("─".repeat(16))));
+    lines.push(Line::from(vec![
+        Span::styled(" Atoms:", Style::default().fg(Color::Cyan)),
+        Span::styled(
+            format!("{}", app.status_atoms),
+            Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(" Edges:", Style::default().fg(Color::Cyan)),
+        Span::styled(
+            format!("{}", app.status_edges),
+            Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
+        ),
+    ]));
 
-    let atom_count = app.atoms.len();
-    let title = format!(" ATOMS ({}) ", atom_count);
-
+    let title = format!(" STATUS ({}) ", app.status_atoms);
     let paragraph = Paragraph::new(lines)
         .block(
             Block::default()
                 .borders(Borders::ALL)
+                .border_style(Style::default().fg(border_color))
                 .title(Span::styled(
                     title,
                     Style::default()
@@ -793,172 +878,22 @@ fn render_atoms_panel(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(paragraph, area);
 }
 
-fn render_selected_panel(f: &mut Frame, app: &App, area: Rect) {
-    let mut lines: Vec<Line<'static>> = Vec::new();
-
-    if let Some(atom) = app.atoms.get(app.selected_atom) {
-        // Title: atom label
-        lines.push(Line::from(vec![
-            Span::styled(
-                format!(" {} ", atom.label),
-                Style::default()
-                    .fg(Color::White)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(
-                if atom.is_seed { "[seed]" } else { "" },
-                Style::default().fg(Color::Yellow),
-            ),
-        ]));
-
-        // Metadata line
-        let tier_display = match atom.tier_str.as_str() {
-            "stable" => "Stable",
-            "candidate" => "Candidate",
-            "new" => "New",
-            "deprecated" => "Deprecated",
-            "quarantine" => "Quarantine",
-            other => other,
-        };
-        let (bullet, bullet_color) = tier_bullet(&atom.tier_str);
-        lines.push(Line::from(vec![
-            Span::raw("  Layer: "),
-            Span::styled(
-                format!("{}", atom.layer),
-                Style::default().fg(Color::Cyan),
-            ),
-            Span::raw("  Tier: "),
-            Span::styled(
-                format!("{} {}", bullet, tier_display),
-                Style::default().fg(bullet_color),
-            ),
-        ]));
-
-        lines.push(Line::from(vec![
-            Span::raw("  Senses: "),
-            Span::styled(
-                format!("{}", atom.sense_count),
-                Style::default().fg(Color::White),
-            ),
-            Span::raw("  Conf: "),
-            Span::styled(
-                format!("{:.2}", atom.confidence),
-                Style::default().fg(confidence_color(atom.confidence)),
-            ),
-            if let Some(coh) = atom.coherence {
-                Span::raw(format!("  Coherence: {:.2}", coh))
-            } else {
-                Span::raw(String::new())
-            },
-        ]));
-
-        if let Some(gs) = atom.grounding_score {
-            lines.push(Line::from(vec![
-                Span::raw("  Grounding: "),
-                Span::styled(
-                    format!("{:.2}", gs),
-                    Style::default().fg(if gs > 0.5 {
-                        Color::Green
-                    } else {
-                        Color::Yellow
-                    }),
-                ),
-            ]));
-        }
-
-        // Compositions
-        if !atom.compositions.is_empty() {
-            lines.push(Line::from(Span::styled(
-                "  Compositions:",
-                Style::default()
-                    .fg(Color::White)
-                    .add_modifier(Modifier::BOLD),
-            )));
-            for (label, conf, is_seed) in atom.compositions.iter().take(8) {
-                let seed_tag = if *is_seed { " (seed)" } else { "" };
-                lines.push(Line::from(vec![
-                    Span::styled("    \u{2192} ", Style::default().fg(Color::DarkGray)), // →
-                    Span::styled(
-                        format!("{:<12}", label),
-                        Style::default().fg(confidence_color(*conf)),
-                    ),
-                    Span::styled(
-                        format!("({:.2}){}", conf, seed_tag),
-                        Style::default().fg(if *is_seed {
-                            Color::Yellow
-                        } else {
-                            Color::DarkGray
-                        }),
-                    ),
-                ]));
-            }
-            if atom.compositions.len() > 8 {
-                lines.push(Line::from(Span::styled(
-                    format!("    ... +{} more", atom.compositions.len() - 8),
-                    Style::default().fg(Color::DarkGray),
-                )));
-            }
-        } else if atom.is_seed {
-            lines.push(Line::from(Span::styled(
-                "  Compositions: (primitive seed)",
-                Style::default().fg(Color::DarkGray),
-            )));
-        } else {
-            lines.push(Line::from(Span::styled(
-                "  Compositions: (none yet)",
-                Style::default().fg(Color::DarkGray),
-            )));
-        }
-
-        // Related nodes
-        if !atom.related.is_empty() {
-            lines.push(Line::from(Span::styled(
-                "  Related:",
-                Style::default()
-                    .fg(Color::White)
-                    .add_modifier(Modifier::BOLD),
-            )));
-            let mut related_line = String::from("   ");
-            for (label, score) in atom.related.iter().take(6) {
-                related_line.push_str(&format!("{}({:.2}) ", label, score));
-            }
-            lines.push(Line::from(Span::styled(
-                related_line,
-                Style::default().fg(Color::Cyan),
-            )));
-        }
-    } else {
-        lines.push(Line::from(Span::styled(
-            " No atoms in graph.",
-            Style::default().fg(Color::DarkGray),
-        )));
-        lines.push(Line::from(Span::styled(
-            " Press [i] to ingest text.",
-            Style::default().fg(Color::DarkGray),
-        )));
-    }
-
-    let selected_label = app
-        .atoms
-        .get(app.selected_atom)
-        .map(|a| a.label.clone())
-        .unwrap_or_default();
-    let title = format!(" SELECTED: {} ", selected_label);
-
-    let paragraph = Paragraph::new(lines)
+fn render_output_panel(f: &mut Frame, app: &App, area: Rect, border_color: Color) {
+    let output_paragraph = Paragraph::new(app.output.clone())
         .block(
             Block::default()
                 .borders(Borders::ALL)
+                .border_style(Style::default().fg(border_color))
                 .title(Span::styled(
-                    title,
+                    " OUTPUT ",
                     Style::default()
                         .fg(Color::White)
                         .add_modifier(Modifier::BOLD),
                 )),
         )
-        .wrap(Wrap { trim: true });
-
-    f.render_widget(paragraph, area);
+        .wrap(Wrap { trim: false })
+        .scroll((app.output_scroll, 0));
+    f.render_widget(output_paragraph, area);
 }
 
 fn render_input_bar(f: &mut Frame, app: &App, area: Rect) {
@@ -977,14 +912,18 @@ fn render_input_bar(f: &mut Frame, app: &App, area: Rect) {
         Span::raw(app.input.clone()),
         Span::raw("_"),
     ])];
-    let input_paragraph = Paragraph::new(input_text).block(Block::default().borders(Borders::ALL));
+    let input_paragraph = Paragraph::new(input_text).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(mode_border_color(&app.mode))),
+    );
     f.render_widget(input_paragraph, area);
 }
 
 fn render_help_overlay(f: &mut Frame, size: Rect) {
     let help_lines = vec![
         Line::from(Span::styled(
-            "RSVS TUI v9.0 Help",
+            "RSVS TUI v8.3 Help",
             Style::default()
                 .fg(Color::Cyan)
                 .add_modifier(Modifier::BOLD),
@@ -1023,7 +962,7 @@ fn render_help_overlay(f: &mut Frame, size: Rect) {
         )),
         Line::from(vec![
             Span::styled("  [\u{2191}\u{2193}] ", Style::default().fg(Color::Cyan)),
-            Span::raw("Navigate atoms in ATOMS panel"),
+            Span::raw("Navigate atoms in STATUS panel"),
         ]),
         Line::from(vec![
             Span::styled("  [Enter] ", Style::default().fg(Color::Cyan)),

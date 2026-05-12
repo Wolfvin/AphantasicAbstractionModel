@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [8.5.0] - 2026-05-12
+
+### Added — English-First Conversion & Bug Fixes
+
+This release converts the system from Indonesian-focused to English-first, adds CI/CD automation, fixes a critical MCTS argument bug, and adds accuracy/convergence test suites.
+
+#### Bug Fix — Critical
+- **GAP-5 [CRITICAL]**: Fixed MCTS argument mismatch in `layer3/reasoning.py:_build_explore_step()`. The call `mcts_query(trigger_concept, context_atoms, max_simulations=5, max_depth=3)` was passing a list as `max_depth`. Fixed to `mcts_query(node_label=trigger_concept, max_depth=3, simulations=20)` matching the bridge signature `mcts_query(node_label, max_depth=3, simulations=100)`.
+
+#### English Conversion
+- **corpus.py**: Removed Indonesian domains (`kerajaan`, `konsep`). Added 4 English domains: `profession`, `history`, `technology`, `society` (30 sentences each, 120 total). All 9 domains now English-ready with 270 sentences.
+- **rsvs-realtest.rs**: Replaced 28 Indonesian functional seeds with 28 English ones (the, is, are, was, a, an, of, in, ...). Replaced 6 Indonesian story domains with English equivalents (Alice/doctor, Bob/farmer, Clara/teacher, Computers, History, Mountains). All 18 appraise calls now English. Discriminability table updated with English labels.
+- **rsvs-tui.rs**: Added `make_english_config()` with 28 English functional words. Translated all Indonesian UI strings to English. Color-coded borders per mode.
+- **seed.rs**: Updated doc comments to reflect English-first, language-agnostic design. Removed all Indonesian language references. Added reference to `PipelineConfig::custom_seeds` for language-specific functional words.
+
+#### Evaluation & Testing
+- **eval.py**: Expanded `SIMILARITY_TRIPLES` from 8 to 24 covering all 9 domains. Updated `CROSS_DOMAIN_ATOMS` and `SINGLE_DOMAIN_ATOMS` for English corpus. Added `benchmark_discriminability()` with 11 TRUE/FALSE pairs and 60% threshold — the core proof benchmark.
+- **test_accuracy.py**: New pytest integration test suite. Tests: atoms promoted (>=40), cross-domain atoms present, 5 parametrized structural similarity rankings, 5 discriminability pairs, confidence growth (cross > single domain). Skips gracefully if Rust extension not compiled.
+- **test_convergence.py**: New convergence engine smoke test. Tests: doctor/physician atoms promoted, structural_similarity >= 0.5, Jaccard similarity > 0. Uses mirrored corpora where "doctor" and "physician" never co-occur.
+
+#### CI/CD
+- **ci.yml**: Main CI pipeline with 3 stages (lint → test → gate). Rust: fmt + clippy + test. Python: ruff + maturin develop + pytest. Frontend: npm lint + build. Matrix: Python 3.11/3.12 × ubuntu/macos.
+- **release.yml**: Release pipeline on tag push. Builds maturin wheels for 5 platforms (linux x86_64/aarch64, macos x86_64/arm64, windows). PyPI publishing via Trusted Publisher. GitHub Release with changelog.
+- **docker.yml**: Docker build on push to main. Multi-stage Dockerfile with Buildx. Pushes to ghcr.io with SHA + latest tags.
+
 ## [8.4.0] - 2026-05-12
 
 ### Added — Architecture Gap Closure (37 gaps resolved)
