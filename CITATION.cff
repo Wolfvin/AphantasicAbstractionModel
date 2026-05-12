@@ -1,8 +1,7 @@
 cff-version: 1.2.0
 message: "If you use RSVS in your research, please cite it as below."
 type: software
-title: "RSVS: Recursive Symbolic Vocabulary System"
-version: "8.3.0"
+title: "AphantasicAbstractionModel"
 authors:
   - name: "Wolfvin"
     orcid: "0000-0000-0000-0000"
@@ -12,7 +11,7 @@ abstract: >
   structural similarity, substitution analysis, and autonomous tiered
   memory lifecycle — designed for neuro-symbolic AI and multilingual NLP
   with a focus on Bahasa Indonesia.
-repository-code: "https://github.com/Wolfvin/SymbolicPuzzle3D"
+repository-code: "https://github.com/Wolfvin/AphantasicAbstractionModel"
 license:
   - MIT
   - Apache-2.0
@@ -27,8 +26,8 @@ keywords:
 date-released: "2026-05-06"
 preferred-citation:
   type: software
-  title: "RSVS: Recursive Symbolic Vocabulary System"
+  title: "AphantasicAbstractionModel"
   authors:
     - name: "Wolfvin"
   year: 2026
-  repository: "https://github.com/Wolfvin/SymbolicPuzzle3D"
+  repository: "https://github.com/Wolfvin/AphantasicAbstractionModel"

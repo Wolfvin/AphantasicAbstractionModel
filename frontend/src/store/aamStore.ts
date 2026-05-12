@@ -1,0 +1,469 @@
+// AAM Zustand Stores
+
+import { create } from 'zustand';
+import type {
+  RSVSNode,
+  RSVSEdge,
+  RSVSEvent,
+  ChatMessage,
+  ViewMode,
+  TimelineState,
+  TimelineEvent,
+  FilterState,
+  AnimationQueueItem,
+  NodeStatus,
+  Tier,
+  AppraiseResult,
+  RelateResult,
+  ComposeResult,
+  ModeResult,
+  StructuralSimilarityResult,
+  SubstitutionAnalysisResult,
+  GroundingInfoResult,
+} from '@/lib/types';
+
+// ── Graph Domain State ──
+
+interface GraphState {
+  nodes: Map<number, RSVSNode>;
+  edges: Map<string, RSVSEdge>;
+  events: RSVSEvent[];
+
+  addNode: (node: RSVSNode) => void;
+  updateNode: (id: number, updates: Partial<RSVSNode>) => void;
+  removeNode: (id: number) => void;
+  getNode: (id: number) => RSVSNode | undefined;
+  addEdge: (edge: RSVSEdge) => void;
+  updateEdge: (id: string, updates: Partial<RSVSEdge>) => void;
+  removeEdge: (id: string) => void;
+  getEdge: (id: string) => RSVSEdge | undefined;
+  pushEvent: (event: RSVSEvent) => void;
+  loadSnapshot: (nodes: RSVSNode[], edges: RSVSEdge[]) => void;
+  getNodeNeighbors: (id: number) => { nodes: RSVSNode[]; edges: RSVSEdge[] };
+  getAtomNodes: (nodeId: number) => RSVSNode[];
+  getCompositeNodesForAtom: (atomId: number) => RSVSNode[];
+  computeJaccardSimilarity: (nodeIdA: number, nodeIdB: number) => number;
+}
+
+export const useGraphStore = create<GraphState>((set, get) => ({
+  nodes: new Map(),
+  edges: new Map(),
+  events: [],
+
+  addNode: (node) =>
+    set((state) => {
+      const nodes = new Map(state.nodes);
+      nodes.set(node.id, node);
+      return { nodes };
+    }),
+
+  updateNode: (id, updates) =>
+    set((state) => {
+      const nodes = new Map(state.nodes);
+      const existing = nodes.get(id);
+      if (existing) {
+        nodes.set(id, { ...existing, ...updates });
+      }
+      return { nodes };
+    }),
+
+  removeNode: (id) =>
+    set((state) => {
+      const nodes = new Map(state.nodes);
+      nodes.delete(id);
+      return { nodes };
+    }),
+
+  getNode: (id) => get().nodes.get(id),
+
+  addEdge: (edge) =>
+    set((state) => {
+      const edges = new Map(state.edges);
+      edges.set(edge.id, edge);
+      return { edges };
+    }),
+
+  updateEdge: (id, updates) =>
+    set((state) => {
+      const edges = new Map(state.edges);
+      const existing = edges.get(id);
+      if (existing) {
+        edges.set(id, { ...existing, ...updates });
+      }
+      return { edges };
+    }),
+
+  removeEdge: (id) =>
+    set((state) => {
+      const edges = new Map(state.edges);
+      edges.delete(id);
+      return { edges };
+    }),
+
+  getEdge: (id) => get().edges.get(id),
+
+  pushEvent: (event) =>
+    set((state) => ({ events: [...state.events, event] })),
+
+  loadSnapshot: (nodes, edges) =>
+    set(() => {
+      const nodeMap = new Map<number, RSVSNode>();
+      nodes.forEach((n) => nodeMap.set(n.id, n));
+      const edgeMap = new Map<string, RSVSEdge>();
+      edges.forEach((e) => edgeMap.set(e.id, e));
+      return { nodes: nodeMap, edges: edgeMap };
+    }),
+
+  getNodeNeighbors: (id) => {
+    const { nodes, edges } = get();
+    const neighborNodes: RSVSNode[] = [];
+    const neighborEdges: RSVSEdge[] = [];
+    edges.forEach((edge) => {
+      if (edge.source === id) {
+        const target = nodes.get(edge.target);
+        if (target) neighborNodes.push(target);
+        neighborEdges.push(edge);
+      } else if (edge.target === id) {
+        const source = nodes.get(edge.source);
+        if (source) neighborNodes.push(source);
+        neighborEdges.push(edge);
+      }
+    });
+    return { nodes: neighborNodes, edges: neighborEdges };
+  },
+
+  /**
+   * Get the atom nodes for a given composite node.
+   * Returns the RSVSNode objects that this node is composed from.
+   */
+  getAtomNodes: (nodeId) => {
+    const { nodes } = get();
+    const node = nodes.get(nodeId);
+    if (!node) return [];
+
+    // Collect atom IDs from any source
+    const atomIds: number[] = [];
+    if (node.atoms && node.atoms.length > 0) {
+      atomIds.push(...node.atoms);
+    } else if (node.derived_from_node_ids && node.derived_from_node_ids.length > 0) {
+      atomIds.push(...node.derived_from_node_ids);
+    } else if (node.semantic?.derived_from_node_ids && node.semantic.derived_from_node_ids.length > 0) {
+      atomIds.push(...node.semantic.derived_from_node_ids);
+    } else if (node.composition?.atoms) {
+      atomIds.push(...node.composition.atoms.map(a => a.atom_id));
+    }
+
+    // Resolve to actual node objects
+    return atomIds
+      .map(id => nodes.get(id))
+      .filter((n): n is RSVSNode => n !== undefined);
+  },
+
+  /**
+   * Get composite nodes that reference a given atom node.
+   */
+  getCompositeNodesForAtom: (atomId) => {
+    const { nodes } = get();
+    const composites: RSVSNode[] = [];
+    nodes.forEach((node) => {
+      // Check various composition fields
+      if (node.atoms && node.atoms.includes(atomId)) {
+        composites.push(node);
+        return;
+      }
+      if (node.derived_from_node_ids && node.derived_from_node_ids.includes(atomId)) {
+        composites.push(node);
+        return;
+      }
+      if (node.semantic?.derived_from_node_ids && node.semantic.derived_from_node_ids.includes(atomId)) {
+        composites.push(node);
+        return;
+      }
+      if (node.composition?.atoms && node.composition.atoms.some(a => a.atom_id === atomId)) {
+        composites.push(node);
+        return;
+      }
+    });
+    return composites;
+  },
+
+  /**
+   * Compute Jaccard similarity between two composite nodes based on their shared atoms.
+   * J(A,B) = |A ∩ B| / |A ∪ B|
+   */
+  computeJaccardSimilarity: (nodeIdA, nodeIdB) => {
+    const getAtomIdSet = (nodeId: number): Set<number> => {
+      const node = get().nodes.get(nodeId);
+      if (!node) return new Set();
+      const ids: number[] = [];
+      if (node.atoms) ids.push(...node.atoms);
+      if (node.derived_from_node_ids) ids.push(...node.derived_from_node_ids);
+      if (node.semantic?.derived_from_node_ids) ids.push(...node.semantic.derived_from_node_ids);
+      if (node.composition?.atoms) ids.push(...node.composition.atoms.map(a => a.atom_id));
+      return new Set(ids);
+    };
+
+    const setA = getAtomIdSet(nodeIdA);
+    const setB = getAtomIdSet(nodeIdB);
+
+    if (setA.size === 0 && setB.size === 0) return 0;
+
+    const intersection = new Set([...setA].filter(x => setB.has(x)));
+    const union = new Set([...setA, ...setB]);
+
+    return union.size === 0 ? 0 : intersection.size / union.size;
+  },
+}));
+
+// ── UI State ──
+
+interface UIState {
+  selectedNodeId: number | null;
+  isDrawerOpen: boolean;
+  viewMode: ViewMode;
+  isSearchOpen: boolean;
+  searchQuery: string;
+  isLeftRailCollapsed: boolean;
+  focusedNodeId: number | null;
+  pinnedNodeIds: Set<number>;
+
+  selectNode: (id: number | null) => void;
+  toggleDrawer: () => void;
+  openDrawer: () => void;
+  closeDrawer: () => void;
+  setViewMode: (mode: ViewMode) => void;
+  toggleSearch: () => void;
+  setSearchQuery: (q: string) => void;
+  toggleLeftRail: () => void;
+  focusNode: (id: number | null) => void;
+  togglePinNode: (id: number) => void;
+}
+
+export const useUIStore = create<UIState>((set, get) => ({
+  selectedNodeId: null,
+  isDrawerOpen: false,
+  viewMode: 'explore',
+  isSearchOpen: false,
+  searchQuery: '',
+  isLeftRailCollapsed: false,
+  focusedNodeId: null,
+  pinnedNodeIds: new Set(),
+
+  selectNode: (id) =>
+    set({ selectedNodeId: id, isDrawerOpen: id !== null }),
+
+  toggleDrawer: () =>
+    set((s) => ({ isDrawerOpen: !s.isDrawerOpen })),
+
+  openDrawer: () => set({ isDrawerOpen: true }),
+  closeDrawer: () => set({ isDrawerOpen: false, selectedNodeId: null }),
+
+  setViewMode: (mode) => set({ viewMode: mode }),
+  toggleSearch: () => set((s) => ({ isSearchOpen: !s.isSearchOpen })),
+  setSearchQuery: (q) => set({ searchQuery: q }),
+  toggleLeftRail: () => set((s) => ({ isLeftRailCollapsed: !s.isLeftRailCollapsed })),
+  focusNode: (id) => set({ focusedNodeId: id }),
+  togglePinNode: (id) =>
+    set((s) => {
+      const pins = new Set(s.pinnedNodeIds);
+      if (pins.has(id)) pins.delete(id);
+      else pins.add(id);
+      return { pinnedNodeIds: pins };
+    }),
+}));
+
+// ── Timeline State ──
+
+interface TimelineStore {
+  timelineState: TimelineState;
+  playbackSpeed: number;
+  currentEventIndex: number;
+  timelineEvents: TimelineEvent[];
+
+  play: () => void;
+  pause: () => void;
+  togglePlayPause: () => void;
+  setSpeed: (speed: number) => void;
+  stepForward: () => void;
+  stepBackward: () => void;
+  seekTo: (index: number) => void;
+  addTimelineEvent: (event: TimelineEvent) => void;
+  resetTimeline: () => void;
+}
+
+export const useTimelineStore = create<TimelineStore>((set, get) => ({
+  timelineState: 'live',
+  playbackSpeed: 1,
+  currentEventIndex: -1,
+  timelineEvents: [],
+
+  play: () => set({ timelineState: 'live' }),
+  pause: () => set({ timelineState: 'paused' }),
+  togglePlayPause: () =>
+    set((s) => ({ timelineState: s.timelineState === 'live' ? 'paused' : 'live' })),
+  setSpeed: (speed) => set({ playbackSpeed: speed }),
+  stepForward: () =>
+    set((s) => ({
+      currentEventIndex: Math.min(s.currentEventIndex + 1, s.timelineEvents.length - 1),
+      timelineState: 'paused',
+    })),
+  stepBackward: () =>
+    set((s) => ({
+      currentEventIndex: Math.max(s.currentEventIndex - 1, 0),
+      timelineState: 'paused',
+    })),
+  seekTo: (index) =>
+    set({ currentEventIndex: index, timelineState: 'paused' }),
+  addTimelineEvent: (event) =>
+    set((s) => ({
+      timelineEvents: [...s.timelineEvents, event],
+      currentEventIndex: s.timelineEvents.length,
+    })),
+  resetTimeline: () =>
+    set({ timelineEvents: [], currentEventIndex: -1, timelineState: 'live' }),
+}));
+
+// ── Chat State ──
+
+interface ChatState {
+  messages: ChatMessage[];
+  isLoading: boolean;
+  addMessage: (msg: ChatMessage) => void;
+  setLoading: (loading: boolean) => void;
+  clearMessages: () => void;
+}
+
+export const useChatStore = create<ChatState>((set) => ({
+  messages: [],
+  isLoading: false,
+
+  addMessage: (msg) =>
+    set((s) => ({ messages: [...s.messages, msg] })),
+  setLoading: (loading) => set({ isLoading: loading }),
+  clearMessages: () => set({ messages: [] }),
+}));
+
+// ── Filter State ──
+
+interface FilterStoreState {
+  filters: FilterState;
+  setTiers: (tiers: Tier[]) => void;
+  setConfidenceRange: (range: [number, number]) => void;
+  setNodeKinds: (kinds: RSVSNode['kind'][]) => void;
+  setSourceBatch: (batch: string | null) => void;
+  setRecentActivity: (seconds: number | null) => void;
+  resetFilters: () => void;
+}
+
+const defaultFilters: FilterState = {
+  tiers: [1, 2, 3],
+  confidenceRange: [0, 1],
+  nodeKinds: ['node'],
+  sourceBatch: null,
+  recentActivity: null,
+};
+
+export const useFilterStore = create<FilterStoreState>((set) => ({
+  filters: { ...defaultFilters },
+
+  setTiers: (tiers) =>
+    set((s) => ({ filters: { ...s.filters, tiers } })),
+  setConfidenceRange: (range) =>
+    set((s) => ({ filters: { ...s.filters, confidenceRange: range } })),
+  setNodeKinds: (kinds) =>
+    set((s) => ({ filters: { ...s.filters, nodeKinds: kinds } })),
+  setSourceBatch: (batch) =>
+    set((s) => ({ filters: { ...s.filters, sourceBatch: batch } })),
+  setRecentActivity: (seconds) =>
+    set((s) => ({ filters: { ...s.filters, recentActivity: seconds } })),
+  resetFilters: () => set({ filters: { ...defaultFilters } }),
+}));
+
+// ── Animation Queue State ──
+
+interface AnimationQueueStore {
+  queue: AnimationQueueItem[];
+  activeAnimations: Map<string, AnimationQueueItem>;
+  reducedMotion: boolean;
+  addToQueue: (item: AnimationQueueItem) => void;
+  removeFromQueue: (id: string) => void;
+  setActiveAnimation: (id: string, item: AnimationQueueItem) => void;
+  removeActiveAnimation: (id: string) => void;
+  setReducedMotion: (reduced: boolean) => void;
+}
+
+export const useAnimationStore = create<AnimationQueueStore>((set) => ({
+  queue: [],
+  activeAnimations: new Map(),
+  reducedMotion: false,
+
+  addToQueue: (item) =>
+    set((s) => ({ queue: [...s.queue, item] })),
+  removeFromQueue: (id) =>
+    set((s) => ({ queue: s.queue.filter((i) => i.id !== id) })),
+  setActiveAnimation: (id, item) =>
+    set((s) => {
+      const active = new Map(s.activeAnimations);
+      active.set(id, item);
+      return { activeAnimations: active };
+    }),
+  removeActiveAnimation: (id) =>
+    set((s) => {
+      const active = new Map(s.activeAnimations);
+      active.delete(id);
+      return { activeAnimations: active };
+    }),
+  setReducedMotion: (reduced) => set({ reducedMotion: reduced }),
+}));
+
+// ── Mode Result State ──
+// Stores the latest appraise/relate/compose/similarity/substitution result for display in panels.
+
+interface ModeResultState {
+  currentResult: ModeResult;
+  isResultLoading: boolean;
+  resultError: string | null;
+
+  setAppraiseResult: (result: AppraiseResult) => void;
+  setRelateResult: (result: RelateResult) => void;
+  setComposeResult: (result: ComposeResult) => void;
+  setStructuralSimilarityResult: (result: StructuralSimilarityResult) => void;
+  setSubstitutionAnalysisResult: (result: SubstitutionAnalysisResult) => void;
+  setGroundingInfoResult: (result: GroundingInfoResult) => void;
+  clearResult: () => void;
+  setResultLoading: (loading: boolean) => void;
+  setResultError: (error: string | null) => void;
+}
+
+export const useModeResultStore = create<ModeResultState>((set) => ({
+  currentResult: null,
+  isResultLoading: false,
+  resultError: null,
+
+  setAppraiseResult: (result) =>
+    set({ currentResult: { type: 'appraise', data: result }, isResultLoading: false, resultError: null }),
+
+  setRelateResult: (result) =>
+    set({ currentResult: { type: 'relate', data: result }, isResultLoading: false, resultError: null }),
+
+  setComposeResult: (result) =>
+    set({ currentResult: { type: 'compose', data: result }, isResultLoading: false, resultError: null }),
+
+  setStructuralSimilarityResult: (result) =>
+    set({ currentResult: { type: 'structural_similarity', data: result }, isResultLoading: false, resultError: null }),
+
+  setSubstitutionAnalysisResult: (result) =>
+    set({ currentResult: { type: 'substitution_analysis', data: result }, isResultLoading: false, resultError: null }),
+
+  setGroundingInfoResult: (result) =>
+    set({ currentResult: { type: 'grounding_info', data: result }, isResultLoading: false, resultError: null }),
+
+  clearResult: () =>
+    set({ currentResult: null, isResultLoading: false, resultError: null }),
+
+  setResultLoading: (loading) =>
+    set({ isResultLoading: loading }),
+
+  setResultError: (error) =>
+    set({ resultError: error, isResultLoading: false }),
+}));

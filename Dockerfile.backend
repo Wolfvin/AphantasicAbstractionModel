@@ -23,13 +23,13 @@ RUN pip3 install --no-cache-dir maturin
 WORKDIR /build
 
 # Cache Cargo dependencies
-COPY backend/Cargo.toml backend/Cargo.lock ./
-COPY backend/crates/rsvs-core/Cargo.toml ./crates/rsvs-core/Cargo.toml
+COPY layer1/Cargo.toml layer1/Cargo.lock ./
+COPY layer1/crates/rsvs-core/Cargo.toml ./crates/rsvs-core/Cargo.toml
 RUN mkdir -p crates/rsvs-core/src && echo "" > crates/rsvs-core/src/lib.rs
 RUN cargo build --release 2>/dev/null || true
 
 # Full build with real source
-COPY backend/ .
+COPY layer1/ .
 RUN cargo build --release
 RUN maturin build --release --strip --out /dist/wheels
 
@@ -55,13 +55,13 @@ RUN pip install --no-cache-dir /tmp/wheels/*.whl "fastapi[standard]" uvicorn slo
     && rm -rf /tmp/wheels
 
 # Copy Python bridge source
-COPY --chown=appuser:appuser backend/python/ /app/backend/python/
+COPY --chown=appuser:appuser layer1/python/ /app/layer1/python/
 
 # Shared data volume for atom artifacts
 RUN mkdir -p /app/data && chown appuser:appuser /app/data
 
 # Environment
-ENV PYTHONPATH=/app/backend/python
+ENV PYTHONPATH=/app/layer1/python
 ENV PYTHONUNBUFFERED=1
 ENV RSVS_ATOM_DIR=/app/data
 ENV PORT=8000

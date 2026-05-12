@@ -3,9 +3,9 @@
 import React, { useEffect, useCallback, useState, useRef, Suspense } from 'react';
 import dynamic from 'next/dynamic';
 import { Skeleton } from '@/components/ui/skeleton';
-import LeftInputRail from '@/components/rsvs/LeftInputRail';
-import GraphHUD from '@/components/rsvs/GraphHUD';
-import { useUIStore, useGraphStore, useAnimationStore, useTimelineStore, useChatStore, useModeResultStore } from '@/store/rsvsStore';
+import LeftInputRail from '@/components/aam/LeftInputRail';
+import GraphHUD from '@/components/aam/GraphHUD';
+import { useUIStore, useGraphStore, useAnimationStore, useTimelineStore, useChatStore, useModeResultStore } from '@/store/aamStore';
 import { fetchLatestFromBackend } from '@/lib/backendBridge';
 // Mock data is used as a fallback when the backend is unreachable (demo mode).
 import { generateTimelineEvents } from '@/lib/timelineHelpers';
@@ -13,15 +13,15 @@ import { generateInitialSnapshot, generateEventStream, generateTimelineEvents as
 
 // Dynamic imports for heavy components (lazy loaded for performance)
 const GraphScene3D = dynamic(
-  () => import('@/components/rsvs/graph3d/GraphScene3D'),
+  () => import('@/components/aam/graph3d/GraphScene3D'),
   {
     ssr: false,
     loading: () => <GraphSkeleton />,
   }
 );
 
-const RightNodeDrawer = dynamic(() => import('@/components/rsvs/RightNodeDrawer'));
-const TimelineBar = dynamic(() => import('@/components/rsvs/TimelineBar'));
+const RightNodeDrawer = dynamic(() => import('@/components/aam/RightNodeDrawer'));
+const TimelineBar = dynamic(() => import('@/components/aam/TimelineBar'));
 
 // ── Skeleton loading components ──
 function GraphSkeleton() {

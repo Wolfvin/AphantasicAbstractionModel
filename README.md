@@ -5,9 +5,13 @@
 [![Python](https://img.shields.io/badge/Python-3.11+-blue?style=flat-square&logo=python)](https://python.org)
 [![Rust](https://img.shields.io/badge/Rust-1.75+-orange?style=flat-square&logo=rust)](https://www.rust-lang.org/)
 
-# RSVS — Recursive Symbolic Vector Space
+# AphantasicAbstractionModel (AAM)
+
+> Previously: SymbolicPuzzle3D / RSVS Genius
 
 **Compositional symbolic meaning, not embeddings. Traceable sense definitions with structural similarity.**
+
+AAM is inspired by **Aphantasia** — the cognitive condition where no visual imagery is stored, only relational structure. This is how AAM remembers: raw input → structured tuples → knowledge graph. No photos. Only relations.
 
 📖 **[Full documentation](https://wolfvin.github.io/SymbolicPuzzle3D/)** · 🚀 [Quick Start](#quick-start) · 📚 [Tutorials](https://wolfvin.github.io/SymbolicPuzzle3D/tutorials/) · 🔧 [API Reference](https://wolfvin.github.io/SymbolicPuzzle3D/api/)
 

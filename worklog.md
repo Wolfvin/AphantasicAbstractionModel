@@ -1,4 +1,32 @@
 ---
+Task ID  : aam-full-migration
+Agent    : Super Z
+Date     : 2026-05-12
+
+Summary  : Full repo migration dari SymbolicPuzzle3D → AphantasicAbstractionModel.
+
+Changes  :
+  - backend/         → layer1/
+  - rsvs_genius/     → layer2/ (dengan rename file per mapping table)
+  - coder + policy   → layer3/
+  - pipeline.py      → root, GeniusPipeline renamed AamPipeline
+  - layer0/          dibuat baru: base, text, image(stub), video(stub), audio(stub)
+  - layer3/reasoning dibuat sebagai stub
+  - frontend: components/rsvs/ → components/aam/, rsvsStore → aamStore
+  - cli: rsvs_agent_cli.py → aam_cli.py
+  - Config: docker-compose, Makefile, setup.sh, setup.ps1, mkdocs.yml, CITATION.cff updated
+  - AAM_OVERVIEW.md dibuat
+  - README.md updated
+
+NOT touched:
+  - rsvs_genius/         (backward compat — jangan hapus sampai semua test pass)
+  - layer1/crates/       (Rust core tidak diubah isinya)
+  - PLAN_Architecture_v1.md
+  - docs/ content
+  - atom/ snapshots
+---
+
+---
 Task ID: sec+test
 Agent: security-and-tests-updater
 Task: Update SECURITY.md and expand test coverage

@@ -7,7 +7,7 @@
 services:
   # ── Nginx reverse proxy ─────────────────────────────────────────────
   # Centralizes TLS termination, rate limiting, and access control.
-  # Only Nginx exposes ports to the host; backend/frontend are internal.
+  # Only Nginx exposes ports to the host; layer1/frontend are internal.
   nginx:
     image: nginx:alpine
     container_name: sp3d-nginx

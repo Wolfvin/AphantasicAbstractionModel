@@ -3,7 +3,7 @@
 #  Deploys to GitHub Pages via .github/workflows/docs.yml
 # ──────────────────────────────────────────────────────────────────────
 
-site_name: RSVS
+site_name: AAM — Aphantasic Abstraction Model
 site_description: >-
   Recursive Symbolic Vocabulary System — compositional symbolic meaning
   engine with structural similarity, substitution analysis, and autonomous
