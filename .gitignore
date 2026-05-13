@@ -74,3 +74,11 @@ layer1/atom/*.jsonl
 layer1/python/atom/*.jsonl
 frontend/db/*.db
 cli/__pycache__/
+
+# Trained model weights (hosted on HuggingFace instead)
+aam-diffusion-v1/*.pt
+aam-diffusion-v1/*.bin
+aam-diffusion-v1/*.safetensors
+aam-diffusion-hf/pytorch_model.bin
+aam-diffusion-hf/.git/
+aam-diffusion-hf/.gitattributes

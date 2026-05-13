@@ -19,4 +19,9 @@ __version__ = "8.5.0"
 __name_full__ = "Aphantasic Abstraction Model"
 __name_short__ = "AAM"
 
-from .pipeline import AamPipeline, AamResponse
+try:
+    from .pipeline import AamPipeline, AamResponse
+except ImportError:
+    # Pipeline requires full layer2/layer3 dependencies
+    # which may not be available in all environments
+    pass
