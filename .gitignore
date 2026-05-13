@@ -82,3 +82,6 @@ aam-diffusion-v1/*.safetensors
 aam-diffusion-hf/pytorch_model.bin
 aam-diffusion-hf/.git/
 aam-diffusion-hf/.gitattributes
+aam-diffusion-v2/
+*.pt
+*.bin

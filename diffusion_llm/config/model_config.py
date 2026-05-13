@@ -417,6 +417,8 @@ class EvoformerConfig:
     use_token_recycling: bool = True
     use_decoder_feedback: bool = True
     use_prediction_recycling: bool = True
+    use_router_coevolve: bool = True
+    d_pair: int = 0  # 0 = use d_model
     min_recycling_improvement: float = 1e-4
 
 

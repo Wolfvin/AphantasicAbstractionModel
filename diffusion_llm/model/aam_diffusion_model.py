@@ -173,6 +173,9 @@ class AamDiffusionModel(nn.Module):
             evoformer_config = getattr(config, "evoformer", None)
             if evoformer_config is None:
                 evoformer_config = EvoformerConfig(d_model=config.model.d_model)
+            else:
+                # Sync d_model with the model's actual d_model
+                evoformer_config.d_model = config.model.d_model
             self.evoformer = EvoformerManager(evoformer_config)
 
         if self.use_dual_memory:
@@ -184,6 +187,9 @@ class AamDiffusionModel(nn.Module):
             dual_memory_config = getattr(config, "dual_memory", None)
             if dual_memory_config is None:
                 dual_memory_config = DualMemoryConfig(d_model=config.model.d_model)
+            else:
+                # Sync d_model with the model's actual d_model
+                dual_memory_config.d_model = config.model.d_model
             self.dual_memory = DualMemorySystem(dual_memory_config)
 
         if self.use_thinking_toggle:

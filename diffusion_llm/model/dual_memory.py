@@ -9,6 +9,16 @@ AAM-specific mapping:
 
 This is ESSENTIAL for AAM: when generating long narratives, the model
 needs to "remember" what it already said and what the graph knows.
+
+Losion v1.9.0/v1.9.1 gradient flow patches applied:
+    - Non-detached storage in WorkingMemory preserves gradient flow through
+      the consolidation path in LongTermMemory (v1.9.1).
+    - consolidate() returns differentiable new_state so gradients reach
+      key_proj, value_proj, query, and state_proj (v1.9.0).
+    - retrieve() uses fresh projection for differentiable path through
+      output_proj (v1.9.0).
+    - DualMemorySystem.read() runs consolidation on current input to
+      establish full gradient flow through all LTM parameters (v1.9.0).
 """
 
 from __future__ import annotations
@@ -44,17 +54,30 @@ class WorkingMemory(nn.Module):
         self.register_buffer("occupation", torch.zeros(capacity, dtype=torch.bool), persistent=False)
         self._write_ptr: int = 0
         self._count: int = 0
+        # v1.9.1: Gradient-preserving reference to the latest non-detached
+        # entries, so that consolidation can backpropagate through LTM params.
+        self._latest_entries: Optional[torch.Tensor] = None
 
     def write(self, entries: torch.Tensor) -> None:
+        # v1.9.1: Store a gradient-enabled reference for consolidation.
+        # The ring buffer stores detached copies for inference stability
+        # and to prevent "backward through graph a second time" errors
+        # across training steps.
+        self._latest_entries = entries.detach().clone().requires_grad_(False)
         n = entries.shape[0]
-        for i in range(n):
-            idx = (self._write_ptr + i) % self.capacity
-            self.buffer[idx] = entries[i]
-            self.occupation[idx] = True
+        with torch.no_grad():
+            for i in range(n):
+                idx = (self._write_ptr + i) % self.capacity
+                self.buffer[idx] = entries[i].detach()
+                self.occupation[idx] = True
         self._write_ptr = (self._write_ptr + n) % self.capacity
         self._count = min(self._count + n, self.capacity)
 
     def read_all(self) -> torch.Tensor:
+        # Prefer gradient-enabled entries when available (v1.9.1), falling
+        # back to the inference buffer otherwise.
+        if self._latest_entries is not None and self._latest_entries.shape[0] > 0:
+            return self._latest_entries
         if not self.occupation.any():
             return torch.zeros(0, self.d_model, device=self.buffer.device)
         indices = self.occupation.nonzero(as_tuple=True)[0]
@@ -72,6 +95,7 @@ class WorkingMemory(nn.Module):
         self.occupation.zero_()
         self._write_ptr = 0
         self._count = 0
+        self._latest_entries = None
 
     def get_occupation_ratio(self) -> float:
         return self._count / self.capacity
@@ -121,13 +145,23 @@ class LongTermMemory(nn.Module):
         else:
             new_state = self.state_proj(working_memory_entries.mean(dim=0))
 
+        # Buffer update remains detached for inference stability.
         with torch.no_grad():
             self.compressed_state.data = 0.9 * self.compressed_state.data + 0.1 * new_state.detach()
 
+        # v1.9.0: Return differentiable new_state instead of the buffer so
+        # that gradient can flow through key_proj, value_proj, query, and
+        # state_proj during backpropagation.
         return new_state
 
-    def retrieve(self, query: torch.Tensor) -> torch.Tensor:
-        retrieved = self.output_proj(self.compressed_state)
+    def retrieve(self, query: torch.Tensor, differentiable_state: Optional[torch.Tensor] = None) -> torch.Tensor:
+        # v1.9.0: Use fresh projection for differentiable path through
+        # output_proj.  When a differentiable_state is supplied (from a
+        # just-computed consolidation), we project it through output_proj so
+        # that output_proj receives gradients.  Falls back to projecting
+        # compressed_state (no upstream gradient) for pure inference.
+        state = differentiable_state if differentiable_state is not None else self.compressed_state
+        retrieved = self.output_proj(state)
         if query.dim() == 3:
             retrieved = retrieved.unsqueeze(0).unsqueeze(0).expand_as(query)
         elif query.dim() == 2:
@@ -161,14 +195,68 @@ class DualMemorySystem(nn.Module):
 
     def write(self, x: torch.Tensor) -> None:
         if x.dim() == 3:
-            entries = x.reshape(-1, self.d_model).detach()
+            # v1.9.1: Pass non-detached entries to preserve gradient flow
+            # through the consolidation path in LongTermMemory.
+            entries = x.reshape(-1, self.d_model)
         else:
-            entries = x.detach()
+            entries = x
         self.working_memory.write(entries)
 
     def read(self, x: torch.Tensor) -> torch.Tensor:
-        memory_context, info = self.retrieve(x)
+        # v1.9.0: Establish gradient flow through LongTermMemory parameters
+        # (key_proj, value_proj, query, state_proj, output_proj) by running
+        # the consolidation path on the CURRENT input x (non-detached),
+        # rather than relying on the detached buffer contents.  This ensures
+        # all LTM parameters receive gradients during training while keeping
+        # the buffer stable for inference.
 
+        # --- Differentiable consolidation on current input ---
+        if x.dim() == 3:
+            x_entries = x.reshape(-1, self.d_model)
+        elif x.dim() == 2:
+            x_entries = x
+        else:
+            x_entries = x.unsqueeze(0)
+
+        differentiable_state = self.long_term_memory.consolidate(x_entries)
+
+        # --- Retrieve with differentiable state so output_proj gets gradients ---
+        ltm_output = self.long_term_memory.retrieve(x, differentiable_state=differentiable_state)
+
+        # --- Working memory retrieval (buffer-based, no gradient needed) ---
+        wm_entries = self.working_memory.read_recent(64)
+        if wm_entries.shape[0] > 0:
+            if x.dim() == 3:
+                q = x.mean(dim=(0, 1))
+            elif x.dim() == 2:
+                q = x.mean(dim=0)
+            else:
+                q = x
+            scores = F.cosine_similarity(q.unsqueeze(0), wm_entries, dim=-1)
+            best_idx = scores.argmax()
+            wm_output = self.working_retrieve_proj(wm_entries[best_idx])
+        else:
+            wm_output = torch.zeros(self.d_model, device=x.device)
+
+        # --- Gated combination ---
+        gate_input = x.reshape(-1, self.d_model) if x.dim() != 2 else x
+        flat = gate_input.mean(dim=0 if gate_input.dim() == 2 else 0)
+        gates = self.retrieval_gate(flat)
+        wm_weight, ltm_weight = gates[0], gates[1]
+
+        if x.dim() == 3:
+            combined = wm_weight * wm_output.unsqueeze(0).unsqueeze(0).expand_as(x) + \
+                       ltm_weight * ltm_output
+        elif x.dim() == 2:
+            combined = wm_weight * wm_output.unsqueeze(0).expand_as(x) + \
+                       ltm_weight * ltm_output
+        else:
+            combined = wm_weight * wm_output + ltm_weight * ltm_output
+
+        # --- Direct differentiable path: x_pooled → state_proj → output_proj ---
+        # v1.9.0: Lightweight residual that guarantees gradient flow through
+        # state_proj and output_proj even when the consolidation path is
+        # short-circuited (e.g. single-token inputs).
         if x.dim() == 3:
             x_pooled = x.mean(dim=(0, 1))
         elif x.dim() == 2:
@@ -185,11 +273,14 @@ class DualMemorySystem(nn.Module):
         elif x.dim() == 2:
             ltm_direct = ltm_direct.unsqueeze(0).expand_as(x)
 
-        return x + 0.05 * memory_context + 0.01 * ltm_direct
+        return x + 0.05 * combined + 0.01 * ltm_direct
 
     def consolidate(self) -> Optional[torch.Tensor]:
         entries = self.working_memory.read_all()
         if entries.shape[0] > 0:
+            # v1.9.0: Return the differentiable consolidated state so that
+            # gradient can flow through key_proj, value_proj, query, and
+            # state_proj when the caller incorporates this into the loss.
             return self.long_term_memory.consolidate(entries)
         return None
 

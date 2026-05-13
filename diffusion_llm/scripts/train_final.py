@@ -630,7 +630,7 @@ def main():
     config.training.warmup_steps = min(100, args.max_steps // 5)
     config.output_dir = str(output_dir)
     config.seed = args.seed
-    config.model_name = "aam-diffusion-v1.0"
+    config.model_name = "aam-diffusion-v2.1"
 
     # Print config
     print(config.summary())

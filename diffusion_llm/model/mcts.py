@@ -39,6 +39,8 @@ class MCTSConfig:
             raise ValueError(f"num_simulations must be positive, got {num_simulations}")
         if c_puct <= 0:
             raise ValueError(f"c_puct must be positive, got {c_puct}")
+        if max_depth <= 0:
+            raise ValueError(f"max_depth must be positive, got {max_depth}")
 
 
 @dataclass
@@ -63,6 +65,11 @@ class MCTSNode:
     @property
     def is_leaf(self) -> bool:
         return not self.is_expanded
+
+    @property
+    def is_root(self) -> bool:
+        """Whether this node is the root."""
+        return self.parent is None
 
 
 class ValueNetwork(nn.Module):
@@ -185,6 +192,7 @@ class MCTSReasoner(nn.Module):
             "root_value": root_value.mean().item(),
             "max_visit_count": visit_counts.max().item(),
             "entropy": -(action_probs * (action_probs + 1e-8).log()).sum(-1).mean().item(),
+            "visit_distribution": visit_counts / (visit_counts.sum(-1, keepdim=True) + 1e-8),
         }
 
         return action_probs, info
@@ -200,4 +208,32 @@ class MCTSReasoner(nn.Module):
         return q_values + exploration
 
     def compute_thinking_budget(self, complexity_score: float, base_simulations: int = 16, max_simulations: int = 256) -> int:
+        """Compute number of MCTS simulations based on complexity.
+
+        Adaptive compute budget: more complex inputs get more simulations.
+
+        Args:
+            complexity_score: Complexity score [0, 1] from ThinkingToggle.
+            base_simulations: Minimum number of simulations.
+            max_simulations: Maximum number of simulations.
+
+        Returns:
+            Recommended number of simulations.
+        """
         return int(base_simulations + (max_simulations - base_simulations) * (complexity_score ** 2))
+
+    def get_reasoning_summary(self, info: Dict[str, Any]) -> str:
+        """Summary of reasoning for logging.
+
+        Args:
+            info: Dictionary from forward output.
+
+        Returns:
+            Summary string.
+        """
+        return (
+            f"MCTS(sims={info['total_simulations']}, "
+            f"root_val={info['root_value']:.3f}, "
+            f"max_visits={info['max_visit_count']:.0f}, "
+            f"entropy={info['entropy']:.3f})"
+        )

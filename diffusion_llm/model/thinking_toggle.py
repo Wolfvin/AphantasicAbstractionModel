@@ -92,11 +92,20 @@ class ThinkingToggle(nn.Module):
         context_input = torch.cat([mean_complexity, mean_task_probs], dim=-1)
         thinking_score = self.context_integrator(context_input).squeeze(-1)
 
+        # v2.3.0: Use force_mode kwarg if provided (thread-safe, no state mutation).
+        # Falls back to _get_force_mode() for backward compatibility.
         if force_mode is not None:
             mode = force_mode
         else:
-            avg_score_val = thinking_score.mean().item()
-            mode = ThinkingMode.THINKING if avg_score_val > self.threshold else ThinkingMode.NON_THINKING
+            persistent_mode = self._get_force_mode()
+            if persistent_mode is not None:
+                mode = persistent_mode
+            else:
+                # v1.8.0: Straight-through estimator for differentiable depth_multiplier.
+                # Forward pass uses hard threshold for control flow (must be non-differentiable),
+                # but depth_multiplier remains fully differentiable through soft blending.
+                avg_score_val = thinking_score.mean().item()
+                mode = ThinkingMode.THINKING if avg_score_val > self.threshold else ThinkingMode.NON_THINKING
 
         overall_task_probs = task_probs.mean(dim=(0, 1))
         dominant_task_idx = overall_task_probs.argmax().item()
@@ -123,13 +132,57 @@ class ThinkingToggle(nn.Module):
             thinking_score=thinking_score,
         )
 
+    def _get_force_mode(self) -> Optional[ThinkingMode]:
+        """Decode the persistent buffer back to a ThinkingMode (or None)."""
+        code = int(self._force_mode_code.item())
+        if code == -1:
+            return None
+        elif code == 0:
+            return ThinkingMode.NON_THINKING
+        elif code == 1:
+            return ThinkingMode.THINKING
+        else:
+            # Corrupted value — reset to auto
+            self._force_mode_code.fill_(-1)
+            return None
+
     def set_force_mode(self, mode: Optional[ThinkingMode]) -> None:
+        """Force mode, bypassing detection. Set None for automatic detection.
+
+        The mode is persisted via a registered buffer so it survives
+        model.state_dict() / model.load_state_dict() round-trips.
+        """
         if mode is None:
             self._force_mode_code.fill_(-1)
         elif mode == ThinkingMode.NON_THINKING:
             self._force_mode_code.fill_(0)
         elif mode == ThinkingMode.THINKING:
             self._force_mode_code.fill_(1)
+        else:
+            raise ValueError(f"Unknown ThinkingMode: {mode!r}")
+
+    def set_threshold(self, threshold: float) -> None:
+        """Update complexity threshold.
+
+        Args:
+            threshold: New threshold value (0.0 - 1.0)
+        """
+        if not 0.0 <= threshold <= 1.0:
+            raise ValueError(f"Threshold must be between 0.0 and 1.0, got {threshold}")
+        self.threshold = threshold
+
+    def get_thinking_mask(self, assessment: ThinkingAssessment, seq_len: int) -> torch.Tensor:
+        """Create binary mask marking which tokens need thinking.
+
+        Args:
+            assessment: Assessment result from forward
+            seq_len: Sequence length
+
+        Returns:
+            Mask [batch, seq] — 1.0 for thinking, 0.0 for non-thinking
+        """
+        mask = (assessment.complexity_score > self.threshold).float()
+        return mask
 
     def get_depth_schedule(self, assessment: ThinkingAssessment) -> torch.Tensor:
         complexity = assessment.complexity_score
