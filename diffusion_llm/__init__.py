@@ -31,7 +31,7 @@ mengeksekusi perintah dari graph-nya sendiri, outputnya
 lebih terarah daripada LLM umum yang "tidak kenal" graph.
 """
 
-__version__ = "0.1.0"
+__version__ = "2.0.0"
 __author__ = "AAM Team"
 
 from diffusion_llm.config.model_config import AamDiffusionConfig, get_default_config
@@ -45,7 +45,23 @@ from diffusion_llm.training.trainer import AamTrainer
 from diffusion_llm.training.dataset import GraphNarrativeDataset
 from diffusion_llm.data.synthetic_generator import SyntheticDataGenerator
 
+# v2.0 modules (from Losion upgrade)
+from diffusion_llm.model.anchored_decoder import AnchoredDiffusionDecoder, ContinuousOutputHead
+from diffusion_llm.model.flow_matching import FlowMatchingDecoder
+from diffusion_llm.model.evoformer import EvoformerManager
+from diffusion_llm.model.dual_memory import DualMemorySystem
+from diffusion_llm.model.mcts import MCTSReasoner
+from diffusion_llm.model.thinking_toggle import ThinkingToggle, ThinkingMode
+from diffusion_llm.model.matryoshka import MatryoshkaLayer, ElasticExtractor
+from diffusion_llm.model.rope import RotaryPositionEncoding
+from diffusion_llm.model.speculative_decoder import SpeculativeDecoder
+from diffusion_llm.model.quantization import BitLinear, FP8Linear
+from diffusion_llm.training.grpo import GRPOTrainer
+from diffusion_llm.training.dapo import DAPOTrainer
+from diffusion_llm.training.curriculum import CurriculumScheduler
+
 __all__ = [
+    # Core
     "AamDiffusionConfig",
     "get_default_config",
     "NoiseScheduler",
@@ -57,4 +73,22 @@ __all__ = [
     "AamTrainer",
     "GraphNarrativeDataset",
     "SyntheticDataGenerator",
+    # v2.0 — Losion Upgrade
+    "AnchoredDiffusionDecoder",
+    "ContinuousOutputHead",
+    "FlowMatchingDecoder",
+    "EvoformerManager",
+    "DualMemorySystem",
+    "MCTSReasoner",
+    "ThinkingToggle",
+    "ThinkingMode",
+    "MatryoshkaLayer",
+    "ElasticExtractor",
+    "RotaryPositionEncoding",
+    "SpeculativeDecoder",
+    "BitLinear",
+    "FP8Linear",
+    "GRPOTrainer",
+    "DAPOTrainer",
+    "CurriculumScheduler",
 ]

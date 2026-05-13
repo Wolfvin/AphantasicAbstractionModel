@@ -14,6 +14,9 @@ The transformer uses:
     - Cross-attention to graph conditioning (evidence, anomalies, etc.)
     - Timestep embedding (sinusoidal) injected via adaptive layer norm
     - Optional flash attention for efficiency
+    - [v2.0] SwiGLU FFN (proven better in LLaMA/Mistral)
+    - [v2.0] RoPE via the dedicated rope.py module
+    - [v2.0] Evoformer integration points for layer recycling
 
 This is the "brainstem" of the body — the core computation that
 transforms noisy signals into coherent patterns.
@@ -26,13 +29,14 @@ lalu mengubahnya menjadi gerakan yang koheren (kalimat).
 from __future__ import annotations
 
 import math
-from typing import Optional
+from typing import Optional, List, Dict, Any
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from diffusion_llm.config.model_config import ModelConfig
+from diffusion_llm.config.model_config import ModelConfig, EvoformerConfig, MatryoshkaConfig
+from diffusion_llm.model.rope import RotaryPositionEncoding
 
 
 class SinusoidalTimestepEmbedding(nn.Module):
@@ -137,6 +141,10 @@ class TransformerBlock(nn.Module):
     3. Adaptive Layer Norm + Feed-Forward Network
 
     Each sub-layer has a residual connection.
+
+    v2.0 Changes:
+    - SwiGLU FFN replaces GELU FFN (proven better in LLaMA/Mistral)
+    - Optional Matryoshka elastic inference on the FFN
     """
 
     def __init__(
@@ -148,10 +156,14 @@ class TransformerBlock(nn.Module):
         norm_eps: float = 1e-6,
         norm_type: str = "rmsnorm",
         use_flash_attention: bool = True,
+        use_swiglu: bool = True,
+        matryoshka_config: Optional[MatryoshkaConfig] = None,
     ):
         super().__init__()
         self.d_model = d_model
         self.n_heads = n_heads
+        self.use_swiglu = use_swiglu
+        self.matryoshka_config = matryoshka_config
 
         # Norms
         NormClass = nn.RMSNorm if norm_type == "rmsnorm" else nn.LayerNorm
@@ -178,20 +190,58 @@ class TransformerBlock(nn.Module):
         )
         self.cross_attn_dropout = nn.Dropout(dropout)
 
-        # Feed-forward
+        # Feed-forward — SwiGLU or legacy GELU
         self.ff_norm = AdaptiveLayerNorm(d_model, eps=norm_eps)
-        self.ff = nn.Sequential(
-            nn.Linear(d_model, d_ff),
-            nn.GELU(),
-            nn.Dropout(dropout),
-            nn.Linear(d_ff, d_model),
-            nn.Dropout(dropout),
-        )
+        if use_swiglu:
+            # SwiGLU FFN (proven better in LLaMA/Mistral)
+            self.gate_proj = nn.Linear(d_model, d_ff, bias=False)
+            self.up_proj = nn.Linear(d_model, d_ff, bias=False)
+            self.down_proj = nn.Linear(d_ff, d_model, bias=False)
+            self.ff_dropout = nn.Dropout(dropout)
+        else:
+            # Legacy GELU FFN (backward compatible)
+            self.ff = nn.Sequential(
+                nn.Linear(d_model, d_ff),
+                nn.GELU(),
+                nn.Dropout(dropout),
+                nn.Linear(d_ff, d_model),
+                nn.Dropout(dropout),
+            )
+
+        # Matryoshka elastic inference (optional)
+        if matryoshka_config is not None and use_swiglu:
+            self._matryoshka_d_ff = d_ff
+            self._matryoshka_factors = sorted(matryoshka_config.granularity_factors)
+            if matryoshka_config.use_adaptive:
+                self.size_selector = nn.Sequential(
+                    nn.Linear(d_model, d_model // 8, bias=False),
+                    nn.SiLU(),
+                    nn.Linear(d_model // 8, 1, bias=False),
+                    nn.Sigmoid(),
+                )
+        else:
+            self._matryoshka_d_ff = None
+            self._matryoshka_factors = None
 
         # Layer scales (optional, helps with deep networks)
         self.self_attn_scale = nn.Parameter(torch.ones(1) * 0.1)
         self.cross_attn_scale = nn.Parameter(torch.ones(1) * 0.1)
         self.ff_scale = nn.Parameter(torch.ones(1) * 0.1)
+
+    def _select_matryoshka_factor(self, x: torch.Tensor) -> float:
+        """Adaptive factor selection for Matryoshka inference."""
+        if not hasattr(self, "size_selector"):
+            return 1.0
+        score = self.size_selector(x.mean(dim=1, keepdim=False))
+        score_val = score.mean().item()
+        min_dist = float("inf")
+        best_factor = self._matryoshka_factors[-1]
+        for f in self._matryoshka_factors:
+            dist = abs(score_val - f)
+            if dist < min_dist:
+                min_dist = dist
+                best_factor = f
+        return best_factor
 
     def forward(
         self,
@@ -200,6 +250,7 @@ class TransformerBlock(nn.Module):
         graph_keys: Optional[torch.Tensor] = None,
         graph_values: Optional[torch.Tensor] = None,
         causal_mask: Optional[torch.Tensor] = None,
+        granularity_factor: Optional[float] = None,
     ) -> torch.Tensor:
         """Forward pass.
 
@@ -211,6 +262,8 @@ class TransformerBlock(nn.Module):
             graph_values: Graph conditioning values for cross-attention,
                 shape (batch, n_graph_nodes, d_model).
             causal_mask: Optional causal mask for self-attention.
+            granularity_factor: Optional Matryoshka granularity factor
+                for elastic inference (1.0 = full size).
 
         Returns:
             Output sequence of shape (batch, seq_len, d_model).
@@ -235,7 +288,40 @@ class TransformerBlock(nn.Module):
 
         # 3. Feed-forward with adaptive layer norm
         normed = self.ff_norm(x, timestep_emb)
-        ff_out = self.ff(normed)
+
+        if self.use_swiglu:
+            # Determine Matryoshka factor
+            factor = granularity_factor
+            if factor is None and self._matryoshka_factors is not None:
+                factor = self._select_matryoshka_factor(normed)
+            elif factor is None:
+                factor = 1.0
+
+            # Clamp factor
+            if self._matryoshka_factors is not None:
+                factor = min(max(factor, min(self._matryoshka_factors)), 1.0)
+            else:
+                factor = 1.0
+
+            d_ff_active = max(1, int(self._matryoshka_d_ff * factor)) if self._matryoshka_d_ff else self.gate_proj.out_features
+
+            if factor >= 1.0 or self._matryoshka_d_ff is None:
+                # Full-size SwiGLU
+                gate = F.silu(self.gate_proj(normed))
+                up = self.up_proj(normed)
+                ff_out = self.down_proj(gate * up)
+            else:
+                # Matryoshka partial SwiGLU
+                d_ff_active = max(1, int(self._matryoshka_d_ff * factor))
+                gate = F.silu(F.linear(normed, self.gate_proj.weight[:d_ff_active, :]))
+                up = F.linear(normed, self.up_proj.weight[:d_ff_active, :])
+                ff_out = F.linear(gate * up, self.down_proj.weight[:, :d_ff_active])
+
+            ff_out = self.ff_dropout(ff_out)
+        else:
+            # Legacy GELU FFN
+            ff_out = self.ff(normed)
+
         x = x + self.ff_scale * ff_out
 
         return x
@@ -260,7 +346,9 @@ class DiffusionTransformer(nn.Module):
     │  N x TransformerBlock:                         │
     │    ├─ AdaLN + Self-Attention                   │
     │    ├─ AdaLN + Cross-Attention (to graph)       │
-    │    └─ AdaLN + Feed-Forward                     │
+    │    └─ AdaLN + SwiGLU FFN (Matryoshka)          │
+    │                                                │
+    │  [Evoformer Layer Recycling — optional]        │
     │                                                │
     │  Output Projection: → predicted noise          │
     └────────────────────────────────────────────────┘
@@ -270,14 +358,29 @@ class DiffusionTransformer(nn.Module):
     - Cross-Attention: graph conditioning guides generation
     - Layer Scales: helps training deep networks
     - RoPE: better length generalization than learned positions
+    - [v2.0] SwiGLU FFN: proven better than GELU in LLaMA/Mistral
+    - [v2.0] Matryoshka: elastic inference at multiple sizes
+    - [v2.0] Evoformer: layer recycling for iterative refinement
 
     Args:
         config: ModelConfig with architecture hyperparameters.
+        evoformer_config: Optional EvoformerConfig for layer recycling.
+        matryoshka_config: Optional MatryoshkaConfig for elastic inference.
+        use_swiglu: Whether to use SwiGLU FFN (default True for v2.0).
     """
 
-    def __init__(self, config: ModelConfig):
+    def __init__(
+        self,
+        config: ModelConfig,
+        evoformer_config: Optional[EvoformerConfig] = None,
+        matryoshka_config: Optional[MatryoshkaConfig] = None,
+        use_swiglu: bool = True,
+    ):
         super().__init__()
         self.config = config
+        self.evoformer_config = evoformer_config
+        self.matryoshka_config = matryoshka_config
+        self.use_swiglu = use_swiglu
 
         # Input embedding (from token IDs to d_model)
         self.token_embedding = nn.Embedding(config.vocab_size, config.d_model)
@@ -290,9 +393,15 @@ class DiffusionTransformer(nn.Module):
             self.position_embedding = nn.Embedding(
                 config.max_seq_len, config.d_model
             )
+            self.rope = None
         else:
             # RoPE is applied inside attention (no separate embedding)
             self.position_embedding = None
+            # v2.0: Create RotaryPositionEncoding module for explicit RoPE
+            self.rope = RotaryPositionEncoding(
+                d_model=config.d_model,
+                max_seq_len=config.max_seq_len,
+            )
 
         # Transformer blocks
         self.blocks = nn.ModuleList([
@@ -304,6 +413,8 @@ class DiffusionTransformer(nn.Module):
                 norm_eps=config.norm_eps,
                 norm_type=config.norm_type,
                 use_flash_attention=config.use_flash_attention,
+                use_swiglu=use_swiglu,
+                matryoshka_config=matryoshka_config,
             )
             for _ in range(config.n_layers)
         ])
@@ -315,8 +426,18 @@ class DiffusionTransformer(nn.Module):
         # Output projection (predict noise/x0/v)
         self.output_proj = nn.Linear(config.d_model, config.d_model)
 
+        # Evoformer integration — lazy import to avoid circular deps
+        self._evoformer_manager = None
+        if evoformer_config is not None:
+            self._init_evoformer(evoformer_config)
+
         # Initialize weights
         self.apply(self._init_weights)
+
+    def _init_evoformer(self, evoformer_config: EvoformerConfig) -> None:
+        """Initialize the Evoformer manager for layer recycling."""
+        from diffusion_llm.model.evoformer import EvoformerManager
+        self._evoformer_manager = EvoformerManager(evoformer_config)
 
     def _init_weights(self, module: nn.Module) -> None:
         """Initialize weights with Xavier/GPT-2 style."""
@@ -334,7 +455,9 @@ class DiffusionTransformer(nn.Module):
         token_ids: Optional[torch.Tensor] = None,
         graph_keys: Optional[torch.Tensor] = None,
         graph_values: Optional[torch.Tensor] = None,
-    ) -> torch.Tensor:
+        granularity_factor: Optional[float] = None,
+        return_hidden_states: bool = False,
+    ) -> torch.Tensor | tuple[torch.Tensor, List[torch.Tensor]]:
         """Forward pass: predict noise given noisy input and timestep.
 
         Args:
@@ -348,9 +471,15 @@ class DiffusionTransformer(nn.Module):
                 shape (batch, n_graph_nodes, d_model).
             graph_values: Graph conditioning values for cross-attention,
                 shape (batch, n_graph_nodes, d_model).
+            granularity_factor: Optional Matryoshka granularity factor
+                for elastic inference (1.0 = full size).
+            return_hidden_states: If True, also return per-layer hidden
+                states for Evoformer layer recycling.
 
         Returns:
             Predicted noise of shape (batch, seq_len, d_model).
+            If return_hidden_states is True, also returns a list of
+            per-layer hidden state tensors.
         """
         # Get input embeddings
         if x_t is None and token_ids is not None:
@@ -361,7 +490,7 @@ class DiffusionTransformer(nn.Module):
         else:
             raise ValueError("Either x_t or token_ids must be provided")
 
-        # Add positional encoding
+        # Add positional encoding (learned positions only; RoPE is applied in attention)
         if self.position_embedding is not None:
             seq_len = h.shape[1]
             positions = torch.arange(seq_len, device=h.device).unsqueeze(0)
@@ -370,20 +499,89 @@ class DiffusionTransformer(nn.Module):
         # Embed timestep
         t_emb = self.timestep_embedding(t)
 
-        # Pass through transformer blocks
+        # Pass through transformer blocks, collecting hidden states for Evoformer
+        hidden_states: List[torch.Tensor] = []
         for block in self.blocks:
             h = block(
                 h,
                 timestep_emb=t_emb,
                 graph_keys=graph_keys,
                 graph_values=graph_values,
+                granularity_factor=granularity_factor,
             )
+            if return_hidden_states or self._evoformer_manager is not None:
+                hidden_states.append(h)
+
+        # Evoformer layer recycling (if enabled)
+        if self._evoformer_manager is not None and len(hidden_states) > 1:
+            hidden_states = self._evoformer_manager.recycle_layers(hidden_states)
+            # Use the last revised hidden state as the output
+            h = hidden_states[-1]
 
         # Final norm and projection
         h = self.final_norm(h)
         output = self.output_proj(h)
 
+        if return_hidden_states:
+            return output, hidden_states
+
         return output
+
+    def apply_evoformer_token_update(self, x: torch.Tensor) -> torch.Tensor:
+        """Apply Evoformer bidirectional token update (Level 2).
+
+        Can be called externally as part of an Evoformer recycling loop.
+
+        Args:
+            x: Hidden state tensor of shape (batch, seq_len, d_model).
+
+        Returns:
+            Revised hidden state tensor.
+        """
+        if self._evoformer_manager is not None:
+            return self._evoformer_manager.bidirectional_token_update(x)
+        return x
+
+    def apply_evoformer_decoder_feedback(
+        self,
+        hidden_state: torch.Tensor,
+        decoder_output: torch.Tensor,
+    ) -> torch.Tensor:
+        """Apply Evoformer decoder-predict feedback (Level 3).
+
+        Can be called externally during anchored decoder refinement.
+
+        Args:
+            hidden_state: Hidden state tensor of shape (batch, seq_len, d_model).
+            decoder_output: Decoder output tensor of shape (batch, seq_len, d_model).
+
+        Returns:
+            Revised hidden state tensor.
+        """
+        if self._evoformer_manager is not None:
+            return self._evoformer_manager.apply_decoder_feedback(hidden_state, decoder_output)
+        return hidden_state
+
+    def apply_evoformer_prediction_recycling(
+        self,
+        hidden_states: torch.Tensor,
+        prediction_logits: torch.Tensor,
+    ) -> torch.Tensor:
+        """Apply Evoformer prediction-context recycling (Level 4).
+
+        Can be called externally to refine graph understanding from
+        predicted output.
+
+        Args:
+            hidden_states: Hidden states of shape (batch, seq_len, d_model).
+            prediction_logits: Prediction logits of shape (batch, seq_len, d_model).
+
+        Returns:
+            Revised hidden state tensor.
+        """
+        if self._evoformer_manager is not None:
+            return self._evoformer_manager.apply_prediction_recycling(hidden_states, prediction_logits)
+        return hidden_states
 
     def get_num_params(self) -> int:
         """Get total number of parameters."""

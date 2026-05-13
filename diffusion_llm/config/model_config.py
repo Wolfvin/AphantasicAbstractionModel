@@ -380,6 +380,94 @@ class InferenceConfig:
     """Output language: 'id' (Indonesian) or 'en' (English)."""
 
 
+# ---------------------------------------------------------------------------
+# v2.0 Upgrade — New Module Configurations (from Losion)
+# ---------------------------------------------------------------------------
+
+@dataclass
+class AnchoredDecoderConfig:
+    """Configuration for Anchored Diffusion Decoder."""
+
+    d_model: int = 768
+    d_vocab: int = 32000
+    n_refine_steps: int = 3
+    d_refine: int = 512
+    use_evoformer_feedback: bool = True
+    n_feedback_iterations: int = 2
+    disambiguation_heads: int = 8
+
+
+@dataclass
+class FlowMatchingConfig:
+    """Configuration for Flow Matching Decoder."""
+
+    d_model: int = 768
+    d_vocab: int = 32000
+    num_steps: int = 3
+
+
+@dataclass
+class EvoformerConfig:
+    """Configuration for Evoformer Feedback System."""
+
+    d_model: int = 768
+    n_recycling_steps: int = 3
+    dropout: float = 0.0
+    use_layer_recycling: bool = True
+    use_token_recycling: bool = True
+    use_decoder_feedback: bool = True
+    use_prediction_recycling: bool = True
+    min_recycling_improvement: float = 1e-4
+
+
+@dataclass
+class DualMemoryConfig:
+    """Configuration for Dual Memory System."""
+
+    d_model: int = 768
+    working_memory_size: int = 512
+    long_term_memory_dim: int = 256
+    consolidation_method: str = "attention"
+    retrieval_method: str = "attention"
+    n_retrieval_heads: int = 4
+    dropout: float = 0.0
+
+
+@dataclass
+class MCTSConfig:
+    """Configuration for MCTS Reasoning Engine."""
+
+    num_simulations: int = 64
+    c_puct: float = 1.5
+    temperature: float = 1.0
+    max_depth: int = 10
+    use_value_network: bool = True
+    max_children: int = 8
+
+
+@dataclass
+class ThinkingToggleConfig:
+    """Configuration for Thinking Toggle."""
+
+    d_model: int = 768
+    threshold: float = 0.5
+
+
+@dataclass
+class MatryoshkaConfig:
+    """Configuration for Matryoshka Elastic Inference."""
+
+    d_model: int = 768
+    d_ff: int = 3072
+    granularity_factors: list = None  # will use default_factory in __post_init__
+    matryoshka_loss_weight: float = 0.1
+    use_adaptive: bool = True
+
+    def __post_init__(self):
+        if self.granularity_factors is None:
+            self.granularity_factors = [0.25, 0.5, 0.75, 1.0]
+
+
 @dataclass
 class AamDiffusionConfig:
     """Master configuration for the AAM Diffusion LLM.
@@ -395,8 +483,27 @@ class AamDiffusionConfig:
     training: TrainingConfig = field(default_factory=TrainingConfig)
     inference: InferenceConfig = field(default_factory=InferenceConfig)
 
+    # --- v2.0 Upgrades from Losion ---
+    anchored_decoder: AnchoredDecoderConfig = field(default_factory=AnchoredDecoderConfig)
+    flow_matching: FlowMatchingConfig = field(default_factory=FlowMatchingConfig)
+    evoformer: EvoformerConfig = field(default_factory=EvoformerConfig)
+    dual_memory: DualMemoryConfig = field(default_factory=DualMemoryConfig)
+    mcts: MCTSConfig = field(default_factory=MCTSConfig)
+    thinking_toggle: ThinkingToggleConfig = field(default_factory=ThinkingToggleConfig)
+    matryoshka: MatryoshkaConfig = field(default_factory=MatryoshkaConfig)
+
+    # --- v2.0 Feature Flags ---
+    use_anchored_decoder: bool = True
+    use_flow_matching: bool = True
+    use_evoformer: bool = True
+    use_dual_memory: bool = True
+    use_mcts: bool = False  # Future — needs custom state representation
+    use_thinking_toggle: bool = True
+    use_matryoshka: bool = True
+    use_swiglu_ffn: bool = True  # Replace GELU with SwiGLU
+
     # --- Meta ---
-    model_name: str = "aam-diffusion-v0.1"
+    model_name: str = "aam-diffusion-v2.0"
     """Model name for saving/loading."""
 
     output_dir: str = "./output"
@@ -439,7 +546,25 @@ class AamDiffusionConfig:
             tokenizer=TokenizerConfig(**data.get("tokenizer", {})),
             training=TrainingConfig(**data.get("training", {})),
             inference=InferenceConfig(**data.get("inference", {})),
-            model_name=data.get("model_name", "aam-diffusion-v0.1"),
+            # v2.0 sub-configs
+            anchored_decoder=AnchoredDecoderConfig(**data.get("anchored_decoder", {})),
+            flow_matching=FlowMatchingConfig(**data.get("flow_matching", {})),
+            evoformer=EvoformerConfig(**data.get("evoformer", {})),
+            dual_memory=DualMemoryConfig(**data.get("dual_memory", {})),
+            mcts=MCTSConfig(**data.get("mcts", {})),
+            thinking_toggle=ThinkingToggleConfig(**data.get("thinking_toggle", {})),
+            matryoshka=MatryoshkaConfig(**data.get("matryoshka", {})),
+            # v2.0 feature flags
+            use_anchored_decoder=data.get("use_anchored_decoder", True),
+            use_flow_matching=data.get("use_flow_matching", True),
+            use_evoformer=data.get("use_evoformer", True),
+            use_dual_memory=data.get("use_dual_memory", True),
+            use_mcts=data.get("use_mcts", False),
+            use_thinking_toggle=data.get("use_thinking_toggle", True),
+            use_matryoshka=data.get("use_matryoshka", True),
+            use_swiglu_ffn=data.get("use_swiglu_ffn", True),
+            # Meta
+            model_name=data.get("model_name", "aam-diffusion-v2.0"),
             output_dir=data.get("output_dir", "./output"),
             seed=data.get("seed", 42),
             aam_mind_source=data.get("aam_mind_source", "rsvs_graph"),
@@ -478,6 +603,23 @@ class AamDiffusionConfig:
             f"    Batch={self.training.batch_size} x {self.training.gradient_accumulation_steps} accum",
             f"    Max steps={self.training.max_steps}",
             f"    AMP={self.training.use_amp} ({self.training.amp_dtype})",
+            "",
+            f"  v2.0 Modules (Losion Upgrade):",
+            f"    Anchored Decoder: {self.use_anchored_decoder} "
+            f"(n_refine={self.anchored_decoder.n_refine_steps})",
+            f"    Flow Matching:    {self.use_flow_matching} "
+            f"(num_steps={self.flow_matching.num_steps})",
+            f"    Evoformer:        {self.use_evoformer} "
+            f"(n_recycle={self.evoformer.n_recycling_steps})",
+            f"    Dual Memory:      {self.use_dual_memory} "
+            f"(working={self.dual_memory.working_memory_size})",
+            f"    MCTS:             {self.use_mcts} "
+            f"(simulations={self.mcts.num_simulations})",
+            f"    Thinking Toggle:  {self.use_thinking_toggle} "
+            f"(threshold={self.thinking_toggle.threshold})",
+            f"    Matryoshka:       {self.use_matryoshka} "
+            f"(factors={self.matryoshka.granularity_factors})",
+            f"    SwiGLU FFN:       {self.use_swiglu_ffn}",
             "",
             f"  AAM Philosophy:",
             f"    Mind = {self.aam_mind_source} (RSVS Knowledge Graph)",
