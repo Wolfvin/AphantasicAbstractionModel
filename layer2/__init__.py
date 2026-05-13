@@ -8,6 +8,7 @@ Modules:
   situation : Chat history as semantic graph memory
   predictive: Prediction → observation → belief update → anomaly detection
   pattern   : Pattern completion + narrative generation from graph
+  temporal  : Temporal tracking layer — when did things happen and what's still relevant?
 
 Bridge:
   bridge    : Unified adapter for PyO3 Rust core (AbstractionBridge)
@@ -31,4 +32,6 @@ from .context import ContextLayer
 from .situation import SituationLayer
 from .predictive import PredictiveEngine, Prediction, Anomaly, BeliefUpdate
 from .pattern import PatternOutput, ReasoningStep, PatternResult
+from .temporal import TemporalTracker, TemporalRecord
+from .diffusion_llm import AamDiffusionLLM, GraphConditioning, DiffusionOutput
 from .web_search import WebSearchEngine

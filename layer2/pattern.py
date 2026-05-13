@@ -63,6 +63,36 @@ _STOP_WORDS = frozenset({
 
 
 # ---------------------------------------------------------------------------
+# G2-8: Narrative evidence tagging
+# ---------------------------------------------------------------------------
+
+
+def _tag_narrative_with_evidence(narrative: str, evidence_nodes: list[str]) -> str:
+    """Post-process narrative to tag evidence references.
+
+    Analogi: Setiap klaim Jin Soun punya cap "bukti dari: node X, Y".
+    Bukan hanya narasi — tapi narasi yang bisa diaudit.
+
+    Args:
+        narrative: The generated narrative text.
+        evidence_nodes: List of evidence node labels.
+
+    Returns:
+        Narrative with an evidence appendix appended.
+    """
+    if not evidence_nodes or not narrative:
+        return narrative
+
+    # Build an evidence appendix
+    evidence_tags = []
+    for i, node in enumerate(evidence_nodes[:10], 1):
+        evidence_tags.append(f"  [{i}] {node}")
+
+    appendix = "\n\n--- Evidence References ---\n" + "\n".join(evidence_tags)
+    return narrative + appendix
+
+
+# ---------------------------------------------------------------------------
 # Data classes
 # ---------------------------------------------------------------------------
 
@@ -115,6 +145,37 @@ class ReasoningStep:
             "grounding_scores": {k: round(v, 4) for k, v in self.grounding_scores.items()},
         }
 
+    @classmethod
+    def from_dict(cls, data: dict) -> ReasoningStep:
+        """Deserialize from a plain dict.
+
+        Args:
+            data: A dict previously returned by `to_dict()`.
+
+        Returns:
+            A new ReasoningStep instance.
+        """
+        # Reconstruct evidence_node_ids from serialized dicts
+        raw_ids = data.get("evidence_node_ids", [])
+        evidence_node_ids: list[tuple[str, str]] = []
+        for entry in raw_ids:
+            if isinstance(entry, dict):
+                evidence_node_ids.append(
+                    (entry.get("node_id", ""), entry.get("sense_id", ""))
+                )
+            elif isinstance(entry, (list, tuple)) and len(entry) >= 2:
+                evidence_node_ids.append((str(entry[0]), str(entry[1])))
+
+        return cls(
+            step_type=data.get("step_type", ""),
+            description=data.get("description", ""),
+            data=data.get("data", {}),
+            evidence_nodes=data.get("evidence_nodes", []),
+            confidence=float(data.get("confidence", 0.5)),
+            evidence_node_ids=evidence_node_ids,
+            grounding_scores={k: float(v) for k, v in data.get("grounding_scores", {}).items()},
+        )
+
 
 @dataclass
 class PatternResult:
@@ -157,6 +218,27 @@ class PatternResult:
             "anomalies": list(self.anomalies),
         }
 
+    @classmethod
+    def from_dict(cls, data: dict) -> PatternResult:
+        """Deserialize from a plain dict.
+
+        Args:
+            data: A dict previously returned by `to_dict()`.
+
+        Returns:
+            A new PatternResult instance.
+        """
+        steps = [ReasoningStep.from_dict(s) for s in data.get("steps", [])]
+        return cls(
+            trigger=data.get("trigger", ""),
+            steps=steps,
+            pattern=data.get("pattern", ""),
+            narrative=data.get("narrative", ""),
+            evidence_chain=data.get("evidence_chain", []),
+            confidence=float(data.get("confidence", 0.0)),
+            anomalies=data.get("anomalies", []),
+        )
+
 
 # ---------------------------------------------------------------------------
 # PatternOutput
@@ -189,7 +271,7 @@ class PatternOutput:
         is_rust_core: Whether the Rust core is being used.
     """
 
-    def __init__(self, rsvs_instance: Any | None = None, bridge: Optional[RsvsBridge] = None) -> None:
+    def __init__(self, rsvs_instance: Any | None = None, bridge: Optional[RsvsBridge] = None, temporal_tracker: Any = None) -> None:
         """Initialize the Pattern Output layer.
 
         Args:
@@ -197,6 +279,9 @@ class PatternOutput:
                 the layer will obtain a bridge via get_bridge().
             bridge: Optional pre-built RsvsBridge instance. If provided,
                 takes precedence over rsvs_instance.
+            temporal_tracker: Optional TemporalTracker instance for
+                temporal cross-referencing (G2-7). Enables finding
+                nodes that co-occurred in time.
         """
         if bridge is not None:
             self._bridge = bridge
@@ -207,6 +292,11 @@ class PatternOutput:
 
         self.rsvs_available = self._bridge.is_available
         self.is_rust_core = self._bridge.is_rust_core
+
+        # G2-7: Temporal tracker for temporal cross-referencing
+        # Analogi: Jin Soun cross-referencing berdasarkan TANGGAL —
+        # "siapa yang berada di Hefei pada waktu yang sama?"
+        self._temporal_tracker = temporal_tracker
 
         # P2-7: Removed self._fallback_graph — now delegates to self._bridge
         # which always has a _FallbackGraph when Rust core is unavailable.
@@ -606,6 +696,29 @@ class PatternOutput:
                             })
                     except Exception:
                         pass
+
+            # G2-7: Temporal cross-reference — find nodes that co-occurred in time
+            # Analogi: "Siapa yang berada di Hefei pada waktu yang sama?"
+            if hasattr(self, '_temporal_tracker') and self._temporal_tracker is not None:
+                for node in nodes_to_compare[:10]:
+                    try:
+                        temporal_overlap = self._temporal_tracker.query_temporal_overlap(node)
+                        for rec in temporal_overlap[:5]:
+                            # Avoid duplicating pairs already found via structural similarity
+                            existing_nodes = (
+                                [p.get("node_a", "") for p in similar_pairs]
+                                + [p.get("node_b", "") for p in similar_pairs]
+                            )
+                            if rec.label not in existing_nodes:
+                                similar_pairs.append({
+                                    "node_a": node,
+                                    "node_b": rec.label,
+                                    "similarity": 0.3,  # temporal overlap = moderate similarity
+                                    "overlap_type": "temporal",
+                                })
+                                evidence_nodes.append(rec.label)
+                    except Exception as exc:
+                        logger.debug("Temporal cross-reference failed for '%s': %s", node, exc)
 
             if similar_pairs or shared_compositions:
                 confidence = 0.7
@@ -1106,6 +1219,11 @@ class PatternOutput:
         )
 
         narrative = "\n\n".join(narrative_parts)
+
+        # G2-8: Tag narrative with evidence references for traceability
+        # Analogi: Setiap klaim Jin Soun punya cap "bukti dari: node X, Y".
+        # Bukan hanya narasi — tapi narasi yang bisa diaudit.
+        narrative = _tag_narrative_with_evidence(narrative, evidence)
 
         return ReasoningStep(
             step_type="narrative",
@@ -1823,3 +1941,107 @@ class PatternOutput:
             "fallback_graph_size": 0,  # P2-7: state lives in bridge
             "history_count": len(self._history),
         }
+
+    # ------------------------------------------------------------------
+    # Persistence (P2-8: Cognitive persistence)
+    # ------------------------------------------------------------------
+
+    _PERSIST_SCHEMA_VERSION = "1.0"
+
+    def save_to_dict(self) -> dict:
+        """Serialize cognitive state to a plain dict (in-memory).
+
+        Saves `_history` as a list of PatternResult dicts.
+        The RSVS bridge is NOT serialized — only the Layer-2
+        cognitive state.
+
+        Returns:
+            A dict containing the full serializable state.
+        """
+        return {
+            "schema_version": self._PERSIST_SCHEMA_VERSION,
+            "history": [r.to_dict() for r in self._history[-200:]],  # Keep bounded
+        }
+
+    def load_from_dict(self, data: dict) -> None:
+        """Restore cognitive state from a plain dict (in-memory).
+
+        Restores `_history` from a list of PatternResult dicts.
+        Existing state is replaced.
+
+        Args:
+            data: A dict previously returned by `save_to_dict()`.
+        """
+        if not isinstance(data, dict):
+            logger.warning("load_from_dict: expected dict, got %s", type(data).__name__)
+            return
+
+        # Schema compatibility check
+        saved_version = data.get("schema_version", "0.0")
+        if saved_version != self._PERSIST_SCHEMA_VERSION:
+            logger.warning(
+                "load_from_dict: schema version mismatch (saved=%s, current=%s). "
+                "Proceeding with best-effort restore.",
+                saved_version, self._PERSIST_SCHEMA_VERSION,
+            )
+
+        history_data = data.get("history", [])
+        self._history = [PatternResult.from_dict(h) for h in history_data]
+
+        logger.info(
+            "PatternOutput state restored: %d history entries",
+            len(self._history),
+        )
+
+    def save(self, path: str) -> dict:
+        """Save cognitive state to a JSON file.
+
+        Args:
+            path: Filesystem path to write the JSON file.
+
+        Returns:
+            A summary dict with stats about what was saved.
+        """
+        data = self.save_to_dict()
+        summary: dict = {
+            "path": path,
+            "history_entries": len(self._history),
+            "schema_version": self._PERSIST_SCHEMA_VERSION,
+            "success": False,
+        }
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False, default=str)
+            summary["success"] = True
+            logger.info("PatternOutput state saved to %s", path)
+        except (OSError, TypeError) as exc:
+            summary["error"] = str(exc)
+            logger.error("PatternOutput save failed: %s", exc)
+        return summary
+
+    def load(self, path: str) -> dict:
+        """Load cognitive state from a JSON file.
+
+        Args:
+            path: Filesystem path to read the JSON file from.
+
+        Returns:
+            A summary dict with stats about what was loaded.
+        """
+        summary: dict = {
+            "path": path,
+            "history_entries": 0,
+            "success": False,
+        }
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            self.load_from_dict(data)
+            summary["history_entries"] = len(self._history)
+            summary["schema_version"] = data.get("schema_version", "unknown")
+            summary["success"] = True
+            logger.info("PatternOutput state loaded from %s", path)
+        except (OSError, json.JSONDecodeError, TypeError) as exc:
+            summary["error"] = str(exc)
+            logger.error("PatternOutput load failed: %s", exc)
+        return summary

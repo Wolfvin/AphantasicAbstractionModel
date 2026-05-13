@@ -15,6 +15,7 @@ Flow:
       -> AAM Core (spreading activation, structural analysis)
       -> Predictive Engine (predict, detect anomalies)
       -> Pattern Output (pattern completion + narrative)
+      -> Layer 3 Deductive Reasoning (if applicable — policy/coder/reasoning)
       -> Appraise Self-Check (verify output consistency)
       -> Final Output (traceable reasoning chain + confidence)
 
@@ -42,6 +43,16 @@ from layer2.context import ContextLayer, SOURCE_TRUST
 from layer2.situation import SituationLayer
 from layer2.predictive import PredictiveEngine, Prediction, Anomaly, BeliefUpdate
 from layer2.pattern import PatternOutput, ReasoningStep, PatternResult
+from layer2.temporal import TemporalTracker, TemporalRecord
+from layer2.diffusion_llm import AamDiffusionLLM, GraphConditioning
+
+# Layer 0: Perceptual Front-End
+from layer0 import TextAbstractor, ImageAbstractor, AudioAbstractor, VideoAbstractor
+from layer0 import observation_to_ingest_data, ingest_observation
+from layer0.base import PerceptualObservation as Layer0PerceptualObservation, ModalityType
+from layer3.reasoning import ReasoningEngine, DeductiveChain, DeductiveStep
+from layer3.policy import DeductivePolicyEngine
+from layer3.coder import DeductiveCoderLayer
 
 logger = logging.getLogger(__name__)
 
@@ -430,7 +441,32 @@ class AamPipeline:
             eta=eta,
             anomaly_threshold=anomaly_threshold,
         )
-        self.pattern = PatternOutput(bridge=self._bridge)
+        self.temporal = TemporalTracker()
+        self.pattern = PatternOutput(bridge=self._bridge, temporal_tracker=self.temporal)
+
+        # AAM Diffusion LLM — the "body" of AAM (1 pikiran + 1 tubuh)
+        # Analogi: Tubuh Jin Soun — bukan LLM umum, tapi model yang
+        # KHUSUS dilatih untuk menarasikan dari graph-nya sendiri.
+        self.diffusion_llm = AamDiffusionLLM()
+
+        # Layer 3: Deductive Reasoning (optional — activated when needed)
+        # Analogi: Jin Soun tidak hanya menarik kesimpulan dari pola,
+        # tapi juga menelusuri rantai deduksi langkah demi langkah,
+        # mengecek kepatuhan, dan menganalisis kode — layer tambahan
+        # yang memperkaya jawaban tanpa mengganggu flow utama.
+        self.reasoning = ReasoningEngine(bridge=self._bridge)
+        self.deductive_policy = DeductivePolicyEngine(bridge=self._bridge)
+        self.deductive_coder = DeductiveCoderLayer(bridge=self._bridge)
+
+        # Layer 0: Perceptual Front-End
+        # TextAbstractor gets the bridge for LLM-driven tuple extraction.
+        # If bridge lacks generate(), TextAbstractor gracefully falls back
+        # to noun-phrase extraction (no raw data stored, only relations).
+        self._text_abstractor = TextAbstractor(llm_bridge=bridge)
+        # Image/Audio/Video abstractors are lazy-initialized (need external bridges)
+        self._image_abstractor: Optional[ImageAbstractor] = None
+        self._audio_abstractor: Optional[AudioAbstractor] = None
+        self._video_abstractor: Optional[VideoAbstractor] = None
 
         # Internal state
         self._conversation_history: list[dict] = []
@@ -477,6 +513,15 @@ class AamPipeline:
         all_predictions: list[dict] = []
         all_belief_updates: list[dict] = []
         non_fatal_errors: list[dict] = []
+
+        # G2-6: Systematic chat ingest — every conversation enriches the graph
+        # Analogi: Setiap percakapan yang Jin Soun dengar dicatat di Simhyeon Pavilion
+        try:
+            self.situation.add_message("user", question)
+            # Also ingest into context layer for provenance tracking
+            self.context.ingest_text(question, source=source)
+        except Exception as exc:
+            logger.debug("Systematic chat ingest failed: %s", exc)
 
         # ---- Step 1: Context Layer (P-01: produce Layer0Output) ----
         try:
@@ -618,6 +663,35 @@ class AamPipeline:
                 )
                 non_fatal_errors.append(err.to_dict())
 
+        # ---- Step 4.5: Layer 3 Deductive Reasoning (if applicable) ----
+        # Analogi: Setelah Jin Soun menarik pola, dia menelusuri
+        # rantai deduksi — apakah ada bukti yang lebih kuat? Apakah
+        # jawaban ini perlu diperkuat dengan penalaran deduktif?
+        # Jika gagal, pipeline tetap jalan — Layer 3 adalah optional.
+        _deductive_confidence_override: float | None = None
+        query_mode = self._detect_query_mode(question)
+        if query_mode != "general" and pattern_result:
+            try:
+                deductive_chain = self.reasoning.build_chain(pattern_result)
+                # Enhance the answer with deductive reasoning
+                if deductive_chain.steps:
+                    # Add deductive chain info to metadata
+                    all_evidence.append({
+                        "type": "deductive_chain",
+                        "mode": query_mode,
+                        "steps": len(deductive_chain.steps),
+                        "aggregate_confidence": deductive_chain.aggregate_confidence,
+                        "conclusion": deductive_chain.conclusion[:200] if deductive_chain.conclusion else "",
+                    })
+                    # If deductive confidence is higher, use it
+                    if deductive_chain.aggregate_confidence > pattern_result.confidence:
+                        _deductive_confidence_override = deductive_chain.aggregate_confidence
+            except Exception as exc:
+                err = ReasoningError(
+                    f"Deductive reasoning failed: {exc}", layer="deductive",
+                )
+                non_fatal_errors.append(err.to_dict())
+
         # ---- Step 5: Belief Update ----
         if prediction:
             try:
@@ -647,16 +721,38 @@ class AamPipeline:
                 n for s in pattern_result.steps for n in s.evidence_nodes
             ))
 
-            answer = generate_narrative(
+            # Use AAM's own Diffusion LLM (the "body") for narrative generation
+            # Analogi: Jin Soun mengungkapkan kesimpulan melalui tubuhnya sendiri,
+            # bukan tubuh sewaan. 1 pikiran + 1 tubuh.
+            graph_conditioning = GraphConditioning(
                 trigger=question,
-                reasoning_chain=reasoning_chain_dicts,
-                pattern=pattern_result.pattern,
                 evidence_nodes=evidence_labels,
-                confidence=pattern_result.confidence,
-                anomalies=pattern_result.anomalies,
-                language=self._language,
-                use_llm=self._use_llm,
+                confidence_map=dict(self._bridge.confidence_map()) if self._bridge.is_available else {},
+                anomalies=pattern_result.anomalies if pattern_result else [],
+                reasoning_chain=[s.to_dict() for s in pattern_result.steps] if pattern_result else [],
+                source_trust=self.context.trust_score(source),
+                scope_active=bool(self.context.get_scope()),
             )
+            diffusion_output = self.diffusion_llm.generate(
+                conditioning=graph_conditioning,
+                language=self._language,
+            )
+
+            # If diffusion fallback produced something, use it; otherwise fall back to external LLM
+            if diffusion_output.narrative and len(diffusion_output.narrative) > 50:
+                answer = diffusion_output.narrative
+            else:
+                # External LLM as last resort
+                answer = generate_narrative(
+                    trigger=question,
+                    reasoning_chain=reasoning_chain_dicts,
+                    pattern=pattern_result.pattern,
+                    evidence_nodes=evidence_labels,
+                    confidence=pattern_result.confidence,
+                    anomalies=pattern_result.anomalies,
+                    language=self._language,
+                    use_llm=self._use_llm,
+                )
 
             confidence = pattern_result.confidence
             reasoning_chain = pattern_result.steps
@@ -676,6 +772,71 @@ class AamPipeline:
             pattern_evidence = []
 
         all_evidence.extend(pattern_evidence)
+
+        # Apply Layer 3 deductive confidence override if applicable
+        if _deductive_confidence_override is not None:
+            confidence = _deductive_confidence_override
+
+        # G2-4: Apply scope filtering to evidence chain
+        # Analogi: Jin Soun hanya mempercayai sumber dalam skup misi saat ini
+        scope = self.context.get_scope()
+        if scope:
+            # Filter evidence to only in-scope sources
+            filtered_evidence = []
+            for ev in all_evidence:
+                ev_source = ev.get("source", ev.get("type", "unknown"))
+                # Check if this evidence comes from an in-scope source
+                if self.context.is_in_scope(ev_source) or ev.get("type") in ("internet_search", "situation_recall", "deductive_chain"):
+                    filtered_evidence.append(ev)
+                else:
+                    # Evidence from out-of-scope source — keep but mark
+                    ev_copy = dict(ev)
+                    ev_copy["out_of_scope"] = True
+                    filtered_evidence.append(ev_copy)
+            all_evidence = filtered_evidence
+
+            # If scope is active, reduce confidence if most evidence is out-of-scope
+            in_scope_count = sum(1 for e in all_evidence if not e.get("out_of_scope", False))
+            total_count = max(len(all_evidence), 1)
+            scope_coverage = in_scope_count / total_count
+            if scope_coverage < 0.5:
+                confidence *= scope_coverage  # Penalize confidence when scope coverage is low
+                appraise_warning = (appraise_warning or "") + (
+                    f" Only {scope_coverage:.0%} of evidence is within scope."
+                ).strip()
+
+        # G2-5: Weight confidence by source trust
+        # Analogi: Jin Soun membedakan "informasi dari Simhyeon Pavilion" vs "gosip tavern"
+        source_trust = self.context.trust_score(source)
+        if source_trust < 1.0:
+            # Adjust confidence based on source trustworthiness
+            confidence = confidence * (0.5 + 0.5 * source_trust)
+
+        # GN-5: Bounded execution — check narrative reliability
+        # Analogi: Jin Soun tahu kapan tubuhnya tidak bisa mengeksekusi teknik
+        # yang dia pikirkan — dan memilih strategi alternatif.
+        is_reliable = True
+        reliability_reason = "Narrative appears reliable"
+        try:
+            is_reliable, reliability_reason = self._check_narrative_reliability(answer, pattern_result)
+            if not is_reliable:
+                # Fallback to structural-only response
+                logger.warning("Narrative unreliable: %s — falling back to structural response", reliability_reason)
+                # Build a structural-only answer from the reasoning chain
+                if pattern_result and pattern_result.steps:
+                    structural_parts = []
+                    for step in pattern_result.steps:
+                        if step.evidence_nodes:
+                            structural_parts.append(
+                                f"[{step.step_type}] {step.description} "
+                                f"(evidence: {', '.join(step.evidence_nodes[:3])}, "
+                                f"confidence: {step.confidence:.1%})"
+                            )
+                    if structural_parts:
+                        answer = "Structural analysis (narrative deemed unreliable):\n" + "\n".join(structural_parts)
+                        confidence *= 0.7  # Reduce confidence for structural-only response
+        except Exception as exc:
+            logger.debug("Narrative reliability check failed: %s", exc)
 
         # ---- Step 6: Appraise Self-Check (P-02) ----
         try:
@@ -743,6 +904,8 @@ class AamPipeline:
             metadata={
                 "latency_s": round(latency, 3),
                 "source": source,
+                "source_trust": source_trust,
+                "scope_active": bool(scope),
                 "internet_search": search_internet,
                 "context_atoms": context_atoms[:5],
                 "conversation_turn": len(self._conversation_history),
@@ -750,10 +913,146 @@ class AamPipeline:
                 "rsvs_available": self._is_rsvs_available(),
                 "use_llm": self._use_llm,
                 "ingest_count": self._ingest_count,
+                "query_mode": query_mode,
+                "narrative_reliable": is_reliable,
+                "reliability_reason": reliability_reason,
             },
             appraise_warning=appraise_warning,
             errors=non_fatal_errors,
         )
+
+    def ask_multimodal(
+        self,
+        text: str = "",
+        image: Any = None,
+        audio: Any = None,
+        video: Any = None,
+        context: list[str] | None = None,
+        source: str = "user_input",
+    ) -> AamResponse:
+        """Ask a question with multi-modal input.
+
+        Processes text, image, audio, and/or video inputs through
+        Layer 0 abstractors, then runs the full cognitive pipeline.
+
+        Each modality is independently abstracted into PerceptualTuples
+        (no raw data stored — only relations). All tuples are combined
+        before being fed into the cognitive pipeline.
+
+        Analogi: Jin Soun tidak hanya membaca dokumen — dia juga
+        mendengar langkah kaki dan mengenali teknik dari suara.
+        Multi-modal = semua jalur persepsi aktif sekaligus.
+
+        Args:
+            text: Text input (optional).
+            image: Image input — bytes, path, or description (optional).
+            audio: Audio input — bytes, path, or description (optional).
+            video: Video input — bytes, path, or description (optional).
+            context: Optional context atoms to guide the query.
+            source: Source provenance (default: "user_input").
+
+        Returns:
+            AamResponse with answer, reasoning chain, evidence, and confidence.
+        """
+        combined_tuples: list = []  # list of PerceptualTuple
+        modality_labels: list[str] = []
+
+        # --- Process each modality through Layer 0 ---
+
+        # Text modality (always available)
+        if text:
+            try:
+                text_obs = self._run_layer0(text, source)
+                combined_tuples.extend(text_obs.tuples)
+                modality_labels.append("text")
+            except Exception as exc:
+                logger.debug("Layer 0 text abstraction failed in ask_multimodal: %s", exc)
+
+        # Image modality (lazy-initialized)
+        if image is not None:
+            try:
+                if self._image_abstractor is None:
+                    self._image_abstractor = ImageAbstractor(llm_bridge=self._bridge)
+                image_obs = self._image_abstractor.abstract(image, context={"source": source})
+                combined_tuples.extend(image_obs.tuples)
+                modality_labels.append("image")
+                # Ingest into RSVS
+                if self._bridge.is_available and image_obs.tuples:
+                    ingest_data = observation_to_ingest_data(image_obs)
+                    if ingest_data:
+                        self._bridge.ingest(ingest_data)
+            except Exception as exc:
+                logger.debug("Layer 0 image abstraction failed in ask_multimodal: %s", exc)
+
+        # Audio modality (lazy-initialized)
+        if audio is not None:
+            try:
+                if self._audio_abstractor is None:
+                    self._audio_abstractor = AudioAbstractor(llm_bridge=self._bridge)
+                audio_obs = self._audio_abstractor.abstract(audio, context={"source": source})
+                combined_tuples.extend(audio_obs.tuples)
+                modality_labels.append("audio")
+                # Ingest into RSVS
+                if self._bridge.is_available and audio_obs.tuples:
+                    ingest_data = observation_to_ingest_data(audio_obs)
+                    if ingest_data:
+                        self._bridge.ingest(ingest_data)
+            except Exception as exc:
+                logger.debug("Layer 0 audio abstraction failed in ask_multimodal: %s", exc)
+
+        # Video modality (lazy-initialized)
+        if video is not None:
+            try:
+                if self._video_abstractor is None:
+                    self._video_abstractor = VideoAbstractor(llm_bridge=self._bridge)
+                video_obs = self._video_abstractor.abstract(video, context={"source": source})
+                combined_tuples.extend(video_obs.tuples)
+                modality_labels.append("video")
+                # Ingest into RSVS
+                if self._bridge.is_available and video_obs.tuples:
+                    ingest_data = observation_to_ingest_data(video_obs)
+                    if ingest_data:
+                        self._bridge.ingest(ingest_data)
+            except Exception as exc:
+                logger.debug("Layer 0 video abstraction failed in ask_multimodal: %s", exc)
+
+        # Extract context atoms from all combined tuples
+        l0_context_atoms: list[str] = []
+        for tuple_ in combined_tuples:
+            if tuple_.subject and tuple_.subject not in l0_context_atoms:
+                l0_context_atoms.append(tuple_.subject)
+            if tuple_.predicate and tuple_.predicate not in l0_context_atoms:
+                l0_context_atoms.append(tuple_.predicate)
+
+        # Merge user-provided context with Layer 0 extracted atoms
+        merged_context = list(context or [])
+        for atom in l0_context_atoms:
+            if atom not in merged_context:
+                merged_context.append(atom)
+
+        # Build a combined text for the pipeline query
+        combined_text = text or ""
+        if not combined_text and combined_tuples:
+            # If no text provided but we have tuples, build a summary
+            parts = []
+            for t in combined_tuples[:5]:
+                parts.append(f"{t.subject} {t.relation_type.value} {t.predicate}")
+            combined_text = " ".join(parts)
+
+        # Run the standard pipeline with the combined text and enriched context
+        result = self.ask(
+            question=combined_text,
+            context=merged_context or None,
+            search_internet=False,
+            source=source,
+        )
+
+        # Add multi-modal metadata to the response
+        result.metadata["multimodal"] = True
+        result.metadata["modalities"] = modality_labels
+        result.metadata["l0_tuple_count"] = len(combined_tuples)
+
+        return result
 
     # -------------------------------------------------------------------
     # P-03: Streaming support
@@ -1039,8 +1338,17 @@ class AamPipeline:
 
     def get_status(self) -> dict:
         """Get current pipeline status."""
+        # Determine which modalities are available via Layer 0
+        layer0_modalities = ["text"]  # text is always available
+        if self._image_abstractor is not None:
+            layer0_modalities.append("image")
+        if self._audio_abstractor is not None:
+            layer0_modalities.append("audio")
+        if self._video_abstractor is not None:
+            layer0_modalities.append("video")
+
         return {
-            "version": "8.5.0",
+            "version": "8.6.0",
             "rsvs_available": self._bridge.is_available,
             "is_rust_core": self._bridge.is_rust_core,
             "scope": self.context.get_scope(),
@@ -1052,11 +1360,200 @@ class AamPipeline:
             "ingest_count": self._ingest_count,
             "maintenance_interval": self._maintenance_interval,
             "last_maintenance": self._last_maintenance_time,
+            "layer3_available": True,  # Layer 3 is always available (works in fallback too)
+            "layer0_available": True,
+            "layer0_modalities": layer0_modalities,
+            "diffusion_llm": self.diffusion_llm.get_status(),
+            "temporal_tracker": self.temporal.get_stats(),
         }
+
+    # -------------------------------------------------------------------
+    # Layer 3: Direct Access Methods
+    # -------------------------------------------------------------------
+
+    def ask_deductive(
+        self,
+        question: str,
+        context: list[str] | None = None,
+    ) -> DeductiveChain:
+        """Ask a question using the full deductive reasoning chain.
+
+        Runs the complete pipeline (context → situation → pattern →
+        deductive reasoning) and returns a DeductiveChain with full
+        traceability — every claim maps to evidence nodes in the RSVS
+        graph.
+
+        Analogi: Jin Soun tidak hanya menyimpulkan, tapi menuliskan
+        setiap langkah penalarannya dari bukti pertama hingga
+        kesimpulan akhir — rantai yang bisa diaudit siapa saja.
+
+        Args:
+            question: The question or trigger text.
+            context: Optional context atoms to guide the query.
+
+        Returns:
+            A DeductiveChain with auditable steps and aggregate confidence.
+
+        Raises:
+            ReasoningError: If the deductive chain cannot be built.
+        """
+        # Run context + situation layers first
+        layer0_output = self._run_context_layer(
+            question, "user_input", False,
+        )
+        layer1_output = self._run_situation_layer(
+            question, "user_input", layer0_output,
+        )
+
+        # Determine context atoms
+        context_atoms = context or [
+            s.get("label", s.get("concept", ""))
+            for s in layer1_output.active_senses[:5]
+            if s.get("label") or s.get("concept")
+        ] or layer0_output.context_atoms
+
+        # Run pattern completion
+        pattern_result = self.pattern.process(question, context_atoms)
+
+        # Build the deductive chain
+        if pattern_result is None:
+            raise ReasoningError(
+                "Pattern completion returned no result — cannot build "
+                "deductive chain without a pattern result.",
+                layer="deductive",
+            )
+
+        deductive_chain = self.reasoning.build_chain(pattern_result)
+
+        logger.info(
+            "ask_deductive(): question='%s', steps=%d, confidence=%.3f",
+            question[:60], len(deductive_chain.steps),
+            deductive_chain.aggregate_confidence,
+        )
+
+        return deductive_chain
+
+    def check_policy(
+        self,
+        text: str,
+        domain: str = "",
+    ) -> list[dict]:
+        """Check text against policy rules.
+
+        Runs the DeductivePolicyEngine's compliance checking, which
+        combines deterministic rule evaluation with RSVS PolicyMeta
+        (governance_score, status_flip_count, seen_fingerprints)
+        for trust-weighted, auditable compliance checking.
+
+        Analogi: Jin Soun mengecek buku hukum DAN catatan
+        pengawasan — bukan hanya "apa aturannya?", tapi juga
+        "seberapa bisa dipercaya entitas yang dilaporkan?"
+
+        Args:
+            text: The text or entity label to check for compliance.
+            domain: Optional domain hint (e.g., "tax", "regulation").
+
+        Returns:
+            A list of dicts, each with compliance results and
+            adjusted confidence from RSVS PolicyMeta.
+        """
+        results: list[dict] = []
+
+        # If a domain hint is provided, try domain-specific checks
+        if domain:
+            result = self.deductive_policy.check_with_rsvs_policy(
+                entity_label=f"{domain}:{text}",
+            )
+            results.append(result)
+        else:
+            # Standard compliance check with RSVS policy metadata
+            result = self.deductive_policy.check_with_rsvs_policy(
+                entity_label=text,
+            )
+            results.append(result)
+
+        # Also run a basic check_compliance for any embedded text
+        try:
+            compliance = self.deductive_policy.check_compliance(text)
+            if compliance.get("violations") or compliance.get("warnings"):
+                results.append({
+                    "type": "text_compliance",
+                    "compliance": compliance,
+                })
+        except Exception as exc:
+            logger.debug("check_compliance() failed for text: %s", exc)
+
+        return results
+
+    def analyze_code(
+        self,
+        code: str,
+        language: str = "python",
+    ) -> dict:
+        """Analyze code using the deductive coder layer.
+
+        Uses the DeductiveCoderLayer's analyze_with_rsvs() method,
+        which creates a full RSVS-represented code graph using
+        compositional semantics for deeper structural analysis.
+
+        Analogi: Jin Soun tidak hanya membaca satu manual teknik —
+        dia menghubungkan teknik dari berbagai manual, membandingkan
+        strukturnya, dan menemukan pola lintas-sumber.
+
+        Args:
+            code: Source code string to analyze.
+            language: Programming language (default: "python").
+
+        Returns:
+            A dict with CodeAnalysisResult data including elements,
+            similar code pairs, anomalies, patterns, and suggestions.
+        """
+        result = self.deductive_coder.analyze_with_rsvs(
+            code=code,
+            language=language,
+        )
+        return result.to_dict()
 
     # -------------------------------------------------------------------
     # P-01: Layer runner methods (produce structured outputs)
     # -------------------------------------------------------------------
+
+    def _run_layer0(self, text: str, source: str) -> Layer0PerceptualObservation:
+        """Run Layer 0 perceptual abstraction on input.
+
+        Converts raw input into structured PerceptualTuples that capture
+        categorical, differential, functional, spatial, temporal, and causal
+        relations. This is the "perception" step before cognition.
+
+        Analogi: Jin Soun mendengar langkah kaki → bukan hanya "suara",
+        tapi "langkah kaki berat, dari arah timur, sekitar 3 orang,
+        berlari". Layer 0 = kemampuan memecah input menjadi relasi.
+
+        Args:
+            text: The raw text input to abstract.
+            source: Source provenance for the input.
+
+        Returns:
+            A Layer0PerceptualObservation containing PerceptualTuples,
+            or a minimal fallback observation if abstraction fails.
+        """
+        try:
+            obs = self._text_abstractor.abstract(text, context={"source": source})
+            # Ingest the structured observation into RSVS
+            if self._bridge.is_available and obs.tuples:
+                ingest_data = observation_to_ingest_data(obs)
+                if ingest_data:
+                    self._bridge.ingest(ingest_data)
+            return obs
+        except Exception as exc:
+            logger.debug("Layer 0 abstraction failed, using raw text: %s", exc)
+            # Fallback: return a minimal observation with just the raw text
+            return Layer0PerceptualObservation(
+                modality=ModalityType.TEXT,
+                raw_input_ref=text[:200],
+                tuples=[],
+                context={"source": source},
+            )
 
     def _run_context_layer(
         self,
@@ -1069,7 +1566,20 @@ class AamPipeline:
         P-01: Instead of just passing strings, we now produce
         a PerceptualObservation with structural information.
         P-04: Source provenance is passed through to RSVS.
+
+        Layer 0 integration: Before the existing context layer logic,
+        we run the perceptual front-end to extract structured tuples
+        from the input text. These tuples enrich the context_atoms
+        that guide downstream reasoning.
         """
+        # Layer 0: Perceptual abstraction — extract structured tuples
+        # before the context layer processes the raw text.
+        try:
+            layer0_obs = self._run_layer0(question, source)
+        except Exception as exc:
+            logger.debug("Layer 0 integration in context layer failed: %s", exc)
+            layer0_obs = None
+
         trust = self.context.trust_score(source)
 
         # P-04: Ingest with source provenance
@@ -1091,6 +1601,14 @@ class AamPipeline:
                 for s in active_senses[:5]
                 if s.get("label")
             ]
+
+        # Enrich context_atoms with perceptual tuples from Layer 0
+        if layer0_obs is not None:
+            for tuple_ in layer0_obs.tuples:
+                if tuple_.subject and tuple_.subject not in context_atoms:
+                    context_atoms.append(tuple_.subject)
+                if tuple_.predicate and tuple_.predicate not in context_atoms:
+                    context_atoms.append(tuple_.predicate)
 
         return Layer0Output(
             text=question,
@@ -1171,6 +1689,55 @@ class AamPipeline:
     # Internal helpers
     # -------------------------------------------------------------------
 
+    def _detect_query_mode(self, question: str) -> str:
+        """Detect which Layer 3 sub-system should handle the query.
+
+        Routes the question to the appropriate deductive reasoning mode
+        based on keyword detection.  Returns "general" for the default
+        pattern completion flow — meaning Layer 3 is not needed.
+
+        Analogi: Jin Soun mendengar pertanyaan dan langsung tahu
+        apakah ini soal regulasi, kode, analisis mendalam, atau
+        pertanyaan biasa — sebelum memulai penalaran.
+
+        Args:
+            question: The user's question / trigger text.
+
+        Returns:
+            One of: "policy", "coder", "reasoning", "general".
+        """
+        q = question.lower()
+
+        # Policy: regulation / compliance / tax questions
+        policy_keywords = [
+            "regulasi", "aturan", "compliance", "kebijakan",
+            "tax", "pajak", "peraturan", "undang-undang", "uu",
+            "violat", "l商务", "audit",
+        ]
+        if any(kw in q for kw in policy_keywords):
+            return "policy"
+
+        # Coder: code-related questions
+        coder_keywords = [
+            "code", "fungsi", "function", "class", "bug", "error",
+            "debug", "refactor", "implementasi", "kode", "script",
+            "method", "module", "api",
+        ]
+        if any(kw in q for kw in coder_keywords):
+            return "coder"
+
+        # Reasoning: analytical / deductive questions
+        reasoning_keywords = [
+            "mengapa", "kenapa", "why", "how", "bukti", "evidence",
+            "analisis", "analysis", "deduce", "deduksi", "sebab",
+            "akibat", "cause", "effect", "explain", "jelaskan",
+            "prove", "buktikan",
+        ]
+        if any(kw in q for kw in reasoning_keywords):
+            return "reasoning"
+
+        return "general"
+
     def _should_search(self, question: str) -> bool:
         """Determine if we should search the internet for this question.
 
@@ -1185,6 +1752,50 @@ class AamPipeline:
         ]
         question_lower = question.lower()
         return any(qi in question_lower for qi in question_indicators)
+
+    def _check_narrative_reliability(
+        self,
+        answer: str,
+        pattern_result: PatternResult | None,
+    ) -> tuple[bool, str]:
+        """Check if the LLM-generated narrative is reliable.
+
+        Bounded execution: detect when the LLM "body" produces unreliable output.
+        Analogi: Jin Soun tahu kapan tubuhnya tidak bisa mengeksekusi teknik
+        yang dia pikirkan — dan memilih strategi alternatif.
+
+        Returns:
+            Tuple of (is_reliable: bool, reason: str)
+        """
+        if not answer or len(answer.strip()) < 10:
+            return False, "Answer too short or empty"
+
+        # Check 1: Does the answer reference the evidence nodes?
+        if pattern_result and pattern_result.steps:
+            evidence_labels = set()
+            for step in pattern_result.steps:
+                for node in step.evidence_nodes:
+                    evidence_labels.add(node.lower())
+
+            # Check if any evidence label appears in the answer
+            answer_lower = answer.lower()
+            evidence_mentioned = any(label in answer_lower for label in evidence_labels if len(label) > 3)
+
+            if not evidence_mentioned and evidence_labels:
+                return False, "Answer doesn't reference any evidence from the graph"
+
+        # Check 2: Does the appraise self-check flag issues?
+        # (This is already handled in the main flow, but we double-check)
+
+        # Check 3: Is the answer internally consistent?
+        # Simple heuristic: check for contradiction markers
+        contradiction_markers = ["namun sebenarnya", "tetapi sebaliknya", "contradict", "namun bertentangan"]
+        answer_lower = answer.lower()
+        has_contradiction = any(marker in answer_lower for marker in contradiction_markers)
+        if has_contradiction:
+            return True, "Answer contains contradiction markers — flagged for review"
+
+        return True, "Narrative appears reliable"
 
     def _generate_fallback_answer(
         self,

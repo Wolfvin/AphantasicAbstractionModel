@@ -10,7 +10,7 @@ Layer 0 meniru proses ini untuk setiap modality input.
 """
 
 from dataclasses import dataclass, field
-from typing import Any, Union
+from typing import Any, Optional, Union
 from enum import Enum
 
 

@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 import time
 from dataclasses import dataclass, field
 from typing import Any, Optional
@@ -254,6 +255,11 @@ class PredictiveEngine:
         # Observed compositions cache — maps concept → list of observed compositions
         # Populated during observe_and_update()
         self._observed: dict[str, list[str]] = {}
+
+        # G2-3: Continuous predictive coding loop state
+        self._continuous_loop_running: bool = False
+        self._loop_interval: float = 30.0
+        self._loop_thread: threading.Thread | None = None
 
         # P2-7: Removed self._fallback_graph — now delegates to self._bridge
         # which always has a _FallbackGraph when Rust core is unavailable.
@@ -1386,6 +1392,91 @@ class PredictiveEngine:
         return summary
 
     # ------------------------------------------------------------------
+    # G2-3: Continuous Predictive Coding Loop
+    # ------------------------------------------------------------------
+
+    def start_continuous_loop(self, interval: float = 30.0) -> None:
+        """Start background predictive coding loop.
+
+        Analogi: Jin Soun tidak hanya update belief saat ditanya —
+        dia TERUS-MENERUS memantau, membandingkan prediksi dengan
+        observasi baru. Jika ada anomali, dia langsung waspada.
+
+        Args:
+            interval: How often (seconds) to check for new observations.
+        """
+        if self._continuous_loop_running:
+            logger.info("Continuous loop already running")
+            return
+        self._loop_interval = interval
+        self._continuous_loop_running = True
+        self._loop_thread = threading.Thread(target=self._continuous_loop_worker, daemon=True)
+        self._loop_thread.start()
+        logger.info("Continuous predictive coding loop started (interval=%.1fs)", interval)
+
+    def stop_continuous_loop(self) -> None:
+        """Stop the background predictive coding loop."""
+        self._continuous_loop_running = False
+        if self._loop_thread is not None and self._loop_thread.is_alive():
+            self._loop_thread.join(timeout=5.0)
+        logger.info("Continuous predictive coding loop stopped")
+
+    def _continuous_loop_worker(self) -> None:
+        """Background worker that continuously checks for prediction errors."""
+        last_event_seq = 0
+        if self.rsvs_available:
+            try:
+                last_event_seq = self._bridge.latest_seq_v1()
+            except Exception:
+                pass
+
+        while self._continuous_loop_running:
+            try:
+                time.sleep(self._loop_interval)
+                if not self._continuous_loop_running:
+                    break
+
+                # Check for new events
+                if self.rsvs_available:
+                    try:
+                        raw = self._bridge.consume_events_v1(after_seq=last_event_seq)
+                        if raw:
+                            events = json.loads(raw) if isinstance(raw, str) else raw
+                            if isinstance(events, dict) and "events" in events:
+                                events = events["events"]
+
+                            for event in events:
+                                if isinstance(event, dict):
+                                    event_type = event.get("type", "")
+                                    label = event.get("label", "")
+                                    seq = event.get("seq", 0)
+
+                                    if seq > last_event_seq:
+                                        last_event_seq = seq
+
+                                    # If new node or sense changed, check predictions
+                                    if event_type in ("node_created", "sense_changed", "confidence_changed") and label:
+                                        self.observe_and_update(label, source="continuous_loop")
+                    except Exception as exc:
+                        logger.debug("Continuous loop event processing failed: %s", exc)
+
+                # Always check for anomalies
+                try:
+                    new_anomalies = self.detect_anomalies()
+                    if new_anomalies:
+                        self._anomalies.extend(new_anomalies)
+                        for anomaly in new_anomalies:
+                            logger.info(
+                                "Continuous loop detected anomaly: '%s' (δ=%.3f)",
+                                anomaly.concept, anomaly.delta
+                            )
+                except Exception as exc:
+                    logger.debug("Continuous loop anomaly detection failed: %s", exc)
+
+            except Exception as exc:
+                logger.warning("Continuous loop error: %s", exc)
+
+    # ------------------------------------------------------------------
     # Reset / utility
     # ------------------------------------------------------------------
 
@@ -1397,6 +1488,10 @@ class PredictiveEngine:
         Analogi: Jin Soun mengosongkan buku catatan prediksi
         untuk memulai kasus baru. Simhyeon Pavilion tetap utuh.
         """
+        # Stop the continuous loop if running
+        if self._continuous_loop_running:
+            self.stop_continuous_loop()
+
         self._predictions = []
         self._belief_updates = []
         self._anomalies = []
@@ -1421,4 +1516,6 @@ class PredictiveEngine:
             "total_anomalies": len(self._anomalies),
             "current_beliefs": self.get_current_beliefs(),
             "fallback_graph_size": 0,  # P2-7: state lives in bridge
+            "continuous_loop_running": self._continuous_loop_running,
+            "continuous_loop_interval": self._loop_interval,
         }

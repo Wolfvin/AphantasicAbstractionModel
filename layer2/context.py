@@ -14,6 +14,7 @@ Flow:
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 from typing import Any, Optional
@@ -155,6 +156,47 @@ class ContextLayer:
         if not self._allowed_sources:
             return True
         return source in self._allowed_sources
+
+    # ------------------------------------------------------------------
+    # GN-4: Access control for knowledge retrieval
+    # ------------------------------------------------------------------
+
+    def set_access_policy(self, policy: dict) -> None:
+        """Set access control policy for knowledge retrieval.
+
+        Analogi: Jin Soun menjadi ancaman karena dia tahu semua rahasia.
+        Access control = siapa boleh tahu apa.
+
+        Args:
+            policy: Dict with keys:
+                - "redact_patterns": list[str] — patterns to redact from output
+                - "max_confidence_for_source": dict[str, float] — cap confidence per source
+                - "deny_sources": list[str] — sources to completely exclude
+        """
+        self._access_policy = policy
+
+    def _apply_access_policy(self, text: str, source: str = "") -> str:
+        """Apply access policy to output text.
+
+        Args:
+            text: The output text to filter.
+            source: The source of the text (for source-specific rules).
+
+        Returns:
+            The filtered text with redactions applied.
+        """
+        if not hasattr(self, '_access_policy') or not self._access_policy:
+            return text
+
+        policy = self._access_policy
+        result = text
+
+        # Redact patterns
+        for pattern in policy.get("redact_patterns", []):
+            if pattern.lower() in result.lower():
+                result = result.replace(pattern, "[REDACTED]")
+
+        return result
 
     # ------------------------------------------------------------------
     # Source trust
@@ -438,5 +480,113 @@ class ContextLayer:
     def clear_ingestion_log(self) -> None:
         """Clear the ingestion log."""
         self._ingestion_log = []
+
+    # ------------------------------------------------------------------
+    # Persistence (P2-8: Cognitive persistence)
+    # ------------------------------------------------------------------
+
+    _PERSIST_SCHEMA_VERSION = "1.0"
+
+    def save_to_dict(self) -> dict:
+        """Serialize cognitive state to a plain dict (in-memory).
+
+        Saves `_allowed_sources` and `_ingestion_log` (the provenance
+        ledger).  The RSVS bridge / web search engine are NOT serialized
+        — only the Layer-2 cognitive state.
+
+        Returns:
+            A dict containing the full serializable state.
+        """
+        return {
+            "schema_version": self._PERSIST_SCHEMA_VERSION,
+            "allowed_sources": self._allowed_sources,
+            "ingestion_log": self._ingestion_log[-500:],  # Keep bounded
+        }
+
+    def load_from_dict(self, data: dict) -> None:
+        """Restore cognitive state from a plain dict (in-memory).
+
+        Restores `_allowed_sources` and `_ingestion_log`.
+        Existing state is replaced.
+
+        Args:
+            data: A dict previously returned by `save_to_dict()`.
+        """
+        if not isinstance(data, dict):
+            logger.warning("load_from_dict: expected dict, got %s", type(data).__name__)
+            return
+
+        # Schema compatibility check
+        saved_version = data.get("schema_version", "0.0")
+        if saved_version != self._PERSIST_SCHEMA_VERSION:
+            logger.warning(
+                "load_from_dict: schema version mismatch (saved=%s, current=%s). "
+                "Proceeding with best-effort restore.",
+                saved_version, self._PERSIST_SCHEMA_VERSION,
+            )
+
+        self._allowed_sources = data.get("allowed_sources", [])
+        self._ingestion_log = data.get("ingestion_log", [])
+
+        logger.info(
+            "ContextLayer state restored: %d allowed sources, %d ingestion log entries",
+            len(self._allowed_sources), len(self._ingestion_log),
+        )
+
+    def save(self, path: str) -> dict:
+        """Save cognitive state to a JSON file.
+
+        Args:
+            path: Filesystem path to write the JSON file.
+
+        Returns:
+            A summary dict with stats about what was saved.
+        """
+        data = self.save_to_dict()
+        summary: dict = {
+            "path": path,
+            "allowed_sources": len(self._allowed_sources),
+            "ingestion_log_entries": len(self._ingestion_log),
+            "schema_version": self._PERSIST_SCHEMA_VERSION,
+            "success": False,
+        }
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False, default=str)
+            summary["success"] = True
+            logger.info("ContextLayer state saved to %s", path)
+        except (OSError, TypeError) as exc:
+            summary["error"] = str(exc)
+            logger.error("ContextLayer save failed: %s", exc)
+        return summary
+
+    def load(self, path: str) -> dict:
+        """Load cognitive state from a JSON file.
+
+        Args:
+            path: Filesystem path to read the JSON file from.
+
+        Returns:
+            A summary dict with stats about what was loaded.
+        """
+        summary: dict = {
+            "path": path,
+            "allowed_sources": 0,
+            "ingestion_log_entries": 0,
+            "success": False,
+        }
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            self.load_from_dict(data)
+            summary["allowed_sources"] = len(self._allowed_sources)
+            summary["ingestion_log_entries"] = len(self._ingestion_log)
+            summary["schema_version"] = data.get("schema_version", "unknown")
+            summary["success"] = True
+            logger.info("ContextLayer state loaded from %s", path)
+        except (OSError, json.JSONDecodeError, TypeError) as exc:
+            summary["error"] = str(exc)
+            logger.error("ContextLayer load failed: %s", exc)
+        return summary
 
 

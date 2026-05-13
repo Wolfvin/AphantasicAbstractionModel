@@ -406,7 +406,7 @@ Pattern Completion Output = {
 | Prediksi gerakan lawan | Predictive Coding | belief update loop | 🔧 Build |
 | "Aku predict X, ternyata Y" | Belief Update | grounding +/−, reflection | ✅ Sebagian |
 | Mengajarkan ke orang lain | Narrative Output | reasoning chain + traceability | 🔧 Build |
-| Batasan: tubuh third-rate | Transformer execution | LLM generates from graph | ⏳ Nanti |
+| Batasan: tubuh third-rate | AAM Diffusion LLM | specialized sentence composer from graph | 🔧 Design Phase |
 | Context-dependent recall | SessionGraph | `context_query()` | ✅ Ada |
 | Metode Jegal Cheon | Paradigm Router | structured analysis framework | ✅ Ada |
 
@@ -514,3 +514,112 @@ USER INPUT: "Siapa yang mencuri Snow Plum Pill?"
 4. **Text Output BUKAN sekadar deductive reasoning** — ini **pattern completion across disparate memories**, persis seperti Jin Soun menghubungkan pencurian Snow Plum Pill → Ju Jangmok → Diancang Five Swords → inside job
 5. **Analogi Jin Soun sangat kuat**: sistem ini = karakter yang mengingat segalanya, memahami relasi, memprediksi, dan mengeluarkan kesimpulan yang bisa diaudit. Kelemahannya (seperti Jin Soun) = eksekusi. Itulah kenapa transformer tetap diperlukan sebagai execution layer untuk generate naratif akhir.
 6. **Kunci inovasi**: LLM generate teks DARI graph, bukan dari kosong. Graph = structural memory, LLM = narrative voice. Jin Soun = graph, tubuhnya = LLM yang terbatas.
+
+---
+
+## Koreksi Konsep: 1 Pikiran + 1 Tubuh
+
+### Masalah dengan Konsep Sebelumnya
+
+Sebelumnya, kita menyebut "tubuh Jin Soun = LLM umum (GPT, Claude, dsb.)". Ini **salah** secara konseptual. Jin Soun tidak menyewa tubuh orang lain — dia punya tubuhnya SENDIRI, meskipun lemah. Kalau dia pakai tubuh sewaan (LLM umum), dia kehilangan:
+
+1. **Konsistensi internal** — LLM umum punya pengetahuan sendiri yang bisa kontradiksi dengan graph
+2. **Grounding** — LLM umum bisa mengarang (hallucinate) informasi yang tidak ada di graph
+3. **Identitas** — AAM tidak punya "tubuh" sendiri, hanya "sewa" dari pihak ketiga
+
+### Konsep Baru: AAM Diffusion LLM
+
+AAM seharusnya punya model **SENDIRI** — bukan LLM umum, tapi model yang **KHUSUS dilatih** untuk menarasikan dari graph structure:
+
+```
+┌──────────────────────────────────────────────────────────┐
+│  AAM = 1 Pikiran + 1 Tubuh                                │
+│                                                           │
+│  Pikiran (Mind) = RSVS Knowledge Graph                    │
+│    - Structural memory — mengingat SEMUA                  │
+│    - Relational — memahami koneksi antar konsep           │
+│    - Perfect recall — tidak pernah lupa                   │
+│    - Confidence scores — tahu apa yang pasti vs ragu      │
+│                                                           │
+│  Tubuh (Body) = AAM Diffusion LLM                         │
+│    - Specialized sentence composer — bukan general LLM     │
+│    - Trained on Graph→Narrative pairs                     │
+│    - Small model (100M-500M params)                       │
+│    - Diffusion process: noise → pattern → clarity         │
+│    - Conditioned on graph structure, bukan prompt biasa    │
+│    - TIDAK BISA mengarang — hanya bisa menarasikan        │
+│      apa yang graph sudah ketahui                          │
+│                                                           │
+│  Bedanya dengan LLM umum:                                 │
+│    ┌─────────────────┬──────────────────────────────┐     │
+│    │ LLM Umum        │ AAM Diffusion LLM            │     │
+│    ├─────────────────┼──────────────────────────────┤     │
+│    │ Input: prompt   │ Input: graph conditioning    │     │
+│    │ Output: text    │ Output: grounded narrative   │     │
+│    │ Bisa hallucinate│ TIDAK BISA hallucinate       │     │
+│    │ General purpose │ Specialized for AAM          │     │
+│    │ 7B-175B params  │ 100M-500M params             │     │
+│    │ Autoregressive  │ Diffusion (non-sequential)   │     │
+│    │ Sewaan          │ MILIK AAM sendiri            │     │
+│    └─────────────────┴──────────────────────────────┘     │
+└──────────────────────────────────────────────────────────┘
+```
+
+### Mengapa Diffusion (Bukan Autoregressive)?
+
+1. **Non-sequential generation** — Diffusion bisa merevisi bagian awal saat generating bagian akhir. Ini mirip bagaimana Jin Soun membentuk pemikirannya: dari vague → clearer → explicit.
+
+2. **Graph conditioning** — Seluruh graph bisa di-encode sebagai conditioning, bukan hanya prefix. Autoregressive hanya bisa melihat "apa yang sudah di-generate sebelumnya."
+
+3. **Coherent long-form** — Diffusion menghasilkan teks yang lebih koheren untuk narasi panjang karena setiap token "mengetahui" tentang token lain.
+
+4. **Tidak bisa hallucinate** — Karena model dilatih KHUSUS untuk Graph→Narrative, dia tidak punya kapabilitas untuk mengarang informasi di luar graph. Seperti pita suara yang hanya bisa mengucapkan apa yang otak pikirkan.
+
+### Arsitektur Target
+
+```
+Training Pipeline (Future):
+  ┌─────────────────────────────────────────────────┐
+  │  Graph → Narrative Training Data                │
+  │                                                  │
+  │  Input: GraphConditioning (evidence, comps,      │
+  │         confidence, anomalies, reasoning chain)  │
+  │  Target: Natural language narrative yang         │
+  │          merepresentasikan graph data            │
+  │                                                  │
+  │  Model: Small diffusion transformer              │
+  │  - Encoder: graph structure → latent             │
+  │  - Diffusion: noise → denoise → text            │
+  │  - Decoder: latent → narrative tokens            │
+  └─────────────────────────────────────────────────┘
+
+Inference Pipeline:
+  1. Pattern Completion → produces GraphConditioning
+  2. Encode conditioning into latent representation
+  3. Sample noise from learned prior
+  4. Iteratively denoise for N steps (configurable)
+  5. Decode into natural language narrative
+  6. Every sentence traceable to evidence nodes
+```
+
+### Status Implementasi
+
+| Komponen | Status | Lokasi |
+|----------|--------|--------|
+| `GraphConditioning` dataclass | ✅ Done | `layer2/diffusion_llm.py` |
+| `DiffusionOutput` dataclass | ✅ Done | `layer2/diffusion_llm.py` |
+| `AamDiffusionLLM` class interface | ✅ Done | `layer2/diffusion_llm.py` |
+| Fallback template generation | ✅ Done | `layer2/diffusion_llm.py` |
+| Integration with pipeline | ✅ Done | `pipeline.py` |
+| Actual diffusion model training | ⏳ Future | — |
+| Model loading & inference | ⏳ Future | — |
+
+### Filosofi
+
+> Jin Soun bukan orang yang menyewa tubuh orang lain untuk berbicara.
+> Dia punya tubuh sendiri — lemah, third-rate, tapi MILIKNYA.
+> Karena tubuhnya khusus dilatih untuk mengeksekusi perintah dari
+> pikirannya (bukan pikiran orang lain), outputnya lebih terarah
+> daripada orang yang punya tubuh lebih kuat tapi pikiran lebih lemah.
+>
+> AAM = 1 pikiran + 1 tubuh. Bukan 1 pikiran + tubuh sewaan.

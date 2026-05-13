@@ -31,6 +31,7 @@ from .context import ContextLayer
 from .situation import SituationLayer
 from .predictive import PredictiveEngine, Prediction, Anomaly, BeliefUpdate
 from .pattern import PatternOutput, ReasoningStep, PatternResult
+from .temporal import TemporalTracker
 
 
 # ---------------------------------------------------------------------------
@@ -177,6 +178,9 @@ class GeniusPipeline:
         )
         self.pattern = PatternOutput(bridge=self._bridge)
 
+        # Temporal tracking layer (G1-1: temporal metadata for nodes)
+        self.temporal = TemporalTracker()
+
         # Internal state
         self._conversation_history: list[dict] = []
 
@@ -220,6 +224,9 @@ class GeniusPipeline:
         # Ingest the question into context
         self.context.ingest_text(question, source=source)
 
+        # G1-1: Record temporal observation for the question
+        self.temporal.record_observation(question, source=source)
+
         # Search internet if requested or auto_search triggers
         search_results = {}
         if search_internet or (self._auto_search and self._should_search(question)):
@@ -254,6 +261,12 @@ class GeniusPipeline:
 
         # Get active senses for context
         active_senses = self.situation.get_active_senses()
+
+        # G1-1: Record temporal observations for active senses
+        for sense in active_senses:
+            label = sense.get("label", "")
+            if label:
+                self.temporal.record_observation(label, source="situation")
 
         # ---- Step 3: RSVS Core + Predictive Engine ----
         # Make predictions based on context
@@ -429,6 +442,7 @@ class GeniusPipeline:
             "active_predictions": len(self.predictive.get_predictions()),
             "use_llm": self._use_llm,
             "language": self._language,
+            "temporal_stats": self.temporal.get_stats(),
         }
 
     # -------------------------------------------------------------------
