@@ -141,7 +141,7 @@ class AamDiffusionModel(nn.Module):
         # Output head — v2.0 ContinuousOutputHead or legacy lm_head
         # ----------------------------------------------------------------
         if self.use_anchored_decoder:
-            from diffusion_llm.model.anchored_decoder import (
+            from diffusion_llm.experimental.anchored_decoder import (
                 ContinuousOutputHead,
                 AnchoredDecoderConfig,
             )
@@ -168,7 +168,7 @@ class AamDiffusionModel(nn.Module):
         # Optional v2.0 modules — lazy imports
         # ----------------------------------------------------------------
         if self.use_evoformer:
-            from diffusion_llm.model.evoformer import EvoformerManager, EvoformerConfig
+            from diffusion_llm.experimental.evoformer import EvoformerManager, EvoformerConfig
 
             evoformer_config = getattr(config, "evoformer", None)
             if evoformer_config is None:
@@ -179,7 +179,7 @@ class AamDiffusionModel(nn.Module):
             self.evoformer = EvoformerManager(evoformer_config)
 
         if self.use_dual_memory:
-            from diffusion_llm.model.dual_memory import (
+            from diffusion_llm.experimental.dual_memory import (
                 DualMemorySystem,
                 DualMemoryConfig,
             )
@@ -193,7 +193,7 @@ class AamDiffusionModel(nn.Module):
             self.dual_memory = DualMemorySystem(dual_memory_config)
 
         if self.use_thinking_toggle:
-            from diffusion_llm.model.thinking_toggle import (
+            from diffusion_llm.experimental.thinking_toggle import (
                 ThinkingToggle,
                 ThinkingMode,
             )
@@ -214,7 +214,7 @@ class AamDiffusionModel(nn.Module):
             self.ThinkingMode = ThinkingMode
 
         if self.use_flow_matching:
-            from diffusion_llm.model.flow_matching import FlowMatchingDecoder
+            from diffusion_llm.experimental.flow_matching import FlowMatchingDecoder
 
             flow_config = getattr(config, "flow_matching", None)
             fm_d_model = (
@@ -235,7 +235,7 @@ class AamDiffusionModel(nn.Module):
             )
 
         if self.use_mcts:
-            from diffusion_llm.model.mcts import MCTSReasoner, MCTSConfig
+            from diffusion_llm.experimental.mcts import MCTSReasoner, MCTSConfig
 
             mcts_config = getattr(config, "mcts", None)
             if mcts_config is None:

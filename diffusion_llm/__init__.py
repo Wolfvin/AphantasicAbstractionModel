@@ -20,84 +20,55 @@ Why Diffusion?
   - Revise earlier parts during generation (non-sequential)
   - Produce more coherent long-form text from structure
 
-Architecture:
+Architecture (Core):
   Input: Graph conditioning (evidence nodes, compositions, confidence, anomalies)
   Process: Iterative denoising from noise
   Output: Natural language narrative grounded in graph structure
 
-Analogi: Jin Soun (graph) + tubuhnya (this model).
-Tubuhnya third-rate, tapi karena KHUSUS dilatih untuk
-mengeksekusi perintah dari graph-nya sendiri, outputnya
-lebih terarah daripada LLM umum yang "tidak kenal" graph.
+Philosophy: "Buktikan pikiran dulu, baru latih tubuh."
+(Prove the mind first, then train the body.)
+
+The mind pipeline (Layer 0 → RSVS → Layer 2 → Layer 3) has been proven
+end-to-end. The body needs supervised training with real graph→narrative
+pairs BEFORE adding advanced features.
+
+Experimental modules are in diffusion_llm.experimental/ — see that
+package for research-grade features that are preserved but not yet
+validated with real training data.
 """
 
-__version__ = "2.1.0"
+__version__ = "2.2.0"
 __author__ = "AAM Team"
 
+# Core architecture — always available
 from diffusion_llm.config.model_config import AamDiffusionConfig, get_default_config
 from diffusion_llm.model.noise_scheduler import NoiseScheduler
 from diffusion_llm.model.graph_encoder import GraphConditioningEncoder
 from diffusion_llm.model.diffusion_transformer import DiffusionTransformer
 from diffusion_llm.model.aam_diffusion_model import AamDiffusionModel
+from diffusion_llm.model.rope import RotaryPositionEncoding
+
+# Core infrastructure — always available
 from diffusion_llm.tokenizer.aam_tokenizer import AamTokenizer
 from diffusion_llm.inference.generator import AamGenerator
 from diffusion_llm.training.trainer import AamTrainer
 from diffusion_llm.training.dataset import GraphNarrativeDataset
-from diffusion_llm.data.synthetic_generator import SyntheticDataGenerator
-
-# v2.0 modules (from Losion upgrade)
-from diffusion_llm.model.anchored_decoder import AnchoredDiffusionDecoder, ContinuousOutputHead
-from diffusion_llm.model.flow_matching import FlowMatchingDecoder
-from diffusion_llm.model.evoformer import EvoformerManager, RouterExpertCoevolve
-from diffusion_llm.model.dual_memory import DualMemorySystem
-from diffusion_llm.model.mcts import MCTSReasoner
-from diffusion_llm.model.thinking_toggle import ThinkingToggle, ThinkingMode
-from diffusion_llm.model.matryoshka import MatryoshkaLayer, ElasticExtractor
-from diffusion_llm.model.rope import RotaryPositionEncoding
-from diffusion_llm.model.speculative_decoder import SpeculativeDecoder
-from diffusion_llm.model.mirror_speculative import MirrorSpeculativeDecoder, MirrorSpeculativeConfig
-from diffusion_llm.model.quantization import BitLinear, FP8Linear
-from diffusion_llm.training.grpo import GRPOTrainer
-from diffusion_llm.training.dapo import DAPOTrainer
-from diffusion_llm.training.curriculum import CurriculumScheduler
-from diffusion_llm.training.llm_jepa import JEPAPredictor, JEPAConfig, JEPATrainer
+from diffusion_llm.training.losses import DiffusionLoss, compute_loss
 
 __all__ = [
-    # Core
+    # Core architecture
     "AamDiffusionConfig",
     "get_default_config",
     "NoiseScheduler",
     "GraphConditioningEncoder",
     "DiffusionTransformer",
     "AamDiffusionModel",
+    "RotaryPositionEncoding",
+    # Core infrastructure
     "AamTokenizer",
     "AamGenerator",
     "AamTrainer",
     "GraphNarrativeDataset",
-    "SyntheticDataGenerator",
-    # v2.0 — Losion Upgrade
-    "AnchoredDiffusionDecoder",
-    "ContinuousOutputHead",
-    "FlowMatchingDecoder",
-    "EvoformerManager",
-    "RouterExpertCoevolve",
-    "DualMemorySystem",
-    "MCTSReasoner",
-    "ThinkingToggle",
-    "ThinkingMode",
-    "MatryoshkaLayer",
-    "ElasticExtractor",
-    "RotaryPositionEncoding",
-    "SpeculativeDecoder",
-    "BitLinear",
-    "FP8Linear",
-    "GRPOTrainer",
-    "DAPOTrainer",
-    "CurriculumScheduler",
-    # v2.1 — Mirror Speculative & JEPA
-    "MirrorSpeculativeDecoder",
-    "MirrorSpeculativeConfig",
-    "JEPAPredictor",
-    "JEPAConfig",
-    "JEPATrainer",
+    "DiffusionLoss",
+    "compute_loss",
 ]
