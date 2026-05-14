@@ -18,7 +18,6 @@ use super::Rsvs;
 use crate::types::NodeId;
 use rayon::prelude::*;
 use std::collections::{BTreeMap, HashMap, HashSet};
-
 // -----------------------------------------------------------------------
 // AppraiseResult — v7.5 appraise mode output
 // -----------------------------------------------------------------------
@@ -435,18 +434,34 @@ impl Rsvs {
         let concept_id = *self.token_to_id.get(concept)?;
 
         let node_ids: Vec<NodeId> = self.graph.nodes.keys().copied().collect();
-        let related_nodes: Vec<(NodeId, f32)> = node_ids
-            .par_iter()
-            .filter(|&&other_id| other_id != concept_id)
-            .filter_map(|&other_id| {
-                let jaccard = self.graph.jaccard_atom_sets(concept_id, other_id);
-                if jaccard > 0.0 {
-                    Some((other_id, jaccard))
-                } else {
-                    None
+        // v11.0: Use structural_similarity instead of deprecated jaccard_atom_sets.
+        // First pass: collect nodes with direct edges or in the senses map
+        let related_nodes: Vec<(NodeId, f32)> = {
+            let mut candidates: HashSet<NodeId> = HashSet::new();
+            // Add nodes with direct edges
+            for e in self.graph.edges_from(concept_id) {
+                candidates.insert(e.to);
+            }
+            // Add nodes from senses that share compositions
+            if let Some(sm_concept) = self.senses.get(&concept_id) {
+                for sense in &sm_concept.senses {
+                    for comp in &sense.compositions {
+                        candidates.insert(comp.node_id);
+                    }
                 }
-            })
-            .collect();
+            }
+            // Also add reverse edges
+            for (&from_id, edges) in &self.graph.edges {
+                if from_id == concept_id { continue; }
+                for e in edges {
+                    if e.to == concept_id {
+                        candidates.insert(from_id);
+                    }
+                }
+            }
+            candidates.remove(&concept_id);
+            candidates.into_iter().map(|id| (id, 0.0)).collect()
+        };
 
         let mut related_nodes = related_nodes;
         related_nodes.sort_by(|a, b| b.1.total_cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
@@ -499,9 +514,20 @@ impl Rsvs {
                 if let Some(entry) = structural_relations.iter_mut().find(|(id, _)| *id == conv_id) {
                     entry.1 = (entry.1 + 0.5).min(1.0);
                 } else {
-                    let jaccard = self.graph.jaccard_atom_sets(concept_id, conv_id);
-                    if jaccard > 0.0 {
-                        structural_relations.push((conv_id, (jaccard + 0.5).min(1.0)));
+                    // v11.0: Use structural_similarity instead of deprecated jaccard_atom_sets
+                    if let Some(sm_concept) = self.senses.get(&concept_id) {
+                        if let Some(sm_conv) = self.senses.get(&conv_id) {
+                            let sim = self.graph.structural_similarity(concept_id, conv_id, sm_concept, sm_conv);
+                            if sim.structural_similarity > 0.0 {
+                                structural_relations.push((conv_id, (sim.structural_similarity + 0.5).min(1.0)));
+                            } else {
+                                // No structural similarity — use a default boost
+                                structural_relations.push((conv_id, 0.5));
+                            }
+                        } else {
+                            // No senses for convergent node — use a default boost
+                            structural_relations.push((conv_id, 0.5));
+                        }
                     } else {
                         structural_relations.push((conv_id, 0.5));
                     }

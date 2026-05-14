@@ -156,6 +156,7 @@ pub fn bootstrap(
             abductive_hypotheses: Vec::new(),
             pattern_memberships: Vec::new(),
             synthesis_results: HashMap::new(),
+            seed_distance_vector: HashMap::new(),
         };
 
         let id = graph.insert_node(node)?;

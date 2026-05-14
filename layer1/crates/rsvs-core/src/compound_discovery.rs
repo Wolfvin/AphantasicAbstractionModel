@@ -302,6 +302,7 @@ impl CompoundDiscoveryEngine {
             abductive_hypotheses: Vec::new(),
             pattern_memberships: Vec::new(),
             synthesis_results: HashMap::new(),
+            seed_distance_vector: HashMap::new(),
         };
 
         let compound_node_id = graph.insert_node(node).ok()?;

@@ -743,6 +743,7 @@ pub fn from_snapshot(snap: RsvsSnapshot) -> Rsvs {
             abductive_hypotheses: Vec::new(),
             pattern_memberships: Vec::new(),
             synthesis_results: HashMap::new(),
+            seed_distance_vector: HashMap::new(),
         };
         graph.label_to_id.insert(node.label.clone(), node.id);
         graph

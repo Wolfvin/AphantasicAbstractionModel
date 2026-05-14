@@ -77,6 +77,12 @@ pub struct SenseInductionConfig {
     /// Prevents compositions from atoms that are not well-represented in the graph.
     /// Default: 0.8
     pub tau_overlap: f32,
+
+    /// v11.0: Weight for entropy as a sense-splitting trigger.
+    /// When entropy_trigger_weight > 0, high context entropy actively
+    /// triggers sense splitting instead of just being a passive filter.
+    /// Default: 0.5
+    pub entropy_trigger_weight: f32,
 }
 
 impl Default for SenseInductionConfig {
@@ -88,6 +94,7 @@ impl Default for SenseInductionConfig {
             composition_min_confidence: 0.3,
             tau_compress: 0.3,
             tau_overlap: 0.8,
+            entropy_trigger_weight: 0.5,
         }
     }
 }
@@ -665,21 +672,59 @@ impl Sense {
         }
     }
 
+    /// Compute entropy-based trigger score for sense splitting.
+    ///
+    /// High entropy across accumulated contexts means this sense is absorbing
+    /// too diverse meanings — it needs to split. This is the ACTIVE trigger:
+    /// entropy doesn't just gate, it SIGNALS that splitting is needed.
+    ///
+    /// The trigger measures how much the context distribution has diverged
+    /// from what a single coherent sense should have. If all contexts of
+    /// "raja" are about war, entropy is low → one sense is fine. If contexts
+    /// span war, palace, fairy tales — entropy is high → split needed.
+    pub fn entropy_trigger_score(&self) -> f32 {
+        if self.contexts.len() < 2 {
+            return 0.0; // Need at least 2 contexts to measure diversity
+        }
+
+        // Compute entropy of the atom distribution across all contexts
+        let all_atoms: Vec<NodeId> = self.contexts.iter().flatten().copied().collect();
+        let entropy = compute_context_entropy(&all_atoms);
+
+        // Also compute inter-context diversity: average Jaccard distance between contexts
+        let mut total_distance = 0.0f32;
+        let mut pair_count = 0usize;
+        for i in 0..self.contexts.len() {
+            for j in (i+1)..self.contexts.len() {
+                let sim = jaccard_sets(&self.contexts[i], &self.contexts[j]);
+                total_distance += 1.0 - sim;
+                pair_count += 1;
+            }
+        }
+        let avg_diversity = if pair_count > 0 { total_distance / pair_count as f32 } else { 0.0 };
+
+        // Trigger = entropy * diversity — both must be high for a strong trigger
+        (entropy * avg_diversity).clamp(0.0, 1.0)
+    }
+
     // -------------------------------------------------------------------
     // Sense Induction (Problem 1) — v6.0
     // -------------------------------------------------------------------
 
     /// Compute the induction score for creating a new sense given a context.
     ///
-    /// This addresses Problem 1: How are senses formed from text? When is a
-    /// new sense warranted given a context?
+    /// v11.0: Entropy is now a co-equal trigger, not just a filter.
+    /// When entropy is high AND divergence is high, induction is strongly warranted.
+    /// When entropy is low, even with some divergence, we're cautious (context too uniform).
+    /// When entropy is high but divergence is low, the new context is diverse but
+    /// fits within existing sense (no need to split).
     ///
     /// The score considers:
     /// - **Composition divergence**: How different the proposed compositions are
     ///   from existing sense cores (Jaccard distance). Higher divergence = more
     ///   reason to create a new sense.
-    /// - **Context entropy**: How diverse the context distribution is. Low entropy
-    ///   means the context is too uniform to define a distinct sense.
+    /// - **Context entropy**: How diverse the context distribution is. Now an ACTIVE
+    ///   trigger that signals splitting is needed, not just a passive gate.
     /// - **Information gain**: Whether creating a new sense would capture meaning
     ///   not already captured by existing senses.
     ///
@@ -714,27 +759,22 @@ impl Sense {
         // 2. Context entropy: measure distribution uniformity
         let entropy = compute_context_entropy(context);
 
-        // If entropy is below threshold, context is too uniform for a distinct sense
-        if entropy < config.entropy_threshold {
-            // Scale down the score proportionally
-            let entropy_factor = entropy / config.entropy_threshold;
-            return divergence * entropy_factor * 0.5;
-        }
-
-        // 3. Information gain: how much new meaning would a new sense capture
-        // This is approximated by the fraction of proposed compositions not in existing
-        let novel_fraction = if proposed_compositions.is_empty() {
-            0.0
-        } else {
+        // v11.0: Entropy is now a co-equal trigger, not just a filter.
+        // When entropy is high AND divergence is high, induction is strongly warranted.
+        // When entropy is low, even with some divergence, we're cautious (context too uniform).
+        // When entropy is high but divergence is low, the new context is diverse but
+        // fits within existing sense (no need to split).
+        let entropy_weight = config.entropy_trigger_weight;
+        let divergence_weight = 1.0 - entropy_weight;
+        let score = divergence_weight * divergence + entropy_weight * entropy.min(1.0);
+        // Boost by novel fraction (how much new meaning this captures)
+        let score = score * (0.7 + 0.3 * {
             let novel = proposed_compositions
                 .iter()
                 .filter(|c| !existing_set.contains(c))
                 .count();
             novel as f32 / proposed_compositions.len() as f32
-        };
-
-        // Combined score: divergence * entropy_weight * information_gain
-        let score = divergence * (0.4 + 0.3 * entropy.min(1.0) + 0.3 * novel_fraction);
+        });
 
         score.clamp(0.0, 1.0)
     }

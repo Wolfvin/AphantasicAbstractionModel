@@ -164,8 +164,16 @@ impl Rsvs {
                     None => continue,
                 };
 
-                // Compute convergence discount via Jaccard of atom sets
-                let conv_discount = self.graph.jaccard_atom_sets(concept_id, conv_id);
+                // v11.0: Use structural_similarity for convergence discount instead of deprecated jaccard_atom_sets
+                let conv_discount = if let Some(sm_concept) = self.senses.get(&concept_id) {
+                    if let Some(sm_conv) = self.senses.get(&conv_id) {
+                        self.graph.structural_similarity(concept_id, conv_id, sm_concept, sm_conv).structural_similarity
+                    } else {
+                        0.3 // No senses for convergent node — moderate discount
+                    }
+                } else {
+                    0.3 // No senses for concept — moderate discount
+                };
                 if conv_discount < 0.1 {
                     continue; // Too weak — don't fuse
                 }

@@ -145,6 +145,7 @@ impl DiscourseTracker {
             abductive_hypotheses: Vec::new(),
             pattern_memberships: Vec::new(),
             synthesis_results: HashMap::new(),
+            seed_distance_vector: HashMap::new(),
         })?;
 
         // Create composition edges from utterance to each token

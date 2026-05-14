@@ -171,6 +171,7 @@ impl Rsvs {
                 abductive_hypotheses: Vec::new(),
                 pattern_memberships: Vec::new(),
                 synthesis_results: std::collections::HashMap::new(),
+                seed_distance_vector: std::collections::HashMap::new(),
             })?;
 
             self.autonomy.register(id, 0.50, Tier::Tier2);

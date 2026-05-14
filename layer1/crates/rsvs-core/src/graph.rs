@@ -320,10 +320,97 @@ impl RsvsGraph {
     }
 
     /// Compute Jaccard similarity between the expanded atom sets of two nodes.
+    ///
+    /// # Deprecation Notice (v11.0)
+    /// This method is deprecated for SEMANTIC SIMILARITY use cases.
+    /// Use `structural_similarity()` instead, which compares at the sense/composition
+    /// level and provides the correct structural meaning comparison.
+    /// This method is retained ONLY for attention scoring and co-occurrence neighborhood
+    /// calculations — NOT for determining whether two nodes mean the same thing.
+    #[deprecated(
+        since = "11.0.0",
+        note = "Use structural_similarity() for semantic similarity. This is only for attention scoring."
+    )]
     pub fn jaccard_atom_sets(&self, a: NodeId, b: NodeId) -> f32 {
         let atoms_a = self.expand(a);
         let atoms_b = self.expand(b);
         jaccard_sets(&atoms_a, &atoms_b)
+    }
+
+    /// v11.0: Compute the seed distance vector for a node.
+    ///
+    /// This maps each seed primitive to the spreading activation energy
+    /// from that seed to this node. The result is a position vector in
+    /// "meaning space" where dimensions are seed primitives.
+    ///
+    /// This is computed lazily (not during ingest) and cached on the node.
+    /// Call this when you need to compare two nodes' positions in meaning space.
+    pub fn compute_seed_distance_vector(
+        &mut self,
+        node_id: NodeId,
+        seed_node_ids: &[NodeId],
+        batch_cache: &crate::batch_spreading::BatchSeedSpreading,
+    ) -> bool {
+        let mut vector = HashMap::new();
+        for &seed_id in seed_node_ids {
+            let energy = batch_cache.get_energy(seed_id, node_id);
+            if energy > 0.0 {
+                vector.insert(seed_id, energy);
+            }
+        }
+
+        if let Some(node) = self.nodes.get_mut(&node_id) {
+            node.seed_distance_vector = vector;
+            true
+        } else {
+            false
+        }
+    }
+
+    /// v11.0: Compute cosine similarity between two nodes' seed distance vectors.
+    ///
+    /// This is the most elegant similarity measure: two nodes are similar
+    /// if they occupy nearby positions in meaning space (relative to seed primitives).
+    ///
+    /// Example: raja = {agent:0.8, identity:0.7, value:0.6, risk:0.3}
+    ///          ratu = {agent:0.7, identity:0.8, value:0.6, risk:0.2}
+    ///          cosine_sim ≈ 0.98 (very similar!)
+    ///
+    /// Returns 0.0 if either node has no seed distance vector.
+    pub fn seed_vector_similarity(&self, a: NodeId, b: NodeId) -> f32 {
+        let node_a = match self.nodes.get(&a) {
+            Some(n) => n,
+            None => return 0.0,
+        };
+        let node_b = match self.nodes.get(&b) {
+            Some(n) => n,
+            None => return 0.0,
+        };
+
+        if node_a.seed_distance_vector.is_empty() || node_b.seed_distance_vector.is_empty() {
+            return 0.0;
+        }
+
+        // Collect all seed IDs from both vectors
+        let all_seeds: HashSet<NodeId> = node_a.seed_distance_vector.keys()
+            .chain(node_b.seed_distance_vector.keys())
+            .copied()
+            .collect();
+
+        let mut dot = 0.0f32;
+        let mut norm_a = 0.0f32;
+        let mut norm_b = 0.0f32;
+
+        for &seed_id in &all_seeds {
+            let va = node_a.seed_distance_vector.get(&seed_id).copied().unwrap_or(0.0);
+            let vb = node_b.seed_distance_vector.get(&seed_id).copied().unwrap_or(0.0);
+            dot += va * vb;
+            norm_a += va * va;
+            norm_b += vb * vb;
+        }
+
+        let denom = norm_a.sqrt() * norm_b.sqrt();
+        if denom == 0.0 { 0.0 } else { (dot / denom).clamp(0.0, 1.0) }
     }
 
     /// v6.3: Apply inactivity-based decay to all learned edges.

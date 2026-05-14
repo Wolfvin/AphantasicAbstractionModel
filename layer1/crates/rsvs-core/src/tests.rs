@@ -1220,6 +1220,7 @@ mod graph_tests {
                 abductive_hypotheses: Vec::new(),
                 pattern_memberships: Vec::new(),
                 synthesis_results: HashMap::new(),
+                seed_distance_vector: HashMap::new(),
             })
             .unwrap();
         let expanded = g.expand(id);
@@ -1252,6 +1253,7 @@ mod graph_tests {
                 abductive_hypotheses: Vec::new(),
                 pattern_memberships: Vec::new(),
                 synthesis_results: HashMap::new(),
+                seed_distance_vector: HashMap::new(),
             })
             .unwrap();
         let a2 = g
@@ -1277,6 +1279,7 @@ mod graph_tests {
                 abductive_hypotheses: Vec::new(),
                 pattern_memberships: Vec::new(),
                 synthesis_results: HashMap::new(),
+                seed_distance_vector: HashMap::new(),
             })
             .unwrap();
         let id = g
@@ -1310,6 +1313,7 @@ mod graph_tests {
                 abductive_hypotheses: Vec::new(),
                 pattern_memberships: Vec::new(),
                 synthesis_results: HashMap::new(),
+                seed_distance_vector: HashMap::new(),
             })
             .unwrap();
         let expanded = g.expand(id);
@@ -1342,6 +1346,7 @@ mod graph_tests {
                 abductive_hypotheses: Vec::new(),
                 pattern_memberships: Vec::new(),
                 synthesis_results: HashMap::new(),
+                seed_distance_vector: HashMap::new(),
             })
             .unwrap();
         let id = g
@@ -1375,6 +1380,7 @@ mod graph_tests {
                 abductive_hypotheses: Vec::new(),
                 pattern_memberships: Vec::new(),
                 synthesis_results: HashMap::new(),
+                seed_distance_vector: HashMap::new(),
             })
             .unwrap();
         let expanded = g.expand(id);
@@ -1414,6 +1420,7 @@ mod graph_tests {
             abductive_hypotheses: Vec::new(),
             pattern_memberships: Vec::new(),
             synthesis_results: HashMap::new(),
+            seed_distance_vector: HashMap::new(),
         });
         assert!(matches!(result, Err(RsvsError::CircularRef { .. })));
     }
@@ -1444,6 +1451,7 @@ mod graph_tests {
                 abductive_hypotheses: Vec::new(),
                 pattern_memberships: Vec::new(),
                 synthesis_results: HashMap::new(),
+                seed_distance_vector: HashMap::new(),
             })
             .unwrap();
         let result = g.insert_edge(Edge {
@@ -1483,6 +1491,7 @@ mod graph_tests {
                 abductive_hypotheses: Vec::new(),
                 pattern_memberships: Vec::new(),
                 synthesis_results: HashMap::new(),
+                seed_distance_vector: HashMap::new(),
             })
             .unwrap();
         let n2 = g
@@ -1508,6 +1517,7 @@ mod graph_tests {
                 abductive_hypotheses: Vec::new(),
                 pattern_memberships: Vec::new(),
                 synthesis_results: HashMap::new(),
+                seed_distance_vector: HashMap::new(),
             })
             .unwrap();
         let result = g.insert_edge(Edge {
@@ -1573,6 +1583,7 @@ mod graph_tests {
             abductive_hypotheses: Vec::new(),
             pattern_memberships: Vec::new(),
             synthesis_results: HashMap::new(),
+            seed_distance_vector: HashMap::new(),
         })
         .unwrap();
         assert_eq!(g.node_count(), 1);
@@ -1618,6 +1629,7 @@ mod v60_node_tests {
             abductive_hypotheses: Vec::new(),
             pattern_memberships: Vec::new(),
             synthesis_results: HashMap::new(),
+            seed_distance_vector: HashMap::new(),
         };
         assert_eq!(node.kind, "node");
         assert_eq!(node.surface_label, "test@en");
@@ -1658,6 +1670,7 @@ mod v60_node_tests {
             abductive_hypotheses: Vec::new(),
             pattern_memberships: Vec::new(),
             synthesis_results: HashMap::new(),
+            seed_distance_vector: HashMap::new(),
         };
         assert!(node.is_seed);
         assert!(node.is_locked);
@@ -1703,6 +1716,7 @@ mod v60_node_tests {
             abductive_hypotheses: Vec::new(),
             pattern_memberships: Vec::new(),
             synthesis_results: HashMap::new(),
+            seed_distance_vector: HashMap::new(),
         };
         assert_eq!(
             node.semantic.compression_state,
@@ -1838,6 +1852,7 @@ mod transformer_bridge_tests {
             abductive_hypotheses: Vec::new(),
             pattern_memberships: Vec::new(),
             synthesis_results: HashMap::new(),
+            seed_distance_vector: HashMap::new(),
         }).unwrap();
         let n2 = graph.insert_node(Node {
             id: 0,
@@ -1861,6 +1876,7 @@ mod transformer_bridge_tests {
             abductive_hypotheses: Vec::new(),
             pattern_memberships: Vec::new(),
             synthesis_results: HashMap::new(),
+            seed_distance_vector: HashMap::new(),
         }).unwrap();
 
         let mut senses = std::collections::HashMap::new();
@@ -2293,5 +2309,409 @@ mod neurosym_tests {
         // For a primitive sense, binary rules should pass
         assert!(results.iter().find(|r| r.rule.name == "no_self_reference").unwrap().passed);
         assert!(results.iter().find(|r| r.rule.name == "no_circular_chain").unwrap().passed);
+    }
+}
+
+// -----------------------------------------------------------------------
+// v11.0: Entropy Trigger Tests
+// -----------------------------------------------------------------------
+
+#[cfg(test)]
+mod entropy_trigger_tests {
+    use crate::sense::{Sense, SenseInductionConfig, SenseManager, SenseConfig};
+    use crate::types::CompositionRef;
+
+    #[test]
+    fn entropy_trigger_score_zero_for_single_context() {
+        // A sense with only one context cannot measure diversity
+        let sense = Sense::new(0, vec![1, 2, 3]);
+        assert!((sense.entropy_trigger_score() - 0.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn entropy_trigger_score_high_for_diverse_contexts() {
+        // Orthogonal contexts → high inter-context diversity → high trigger score
+        let mut sm = SenseManager::new(SenseConfig {
+            theta_assign: 0.01,
+            ..SenseConfig::default()
+        });
+        sm.ingest(vec![1, 2, 3]);
+        sm.ingest(vec![10, 20, 30]);
+        // Find the sense that got both contexts (if merged) or just check one
+        for sense in &sm.senses {
+            if sense.contexts.len() >= 2 {
+                let score = sense.entropy_trigger_score();
+                // Should be > 0 because contexts are very different
+                assert!(score > 0.0, "Expected positive trigger score for diverse contexts, got {}", score);
+            }
+        }
+    }
+
+    #[test]
+    fn entropy_trigger_score_low_for_identical_contexts() {
+        // Identical contexts → zero inter-context distance → low trigger
+        let mut sm = SenseManager::new(SenseConfig {
+            theta_assign: 0.01,
+            ..SenseConfig::default()
+        });
+        sm.ingest(vec![1, 2, 3]);
+        sm.ingest(vec![1, 2, 3]);
+        if let Some(sense) = sm.senses.iter().find(|s| s.contexts.len() >= 2) {
+            let score = sense.entropy_trigger_score();
+            // With identical contexts, avg_diversity = 0.0, so trigger = 0.0
+            assert!((score - 0.0).abs() < 0.001, "Expected zero trigger for identical contexts, got {}", score);
+        }
+    }
+
+    #[test]
+    fn entropy_trigger_score_bounded_0_1() {
+        let mut sm = SenseManager::new(SenseConfig {
+            theta_assign: 0.01,
+            ..SenseConfig::default()
+        });
+        // Ingest many diverse contexts
+        for i in 0..10 {
+            sm.ingest(vec![i * 100, i * 100 + 1, i * 100 + 2]);
+        }
+        for sense in &sm.senses {
+            if sense.contexts.len() >= 2 {
+                let score = sense.entropy_trigger_score();
+                assert!(score >= 0.0 && score <= 1.0, "Trigger score out of bounds: {}", score);
+            }
+        }
+    }
+
+    #[test]
+    fn induction_score_uses_entropy_as_trigger() {
+        // With entropy_trigger_weight = 1.0, entropy alone drives the score
+        let sense = Sense::new_compositional(
+            0,
+            vec![CompositionRef::new(1, 0), CompositionRef::new(2, 0)],
+            vec![1, 2, 3, 4],
+            1,
+        );
+        let proposed = vec![CompositionRef::new(5, 0), CompositionRef::new(6, 0)];
+
+        let config_full_entropy = SenseInductionConfig {
+            entropy_trigger_weight: 1.0,
+            ..SenseInductionConfig::default()
+        };
+        let score = sense.induction_score(&proposed, &vec![1, 2, 3, 4], &config_full_entropy);
+        // With weight=1.0 on entropy and 0.0 on divergence, score depends purely on context entropy
+        assert!(score > 0.0, "Expected positive score with full entropy weight, got {}", score);
+        assert!(score <= 1.0);
+    }
+
+    #[test]
+    fn induction_score_entropy_weight_zero_ignores_entropy() {
+        // With entropy_trigger_weight = 0.0, only divergence matters
+        let sense = Sense::new_compositional(
+            0,
+            vec![CompositionRef::new(1, 0), CompositionRef::new(2, 0)],
+            vec![1, 2, 3, 4],
+            1,
+        );
+        let proposed = vec![CompositionRef::new(5, 0), CompositionRef::new(6, 0)];
+
+        let config_no_entropy = SenseInductionConfig {
+            entropy_trigger_weight: 0.0,
+            ..SenseInductionConfig::default()
+        };
+        let score = sense.induction_score(&proposed, &vec![1, 2, 3, 4], &config_no_entropy);
+        // With weight=0.0, score = divergence * novel_fraction boost
+        // Divergence = 1.0 (completely different), so score should be high
+        assert!(score > 0.5, "Expected high score with full divergence weight, got {}", score);
+    }
+
+    #[test]
+    fn induction_score_default_weight_balances() {
+        // With default weight (0.5), both divergence and entropy contribute
+        let sense = Sense::new_compositional(
+            0,
+            vec![CompositionRef::new(1, 0), CompositionRef::new(2, 0)],
+            vec![1, 2, 3, 4, 5, 6, 7, 8], // high-entropy context
+            1,
+        );
+        let proposed = vec![CompositionRef::new(9, 0), CompositionRef::new(10, 0)];
+
+        let score = sense.induction_score(
+            &proposed,
+            &vec![1, 2, 3, 4, 5, 6, 7, 8],
+            &SenseInductionConfig::default(),
+        );
+        // Score should be positive since both divergence and entropy contribute
+        assert!(score > 0.0, "Expected positive score with balanced weights, got {}", score);
+    }
+}
+
+// -----------------------------------------------------------------------
+// v11.0: Seed Distance Vector Similarity Tests
+// -----------------------------------------------------------------------
+
+#[cfg(test)]
+mod seed_vector_similarity_tests {
+    use crate::graph::RsvsGraph;
+    use crate::types::{Node, NodeStatus, SemanticMeta, Tier};
+
+    #[test]
+    fn seed_vector_similarity_zero_when_no_vectors() {
+        let mut g = RsvsGraph::new();
+        let id_a = g.insert_node(Node {
+            id: 0,
+            label: "a".into(),
+            surface_label: "a".into(),
+            kind: "node".into(),
+            tier: Tier::Tier2,
+            confidence: 0.5,
+            status: NodeStatus::Candidate,
+            is_seed: false,
+            is_locked: false,
+            semantic: SemanticMeta::default(),
+            policy_meta: None,
+            language_links: vec![],
+            atoms: vec![],
+            fingerprint: None,
+            seed_distance_vector: std::collections::HashMap::new(),
+            ..Default::default()
+        }).unwrap();
+        let id_b = g.insert_node(Node {
+            id: 0,
+            label: "b".into(),
+            surface_label: "b".into(),
+            kind: "node".into(),
+            tier: Tier::Tier2,
+            confidence: 0.5,
+            status: NodeStatus::Candidate,
+            is_seed: false,
+            is_locked: false,
+            semantic: SemanticMeta::default(),
+            policy_meta: None,
+            language_links: vec![],
+            atoms: vec![],
+            fingerprint: None,
+            seed_distance_vector: std::collections::HashMap::new(),
+            ..Default::default()
+        }).unwrap();
+        let sim = g.seed_vector_similarity(id_a, id_b);
+        assert!((sim - 0.0).abs() < 0.001, "Expected 0 similarity when vectors empty, got {}", sim);
+    }
+
+    #[test]
+    fn seed_vector_similarity_identical_vectors() {
+        let mut g = RsvsGraph::new();
+        let mut vec_a = std::collections::HashMap::new();
+        vec_a.insert(1, 0.8);
+        vec_a.insert(2, 0.6);
+        vec_a.insert(3, 0.4);
+
+        let vec_b = vec_a.clone();
+
+        let id_a = g.insert_node(Node {
+            id: 0,
+            label: "a".into(),
+            surface_label: "a".into(),
+            kind: "node".into(),
+            tier: Tier::Tier2,
+            confidence: 0.5,
+            status: NodeStatus::Candidate,
+            is_seed: false,
+            is_locked: false,
+            semantic: SemanticMeta::default(),
+            policy_meta: None,
+            language_links: vec![],
+            atoms: vec![],
+            fingerprint: None,
+            seed_distance_vector: vec_a,
+            ..Default::default()
+        }).unwrap();
+        let id_b = g.insert_node(Node {
+            id: 0,
+            label: "b".into(),
+            surface_label: "b".into(),
+            kind: "node".into(),
+            tier: Tier::Tier2,
+            confidence: 0.5,
+            status: NodeStatus::Candidate,
+            is_seed: false,
+            is_locked: false,
+            semantic: SemanticMeta::default(),
+            policy_meta: None,
+            language_links: vec![],
+            atoms: vec![],
+            fingerprint: None,
+            seed_distance_vector: vec_b,
+            ..Default::default()
+        }).unwrap();
+
+        let sim = g.seed_vector_similarity(id_a, id_b);
+        assert!((sim - 1.0).abs() < 0.001, "Expected cosine sim = 1.0 for identical vectors, got {}", sim);
+    }
+
+    #[test]
+    fn seed_vector_similarity_orthogonal_vectors() {
+        let mut g = RsvsGraph::new();
+        // Orthogonal vectors: non-overlapping seeds
+        let mut vec_a = std::collections::HashMap::new();
+        vec_a.insert(1, 0.9);
+        vec_a.insert(2, 0.1);
+
+        let mut vec_b = std::collections::HashMap::new();
+        vec_b.insert(3, 0.9);
+        vec_b.insert(4, 0.1);
+
+        let id_a = g.insert_node(Node {
+            id: 0,
+            label: "a".into(),
+            surface_label: "a".into(),
+            kind: "node".into(),
+            tier: Tier::Tier2,
+            confidence: 0.5,
+            status: NodeStatus::Candidate,
+            is_seed: false,
+            is_locked: false,
+            semantic: SemanticMeta::default(),
+            policy_meta: None,
+            language_links: vec![],
+            atoms: vec![],
+            fingerprint: None,
+            seed_distance_vector: vec_a,
+            ..Default::default()
+        }).unwrap();
+        let id_b = g.insert_node(Node {
+            id: 0,
+            label: "b".into(),
+            surface_label: "b".into(),
+            kind: "node".into(),
+            tier: Tier::Tier2,
+            confidence: 0.5,
+            status: NodeStatus::Candidate,
+            is_seed: false,
+            is_locked: false,
+            semantic: SemanticMeta::default(),
+            policy_meta: None,
+            language_links: vec![],
+            atoms: vec![],
+            fingerprint: None,
+            seed_distance_vector: vec_b,
+            ..Default::default()
+        }).unwrap();
+
+        let sim = g.seed_vector_similarity(id_a, id_b);
+        assert!((sim - 0.0).abs() < 0.001, "Expected cosine sim ≈ 0 for orthogonal vectors, got {}", sim);
+    }
+
+    #[test]
+    fn seed_vector_similarity_partially_overlapping() {
+        let mut g = RsvsGraph::new();
+        // Partially overlapping: share seed 2 with different energies
+        let mut vec_a = std::collections::HashMap::new();
+        vec_a.insert(1, 0.8);
+        vec_a.insert(2, 0.6);
+
+        let mut vec_b = std::collections::HashMap::new();
+        vec_b.insert(2, 0.6);
+        vec_b.insert(3, 0.8);
+
+        let id_a = g.insert_node(Node {
+            id: 0,
+            label: "a".into(),
+            surface_label: "a".into(),
+            kind: "node".into(),
+            tier: Tier::Tier2,
+            confidence: 0.5,
+            status: NodeStatus::Candidate,
+            is_seed: false,
+            is_locked: false,
+            semantic: SemanticMeta::default(),
+            policy_meta: None,
+            language_links: vec![],
+            atoms: vec![],
+            fingerprint: None,
+            seed_distance_vector: vec_a,
+            ..Default::default()
+        }).unwrap();
+        let id_b = g.insert_node(Node {
+            id: 0,
+            label: "b".into(),
+            surface_label: "b".into(),
+            kind: "node".into(),
+            tier: Tier::Tier2,
+            confidence: 0.5,
+            status: NodeStatus::Candidate,
+            is_seed: false,
+            is_locked: false,
+            semantic: SemanticMeta::default(),
+            policy_meta: None,
+            language_links: vec![],
+            atoms: vec![],
+            fingerprint: None,
+            seed_distance_vector: vec_b,
+            ..Default::default()
+        }).unwrap();
+
+        let sim = g.seed_vector_similarity(id_a, id_b);
+        // Should be between 0 and 1 for partially overlapping
+        assert!(sim > 0.0 && sim < 1.0, "Expected 0 < sim < 1 for partial overlap, got {}", sim);
+    }
+
+    #[test]
+    fn compute_seed_distance_vector_fills_from_cache() {
+        use crate::batch_spreading::BatchSeedSpreading;
+        use crate::spreading::SpreadingActivation;
+        use crate::spreading::SpreadingActivationConfig;
+
+        let mut g = RsvsGraph::new();
+        let id_a = g.insert_node(Node {
+            id: 0,
+            label: "a".into(),
+            surface_label: "a".into(),
+            kind: "node".into(),
+            tier: Tier::Tier2,
+            confidence: 0.5,
+            status: NodeStatus::Candidate,
+            is_seed: false,
+            is_locked: false,
+            semantic: SemanticMeta::default(),
+            policy_meta: None,
+            language_links: vec![],
+            atoms: vec![],
+            fingerprint: None,
+            seed_distance_vector: std::collections::HashMap::new(),
+            ..Default::default()
+        }).unwrap();
+
+        let spreading = SpreadingActivation::new(SpreadingActivationConfig::default());
+        let mut batch = BatchSeedSpreading::new(spreading, vec![1, 2], vec![], vec![]);
+        // Manually populate cache
+        let mut seed1_map = std::collections::HashMap::new();
+        seed1_map.insert(id_a, 0.7);
+        batch.cache.insert(1, seed1_map);
+        let mut seed2_map = std::collections::HashMap::new();
+        seed2_map.insert(id_a, 0.3);
+        batch.cache.insert(2, seed2_map);
+
+        let result = g.compute_seed_distance_vector(id_a, &[1, 2], &batch);
+        assert!(result, "compute_seed_distance_vector should return true for existing node");
+
+        let node = g.get_node(id_a).unwrap();
+        assert_eq!(node.seed_distance_vector.len(), 2);
+        assert!((node.seed_distance_vector.get(&1).copied().unwrap_or(0.0) - 0.7).abs() < 0.001);
+        assert!((node.seed_distance_vector.get(&2).copied().unwrap_or(0.0) - 0.3).abs() < 0.001);
+    }
+
+    #[test]
+    fn compute_seed_distance_vector_returns_false_for_missing_node() {
+        use crate::batch_spreading::BatchSeedSpreading;
+        use crate::spreading::SpreadingActivation;
+        use crate::spreading::SpreadingActivationConfig;
+
+        let g = RsvsGraph::new();
+        let spreading = SpreadingActivation::new(SpreadingActivationConfig::default());
+        let batch = BatchSeedSpreading::new(spreading, vec![1], vec![], vec![]);
+
+        // Don't insert any node, so node 999 doesn't exist
+        let mut g = g;
+        let result = g.compute_seed_distance_vector(999, &[1], &batch);
+        assert!(!result, "compute_seed_distance_vector should return false for non-existent node");
     }
 }

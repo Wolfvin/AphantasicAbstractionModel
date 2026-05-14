@@ -879,6 +879,20 @@ pub struct Node {
     /// Key = sense_id, Value = synthesis results for that sense.
     #[serde(default)]
     pub synthesis_results: HashMap<SenseId, Vec<SynthesisResult>>,
+
+       /// v11.0: Seed distance vector — the node's position in meaning space
+    /// relative to seed primitives. Maps each seed NodeId to the spreading
+    /// activation energy from that seed. This is the "coordinates in meaning space"
+    /// that makes a node's meaning a POSITION relative to primitives, not just
+    /// a list of compositions.
+    ///
+    /// Example: raja might have {agent: 0.8, identity: 0.7, value: 0.6, risk: 0.3}
+    /// while ratu might have {agent: 0.7, identity: 0.8, value: 0.6, risk: 0.2}
+    /// The difference is organic — from co-occurrence, not hardcoded.
+    ///
+    /// Computed lazily when needed, not during ingest.
+    #[serde(default)]
+    pub seed_distance_vector: HashMap<NodeId, f32>,
 }
 
 impl Default for Node {
@@ -905,6 +919,7 @@ impl Default for Node {
             abductive_hypotheses: Vec::new(),
             pattern_memberships: Vec::new(),
             synthesis_results: HashMap::new(),
+            seed_distance_vector: HashMap::new(),
         }
     }
 }
