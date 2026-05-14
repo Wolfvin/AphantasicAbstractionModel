@@ -8,9 +8,10 @@ Modules:
   policy    : Rule-based compliance checking (tax, regulation)
   reasoning : Deductive chain builder + structured output
   hypothesis: Hypothesis-Driven Active Reasoning (Jin Sowoon method)
+  lattice   : Possibility Lattice — dynamic hypothesis space with hybridization
 """
 
-__version__ = "1.3.0"
+__version__ = "1.4.0"
 
 from .coder import CoderLayer, CodeElement, CodeAnalysisResult, DeductiveCoderLayer
 from .policy import PolicyEngine, PolicyRule, PolicyViolation, DeductivePolicyEngine
@@ -20,4 +21,12 @@ from .hypothesis import (
     Hypothesis,
     Evidence,
     HypothesisCycleResult,
+)
+from .lattice import (
+    PossibilityLattice,
+    Possibility,
+    LatticeResult,
+    LatticeGeneration,
+    LatticeMode,
+    PossibilityState,
 )

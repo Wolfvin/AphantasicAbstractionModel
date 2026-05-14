@@ -12,6 +12,8 @@ Modules:
   prediction_loop: Explicit predict/observe/update lifecycle with state tracking
   pattern       : Pattern completion + narrative generation from graph
   temporal      : Temporal tracking layer — when did things happen and what's still relevant?
+  possibility_generator: Enumerate all possible interpretations from RSVS graph
+  hypothesis_combinator: Combine complementary hypotheses into hybrids (A × B)
 
 Bridge:
   bridge    : Unified adapter for PyO3 Rust core (AbstractionBridge)
@@ -19,7 +21,7 @@ Bridge:
   web_search: Live web search with caching
 """
 
-__version__ = "1.0.0-alpha"
+__version__ = "1.1.0-alpha"
 
 from .bridge import AbstractionBridge, RsvsBridge, get_bridge, is_rust_core_available
 from .embedding import (
@@ -41,3 +43,5 @@ from .diffusion_llm import AamDiffusionLLM, GraphConditioning, DiffusionOutput
 from .scope_control import ScopeControl, ScopeConfig, ScopeAuditEntry
 from .chat_index import SemanticChatIndex, ChatNode, ChatEdge, ConversationGraph
 from .web_search import WebSearchEngine
+from .possibility_generator import PossibilityGenerator, GeneratedPossibility
+from .hypothesis_combinator import HypothesisCombinator, HybridResult, ComplementarityScore

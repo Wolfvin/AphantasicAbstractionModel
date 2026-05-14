@@ -98,8 +98,14 @@ _DEFAULT_CONFIRM_IMPACT = 0.10
 _DEFAULT_MIN_EVIDENCE_FOR_CONCLUSION = 2
 
 # Valid hypothesis states
+# Extended with hybrid/emergent states for Possibility Lattice support
 _VALID_HYPOTHESIS_STATES = frozenset({
-    "proposed", "testing", "confirmed", "refuted", "inconclusive", "superseded"
+    "proposed", "testing", "confirmed", "refuted", "inconclusive", "superseded",
+    "hybrid",       # Created from hybridization of two hypotheses (A × B)
+    "emergent",     # Emerged from implication tracing of a hybrid
+    "surviving",    # Survived elimination round in lattice mode
+    "eliminated",   # Eliminated in lattice mode (below confidence threshold)
+    "concluded",    # Final conclusion in lattice mode
 })
 
 
@@ -195,6 +201,15 @@ class Hypothesis:
     created_at: str = field(default_factory=lambda: time.strftime("%Y-%m-%dT%H:%M:%S"))
     tested_at: str = ""
     cycle_count: int = 0
+    # Lattice mode extensions
+    parent_ids: list[str] = field(default_factory=list)  # For hybrid lineage (2 parents = hybrid)
+    generation: int = 0  # Lattice generation number (0 = initial)
+    source: str = "anomaly"  # "anomaly", "context", "input", "hybrid", "emergent"
+
+    @property
+    def is_hybrid(self) -> bool:
+        """Whether this hypothesis was created from hybridization."""
+        return len(self.parent_ids) >= 2
 
     def __post_init__(self) -> None:
         """Validate initial state."""
@@ -245,6 +260,11 @@ class Hypothesis:
             "cycle_count": self.cycle_count,
             "total_evidence_count": self.total_evidence_count,
             "net_evidence_score": round(self.net_evidence_score, 4),
+            # Lattice mode extensions
+            "parent_ids": list(self.parent_ids),
+            "generation": self.generation,
+            "source": self.source,
+            "is_hybrid": self.is_hybrid,
         }
 
 
