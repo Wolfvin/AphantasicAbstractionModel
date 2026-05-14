@@ -942,6 +942,7 @@ pub fn from_snapshot(snap: RsvsSnapshot) -> Rsvs {
         abductive_engine: None,
         pattern_mining_engine: None,
         synthesis_engine: None,
+        compound_discovery_engine: None,
     };
 
     // v7.3: Restore domain calibration from saved data

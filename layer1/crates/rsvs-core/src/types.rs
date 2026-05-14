@@ -674,6 +674,8 @@ pub enum EdgeSource {
     PatternMining,
     /// v10.0: Created by cross-pathway synthesis — hidden meaning edges.
     Synthesis,
+    /// v10.1: Created by compound discovery — multi-word expression edges.
+    CompoundDiscovery,
 }
 
 /// L0-02: Relation type for edges — mirrors Python Layer 0 RelationType.

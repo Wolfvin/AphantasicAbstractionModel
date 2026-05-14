@@ -203,6 +203,52 @@ impl Rsvs {
         // --- Step 2b: Build/update node atom sets from co-occurrence ---
         self.update_node_atoms(&candidates, &correlation_id);
 
+        // --- Step 2c: v10.1 Compound Discovery ---
+        // After entity promotion, scan co-occurrence stats for token pairs
+        // with near-perfect NPMI — these form multi-word expressions.
+        // E.g., "harga" + "diri" always co-occur → "harga_diri" (dignity)
+        if let Some(compound_engine) = &mut self.compound_discovery_engine {
+            let compounds = compound_engine.process_batch(
+                &self.stats_db,
+                &self.token_to_id,
+                &self.seed_node_ids,
+                &mut self.graph,
+                &mut self.senses,
+            );
+
+            for compound in &compounds {
+                // Register the compound label in lookup tables
+                if let Some(compound_id) = compound.compound_node_id {
+                    self.register_label(&compound.label, compound_id, None);
+                    self.atom_sets.insert(
+                        compound.label.clone(),
+                        vec![
+                            compound.node_id_a.unwrap_or(0),
+                            compound.node_id_b.unwrap_or(0),
+                        ],
+                    );
+
+                    // Register with autonomy engine
+                    self.autonomy.register(compound_id, 0.60, Tier::Tier2);
+                    dirty_node_ids.insert(compound_id);
+
+                    self.emit_event(
+                        &correlation_id,
+                        "compound_discovered",
+                        serde_json::json!({
+                            "label": compound.label,
+                            "components": [compound.component_a, compound.component_b],
+                            "npmi": format!("{:.3}", compound.npmi),
+                            "cooc_count": compound.cooc_count,
+                            "combined_compositions": compound.combined_compositions.len(),
+                        }),
+                    );
+
+                    stats.atoms_promoted += 1;
+                }
+            }
+        }
+
         // --- Step 3: For each sentence, run attention + induce senses with compositions ---
         self.autonomy.begin_batch();
         let snapshot = self.autonomy.snapshot();

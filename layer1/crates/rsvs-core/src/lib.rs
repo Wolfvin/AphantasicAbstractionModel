@@ -59,6 +59,7 @@ pub mod compositional_blending;
 pub mod abductive_reasoning;
 pub mod pattern_mining;
 pub mod cross_pathway_synthesis;
+pub mod compound_discovery;
 pub mod emergent_reasoning_tests;
 
 pub use attention::{
@@ -101,4 +102,5 @@ pub use compositional_blending::{CompositionalBlendingEngine, BlendingConfig};
 pub use abductive_reasoning::{AbductiveReasoningEngine, AbductiveConfig};
 pub use pattern_mining::{PatternMiningEngine, PatternMiningConfig};
 pub use cross_pathway_synthesis::{CrossPathwaySynthesisEngine, SynthesisConfig};
+pub use compound_discovery::{CompoundDiscoveryEngine, CompoundDiscoveryConfig, DiscoveredCompound};
 pub use types::*;

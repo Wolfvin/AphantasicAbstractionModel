@@ -231,6 +231,9 @@ pub struct Rsvs {
 
     /// v10.0 Engine 4: Cross-Pathway Synthesis — P1 gap + P2 conflict → hidden meaning.
     pub synthesis_engine: Option<crate::cross_pathway_synthesis::CrossPathwaySynthesisEngine>,
+
+    /// v10.1 Engine 5: Compound Discovery — auto-detect multi-word expressions.
+    pub compound_discovery_engine: Option<crate::compound_discovery::CompoundDiscoveryEngine>,
 }
 
 impl Rsvs {
@@ -318,6 +321,9 @@ impl Rsvs {
             abductive_engine: None,
             pattern_mining_engine: None,
             synthesis_engine: None,
+
+            // v10.1: Compound Discovery Engine (initialized after bootstrap)
+            compound_discovery_engine: None,
         };
 
         // v9.0: Initialize meaning pathway engines after bootstrap
@@ -383,6 +389,13 @@ impl Rsvs {
         self.abductive_engine = Some(AbductiveReasoningEngine::new(AbductiveConfig::default()));
         self.pattern_mining_engine = Some(PatternMiningEngine::new(PatternMiningConfig::default()));
         self.synthesis_engine = Some(CrossPathwaySynthesisEngine::new(SynthesisConfig::default()));
+
+        // v10.1: Create Compound Discovery Engine
+        self.compound_discovery_engine = Some(
+            crate::compound_discovery::CompoundDiscoveryEngine::new(
+                crate::compound_discovery::CompoundDiscoveryConfig::default(),
+            ),
+        );
 
         Ok(())
     }
