@@ -38,9 +38,11 @@ Architecture:
     The reasoner handles generative/eliminative single-path reasoning;
     this module handles the dynamic possibility space with hybridization.
 
-Integration:
+Integration (Layer 2 → Layer 3):
     - Layer 2 PossibilityGenerator: Enumerate from RSVS graph
+      → USED by Lattice._generate_possibilities() via delegation
     - Layer 2 HypothesisCombinator: Compose hybrids (A × B)
+      → USED by Lattice._hybridize() via delegation
     - Layer 3 HypothesisDrivenReasoner: Base reasoning engine
     - RSVS Bridge: mcts_query() → implication traversal
     - RSVS Bridge: appraise() → novelty detection
@@ -60,6 +62,13 @@ from typing import Any, Callable, Optional
 from layer2.bridge import RsvsBridge, get_bridge
 from layer2.predictive import Anomaly, PredictiveEngine
 from layer2.pattern import PatternResult, PatternOutput, ReasoningStep
+from layer2.possibility_generator import PossibilityGenerator, GeneratedPossibility
+from layer2.hypothesis_combinator import (
+    HypothesisCombinator,
+    HybridResult,
+    ComplementarityScore,
+    CompositionMode,
+)
 from layer3.reasoning import ReasoningEngine, DeductiveChain, DeductiveStep
 from layer3.hypothesis import (
     HypothesisDrivenReasoner,
@@ -104,6 +113,11 @@ _DEFAULT_IMPLICATION_DEPTH = 2
 
 # How much confidence boost a hybrid gets for combining complementary evidence
 _DEFAULT_HYBRID_CONFIDENCE_BOOST = 1.1
+
+# TOTAL cap on possibility space — mature AAM should not exceed ~200
+# This is the key bounded-growth guarantee from the vision:
+# "Tidak akan sampai lebih dari 200 kalau AAM sudah mature"
+_DEFAULT_MAX_TOTAL_POSSIBILITIES = 200
 
 
 # ---------------------------------------------------------------------------
@@ -227,6 +241,20 @@ class Possibility:
             "created_at": self.created_at,
         }
 
+    def to_combinator_dict(self) -> dict:
+        """Convert to a dict compatible with HypothesisCombinator.hybridize().
+
+        The HypothesisCombinator expects dicts with 'id', 'statement',
+        'confidence', and 'explained_evidence' keys.
+        """
+        return {
+            "id": self.possibility_id,
+            "possibility_id": self.possibility_id,
+            "statement": self.statement,
+            "confidence": self.confidence,
+            "explained_evidence": self.explained_evidence,
+        }
+
 
 @dataclass
 class LatticeGeneration:
@@ -243,6 +271,8 @@ class LatticeGeneration:
         eliminated_count: Number eliminated in this generation.
         emerged_count: Number of emergent possibilities from implication tracing.
         is_stable: Whether the lattice reached a fixed point.
+        novelty_rate: Ratio of novel possibilities to total candidates.
+            Used for diminishing returns tracking.
         timestamp: When this generation was processed.
     """
 
@@ -254,6 +284,7 @@ class LatticeGeneration:
     eliminated_count: int = 0
     emerged_count: int = 0
     is_stable: bool = False
+    novelty_rate: float = 0.0
     timestamp: str = field(default_factory=lambda: time.strftime("%Y-%m-%dT%H:%M:%S"))
 
     def to_dict(self) -> dict:
@@ -267,6 +298,7 @@ class LatticeGeneration:
             "eliminated_count": self.eliminated_count,
             "emerged_count": self.emerged_count,
             "is_stable": self.is_stable,
+            "novelty_rate": round(self.novelty_rate, 4),
             "timestamp": self.timestamp,
         }
 
@@ -292,6 +324,8 @@ class LatticeResult:
         total_eliminated: Total eliminated across all generations.
         total_hybrids: Total hybrids created across all generations.
         total_emergent: Total emergent possibilities found.
+        total_capped: Number of possibilities removed by total cap.
+        diminishing_returns_curve: Novelty rate per generation.
         confidence: Final confidence of the conclusion.
     """
 
@@ -308,6 +342,8 @@ class LatticeResult:
     total_eliminated: int = 0
     total_hybrids: int = 0
     total_emergent: int = 0
+    total_capped: int = 0
+    diminishing_returns_curve: list[float] = field(default_factory=list)
     confidence: float = 0.0
 
     def to_dict(self) -> dict:
@@ -326,6 +362,8 @@ class LatticeResult:
             "total_eliminated": self.total_eliminated,
             "total_hybrids": self.total_hybrids,
             "total_emergent": self.total_emergent,
+            "total_capped": self.total_capped,
+            "diminishing_returns_curve": [round(r, 4) for r in self.diminishing_returns_curve],
             "confidence": round(self.confidence, 4),
         }
 
@@ -358,6 +396,11 @@ class PossibilityLattice:
     - ELIMINATIVE: Full space → progressive elimination
     - LATTICE: Dynamic space — eliminate + hybridize (DEFAULT)
 
+    Layer 2 Integration:
+    - PossibilityGenerator (L2) handles possibility enumeration
+    - HypothesisCombinator (L2) handles hybrid composition
+    - This module (L3) orchestrates the lattice cycle
+
     Attributes:
         rsvs_available: Whether a working RSVS instance is connected.
         is_rust_core: Whether the Rust core is being used.
@@ -377,7 +420,9 @@ class PossibilityLattice:
         complementarity_threshold: float = _DEFAULT_COMPLEMENTARITY_THRESHOLD,
         max_initial_possibilities: int = _DEFAULT_MAX_INITIAL_POSSIBILITIES,
         max_hybrids_per_generation: int = _DEFAULT_MAX_HYBRIDS_PER_GENERATION,
+        max_total_possibilities: int = _DEFAULT_MAX_TOTAL_POSSIBILITIES,
         question_callback: Optional[Callable[[str], str]] = None,
+        compose_callback: Optional[Callable[[str, str, str], str]] = None,
     ) -> None:
         """Initialize the Possibility Lattice.
 
@@ -395,8 +440,15 @@ class PossibilityLattice:
                 are worth hybridizing.
             max_initial_possibilities: Cap on initial possibility enumeration.
             max_hybrids_per_generation: Cap on hybrids produced per generation.
+            max_total_possibilities: TOTAL cap on possibility space (~200 for mature AAM).
+                This is the bounded-growth guarantee: after hybridization and
+                emergence, the total cannot exceed this cap.
             question_callback: Optional callback for asking the user questions.
                 If None, question mode collects questions but doesn't ask.
+            compose_callback: Optional callback for LLM-driven hybrid composition.
+                Signature: (parent_a_stmt, parent_b_stmt, evidence_context) -> composed_stmt
+                When provided, uses CompositionMode.LLM_DRIVEN for TRUE A × B.
+                When None, uses CompositionMode.CONCATENATIVE (fast "A ∘ B").
         """
         if bridge is not None:
             self._bridge = bridge
@@ -422,6 +474,28 @@ class PossibilityLattice:
         else:
             self._predictive_engine = PredictiveEngine(bridge=self._bridge)
 
+        # --- Layer 2 Integration ---
+        # PossibilityGenerator: enumerates all possibilities from RSVS graph
+        self._possibility_generator = PossibilityGenerator(
+            bridge=self._bridge,
+            max_possibilities=max_initial_possibilities,
+        )
+
+        # HypothesisCombinator: composes hybrids (A × B)
+        composition_mode = (
+            CompositionMode.LLM_DRIVEN
+            if compose_callback is not None
+            else CompositionMode.CONCATENATIVE
+        )
+        self._hypothesis_combinator = HypothesisCombinator(
+            bridge=self._bridge,
+            complementarity_threshold=complementarity_threshold,
+            max_hybrids=max_hybrids_per_generation,
+            implication_depth=_DEFAULT_IMPLICATION_DEPTH,
+            composition_mode=composition_mode,
+            compose_callback=compose_callback,
+        )
+
         # Configuration
         self._max_generations = max_generations
         self._elimination_threshold = elimination_threshold
@@ -431,6 +505,7 @@ class PossibilityLattice:
         self._complementarity_threshold = complementarity_threshold
         self._max_initial_possibilities = max_initial_possibilities
         self._max_hybrids_per_generation = max_hybrids_per_generation
+        self._max_total_possibilities = max_total_possibilities
         self._question_callback = question_callback
 
         # Lattice history
@@ -439,9 +514,10 @@ class PossibilityLattice:
         logger.info(
             "PossibilityLattice initialized "
             "(max_gen=%d, elim=%.2f, question_thresh=%d, "
-            "conclusion_conf=%.2f, rsvs=%s)",
+            "conclusion_conf=%.2f, max_total=%d, compose=%s, rsvs=%s)",
             max_generations, elimination_threshold, question_mode_threshold,
-            conclusion_confidence, self.rsvs_available,
+            conclusion_confidence, max_total_possibilities,
+            composition_mode.value, self.rsvs_available,
         )
 
     # ==================================================================
@@ -470,7 +546,8 @@ class PossibilityLattice:
            a. ELIMINATE — Remove possibilities below threshold
            b. HYBRIDIZE — Combine complementary pairs
            c. DETECT NOVEL — Filter genuinely novel hybrids
-           d. CHECK STABILITY — Stop if no changes
+           d. ENFORCE TOTAL CAP — Bound possibility space to ≤ max_total
+           e. CHECK STABILITY — Stop if no changes
         3. CONCLUDE — Return best possibility or ask user
 
         Args:
@@ -494,7 +571,7 @@ class PossibilityLattice:
             query[:60], mode.value, question_mode,
         )
 
-        # ---- PHASE 1: GENERATE ----
+        # ---- PHASE 1: GENERATE (delegated to L2 PossibilityGenerator) ----
         possibilities = self._generate_possibilities(
             query, context, evidence_list, anomaly,
         )
@@ -507,13 +584,15 @@ class PossibilityLattice:
                 anomaly, context, pattern_result, result_id, query,
             )
 
-        # ---- PHASE 2: ITERATE (eliminate → hybridize → detect) ----
+        # ---- PHASE 2: ITERATE (eliminate → hybridize → detect → cap → stability) ----
         generations: list[LatticeGeneration] = []
         all_evidence = set(evidence_list)
         total_eliminated = 0
         total_hybrids = 0
         total_emergent = 0
+        total_capped = 0
         questions_asked: list[str] = []
+        diminishing_returns_curve: list[float] = []
 
         for gen_num in range(self._max_generations):
             gen_record = LatticeGeneration(generation=gen_num, pre_count=len(possibilities))
@@ -531,6 +610,8 @@ class PossibilityLattice:
                 sole = possibilities[0]
                 sole.state = "concluded"
                 gen_record.is_stable = True
+                diminishing_returns_curve.append(0.0)
+                gen_record.novelty_rate = 0.0
                 generations.append(gen_record)
                 return LatticeResult(
                     result_id=result_id,
@@ -544,6 +625,8 @@ class PossibilityLattice:
                     total_eliminated=total_eliminated,
                     total_hybrids=total_hybrids,
                     total_emergent=total_emergent,
+                    total_capped=total_capped,
+                    diminishing_returns_curve=diminishing_returns_curve,
                     confidence=sole.confidence,
                 )
 
@@ -556,6 +639,8 @@ class PossibilityLattice:
                     )
                 # No anomaly — return empty result
                 gen_record.is_stable = True
+                diminishing_returns_curve.append(0.0)
+                gen_record.novelty_rate = 0.0
                 generations.append(gen_record)
                 return LatticeResult(
                     result_id=result_id,
@@ -563,12 +648,14 @@ class PossibilityLattice:
                     mode=mode.value,
                     generations=generations,
                     confidence=0.0,
+                    diminishing_returns_curve=diminishing_returns_curve,
                 )
 
             # Step 2b: HYBRIDIZE — combine complementary pairs (only in LATTICE mode)
             hybrids_created = 0
             novel_count = 0
             emerged_count = 0
+            total_candidates = 0
 
             if mode == LatticeMode.LATTICE:
                 hybrids, hybrid_implications = self._hybridize(
@@ -588,11 +675,30 @@ class PossibilityLattice:
                 total_emergent += emerged_count
                 possibilities.extend(novel_emergent)
 
+                # Step 2d: ENFORCE TOTAL CAP (bounded-growth guarantee)
+                pre_cap_count = len(possibilities)
+                possibilities = self._enforce_total_cap(possibilities)
+                capped = pre_cap_count - len(possibilities)
+                total_capped += capped
+                if capped > 0:
+                    logger.info(
+                        "Total cap enforced: %d → %d (max=%d)",
+                        pre_cap_count, len(possibilities), self._max_total_possibilities,
+                    )
+
+                # Track novelty rate for diminishing returns curve
+                total_candidates = hybrids_created + len(hybrid_implications)
+                novelty_rate = (novel_count + emerged_count) / max(total_candidates, 1)
+                diminishing_returns_curve.append(novelty_rate)
+
             gen_record.hybrids_created = hybrids_created
             gen_record.novel_count = novel_count
             gen_record.emerged_count = emerged_count
+            gen_record.novelty_rate = (
+                diminishing_returns_curve[-1] if diminishing_returns_curve else 0.0
+            )
 
-            # Step 2d: CHECK STABILITY
+            # Step 2e: CHECK STABILITY
             eliminated = gen_record.eliminated_count
             emerged = novel_count + emerged_count
             gen_record.is_stable = (emerged == 0 and eliminated == 0)
@@ -607,7 +713,7 @@ class PossibilityLattice:
                 )
                 break
 
-            # Step 2e: QUESTION MODE — if few remain and stuck
+            # Step 2f: QUESTION MODE — if few remain and stuck
             if (question_mode
                     and len(possibilities) <= self._question_mode_threshold
                     and len(possibilities) > 1):
@@ -626,7 +732,7 @@ class PossibilityLattice:
                             "Question mode: would ask '%s'", question[:80],
                         )
 
-            # Step 2f: Gather more evidence from RSVS for next round
+            # Step 2g: Gather more evidence from RSVS for next round
             new_evidence = self._seek_discriminating_evidence(possibilities)
             all_evidence.update(new_evidence)
 
@@ -659,6 +765,8 @@ class PossibilityLattice:
             total_eliminated=total_eliminated,
             total_hybrids=total_hybrids,
             total_emergent=total_emergent,
+            total_capped=total_capped,
+            diminishing_returns_curve=diminishing_returns_curve,
             confidence=best.confidence if best else 0.0,
         )
 
@@ -666,7 +774,7 @@ class PossibilityLattice:
         return result
 
     # ==================================================================
-    # PHASE 1: GENERATE — Enumerate all possibilities
+    # PHASE 1: GENERATE — Delegate to L2 PossibilityGenerator
     # ==================================================================
 
     def _generate_possibilities(
@@ -676,13 +784,15 @@ class PossibilityLattice:
         evidence_list: list[str],
         anomaly: Anomaly | None,
     ) -> list[Possibility]:
-        """Generate all possibilities from multiple angles.
+        """Generate all possibilities by delegating to L2 PossibilityGenerator.
 
         Strategy:
-        1. Context-based: What does the RSVS graph say about the query context?
-        2. Input-specific: What does the query itself suggest?
-        3. Cross-referential: What emerges from combining context and input?
-        4. Anomaly-driven: If an anomaly is provided, generate from it.
+        1. Delegate enumeration to PossibilityGenerator (L2)
+           which systematically generates from 4 angles:
+           context-based, input-specific, cross-referential, structural
+        2. Convert GeneratedPossibility → Possibility for lattice use
+        3. Add anomaly-driven possibilities if an anomaly is provided
+           (anomaly generation stays in L3 since it depends on HypothesisDrivenReasoner)
 
         For a mature AAM, this typically produces 50-150 possibilities.
 
@@ -698,23 +808,33 @@ class PossibilityLattice:
         possibilities: list[Possibility] = []
         all_evidence = set(evidence_list)
 
-        # Angle 1: Context-based possibilities
-        if context and self.rsvs_available:
-            ctx_possibilities = self._generate_from_context(query, context, all_evidence)
-            possibilities.extend(ctx_possibilities)
+        # --- L2 Delegation: PossibilityGenerator ---
+        generated = self._possibility_generator.generate(
+            query=query,
+            context=context,
+            evidence=evidence_list,
+        )
 
-        # Angle 2: Input-specific possibilities
-        input_possibilities = self._generate_from_input(query, all_evidence)
-        possibilities.extend(input_possibilities)
+        # Convert GeneratedPossibility → Possibility
+        for gp in generated:
+            possibilities.append(Possibility(
+                possibility_id=gp.id,
+                statement=gp.statement,
+                reasoning=(
+                    f"Generated from '{gp.source}' angle for query '{query[:50]}'. "
+                    f"Based on evidence: {', '.join(sorted(gp.evidence_ids)[:3])}."
+                ),
+                confidence=gp.confidence,
+                state="proposed",
+                explained_evidence=gp.evidence_ids,
+                all_evidence=all_evidence,
+                generation=0,
+                source=gp.source,
+                anomaly_source="",
+            ))
 
-        # Angle 3: Cross-referential possibilities
-        if self.rsvs_available and context:
-            cross_possibilities = self._generate_from_cross_reference(
-                query, context, all_evidence,
-            )
-            possibilities.extend(cross_possibilities)
-
-        # Angle 4: Anomaly-driven possibilities
+        # --- L3 Addition: Anomaly-driven possibilities ---
+        # This stays in L3 because it depends on HypothesisDrivenReasoner
         if anomaly is not None:
             anomaly_possibilities = self._generate_from_anomaly(anomaly, all_evidence)
             possibilities.extend(anomaly_possibilities)
@@ -726,239 +846,13 @@ class PossibilityLattice:
         possibilities = possibilities[:self._max_initial_possibilities]
 
         logger.info(
-            "Generated %d possibilities from %d angles "
-            "(context=%d, input=%d, cross=%d, anomaly=%d)",
+            "Generated %d possibilities "
+            "(L2_generator=%d, anomaly=%d, after_dedup=%d)",
             len(possibilities),
-            sum(1 for _ in [1] if context) + sum(1 for _ in [1] if anomaly),
-            sum(1 for p in possibilities if p.source == "context"),
-            sum(1 for p in possibilities if p.source == "input"),
-            sum(1 for p in possibilities if p.source == "cross_reference"),
+            len(generated),
             sum(1 for p in possibilities if p.source == "anomaly"),
+            len(possibilities),
         )
-
-        return possibilities
-
-    def _generate_from_context(
-        self,
-        query: str,
-        context: list[str],
-        all_evidence: set[str],
-    ) -> list[Possibility]:
-        """Generate possibilities based on context from RSVS graph.
-
-        Uses relate(), senses(), and mcts_query() to find all possible
-        interpretations of the query within the given context.
-        """
-        possibilities: list[Possibility] = []
-
-        for ctx_atom in context[:10]:
-            # Use relate() to find structurally connected concepts
-            try:
-                relate_result = self._bridge.relate(ctx_atom)
-                if relate_result and isinstance(relate_result, dict):
-                    related_nodes = relate_result.get("related_nodes", [])
-                    for node_entry in related_nodes[:5]:
-                        label = self._extract_label(node_entry)
-                        if not label:
-                            continue
-
-                        poss_id = uuid.uuid4().hex[:8]
-                        possibilities.append(Possibility(
-                            possibility_id=poss_id,
-                            statement=f"'{label}' is relevant to '{query}' via context '{ctx_atom}'",
-                            reasoning=(
-                                f"RSVS relate() found structural connection between "
-                                f"'{ctx_atom}' and '{label}', suggesting relevance to the query."
-                            ),
-                            confidence=0.4,
-                            state="proposed",
-                            explained_evidence={ctx_atom},
-                            all_evidence=all_evidence,
-                            generation=0,
-                            source="context",
-                            anomaly_source="",
-                        ))
-            except Exception as exc:
-                logger.debug("relate() context generation failed: %s", exc)
-
-            # Use senses() to find compositional interpretations
-            try:
-                senses = self._bridge.senses(ctx_atom)
-                if senses and isinstance(senses, list):
-                    for sense in senses[:3]:
-                        if not isinstance(sense, dict):
-                            continue
-                        sense_idx = str(sense.get("sense_idx", 0))
-                        gs = sense.get("grounding_score", 0.5)
-                        core_atoms = sense.get("core_atoms", [])
-                        if not core_atoms:
-                            continue
-
-                        atom_labels = [
-                            a[0] if isinstance(a, (list, tuple)) else str(a)
-                            for a in core_atoms[:5]
-                        ]
-
-                        poss_id = uuid.uuid4().hex[:8]
-                        possibilities.append(Possibility(
-                            possibility_id=poss_id,
-                            statement=(
-                                f"Sense {sense_idx} of '{ctx_atom}' — "
-                                f"compositions: {', '.join(str(a) for a in atom_labels[:3])} — "
-                                f"is the interpretation for '{query}'"
-                            ),
-                            reasoning=(
-                                f"RSVS senses() revealed a compositional structure for "
-                                f"'{ctx_atom}' that may interpret the query."
-                            ),
-                            confidence=min(0.6, gs),
-                            state="proposed",
-                            explained_evidence={ctx_atom},
-                            all_evidence=all_evidence,
-                            generation=0,
-                            source="context",
-                        ))
-            except Exception as exc:
-                logger.debug("senses() context generation failed: %s", exc)
-
-        return possibilities
-
-    def _generate_from_input(
-        self,
-        query: str,
-        all_evidence: set[str],
-    ) -> list[Possibility]:
-        """Generate possibilities based on the query input itself.
-
-        Uses keyword extraction and RSVS queries to enumerate
-        what the query could mean.
-        """
-        possibilities: list[Possibility] = []
-        concepts = self._extract_key_concepts(query)
-
-        for concept in concepts[:8]:
-            # Direct query possibility
-            poss_id = uuid.uuid4().hex[:8]
-            possibilities.append(Possibility(
-                possibility_id=poss_id,
-                statement=f"'{concept}' is the key element in understanding '{query}'",
-                reasoning=(
-                    f"The concept '{concept}' was directly mentioned in the query, "
-                    f"suggesting it plays a central role in the answer."
-                ),
-                confidence=0.5,
-                state="proposed",
-                explained_evidence=set(),
-                all_evidence=all_evidence,
-                generation=0,
-                source="input",
-            ))
-
-            # If RSVS available, find structural alternatives
-            if self.rsvs_available:
-                try:
-                    senses = self._bridge.senses(concept)
-                    if senses and isinstance(senses, list):
-                        for sense in senses[:2]:
-                            if isinstance(sense, dict):
-                                gs = sense.get("grounding_score", 0.5)
-                                sense_idx = str(sense.get("sense_idx", 0))
-
-                                poss_id = uuid.uuid4().hex[:8]
-                                possibilities.append(Possibility(
-                                    possibility_id=poss_id,
-                                    statement=(
-                                        f"'{concept}' (sense {sense_idx}) "
-                                        f"provides a specific angle on '{query}'"
-                                    ),
-                                    reasoning=(
-                                        f"RSVS has sense {sense_idx} for '{concept}' "
-                                        f"with grounding {gs:.2f}, offering a "
-                                        f"structured interpretation."
-                                    ),
-                                    confidence=min(0.55, gs * 1.1),
-                                    state="proposed",
-                                    explained_evidence={concept},
-                                    all_evidence=all_evidence,
-                                    generation=0,
-                                    source="input",
-                                ))
-                except Exception as exc:
-                    logger.debug("senses() input generation failed: %s", exc)
-
-        return possibilities
-
-    def _generate_from_cross_reference(
-        self,
-        query: str,
-        context: list[str],
-        all_evidence: set[str],
-    ) -> list[Possibility]:
-        """Generate possibilities from cross-referencing context and input.
-
-        Uses mcts_query() to find reasoning paths that connect
-        multiple context atoms to the query.
-        """
-        possibilities: list[Possibility] = []
-
-        if not self.rsvs_available:
-            return possibilities
-
-        # Use MCTS to find connecting paths
-        try:
-            mcts_result = self._bridge.mcts_query(
-                node_label=query[:100],
-                max_depth=3,
-                simulations=30,
-            )
-            if mcts_result and isinstance(mcts_result, dict):
-                best_path = mcts_result.get("best_path", [])
-                if best_path:
-                    for i, node_label in enumerate(best_path[:5]):
-                        if not isinstance(node_label, str):
-                            continue
-                        poss_id = uuid.uuid4().hex[:8]
-                        possibilities.append(Possibility(
-                            possibility_id=poss_id,
-                            statement=(
-                                f"MCTS path node '{node_label}' (step {i+1}) "
-                                f"is a reasoning link for '{query[:50]}'"
-                            ),
-                            reasoning=(
-                                f"MCTS traversal found '{node_label}' on the best "
-                                f"reasoning path from the query, suggesting it "
-                                f"connects context to conclusion."
-                            ),
-                            confidence=0.45,
-                            state="proposed",
-                            explained_evidence=set(context[:3]),
-                            all_evidence=all_evidence,
-                            generation=0,
-                            source="cross_reference",
-                        ))
-
-                # Also check scored atoms from MCTS
-                scored_atoms = mcts_result.get("scored_atoms", [])
-                for atom_entry in scored_atoms[:5]:
-                    label = self._extract_label(atom_entry)
-                    if label:
-                        poss_id = uuid.uuid4().hex[:8]
-                        possibilities.append(Possibility(
-                            possibility_id=poss_id,
-                            statement=f"MCTS-scored atom '{label}' is relevant to '{query[:50]}'",
-                            reasoning=(
-                                f"MCTS scoring identified '{label}' as a high-value "
-                                f"reasoning atom for the query."
-                            ),
-                            confidence=0.4,
-                            state="proposed",
-                            explained_evidence=set(),
-                            all_evidence=all_evidence,
-                            generation=0,
-                            source="cross_reference",
-                        ))
-        except Exception as exc:
-            logger.debug("mcts_query() cross-reference generation failed: %s", exc)
 
         return possibilities
 
@@ -971,6 +865,9 @@ class PossibilityLattice:
 
         Uses the existing reasoner to generate hypotheses from the anomaly,
         then converts them to Possibilities.
+
+        This method stays in L3 because it depends on HypothesisDrivenReasoner
+        which is a Layer 3 component.
         """
         possibilities: list[Possibility] = []
 
@@ -1073,7 +970,7 @@ class PossibilityLattice:
         return surviving, eliminated_count
 
     # ==================================================================
-    # PHASE 2b: HYBRIDIZE — Combine complementary pairs
+    # PHASE 2b: HYBRIDIZE — Delegate to L2 HypothesisCombinator
     # ==================================================================
 
     def _hybridize(
@@ -1084,17 +981,12 @@ class PossibilityLattice:
     ) -> tuple[list[Possibility], list[Possibility]]:
         """Hybridize complementary possibility pairs (A × B).
 
-        Two possibilities are complementary if:
-        - They explain DIFFERENT parts of the evidence (low overlap)
-        - Together they cover MORE evidence (high joint coverage)
-        - Neither subsumes the other
+        Delegates to L2 HypothesisCombinator for:
+        - Complementarity measurement
+        - Hybrid composition (A × B, including LLM-driven if callback provided)
+        - Implication tracing
 
-        The hybrid is NOT A ∧ B (conjunction), but A × B (composition):
-        a new possibility that combines insights from both parents
-        and may reveal entirely new avenues of reasoning.
-
-        Additionally, traces implications of each hybrid to find
-        emergent possibilities that neither parent could see alone.
+        Then converts HybridResult → Possibility for lattice use.
 
         Args:
             possibilities: Current surviving possibilities.
@@ -1110,193 +1002,156 @@ class PossibilityLattice:
         if len(possibilities) < 2:
             return hybrids, emergent
 
-        # Find complementary pairs and hybridize
-        hybrid_count = 0
-        for i, p_a in enumerate(possibilities):
-            if hybrid_count >= self._max_hybrids_per_generation:
-                break
-            for p_b in possibilities[i + 1:]:
-                if hybrid_count >= self._max_hybrids_per_generation:
-                    break
+        # --- L2 Delegation: HypothesisCombinator ---
+        # Convert Possibility → dict for combinator
+        poss_dicts = [p.to_combinator_dict() for p in possibilities]
 
-                complementarity = self._measure_complementarity(p_a, p_b)
-                if complementarity >= self._complementarity_threshold:
-                    hybrid = self._compose(p_a, p_b, all_evidence, generation)
-                    hybrids.append(hybrid)
-                    hybrid_count += 1
+        hybrid_results = self._hypothesis_combinator.hybridize(
+            possibilities=poss_dicts,
+            all_evidence=all_evidence,
+        )
 
-                    # Trace implications — the CRUCIAL step
-                    implications = self._trace_implications(
-                        hybrid, all_evidence, generation,
-                    )
-                    emergent.extend(implications)
+        # Convert HybridResult → Possibility
+        for hr in hybrid_results:
+            hybrid = self._hybrid_result_to_possibility(
+                hr, all_evidence, generation,
+            )
+            hybrids.append(hybrid)
+
+            # Convert implications to emergent Possibilities
+            for impl_stmt in hr.implications:
+                impl_id = uuid.uuid4().hex[:8]
+                emergent.append(Possibility(
+                    possibility_id=impl_id,
+                    statement=impl_stmt,
+                    reasoning=(
+                        f"Tracing implications of hybrid [{hr.hybrid_id}] "
+                        f"revealed '{impl_stmt[:60]}' — a possibility that was not "
+                        f"visible from either parent alone."
+                    ),
+                    confidence=hr.confidence * 0.75,  # Slightly lower — untested
+                    state="emergent",
+                    explained_evidence=hr.explained_evidence,  # Inherit from hybrid
+                    all_evidence=all_evidence,
+                    parent_ids=[hr.hybrid_id],
+                    generation=generation,
+                    source="emergent",
+                    anomaly_source="",
+                ))
 
         logger.debug(
-            "Hybridization: %d complementary pairs → %d hybrids, %d emergent",
-            hybrid_count, len(hybrids), len(emergent),
+            "Hybridization (via L2 Combinator): %d possibilities → %d hybrids, %d emergent",
+            len(possibilities), len(hybrids), len(emergent),
         )
 
         return hybrids, emergent
 
-    def _measure_complementarity(
+    def _hybrid_result_to_possibility(
         self,
-        a: Possibility,
-        b: Possibility,
-    ) -> float:
-        """Measure how complementary two possibilities are.
-
-        Two possibilities are complementary if:
-        - They explain DIFFERENT parts of the evidence (low overlap)
-        - Together they cover MORE evidence (high joint coverage)
-        - Neither subsumes the other
-
-        Returns:
-            Complementarity score (0.0–1.0).
-        """
-        # Evidence overlap
-        joint = a.explained_evidence | b.explained_evidence
-        if not joint:
-            # No evidence overlap — use structural similarity as proxy
-            if self.rsvs_available:
-                try:
-                    sim = self._bridge.structural_similarity(
-                        a.statement[:50], b.statement[:50],
-                    )
-                    if sim and isinstance(sim, dict):
-                        sim_val = sim.get("structural_similarity", 0.5)
-                        if isinstance(sim_val, (int, float)):
-                            # Low similarity = high complementarity
-                            return 1.0 - float(sim_val)
-                except Exception:
-                    pass
-            # No evidence and no RSVS — moderate complementarity
-            return 0.3
-
-        overlap = a.explained_evidence & b.explained_evidence
-        overlap_ratio = len(overlap) / len(joint)
-        joint_coverage = len(joint) / max(len(a.all_evidence), 1)
-
-        # High complementarity = low overlap + high joint coverage
-        return joint_coverage * (1.0 - overlap_ratio)
-
-    def _compose(
-        self,
-        a: Possibility,
-        b: Possibility,
+        hr: HybridResult,
         all_evidence: set[str],
         generation: int,
     ) -> Possibility:
-        """Create a hybrid possibility from two complementary parents.
+        """Convert a HybridResult from L2 HypothesisCombinator to a Possibility.
 
-        This is NOT A ∧ B (conjunction), but A × B (composition):
-        the hybrid combines insights from both parents and may
-        have properties that neither parent has alone.
-
-        The hybrid gets a confidence boost because it explains
-        more evidence than either parent alone.
+        This bridges the L2→L3 data format gap.
         """
-        poss_id = uuid.uuid4().hex[:8]
-        combined_evidence = a.explained_evidence | b.explained_evidence
+        poss_id = hr.hybrid_id
 
-        # Confidence: minimum of parents * boost (covers more evidence)
-        base_conf = min(a.confidence, b.confidence)
-        # Boost proportional to additional coverage
-        a_coverage = a.coverage
-        b_coverage = b.coverage
-        combined_coverage = len(combined_evidence) / max(len(all_evidence), 1)
-        coverage_boost = combined_coverage / max(max(a_coverage, b_coverage), 0.01)
-        hybrid_conf = min(0.95, base_conf * min(coverage_boost, _DEFAULT_HYBRID_CONFIDENCE_BOOST))
+        # Find parent statements for reasoning trace
+        parent_a_stmt = ""
+        parent_b_stmt = ""
+        for poss in getattr(self, '_last_possibilities', []):
+            if poss.possibility_id == hr.parent_a_id:
+                parent_a_stmt = poss.statement[:40]
+            elif poss.possibility_id == hr.parent_b_id:
+                parent_b_stmt = poss.statement[:40]
 
-        hybrid = Possibility(
+        return Possibility(
             possibility_id=poss_id,
-            statement=f"{a.statement} ∘ {b.statement}",
+            statement=hr.statement,
             reasoning=(
-                f"Hybrid of [{a.possibility_id}] and [{b.possibility_id}]: "
-                f"combining '{a.statement[:40]}' with '{b.statement[:40]}' "
-                f"creates a more complete explanation covering {len(combined_evidence)} "
-                f"evidence items (vs {len(a.explained_evidence)} + {len(b.explained_evidence)} individually)."
+                f"Hybrid of [{hr.parent_a_id}] and [{hr.parent_b_id}]: "
+                f"combining '{parent_a_stmt}' with '{parent_b_stmt}' "
+                f"creates a more complete explanation covering {len(hr.explained_evidence)} "
+                f"evidence items. Complementarity: {hr.complementarity:.3f}."
             ),
-            confidence=hybrid_conf,
+            confidence=hr.confidence,
             state="hybrid",
-            explained_evidence=combined_evidence,
+            explained_evidence=hr.explained_evidence,
             all_evidence=all_evidence,
-            parent_ids=[a.possibility_id, b.possibility_id],
+            parent_ids=[hr.parent_a_id, hr.parent_b_id],
             generation=generation,
             source="hybrid",
-            anomaly_source=a.anomaly_source or b.anomaly_source,
-            confirmatory_evidence=list(
-                {e.evidence_id: e for e in a.confirmatory_evidence + b.confirmatory_evidence}.values()
-            ),
-            disconfirmatory_evidence=list(
-                {e.evidence_id: e for e in a.disconfirmatory_evidence + b.disconfirmatory_evidence}.values()
-            ),
         )
 
-        return hybrid
+    # ==================================================================
+    # PHASE 2d: ENFORCE TOTAL CAP (Bounded-Growth Guarantee)
+    # ==================================================================
 
-    def _trace_implications(
+    def _enforce_total_cap(
         self,
-        hybrid: Possibility,
-        all_evidence: set[str],
-        generation: int,
+        possibilities: list[Possibility],
     ) -> list[Possibility]:
-        """Trace implications of a hybrid to find emergent possibilities.
+        """Enforce the total possibility space bound.
 
-        The CRUCIAL step: a hybrid may open doors that neither parent
-        could see alone. For example:
-        - A="betrayed" + B="pride wounded"
-        - Hybrid="betrayal of pride"
-        - Implies="pattern of repeated trust violations"
-        - Implies="childhood origin of trust issues"
+        This is the key bounded-growth guarantee from the vision:
+        "Tidak akan sampai lebih dari 200 kalau AAM sudah mature"
 
-        Each implication is a NEW possibility that was NOT in the
-        original possibility space.
+        After hybridization and emergence add new possibilities,
+        we enforce a total cap. We keep the highest-confidence
+        possibilities and remove the rest.
 
-        Uses RSVS mcts_query() for implication traversal.
+        Priority order for keeping:
+        1. Surviving (non-hybrid) possibilities — these have been tested
+        2. Hybrid possibilities — synthesized from complementary pairs
+        3. Emergent possibilities — traced from implications
+
+        Within each category, keep highest confidence first.
+
+        Args:
+            possibilities: Current list of all possibilities (may exceed cap).
+
+        Returns:
+            List of possibilities trimmed to max_total_possibilities.
         """
-        emergent: list[Possibility] = []
+        if len(possibilities) <= self._max_total_possibilities:
+            return possibilities
 
-        if not self.rsvs_available:
-            return emergent
+        # Separate by source priority
+        surviving = [p for p in possibilities if p.state == "surviving"]
+        hybrid = [p for p in possibilities if p.state == "hybrid"]
+        emergent = [p for p in possibilities if p.state == "emergent"]
+        other = [p for p in possibilities if p.state not in ("surviving", "hybrid", "emergent")]
 
-        try:
-            mcts_result = self._bridge.mcts_query(
-                node_label=hybrid.statement[:100],
-                max_depth=_DEFAULT_IMPLICATION_DEPTH,
-                simulations=15,
-            )
-            if mcts_result and isinstance(mcts_result, dict):
-                best_path = mcts_result.get("best_path", [])
-                for node_label in best_path[:3]:
-                    if not isinstance(node_label, str):
-                        continue
+        # Sort each by confidence (descending)
+        surviving.sort(key=lambda p: p.confidence, reverse=True)
+        hybrid.sort(key=lambda p: p.confidence, reverse=True)
+        emergent.sort(key=lambda p: p.confidence, reverse=True)
+        other.sort(key=lambda p: p.confidence, reverse=True)
 
-                    # Check if this is genuinely new
-                    poss_id = uuid.uuid4().hex[:8]
-                    emergent.append(Possibility(
-                        possibility_id=poss_id,
-                        statement=(
-                            f"Implication of hybrid: '{node_label}' — "
-                            f"emerged from combining '{hybrid.statement[:40]}'"
-                        ),
-                        reasoning=(
-                            f"Tracing implications of hybrid [{hybrid.possibility_id}] "
-                            f"revealed '{node_label}' — a possibility that was not "
-                            f"visible from either parent alone."
-                        ),
-                        confidence=hybrid.confidence * 0.8,  # Slightly lower — untested
-                        state="emergent",
-                        explained_evidence=set(),
-                        all_evidence=all_evidence,
-                        parent_ids=[hybrid.possibility_id],
-                        generation=generation,
-                        source="emergent",
-                        anomaly_source=hybrid.anomaly_source,
-                    ))
-        except Exception as exc:
-            logger.debug("Implication tracing failed: %s", exc)
+        # Fill cap by priority
+        result: list[Possibility] = []
+        remaining_cap = self._max_total_possibilities
 
-        return emergent
+        for category in [surviving, other, hybrid, emergent]:
+            take = min(len(category), remaining_cap)
+            result.extend(category[:take])
+            remaining_cap -= take
+            if remaining_cap <= 0:
+                break
+
+        logger.debug(
+            "Total cap enforced: %d → %d "
+            "(surviving=%d, hybrid=%d, emergent=%d, other=%d)",
+            len(possibilities), len(result),
+            sum(1 for p in result if p.state == "surviving"),
+            sum(1 for p in result if p.state == "hybrid"),
+            sum(1 for p in result if p.state == "emergent"),
+            sum(1 for p in result if p.state not in ("surviving", "hybrid", "emergent")),
+        )
+
+        return result
 
     # ==================================================================
     # PHASE 2c: DETECT NOVEL — Filter genuinely novel hybrids
@@ -1358,7 +1213,7 @@ class PossibilityLattice:
         return novel
 
     # ==================================================================
-    # PHASE 2e: QUESTION MODE — Find best discriminating question
+    # PHASE 2f: QUESTION MODE — Find best discriminating question
     # ==================================================================
 
     def _find_best_question(self, possibilities: list[Possibility]) -> str | None:
@@ -1411,7 +1266,7 @@ class PossibilityLattice:
         )
 
     # ==================================================================
-    # PHASE 2f: Seek discriminating evidence
+    # PHASE 2g: Seek discriminating evidence
     # ==================================================================
 
     def _seek_discriminating_evidence(
@@ -1429,7 +1284,7 @@ class PossibilityLattice:
         Returns:
             Set of new evidence strings found.
         """
-        new_evidence: set[str] = []
+        new_evidence: list[str] = []
 
         if not self.rsvs_available:
             return set(new_evidence)
@@ -1664,6 +1519,16 @@ class PossibilityLattice:
     def predictive_engine(self) -> PredictiveEngine:
         """Access the underlying PredictiveEngine."""
         return self._predictive_engine
+
+    @property
+    def possibility_generator(self) -> PossibilityGenerator:
+        """Access the L2 PossibilityGenerator."""
+        return self._possibility_generator
+
+    @property
+    def hypothesis_combinator(self) -> HypothesisCombinator:
+        """Access the L2 HypothesisCombinator."""
+        return self._hypothesis_combinator
 
     @property
     def lattice_history(self) -> list[LatticeResult]:
