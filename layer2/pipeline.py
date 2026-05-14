@@ -11,9 +11,11 @@ kesimpulan yang bisa diaudit.
 Flow:
     User Input
       -> Context Layer (internet search jika perlu)
+      -> Scope Control (hierarchical scope management)
+      -> Semantic Chat Index (index conversation as graph of meaning)
       -> Situation Layer (ingest chat, cari konteks relevan)
       -> RSVS Core (spreading activation, structural analysis)
-      -> Predictive Engine (predict, detect anomalies)
+      -> Prediction Loop (predict/observe/update lifecycle)
       -> Pattern Output (pattern completion + narrative)
       -> Final Output (traceable reasoning chain + confidence)
 """
@@ -30,6 +32,9 @@ from .llm import generate_narrative
 from .context import ContextLayer
 from .situation import SituationLayer
 from .predictive import PredictiveEngine, Prediction, Anomaly, BeliefUpdate
+from .prediction_loop import PredictionLoop, CycleResult, CycleTracker
+from .scope_control import ScopeControl, ScopeConfig
+from .chat_index import SemanticChatIndex, ChatNode
 from .pattern import PatternOutput, ReasoningStep, PatternResult
 from .temporal import TemporalTracker
 
@@ -120,12 +125,26 @@ class GeniusPipeline:
         pipeline.set_scope(["official_doc", "academic"])
         result = pipeline.ask("Berapa tarif pajak penghasilan?")
 
+        # With hierarchical scope control
+        scope_id = pipeline.define_scope(ScopeConfig(
+            domain="finance",
+            subdomains=["tax"],
+            topics=["pajak penghasilan"],
+            min_confidence=0.5,
+            boundary_mode="soft",
+        ))
+        pipeline.activate_scope(scope_id)
+        result = pipeline.ask("Berapa tarif pajak penghasilan?")
+        pipeline.deactivate_scope()
+
     Analogi novel:
         Ini adalah Jin Soun secara keseluruhan.
         - ContextLayer = Simhyeon Pavilion + kemampuan membatasi sumber
+        - ScopeControl = batasan hierarkis (domain->subdomain->topic)
+        - SemanticChatIndex = percakapan sebagai graph of meaning
         - SituationLayer = ingatan percakapan + active senses
         - RSVS Core = structural memory (30 tahun ingatan)
-        - PredictiveEngine = "aku predict X, ternyata Y, update belief"
+        - PredictionLoop = predict/observe/update lifecycle (Friston)
         - PatternOutput = pattern completion + narrative
     """
 
@@ -176,6 +195,11 @@ class GeniusPipeline:
             eta=eta,
             anomaly_threshold=anomaly_threshold,
         )
+        self.prediction_loop = PredictionLoop(
+            bridge=self._bridge,
+        )
+        self.scope = ScopeControl(bridge=self._bridge)
+        self.chat_index = SemanticChatIndex(bridge=self._bridge)
         self.pattern = PatternOutput(bridge=self._bridge)
 
         # Temporal tracking layer (G1-1: temporal metadata for nodes)
@@ -183,6 +207,7 @@ class GeniusPipeline:
 
         # Internal state
         self._conversation_history: list[dict] = []
+        self._current_conversation_id: str | None = None
 
     # -------------------------------------------------------------------
     # Public API
@@ -197,12 +222,12 @@ class GeniusPipeline:
     ) -> GeniusResponse:
         """Ask a question and get a traceable, evidence-backed response.
 
-        This is the main entry point. It runs through all 5 layers:
+        This is the main entry point. It runs through all layers:
 
         1. Context Layer: Search internet if needed, apply scope filter
-        2. Situation Layer: Ingest the question, find relevant context
-        3. RSVS Core: Spreading activation, structural analysis
-        4. Predictive Engine: Predict, detect anomalies
+        2. Semantic Chat Index: Index user message, retrieve by meaning
+        3. Situation Layer: Ingest the question, find relevant context
+        4. RSVS Core + Prediction Loop: predict/observe/update cycle
         5. Pattern Output: Pattern completion, generate narrative
 
         Args:
@@ -239,8 +264,14 @@ class GeniusPipeline:
                     "trust": self.context.trust_score("web_search"),
                 })
 
-        # ---- Step 2: Situation Layer ----
-        # Record the question in conversation history
+        # ---- Step 2: Semantic Chat Index + Situation Layer ----
+        # Index the user message in the semantic chat index
+        chat_node = self.chat_index.index_message(
+            "user", question, conversation_id=self._current_conversation_id
+        )
+        self._current_conversation_id = chat_node.conversation_id
+
+        # Record the question in conversation history (legacy)
         msg_stats = self.situation.add_message("user", question)
         self._conversation_history.append({
             "role": "user",
@@ -248,7 +279,13 @@ class GeniusPipeline:
             "timestamp": time.time(),
         })
 
-        # Find relevant context from chat history / graph
+        # Find relevant context: use SemanticChatIndex for meaning-based retrieval
+        chat_relevant = self.chat_index.retrieve_by_meaning(question, top_k=5)
+        chat_relevant_labels = [
+            cn.semantic_atoms for cn in chat_relevant if cn.semantic_atoms
+        ]
+
+        # Use SituationLayer for RSVS-based retrieval
         relevant = self.situation.get_relevant_context(question, top_k=10)
         if relevant:
             all_evidence.append({
@@ -268,33 +305,72 @@ class GeniusPipeline:
             if label:
                 self.temporal.record_observation(label, source="situation")
 
-        # ---- Step 3: RSVS Core + Predictive Engine ----
+        # ---- Step 3: RSVS Core + Prediction Loop ----
         # Make predictions based on context
         context_atoms = context or [
             s.get("label", s.get("concept", ""))
             for s in active_senses[:5]
             if s.get("label") or s.get("concept")
         ]
+        # Enrich context_atoms with semantic chat index results
+        for atoms_list in chat_relevant_labels[:3]:
+            for atom in atoms_list[:3]:
+                if atom not in context_atoms:
+                    context_atoms.append(atom)
 
-        # Predict for the main concept in the question
-        prediction = self.predictive.predict(question, context_atoms)
-        if prediction:
+        # Run full prediction cycle using PredictionLoop (predict/observe/update)
+        cycle_result = self.prediction_loop.run_cycle(question, question, context_atoms)
+        if cycle_result.prediction:
             all_predictions.append({
-                "concept": prediction.concept,
-                "expected": prediction.expected_compositions,
-                "confidence": prediction.confidence,
+                "concept": cycle_result.prediction.concept,
+                "expected": cycle_result.prediction.expected_compositions,
+                "confidence": cycle_result.prediction.confidence,
+                "cycle_id": cycle_result.cycle_id,
+                "state": cycle_result.state,
             })
 
-        # Detect existing anomalies
+        # Collect belief updates from cycle
+        if cycle_result.belief_update:
+            all_belief_updates.append({
+                "concept": cycle_result.belief_update.concept,
+                "old_confidence": round(cycle_result.belief_update.old_confidence, 3),
+                "new_confidence": round(cycle_result.belief_update.new_confidence, 3),
+                "direction": cycle_result.belief_update.direction,
+                "reason": cycle_result.belief_update.reason,
+            })
+
+        # Collect anomaly from cycle
+        if cycle_result.anomaly:
+            all_anomalies.append({
+                "concept": cycle_result.anomaly.concept,
+                "expected": cycle_result.anomaly.expected,
+                "observed": cycle_result.anomaly.observed,
+                "delta": cycle_result.anomaly.delta,
+                "description": cycle_result.anomaly.description,
+            })
+
+        # Collect re-prediction if auto-triggered
+        if cycle_result.re_prediction:
+            all_predictions.append({
+                "concept": cycle_result.re_prediction.concept,
+                "expected": cycle_result.re_prediction.expected_compositions,
+                "confidence": cycle_result.re_prediction.confidence,
+                "is_re_prediction": True,
+                "parent_cycle_id": cycle_result.cycle_id,
+            })
+
+        # Also detect anomalies from the predictive engine (legacy, for completeness)
         anomalies = self.predictive.detect_anomalies()
         for anomaly in anomalies:
-            all_anomalies.append({
-                "concept": anomaly.concept,
-                "expected": anomaly.expected,
-                "observed": anomaly.observed,
-                "delta": anomaly.delta,
-                "description": anomaly.description,
-            })
+            # Avoid duplicating anomalies already captured by the cycle
+            if not any(a.get("concept") == anomaly.concept for a in all_anomalies):
+                all_anomalies.append({
+                    "concept": anomaly.concept,
+                    "expected": anomaly.expected,
+                    "observed": anomaly.observed,
+                    "delta": anomaly.delta,
+                    "description": anomaly.description,
+                })
 
         # ---- Step 4: Pattern Completion Output ----
         # Run the full pattern completion pipeline
@@ -320,17 +396,8 @@ class GeniusPipeline:
                     })
 
         # ---- Step 5: Belief Update ----
-        # If we made predictions, check if observation updates beliefs
-        if prediction:
-            belief_updates = self.predictive.observe_and_update(question, source=source)
-            for bu in belief_updates:
-                all_belief_updates.append({
-                    "concept": bu.concept,
-                    "old_confidence": round(bu.old_confidence, 3),
-                    "new_confidence": round(bu.new_confidence, 3),
-                    "direction": bu.direction,
-                    "reason": bu.reason,
-                })
+        # Belief updates are now handled by PredictionLoop in Step 3.
+        # Legacy observe_and_update kept for backward compatibility.
 
         # ---- Build Response ----
         # Determine the main answer
@@ -364,7 +431,10 @@ class GeniusPipeline:
 
         all_evidence.extend(pattern_evidence)
 
-        # Record assistant response in conversation
+        # Record assistant response in conversation and chat index
+        self.chat_index.index_message(
+            "assistant", answer, conversation_id=self._current_conversation_id
+        )
         self.situation.add_message("assistant", answer)
         self._conversation_history.append({
             "role": "assistant",
@@ -391,6 +461,10 @@ class GeniusPipeline:
                 "active_senses_count": len(active_senses),
                 "rsvs_available": self._is_rsvs_available(),
                 "use_llm": self._use_llm,
+                "conversation_id": self._current_conversation_id,
+                "prediction_cycle_id": cycle_result.cycle_id if cycle_result else None,
+                "prediction_state": cycle_result.state if cycle_result else None,
+                "scope_active": (self.scope.get_active_scope() is not None),
             },
         )
 
@@ -426,20 +500,47 @@ class GeniusPipeline:
         """
         self.context.set_scope(allowed_sources)
 
+    def define_scope(self, config: ScopeConfig) -> str:
+        """Define a hierarchical scope with domain/subdomain/topic filtering.
+
+        Analogi: Jin Soun membatasi investigasi ke domain "kriminal"
+        dengan subdomain "pencurian" dan topik "Snow Plum Pill".
+
+        Args:
+            config: ScopeConfig with domain, subdomains, topics, etc.
+
+        Returns:
+            scope_id for the defined scope.
+        """
+        return self.scope.define_scope(config)
+
+    def activate_scope(self, scope_id: str) -> None:
+        """Activate a previously defined scope."""
+        self.scope.activate_scope(scope_id)
+
+    def deactivate_scope(self) -> None:
+        """Deactivate the current scope."""
+        self.scope.deactivate_scope()
+
     def clear_scope(self) -> None:
         """Clear scope filter — accept all sources."""
         self.context.clear_scope()
+        self.scope.deactivate_scope()
 
     def get_status(self) -> dict:
         """Get current pipeline status."""
+        active_scope = self.scope.get_active_scope()
         return {
-            "version": "0.5.0",
+            "version": "0.6.0",
             "rsvs_available": self._bridge.is_available,
             "is_rust_core": self._bridge.is_rust_core,
             "scope": self.context.get_scope(),
+            "active_scope_domain": active_scope.domain if active_scope else None,
             "conversation_turns": len(self._conversation_history),
             "active_senses": len(self.situation.get_active_senses()),
             "active_predictions": len(self.predictive.get_predictions()),
+            "active_cycles": len(self.prediction_loop.get_active_cycles()) if hasattr(self.prediction_loop, 'get_active_cycles') else 0,
+            "chat_index_stats": self.chat_index.get_statistics() if hasattr(self, 'chat_index') else {},
             "use_llm": self._use_llm,
             "language": self._language,
             "temporal_stats": self.temporal.get_stats(),

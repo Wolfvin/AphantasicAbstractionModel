@@ -28,10 +28,13 @@ AphantasicAbstractionModel/
 │             atoms · senses · compositions · spreading activation
 │
 ├── layer2/   Cognitive Runtime
-│             context   : scoped knowledge + internet
-│             situation : chat history as semantic memory
-│             predictive: belief update + anomaly detection
-│             pattern   : pattern completion + narrative
+│             context        : scoped knowledge + internet
+│             scope_control  : hierarchical scope management (domain/subdomain/topic)
+│             chat_index     : semantic chat index — conversations as graph of meaning
+│             situation      : chat history as semantic memory
+│             predictive     : belief update + anomaly detection
+│             prediction_loop: explicit predict/observe/update lifecycle (Friston)
+│             pattern        : pattern completion + narrative
 │
 ├── layer3/   Deductive Reasoning & Output
 │             policy    : rule-based compliance (tax, regulation)
@@ -58,7 +61,7 @@ bisa di-cross-reference instan dari 4 departemen berbeda.
 | layer0/video | Stub — planned |
 | layer0/audio | Stub — planned (Whisper) |
 | layer1 RSVS Core | Stable v8.3 |
-| layer2 Cognitive Runtime | Stable v0.5 |
+| layer2 Cognitive Runtime | Stable v0.6 |
 | layer3/policy | Stable |
 | layer3/coder | Stable |
 | layer3/reasoning | Stub — in progress |

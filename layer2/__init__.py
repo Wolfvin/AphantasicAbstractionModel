@@ -4,11 +4,14 @@ AAM Layer 2 — Cognitive Runtime
 Aphantasic Abstraction Model — knowledge without imagery.
 
 Modules:
-  context   : Scoped knowledge + internet search + source trust
-  situation : Chat history as semantic graph memory
-  predictive: Prediction → observation → belief update → anomaly detection
-  pattern   : Pattern completion + narrative generation from graph
-  temporal  : Temporal tracking layer — when did things happen and what's still relevant?
+  context       : Scoped knowledge + internet search + source trust
+  scope_control : Hierarchical scope management for RSVS graph and cognitive runtime
+  chat_index    : Semantic chat index — conversations as a graph of meaning
+  situation     : Chat history as semantic graph memory
+  predictive    : Prediction → observation → belief update → anomaly detection
+  prediction_loop: Explicit predict/observe/update lifecycle with state tracking
+  pattern       : Pattern completion + narrative generation from graph
+  temporal      : Temporal tracking layer — when did things happen and what's still relevant?
 
 Bridge:
   bridge    : Unified adapter for PyO3 Rust core (AbstractionBridge)
@@ -31,7 +34,10 @@ from .llm import generate_narrative, generate_narrative_via_sdk, generate_narrat
 from .context import ContextLayer
 from .situation import SituationLayer
 from .predictive import PredictiveEngine, Prediction, Anomaly, BeliefUpdate
+from .prediction_loop import PredictionLoop, CycleResult, CycleTracker
 from .pattern import PatternOutput, ReasoningStep, PatternResult
 from .temporal import TemporalTracker, TemporalRecord
 from .diffusion_llm import AamDiffusionLLM, GraphConditioning, DiffusionOutput
+from .scope_control import ScopeControl, ScopeConfig, ScopeAuditEntry
+from .chat_index import SemanticChatIndex, ChatNode, ChatEdge, ConversationGraph
 from .web_search import WebSearchEngine
