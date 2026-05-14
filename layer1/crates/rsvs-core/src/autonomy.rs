@@ -17,6 +17,9 @@ use std::collections::{HashMap, HashSet};
 
 use crate::types::{NodeId, NodeStatus, Tier};
 
+// Import Node for meaning pathway integration
+use crate::types::Node;
+
 /// Memory class of a node.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MemoryClass {
@@ -849,6 +852,52 @@ impl AutonomyEngine {
             }
         }
         flagged
+    }
+
+    /// v9.0: Incorporate meaning pathway data into autonomy decisions.
+    ///
+    /// Gap annotations → confidence adjustment (more gaps = less understood).
+    /// Sense profiles → tier boost (high profile confidence = eligible for promotion).
+    /// Meaning conflicts → flag for review.
+    pub fn incorporate_meaning_pathways(&mut self, node: &mut Node) {
+        // 1. Gap annotations → confidence penalty
+        let total_gaps: usize = node.gap_annotations.values().map(|g| g.len()).sum();
+        if total_gaps > 0 {
+            let gap_penalty = 0.02 * total_gaps as f32; // 2% per gap
+            node.confidence = (node.confidence - gap_penalty).max(0.1);
+            if let Some(rec) = self.records.get_mut(&node.id) {
+                rec.confidence = node.confidence;
+            }
+        }
+
+        // 2. Profile confidence → tier boost
+        for profile in node.sense_profiles.values() {
+            let avg_confidence = (
+                profile.affective.profile_confidence
+                    + profile.social.profile_confidence
+                    + profile.connotative.profile_confidence
+            ) / 3.0;
+
+            if avg_confidence > 0.7 && matches!(node.tier, Tier::Tier2) {
+                // Well-understood node → eligible for promotion
+                node.confidence = (node.confidence + 0.05).min(1.0);
+                if let Some(rec) = self.records.get_mut(&node.id) {
+                    rec.confidence = node.confidence;
+                }
+            }
+        }
+
+        // 3. Meaning conflicts → no tier change, but signal to reflection
+        let conflict_count: usize = node.sense_profiles.values()
+            .map(|p| p.conflicts.len())
+            .sum();
+        if conflict_count > 0 {
+            // Mark node as needing review by slightly reducing governance
+            // The reflection engine will pick this up
+            if let Some(ref mut pm) = node.policy_meta {
+                pm.governance_score = (pm.governance_score - 0.05).max(0.0);
+            }
+        }
     }
 }
 

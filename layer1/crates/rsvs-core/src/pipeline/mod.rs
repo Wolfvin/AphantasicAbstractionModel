@@ -79,6 +79,11 @@ pub struct PipelineConfig {
 
     /// v6.3: Weight for diversity in entity score.
     pub beta_entity: f32,
+
+    /// v9.0: Master switch for all meaning pathways.
+    /// When true, initializes BatchSeedSpreading, GapDetector,
+    /// SeedActivationEngine, and DiscourseTracker.
+    pub enable_meaning_pathways: bool,
 }
 
 impl Default for PipelineConfig {
@@ -106,6 +111,7 @@ impl Default for PipelineConfig {
             tau_entity_learned: 0.15,
             alpha_entity: 0.5,
             beta_entity: 0.5,
+            enable_meaning_pathways: true,
         }
     }
 }
@@ -190,6 +196,27 @@ pub struct Rsvs {
     /// v8.0: Convergence detection engine — detects structural equivalence
     /// between nodes (e.g., "dog" ↔ "anjing") based on composition overlap.
     pub convergence: crate::convergence::ConvergenceEngine,
+
+    // === v9.0: Meaning Pathways ===
+
+    /// Master switch for all meaning pathways.
+    pub enable_meaning_pathways: bool,
+
+    /// v9.0: Batch seed spreading cache — shared across all pathways.
+    /// Provides O(1) energy lookups from pre-computed spreading activation.
+    pub batch_seed_spreading: Option<crate::batch_spreading::BatchSeedSpreading>,
+
+    /// v9.0 Pathway 1: Gap detection — predicts missing compositions.
+    pub gap_detector: Option<crate::gap_detection::GapDetector>,
+
+    /// v9.0 Pathway 2: Affective-social seed activation — computes profiles.
+    pub seed_activation_engine: Option<crate::seed_activation::SeedActivationEngine>,
+
+    /// v9.0 Pathway 3: Discourse structure tracking — speech acts, centering.
+    pub discourse_tracker: Option<crate::discourse_tracking::DiscourseTracker>,
+
+    /// Sentence groups collected during per-sentence loop for P3.
+    pub(crate) sentence_groups: Vec<Vec<NodeId>>,
 }
 
 impl Rsvs {
@@ -221,10 +248,13 @@ impl Rsvs {
         let mut config = config;
         config.seed_labels = effective_seed_labels;
 
+        // v9.0: Capture enable_meaning_pathways before config is moved
+        let enable_meaning_pathways = config.enable_meaning_pathways;
+
         // v8.0: Build seed NodeId set for composition-based grounding
         let seed_node_ids: HashSet<NodeId> = seed_map.values().copied().collect();
 
-        Ok(Self {
+        let mut rsvs = Self {
             graph,
             senses,
             autonomy,
@@ -260,9 +290,71 @@ impl Rsvs {
             ),
             deps_planner: crate::deps::DEPSPlanner::new(),
             convergence: crate::convergence::ConvergenceEngine::new(),
-        })
+
+            // v9.0: Meaning Pathways initialization
+            enable_meaning_pathways,
+            batch_seed_spreading: None, // Initialized after bootstrap
+            gap_detector: None,
+            seed_activation_engine: None,
+            discourse_tracker: None,
+            sentence_groups: Vec::new(),
+        };
+
+        // v9.0: Initialize meaning pathway engines after bootstrap
+        if rsvs.enable_meaning_pathways {
+            rsvs.init_meaning_pathways()?;
+        }
+
+        Ok(rsvs)
     }
 
+    /// v9.0: Initialize meaning pathway engines after bootstrap.
+    ///
+    /// Resolves seed NodeIds from the graph and creates all pathway engines.
+    fn init_meaning_pathways(&mut self) -> Result<(), RsvsError> {
+        use crate::batch_spreading::BatchSeedSpreading;
+        use crate::gap_detection::{GapDetector, GapDetectionConfig};
+        use crate::seed_activation::{SeedActivationEngine, SeedActivationConfig};
+        use crate::discourse_tracking::{DiscourseTracker, DiscourseConfig};
+
+        // Resolve seed NodeIds for each pathway
+        let resolve_seeds = |labels: &[&str]| -> Vec<NodeId> {
+            labels.iter()
+                .filter_map(|l| self.graph.id_for_label(l))
+                .collect()
+        };
+
+        let affective_seeds = resolve_seeds(&["value", "risk"]);
+        let social_seeds = resolve_seeds(&["trust", "identity", "agent"]);
+        let pragmatic_seeds = resolve_seeds(&["goal", "feedback", "action"]);
+
+        // Create BatchSeedSpreading cache
+        self.batch_seed_spreading = Some(BatchSeedSpreading::new(
+            self.spreading_activation.clone_config(),
+            affective_seeds.clone(),
+            social_seeds.clone(),
+            pragmatic_seeds.clone(),
+        ));
+
+        // Create GapDetector
+        self.gap_detector = Some(GapDetector::new(GapDetectionConfig {
+            affective_seeds: affective_seeds.clone(),
+            social_seeds: social_seeds.clone(),
+            pragmatic_seeds: pragmatic_seeds.clone(),
+            ..GapDetectionConfig::default()
+        }));
+
+        // Create SeedActivationEngine
+        self.seed_activation_engine = Some(SeedActivationEngine::new(
+            SeedActivationConfig::default(),
+            &self.graph,
+        ));
+
+        // Create DiscourseTracker
+        self.discourse_tracker = Some(DiscourseTracker::new(DiscourseConfig::default()));
+
+        Ok(())
+    }
     /// Generate the next correlation ID for an ingest batch.
     fn next_correlation_id(&mut self) -> String {
         self.ingest_counter += 1;

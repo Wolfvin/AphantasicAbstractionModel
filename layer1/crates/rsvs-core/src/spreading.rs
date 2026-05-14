@@ -106,6 +106,14 @@ impl SpreadingActivation {
         Self { config }
     }
 
+    /// Clone the configuration to create a new engine instance.
+    /// Used by BatchSeedSpreading which needs its own engine with the same config.
+    pub fn clone_config(&self) -> Self {
+        Self {
+            config: self.config.clone(),
+        }
+    }
+
     /// Run spreading activation from a set of seed nodes.
     ///
     /// Each seed node receives `initial_energy`. Energy then spreads

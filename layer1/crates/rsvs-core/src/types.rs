@@ -20,6 +20,410 @@
 //!   compositions reach layer N-1.
 
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+
+// -----------------------------------------------------------------------
+// v9.0: Meaning Pathway Types
+// -----------------------------------------------------------------------
+
+/// A single gap annotation — detected meaning gap from Pathway 1.
+/// Stored per-sense on the Node struct.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GapAnnotation {
+    /// What type of gap was detected.
+    pub gap_type: GapType,
+    /// Confidence of this gap detection (0.0–1.0).
+    pub confidence: f32,
+    /// The node that was expected but not present.
+    pub target_node: NodeId,
+    /// Trace back to seed primitives that motivated this gap.
+    pub seed_trace: Vec<NodeId>,
+}
+
+/// Types of meaning gaps detected by Pathway 1 (Predictive Gap Detection).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum GapType {
+    /// Scalar implicature: "some" → ¬"all" (weaker item used, stronger unused).
+    ScalarImplicature,
+    /// Presupposition ungrounded: referenced concept has no grounding.
+    PresuppositionUngrounded,
+    /// Pragmatic divergence: actual compositions deviate from predicted.
+    PragmaticDivergence,
+    /// Affective mismatch: spreading from value seed doesn't match.
+    AffectiveMismatch,
+    /// Social mismatch: spreading from trust/identity seed doesn't match.
+    SocialMismatch,
+    /// Connotative absent: expected cultural association not present.
+    ConnotativeAbsent,
+    /// Expected composition: composition predicted by analogy but missing.
+    ExpectedComposition,
+}
+
+impl Default for GapType {
+    fn default() -> Self {
+        GapType::ExpectedComposition
+    }
+}
+
+/// Sense-level meaning profile from Pathway 2 (Affective-Social Seed Activation).
+/// Per-sense because different senses of a polysemous node can have
+/// very different affective and social profiles.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SenseProfile {
+    /// The sense this profile belongs to.
+    pub sense_id: SenseId,
+    /// Affective profile: valence, arousal, dominance.
+    pub affective: AffectiveProfile,
+    /// Social profile: distance, trust, power, politeness.
+    pub social: SocialProfile,
+    /// Connotative profile: cultural activations, connotation direction.
+    pub connotative: ConnotativeProfile,
+    /// Cross-pathway conflicts — where pathways contradict each other.
+    /// This is a signal of hidden meaning (irony, sarcasm, gaslighting).
+    #[serde(default)]
+    pub conflicts: Vec<PathwayConflict>,
+}
+
+/// Affective profile: VAD (Valence, Arousal, Dominance) model.
+/// Derived from spreading activation distance to affective seeds.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AffectiveProfile {
+    /// Valence: how positive/negative (-1.0 to +1.0).
+    /// Computed from spreading to "value" seed.
+    pub valence: f32,
+    /// Arousal: how intense/threatening (0.0 to 1.0).
+    /// Computed from spreading to "risk" seed.
+    pub arousal: f32,
+    /// Dominance: how much control (0.0 to 1.0).
+    /// Computed from spreading to "agent" seed.
+    pub dominance: f32,
+    /// Confidence of this profile (how much evidence supports it).
+    pub profile_confidence: f32,
+    /// Whether verified by more than one seed pathway.
+    pub cross_verified: bool,
+}
+
+impl Default for AffectiveProfile {
+    fn default() -> Self {
+        Self {
+            valence: 0.0,
+            arousal: 0.0,
+            dominance: 0.0,
+            profile_confidence: 0.0,
+            cross_verified: false,
+        }
+    }
+}
+
+/// Social profile: distance, trust, power.
+/// Derived from spreading activation to social seeds.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SocialProfile {
+    /// Social distance: 0.0 = self, 1.0 = other.
+    /// Computed from spreading to "identity" seed.
+    pub distance: f32,
+    /// Trust level: 0.0 to 1.0.
+    /// Computed from spreading to "trust" seed.
+    pub trust: f32,
+    /// Power direction: +1.0 = speaker dominant, -1.0 = addressee dominant.
+    /// Computed from spreading to "agent" seed.
+    pub power_direction: f32,
+    /// Expected politeness level (Brown & Levinson: W = D + P + R).
+    pub expected_politeness: f32,
+    /// Confidence of this profile.
+    pub profile_confidence: f32,
+}
+
+impl Default for SocialProfile {
+    fn default() -> Self {
+        Self {
+            distance: 0.5,
+            trust: 0.5,
+            power_direction: 0.0,
+            expected_politeness: 0.5,
+            profile_confidence: 0.0,
+        }
+    }
+}
+
+/// Connotative profile: cultural associations and connotation direction.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConnotativeProfile {
+    /// Cultural area activations: cluster_id → activation energy.
+    #[serde(default)]
+    pub cultural_activations: HashMap<u64, f32>,
+    /// Primary connotation direction.
+    pub primary_connotation: ConnotationDirection,
+    /// Secondary connotations: (activated_node, energy).
+    #[serde(default)]
+    pub secondary_connotations: Vec<(NodeId, f32)>,
+    /// Confidence of this profile.
+    pub profile_confidence: f32,
+}
+
+impl Default for ConnotativeProfile {
+    fn default() -> Self {
+        Self {
+            cultural_activations: HashMap::new(),
+            primary_connotation: ConnotationDirection::Neutral,
+            secondary_connotations: Vec::new(),
+            profile_confidence: 0.0,
+        }
+    }
+}
+
+/// Connotation direction.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub enum ConnotationDirection {
+    #[default]
+    Neutral,
+    Positive,
+    Negative,
+    /// Positive and negative equally strong — IRONY/AMBIGUITY signal.
+    Ambiguous,
+    ContextDependent,
+}
+
+/// Cross-pathway conflict — hidden meaning signal.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PathwayConflict {
+    /// First pathway in conflict.
+    pub pathway_a: SeedPathway,
+    /// Second pathway in conflict.
+    pub pathway_b: SeedPathway,
+    /// Type of conflict.
+    pub conflict_type: ConflictType,
+    /// Strength of conflict (0.0–1.0).
+    pub conflict_score: f32,
+    /// Description of the structural conflict.
+    pub description: StructuralConflictDescription,
+}
+
+/// Seed pathway categories.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum SeedPathway {
+    /// Affective seeds: value, risk.
+    Affective,
+    /// Social seeds: trust, identity, agent.
+    Social,
+    /// Pragmatic seeds: goal, feedback, action.
+    Pragmatic,
+}
+
+/// Types of cross-pathway conflicts.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum ConflictType {
+    /// Affective positive but Social threatening → sarcasm.
+    AffectiveSocialMismatch,
+    /// Affective positive but Pragmatic manipulative → flattery.
+    AffectivePragmaticMismatch,
+    /// Social equal but Pragmatic dominant → hidden power.
+    SocialPragmaticMismatch,
+    /// Internal affective: valence positive + arousal high → ambiguity.
+    AffectiveInternalConflict,
+    /// Connotative contradicts literal meaning → euphemism.
+    ConnotativeLiteralMismatch,
+}
+
+/// Structural description of a pathway conflict.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StructuralConflictDescription {
+    /// Seed driving pathway A.
+    pub seed_a: NodeId,
+    /// Seed driving pathway B.
+    pub seed_b: NodeId,
+    /// Activation energy from seed A.
+    pub activation_a: f32,
+    /// Activation energy from seed B.
+    pub activation_b: f32,
+    /// Expected relation type.
+    pub expected_relation: Option<RelationType>,
+    /// Actual divergence score.
+    pub actual_divergence: f32,
+}
+
+/// Discourse metadata for utterance nodes (Pathway 3).
+/// Only present for nodes with `semantic.is_utterance = true`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DiscourseMeta {
+    /// Speech act type (if node is an utterance).
+    pub speech_act: Option<SpeechActType>,
+    /// Felicity condition status.
+    pub felicity: Option<FelicityStatus>,
+    /// Centering state (updated per utterance).
+    pub centering: Option<CenteringState>,
+    /// Rhetorical relation to previous utterance.
+    pub prev_relation: Option<(RhetoricalRelation, f32)>,
+    /// Extensional referent set.
+    pub extension: Option<ExtensionSet>,
+}
+
+impl Default for DiscourseMeta {
+    fn default() -> Self {
+        Self {
+            speech_act: None,
+            felicity: None,
+            centering: None,
+            prev_relation: None,
+            extension: None,
+        }
+    }
+}
+
+/// Speech act type (Searle's taxonomy).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum SpeechActType {
+    /// Claiming a fact: "Dia marah".
+    Assertive,
+    /// Requesting something: "Tolong duduk".
+    Directive,
+    /// Promising: "Aku akan datang".
+    Commissive,
+    /// Expressing feeling: "Wah!".
+    Expressive,
+    /// Declaring: "Ku nyatakan kamu suami istri".
+    Declaration,
+    /// Cannot be determined (insufficient context).
+    Undetermined,
+}
+
+impl Default for SpeechActType {
+    fn default() -> Self {
+        SpeechActType::Undetermined
+    }
+}
+
+/// Felicity condition check result.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FelicityStatus {
+    /// Is propositional content condition met?
+    pub propositional_content: bool,
+    /// Is preparatory condition met?
+    pub preparatory: bool,
+    /// Is sincerity condition met?
+    pub sincerity: bool,
+    /// Is essential condition met?
+    pub essential: bool,
+    /// Overall: is this utterance felicitous?
+    pub is_felicitous: bool,
+    /// Details of each condition check.
+    #[serde(default)]
+    pub check_details: Vec<FelicityCheck>,
+}
+
+impl Default for FelicityStatus {
+    fn default() -> Self {
+        Self {
+            propositional_content: true,
+            preparatory: true,
+            sincerity: true,
+            essential: true,
+            is_felicitous: true,
+            check_details: Vec::new(),
+        }
+    }
+}
+
+/// A single felicity condition check.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FelicityCheck {
+    /// Name of the condition checked.
+    pub condition_name: String,
+    /// Whether the condition was found to be met.
+    pub found: bool,
+    /// Confidence of the check result.
+    pub confidence: f32,
+}
+
+/// Centering state (Grosz, Joshi, Weinstein).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CenteringState {
+    /// Backward-looking center: most salient entity from previous utterance.
+    pub cb: Option<NodeId>,
+    /// Forward-looking centers: entities that might be focus of next utterance.
+    /// Sorted by salience (descending).
+    pub cf: Vec<(NodeId, f32)>,
+    /// Transition type from previous utterance.
+    pub transition: TransitionType,
+    /// Coherence score (1.0 = Continue, 0.2 = RoughShift).
+    pub coherence: f32,
+}
+
+impl Default for CenteringState {
+    fn default() -> Self {
+        Self {
+            cb: None,
+            cf: Vec::new(),
+            transition: TransitionType::Continue,
+            coherence: 1.0,
+        }
+    }
+}
+
+/// Centering transition type (ordered by coherence: Continue > Retain > Smooth > Rough).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub enum TransitionType {
+    /// Cb same, Cb ∈ Cf — most coherent.
+    #[default]
+    Continue,
+    /// Cb same, Cb ∉ Cf — less coherent.
+    Retain,
+    /// Cb changed, Cb ∈ Cf — okay.
+    SmoothShift,
+    /// Cb changed, Cb ∉ Cf — least coherent.
+    RoughShift,
+}
+
+/// Rhetorical relation (RST/SDRT).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum RhetoricalRelation {
+    // Nucleus-Satellite
+    Elaboration,
+    Background,
+    Cause,
+    Result,
+    Concession,
+    Condition,
+    Interpretation,
+    Evaluation,
+    Evidence,
+    Motivation,
+    // Multi-nucleus
+    Contrast,
+    Conjunction,
+    Disjunction,
+    List,
+    Sequence,
+    // Unknown
+    Unmarked,
+}
+
+impl Default for RhetoricalRelation {
+    fn default() -> Self {
+        RhetoricalRelation::Unmarked
+    }
+}
+
+/// Extensional referent set.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExtensionSet {
+    /// Node IDs that are referents of the utterance.
+    pub referents: Vec<NodeId>,
+    /// Quantifier type (if any).
+    pub quantifier: Option<Quantifier>,
+    /// Confidence of the extension computation.
+    pub confidence: f32,
+}
+
+/// Quantifier type for extensional sets.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum Quantifier {
+    Universal,
+    Existential,
+    Definite,
+    Indefinite,
+    Generic,
+}
 
 /// A node ID. u32 = 4 bytes vs ~50 bytes for a String.
 pub type NodeId = u32;
@@ -111,6 +515,10 @@ pub enum EdgeSource {
     Learned,
     /// Created by explicit composition (compose API).
     Composition,
+    /// Created by gap detection (P1) — predicted but not observed compositions.
+    GapDetection,
+    /// Created by discourse tracking (P3) — rhetorical/performative edges.
+    Discourse,
 }
 
 /// L0-02: Relation type for edges — mirrors Python Layer 0 RelationType.
@@ -135,6 +543,8 @@ pub enum RelationType {
     Temporal,
     /// "X causes Y" / "X is caused by Y" — causal relation.
     Causal,
+    /// Discursive / rhetorical relation between utterances.
+    Discursive,
 }
 
 /// A language link between nodes.
@@ -171,6 +581,16 @@ pub struct SemanticMeta {
     /// are layer 0 seeds, the node is tagged `internal_representation = true`
     /// and its layer is forced to 1.
     pub internal_representation: bool,
+    /// v9.0: Whether this node represents an utterance (sentence-level)
+    /// rather than a token. Utterance nodes are created by Pathway 3
+    /// (Discourse Structure Tracking) and have compositions that reference
+    /// the token nodes that form the sentence.
+    #[serde(default)]
+    pub is_utterance: bool,
+    /// v9.0: If this is an utterance node, references to its constituent
+    /// token NodeIds. Empty for non-utterance nodes.
+    #[serde(default)]
+    pub utterance_tokens: Vec<NodeId>,
 }
 
 impl Default for SemanticMeta {
@@ -181,6 +601,8 @@ impl Default for SemanticMeta {
             derived_from_node_ids: Vec::new(),
             compression_reason: None,
             internal_representation: false,
+            is_utterance: false,
+            utterance_tokens: Vec::new(),
         }
     }
 }
@@ -257,6 +679,28 @@ pub struct Node {
 
     /// Perceptual grounding fingerprint.
     pub fingerprint: Option<Fingerprint>,
+
+    // === v9.0: Meaning Pathway Data ===
+
+    /// Gap annotations per sense — detected meaning gaps from Pathway 1.
+    /// Key = sense_id, Value = gaps found for that sense.
+    /// Stored per-sense because different senses of a polysemous node
+    /// can have different gaps (e.g., "bank" financial vs river).
+    #[serde(default)]
+    pub gap_annotations: HashMap<SenseId, Vec<GapAnnotation>>,
+
+    /// Sense profiles per sense — affective/social/connotative from Pathway 2.
+    /// Key = sense_id, Value = meaning profile for that sense.
+    /// Per-sense because "bank" (financial) and "bank" (river) have
+    /// very different affective and social profiles.
+    #[serde(default)]
+    pub sense_profiles: HashMap<SenseId, SenseProfile>,
+
+    /// Discourse metadata — only present for utterance nodes (Pathway 3).
+    /// Contains speech act type, felicity status, centering state,
+    /// rhetorical relation, and extensional set.
+    #[serde(default)]
+    pub discourse_meta: Option<DiscourseMeta>,
 }
 
 impl Default for Node {
@@ -276,6 +720,9 @@ impl Default for Node {
             language_links: Vec::new(),
             atoms: Vec::new(),
             fingerprint: None,
+            gap_annotations: HashMap::new(),
+            sense_profiles: HashMap::new(),
+            discourse_meta: None,
         }
     }
 }

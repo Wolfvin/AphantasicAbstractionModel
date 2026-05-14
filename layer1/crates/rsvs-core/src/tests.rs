@@ -1192,6 +1192,7 @@ mod graph_tests {
     use crate::error::RsvsError;
     use crate::graph::RsvsGraph;
     use crate::types::{CompressionState, Edge, EdgeSource, Node, NodeStatus, RelationType, SemanticMeta, Tier};
+    use std::collections::HashMap;
 
     #[test]
     fn expand_raw_node_returns_self() {
@@ -1212,6 +1213,9 @@ mod graph_tests {
                 language_links: vec![],
                 atoms: vec![],
                 fingerprint: None,
+                gap_annotations: HashMap::new(),
+                sense_profiles: HashMap::new(),
+                discourse_meta: None,
             })
             .unwrap();
         let expanded = g.expand(id);
@@ -1237,6 +1241,9 @@ mod graph_tests {
                 language_links: vec![],
                 atoms: vec![],
                 fingerprint: None,
+                gap_annotations: HashMap::new(),
+                sense_profiles: HashMap::new(),
+                discourse_meta: None,
             })
             .unwrap();
         let a2 = g
@@ -1255,6 +1262,9 @@ mod graph_tests {
                 language_links: vec![],
                 atoms: vec![],
                 fingerprint: None,
+                gap_annotations: HashMap::new(),
+                sense_profiles: HashMap::new(),
+                discourse_meta: None,
             })
             .unwrap();
         let id = g
@@ -1274,11 +1284,16 @@ mod graph_tests {
                     derived_from_node_ids: vec![],
                     compression_reason: None,
                     internal_representation: false,
+                    is_utterance: false,
+                    utterance_tokens: Vec::new(),
                 },
                 policy_meta: None,
                 language_links: vec![],
                 atoms: vec![a1, a2],
                 fingerprint: None,
+                gap_annotations: HashMap::new(),
+                sense_profiles: HashMap::new(),
+                discourse_meta: None,
             })
             .unwrap();
         let expanded = g.expand(id);
@@ -1304,6 +1319,9 @@ mod graph_tests {
                 language_links: vec![],
                 atoms: vec![],
                 fingerprint: None,
+                gap_annotations: HashMap::new(),
+                sense_profiles: HashMap::new(),
+                discourse_meta: None,
             })
             .unwrap();
         let id = g
@@ -1323,11 +1341,16 @@ mod graph_tests {
                     derived_from_node_ids: vec![a1],
                     compression_reason: Some("test".into()),
                     internal_representation: false,
+                    is_utterance: false,
+                    utterance_tokens: Vec::new(),
                 },
                 policy_meta: None,
                 language_links: vec![],
                 atoms: vec![],
                 fingerprint: None,
+                gap_annotations: HashMap::new(),
+                sense_profiles: HashMap::new(),
+                discourse_meta: None,
             })
             .unwrap();
         let expanded = g.expand(id);
@@ -1353,11 +1376,16 @@ mod graph_tests {
                 derived_from_node_ids: vec![5],
                 compression_reason: None,
                     internal_representation: false,
+                is_utterance: false,
+                utterance_tokens: Vec::new(),
             },
             policy_meta: None,
             language_links: vec![],
             atoms: vec![],
             fingerprint: None,
+            gap_annotations: HashMap::new(),
+            sense_profiles: HashMap::new(),
+            discourse_meta: None,
         });
         assert!(matches!(result, Err(RsvsError::CircularRef { .. })));
     }
@@ -1381,6 +1409,9 @@ mod graph_tests {
                 language_links: vec![],
                 atoms: vec![],
                 fingerprint: None,
+                gap_annotations: HashMap::new(),
+                sense_profiles: HashMap::new(),
+                discourse_meta: None,
             })
             .unwrap();
         let result = g.insert_edge(Edge {
@@ -1413,6 +1444,9 @@ mod graph_tests {
                 language_links: vec![],
                 atoms: vec![],
                 fingerprint: None,
+                gap_annotations: HashMap::new(),
+                sense_profiles: HashMap::new(),
+                discourse_meta: None,
             })
             .unwrap();
         let n2 = g
@@ -1431,6 +1465,9 @@ mod graph_tests {
                 language_links: vec![],
                 atoms: vec![],
                 fingerprint: None,
+                gap_annotations: HashMap::new(),
+                sense_profiles: HashMap::new(),
+                discourse_meta: None,
             })
             .unwrap();
         let result = g.insert_edge(Edge {
@@ -1489,6 +1526,9 @@ mod graph_tests {
             language_links: vec![],
             atoms: vec![],
             fingerprint: None,
+            gap_annotations: HashMap::new(),
+            sense_profiles: HashMap::new(),
+            discourse_meta: None,
         })
         .unwrap();
         assert_eq!(g.node_count(), 1);
@@ -1500,6 +1540,7 @@ mod v60_node_tests {
     use crate::types::{
         CompressionState, Fingerprint, Node, NodeStatus, PolicyMeta, SemanticMeta, Tier,
     };
+    use std::collections::HashMap;
 
     #[test]
     fn v60_node_creation() {
@@ -1519,11 +1560,16 @@ mod v60_node_tests {
                 derived_from_node_ids: vec![],
                 compression_reason: None,
                     internal_representation: false,
+                is_utterance: false,
+                utterance_tokens: Vec::new(),
             },
             policy_meta: Some(PolicyMeta::default()),
             language_links: vec![],
             atoms: vec![],
             fingerprint: None,
+            gap_annotations: HashMap::new(),
+            sense_profiles: HashMap::new(),
+            discourse_meta: None,
         };
         assert_eq!(node.kind, "node");
         assert_eq!(node.surface_label, "test@en");
@@ -1550,11 +1596,16 @@ mod v60_node_tests {
                 derived_from_node_ids: vec![],
                 compression_reason: None,
                     internal_representation: false,
+                is_utterance: false,
+                utterance_tokens: Vec::new(),
             },
             policy_meta: None,
             language_links: vec![],
             atoms: vec![],
             fingerprint: None,
+            gap_annotations: HashMap::new(),
+            sense_profiles: HashMap::new(),
+            discourse_meta: None,
         };
         assert!(node.is_seed);
         assert!(node.is_locked);
@@ -1579,6 +1630,8 @@ mod v60_node_tests {
                 derived_from_node_ids: vec![1, 2, 3],
                 compression_reason: Some("co-occurrence aggregation".to_string()),
                 internal_representation: false,
+                is_utterance: false,
+                utterance_tokens: Vec::new(),
             },
             policy_meta: Some(PolicyMeta {
                 policy_version: "6.0".to_string(),
@@ -1591,6 +1644,9 @@ mod v60_node_tests {
             language_links: vec![],
             atoms: vec![1, 2, 3],
             fingerprint: None,
+            gap_annotations: HashMap::new(),
+            sense_profiles: HashMap::new(),
+            discourse_meta: None,
         };
         assert_eq!(
             node.semantic.compression_state,
@@ -1629,6 +1685,7 @@ mod transformer_bridge_tests {
     use crate::sense::{GroundingEvidence, Sense, SenseManager, SenseConfig};
     use crate::transformer_bridge::{TransformerBridge, TransformerBridgeConfig};
     use crate::types::CompositionRef;
+    use std::collections::HashMap;
 
     #[test]
     fn vectors_to_compositions_with_similar_vectors() {
@@ -1718,6 +1775,9 @@ mod transformer_bridge_tests {
             language_links: vec![],
             atoms: vec![],
             fingerprint: None,
+            gap_annotations: HashMap::new(),
+            sense_profiles: HashMap::new(),
+            discourse_meta: None,
         }).unwrap();
         let n2 = graph.insert_node(Node {
             id: 0,
@@ -1734,6 +1794,9 @@ mod transformer_bridge_tests {
             language_links: vec![],
             atoms: vec![],
             fingerprint: None,
+            gap_annotations: HashMap::new(),
+            sense_profiles: HashMap::new(),
+            discourse_meta: None,
         }).unwrap();
 
         let mut senses = std::collections::HashMap::new();

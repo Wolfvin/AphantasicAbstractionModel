@@ -323,6 +323,66 @@ impl ConvergenceEngine {
     pub fn import_detected_pairs(&mut self, pairs: Vec<(NodeId, NodeId)>) {
         self.detected_pairs = pairs.into_iter().collect();
     }
+
+    /// v9.0: Converge meaning profiles between structurally equivalent nodes.
+    ///
+    /// When convergence is detected (e.g., "merah" ≡ "red"), this method
+    /// blends affective/social profiles between the two nodes using averaging,
+    /// and marks both as `cross_verified = true`.
+    ///
+    /// This enables cross-linguistic meaning convergence: nodes that mean
+    /// the same thing in different languages share their connotative profiles.
+    pub fn converge_profiles(
+        &self,
+        node_a: NodeId,
+        node_b: NodeId,
+        graph: &mut RsvsGraph,
+    ) {
+        // Get profiles from both nodes
+        let profiles_a = graph.get_node(node_a).map(|n| n.sense_profiles.clone());
+        let profiles_b = graph.get_node(node_b).map(|n| n.sense_profiles.clone());
+
+        let (Some(profiles_a), Some(profiles_b)) = (profiles_a, profiles_b) else {
+            return;
+        };
+
+        // Blend affective profiles for each sense that exists in both nodes
+        for (sense_id_a, profile_a) in &profiles_a {
+            for (sense_id_b, profile_b) in &profiles_b {
+                // Blend affective profile: average VAD scores, take max confidence
+                let blended_valence = (profile_a.affective.valence + profile_b.affective.valence) / 2.0;
+                let blended_arousal = (profile_a.affective.arousal + profile_b.affective.arousal) / 2.0;
+                let blended_dominance = (profile_a.affective.dominance + profile_b.affective.dominance) / 2.0;
+                let blended_affective_conf = profile_a.affective.profile_confidence
+                    .max(profile_b.affective.profile_confidence);
+
+                // Update node A with blended affective profile
+                if let Some(node) = graph.get_node_mut(node_a) {
+                    if let Some(sp) = node.sense_profiles.get_mut(sense_id_a) {
+                        sp.affective.valence = blended_valence;
+                        sp.affective.arousal = blended_arousal;
+                        sp.affective.dominance = blended_dominance;
+                        sp.affective.profile_confidence = blended_affective_conf;
+                        sp.affective.cross_verified = true;
+                    }
+                }
+
+                // Update node B with same blended profile
+                if let Some(node) = graph.get_node_mut(node_b) {
+                    if let Some(sp) = node.sense_profiles.get_mut(sense_id_b) {
+                        sp.affective.valence = blended_valence;
+                        sp.affective.arousal = blended_arousal;
+                        sp.affective.dominance = blended_dominance;
+                        sp.affective.profile_confidence = blended_affective_conf;
+                        sp.affective.cross_verified = true;
+                    }
+                }
+
+                // Only blend the first matching sense pair (most common case)
+                break;
+            }
+        }
+    }
 }
 
 // -----------------------------------------------------------------------
@@ -414,6 +474,8 @@ mod tests {
                     derived_from_node_ids: vec![1, 2],
                     compression_reason: Some("test".to_string()),
                     internal_representation: true,
+                    is_utterance: false,
+                    utterance_tokens: Vec::new(),
                 },
                 ..Node::default()
             })
@@ -432,6 +494,8 @@ mod tests {
                     derived_from_node_ids: vec![1, 2],
                     compression_reason: Some("test".to_string()),
                     internal_representation: true,
+                    is_utterance: false,
+                    utterance_tokens: Vec::new(),
                 },
                 ..Node::default()
             })
@@ -521,6 +585,8 @@ mod tests {
                     derived_from_node_ids: vec![1, 2],
                     compression_reason: Some("test".to_string()),
                     internal_representation: false,
+                    is_utterance: false,
+                    utterance_tokens: Vec::new(),
                 },
                 ..Node::default()
             })
@@ -539,6 +605,8 @@ mod tests {
                     derived_from_node_ids: vec![1, 3], // Different from dog
                     compression_reason: Some("test".to_string()),
                     internal_representation: false,
+                    is_utterance: false,
+                    utterance_tokens: Vec::new(),
                 },
                 ..Node::default()
             })

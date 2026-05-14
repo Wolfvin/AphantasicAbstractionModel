@@ -93,6 +93,7 @@ fn make_english_config() -> PipelineConfig {
         tau_entity_learned: 0.10,
         alpha_entity: 0.5,
         beta_entity: 0.5,
+        enable_meaning_pathways: true,
     }
 }
 

@@ -141,12 +141,17 @@ pub fn bootstrap(
                 derived_from_node_ids: vec![],
                 compression_reason: None,
                 internal_representation: false,
+                is_utterance: false,
+                utterance_tokens: Vec::new(),
             },
             policy_meta: None,
             language_links: vec![],
 
             atoms: vec![],
             fingerprint: None,
+            gap_annotations: HashMap::new(),
+            sense_profiles: HashMap::new(),
+            discourse_meta: None,
         };
 
         let id = graph.insert_node(node)?;

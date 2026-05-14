@@ -47,8 +47,13 @@ pub mod types;
 pub mod neurosym;
 pub mod paradigm;
 pub mod spreading;
+pub mod batch_spreading;
+pub mod gap_detection;
+pub mod seed_activation;
+pub mod discourse_tracking;
 pub mod deps;
 pub mod session;
+pub mod meaning_pathway_tests;
 
 pub use attention::{
     is_groundable_to_seeds, sentence_contains_seed, text_to_sentences, tokenize, AttentionComponent, AttentionConfig,
@@ -82,4 +87,8 @@ pub use paradigm::{ParadigmRouter, ParadigmRouterConfig, TraversalParadigm, Cali
 pub use spreading::{SpreadingActivation, SpreadingActivationConfig, ActivationResult};
 pub use deps::{DEPSPlanner, DEPSResult, RecoveryPlan, RecoveryAction, FailureType};
 pub use session::{SessionGraph, SessionComparison, SessionStats, ComparisonWinner};
+pub use batch_spreading::BatchSeedSpreading;
+pub use gap_detection::{GapDetector, GapDetectionConfig, MeaningGap, GapEvidence, ScalarScale, ScalarScaleIndex};
+pub use seed_activation::{SeedActivationEngine, SeedActivationConfig};
+pub use discourse_tracking::{DiscourseTracker, DiscourseConfig};
 pub use types::*;

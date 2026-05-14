@@ -149,6 +149,8 @@ impl Rsvs {
                     derived_from_node_ids: vec![],
                     compression_reason: None,
                     internal_representation: false,
+                    is_utterance: false,
+                    utterance_tokens: Vec::new(),
                 },
                 policy_meta: Some(PolicyMeta {
                     policy_version: "6.0".to_string(),
@@ -162,6 +164,9 @@ impl Rsvs {
 
                 atoms: vec![],
                 fingerprint: None,
+                gap_annotations: std::collections::HashMap::new(),
+                sense_profiles: std::collections::HashMap::new(),
+                discourse_meta: None,
             })?;
 
             self.autonomy.register(id, 0.50, Tier::Tier2);
@@ -197,6 +202,9 @@ impl Rsvs {
         // --- Step 3: For each sentence, run attention + induce senses with compositions ---
         self.autonomy.begin_batch();
         let snapshot = self.autonomy.snapshot();
+
+        // v9.0: Collect sentence groups for Pathway 3 discourse tracking
+        self.sentence_groups.clear();
 
         for tokens in &sentences {
             self.total_contexts += 1;
@@ -415,6 +423,15 @@ impl Rsvs {
                     sense_mgr.purge_fragile();
                 }
             }
+
+            // v9.0: Collect sentence token NodeIds for P3 discourse tracking
+            let sentence_token_ids: Vec<NodeId> = tokens
+                .iter()
+                .filter_map(|t| self.token_to_id.get(t.as_str()).copied())
+                .collect();
+            if !sentence_token_ids.is_empty() {
+                self.sentence_groups.push(sentence_token_ids);
+            }
         }
 
         // --- Step 4: Check global stability ---
@@ -435,6 +452,106 @@ impl Rsvs {
         stats.watchlist_additions = self.autonomy.watchlist_len();
         // v6.1: Flag inactive atoms and record count
         stats.atoms_flagged_inactive = self.autonomy.flag_inactive_atoms(self.autonomy.context_counter);
+
+        // ================================================================
+        // v9.0: BATCH-LEVEL MEANING PATHWAY PROCESSING
+        // Runs AFTER all per-sentence sense induction is complete.
+        // Steps 5.5–5.9 from the meaning pathway architecture.
+        // ================================================================
+        if self.enable_meaning_pathways {
+            // Convert candidate token strings to NodeIds for pathway processing
+            let candidate_node_ids: Vec<NodeId> = candidates
+                .iter()
+                .filter_map(|t| self.token_to_id.get(t.as_str()).copied())
+                .collect();
+
+            // Step 5.5: Batch Seed Spreading (incremental)
+            if let Some(batch_spreading) = &mut self.batch_seed_spreading {
+                // Run full batch spreading once per ingest
+                batch_spreading.run_batch(&self.senses, &self.composition_index);
+                batch_spreading.set_last_batch(self.batch_counter);
+            }
+
+            // Step 5.6: Gap Detection (Pathway 1)
+            if let Some(gap_detector) = &self.gap_detector {
+                if let Some(batch_cache) = &self.batch_seed_spreading {
+                    let gap_results = gap_detector.process_batch(
+                        &candidate_node_ids,
+                        &self.graph,
+                        &self.senses,
+                        &self.composition_index,
+                        batch_cache,
+                    );
+
+                    // Apply gap annotations to nodes
+                    for (node_id, sense_id, annotations) in gap_results {
+                        if let Some(node) = self.graph.get_node_mut(node_id) {
+                            node.gap_annotations.insert(sense_id, annotations);
+                        }
+                    }
+                }
+            }
+
+            // Step 5.7: Sense Profiling (Pathway 2)
+            if let Some(seed_engine) = &mut self.seed_activation_engine {
+                if let Some(batch_cache) = &self.batch_seed_spreading {
+                    let profile_results = seed_engine.process_batch(
+                        &candidate_node_ids,
+                        &self.senses,
+                        batch_cache,
+                        self.batch_counter,
+                    );
+
+                    // Apply sense profiles to nodes
+                    for (node_id, sense_id, profile) in profile_results {
+                        if let Some(node) = self.graph.get_node_mut(node_id) {
+                            node.sense_profiles.insert(sense_id, profile);
+                        }
+                    }
+                }
+            }
+
+            // Step 5.8: Discourse Tracking (Pathway 3)
+            if let Some(discourse_tracker) = &mut self.discourse_tracker {
+                if let Some(batch_cache) = &self.batch_seed_spreading {
+                    let _utterance_ids = discourse_tracker.process_batch(
+                        &self.sentence_groups,
+                        &mut self.graph,
+                        batch_cache,
+                        self.batch_counter,
+                    );
+                }
+            }
+
+            // Step 5.9: Refinement (P3 context → adjust P1/P2)
+            // If discourse tracking found rhetorical relations, feed back
+            // into gap detection and profiling. This is a lightweight pass
+            // that adjusts confidence of existing annotations based on
+            // discourse coherence.
+            if let Some(discourse_tracker) = &self.discourse_tracker {
+                if let Some(centering) = discourse_tracker.current_centering() {
+                    // Low coherence → boost gap confidence (more uncertain meaning)
+                    if centering.coherence < 0.5 {
+                        for &node_id in &candidate_node_ids {
+                            if let Some(node) = self.graph.get_node_mut(node_id) {
+                                for annotations in node.gap_annotations.values_mut() {
+                                    for ann in annotations.iter_mut() {
+                                        ann.confidence = (ann.confidence * 1.1).min(1.0);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Step 6: Autonomy integration with pathway data
+            for &node_id in &candidate_node_ids {
+                if let Some(node) = self.graph.get_node_mut(node_id) {
+                    self.autonomy.incorporate_meaning_pathways(node);
+                }
+            }
+        }
 
         // v6.3: Edge weight decay — apply after each ingest batch
         self.batch_counter += 1;
@@ -564,6 +681,16 @@ impl Rsvs {
             );
             if !convergence_results.is_empty() {
                 let linked_count = convergence_results.iter().filter(|r| r.linked).count();
+
+                // v9.0: Converge meaning profiles for structurally equivalent nodes
+                for result in &convergence_results {
+                    if result.linked {
+                        self.convergence.converge_profiles(
+                            result.node_a, result.node_b, &mut self.graph,
+                        );
+                    }
+                }
+
                 self.emit_event(
                     &correlation_id,
                     "convergence_detected",

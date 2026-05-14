@@ -222,11 +222,16 @@ impl Rsvs {
                 derived_from_node_ids: comp_node_ids.clone(),
                 compression_reason: Some("explicit composition".to_string()),
                 internal_representation: false,
+                is_utterance: false,
+                utterance_tokens: Vec::new(),
             },
             policy_meta: None,
             language_links: vec![],
             atoms: comp_node_ids.clone(),
             fingerprint: None,
+            gap_annotations: std::collections::HashMap::new(),
+            sense_profiles: std::collections::HashMap::new(),
+            discourse_meta: None,
         };
 
         let node_id = self.graph.insert_node(node)?;

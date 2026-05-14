@@ -428,6 +428,7 @@ fn relation_type_to_str(rt: &RelationType) -> &'static str {
         RelationType::Spatial => "spatial",
         RelationType::Temporal => "temporal",
         RelationType::Causal => "causal",
+        RelationType::Discursive => "discursive",
     }
 }
 
@@ -439,6 +440,7 @@ fn str_to_relation_type(s: &str) -> RelationType {
         "spatial" => RelationType::Spatial,
         "temporal" => RelationType::Temporal,
         "causal" => RelationType::Causal,
+        "discursive" => RelationType::Discursive,
         _ => RelationType::Categorical,
     }
 }
@@ -717,6 +719,8 @@ pub fn from_snapshot(snap: RsvsSnapshot) -> Rsvs {
                 derived_from_node_ids: sn.derived_from_node_ids.clone(),
                 compression_reason: sn.compression_reason.clone(),
                 internal_representation: sn.internal_representation,
+                is_utterance: false,
+                utterance_tokens: Vec::new(),
             },
             policy_meta: sn.policy_meta.as_ref().map(|pm| PolicyMeta {
                 policy_version: pm.policy_version.clone(),
@@ -732,6 +736,9 @@ pub fn from_snapshot(snap: RsvsSnapshot) -> Rsvs {
             }).collect(),
             atoms: sn.atoms.clone(),
             fingerprint: None,
+            gap_annotations: HashMap::new(),
+            sense_profiles: HashMap::new(),
+            discourse_meta: None,
         };
         graph.label_to_id.insert(node.label.clone(), node.id);
         graph
@@ -919,6 +926,14 @@ pub fn from_snapshot(snap: RsvsSnapshot) -> Rsvs {
         ),
         deps_planner: crate::deps::DEPSPlanner::new(),
         convergence: crate::convergence::ConvergenceEngine::new(),
+
+        // v9.0: Meaning Pathways
+        enable_meaning_pathways: false,
+        batch_seed_spreading: None,
+        gap_detector: None,
+        seed_activation_engine: None,
+        discourse_tracker: None,
+        sentence_groups: Vec::new(),
     };
 
     // v7.3: Restore domain calibration from saved data
