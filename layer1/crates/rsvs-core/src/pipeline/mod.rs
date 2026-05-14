@@ -217,6 +217,20 @@ pub struct Rsvs {
 
     /// Sentence groups collected during per-sentence loop for P3.
     pub(crate) sentence_groups: Vec<Vec<NodeId>>,
+
+    // === v10.0: Emergent Reasoning Engines ===
+
+    /// v10.0 Engine 1: Compositional Blending — merge sense A + sense B → hybrid A∧B.
+    pub blending_engine: Option<crate::compositional_blending::CompositionalBlendingEngine>,
+
+    /// v10.0 Engine 2: Abductive Reasoning — X→Y→Z pattern hypothesis.
+    pub abductive_engine: Option<crate::abductive_reasoning::AbductiveReasoningEngine>,
+
+    /// v10.0 Engine 3: Pattern Mining — recurring composition pairs → named patterns.
+    pub pattern_mining_engine: Option<crate::pattern_mining::PatternMiningEngine>,
+
+    /// v10.0 Engine 4: Cross-Pathway Synthesis — P1 gap + P2 conflict → hidden meaning.
+    pub synthesis_engine: Option<crate::cross_pathway_synthesis::CrossPathwaySynthesisEngine>,
 }
 
 impl Rsvs {
@@ -298,6 +312,12 @@ impl Rsvs {
             seed_activation_engine: None,
             discourse_tracker: None,
             sentence_groups: Vec::new(),
+
+            // v10.0: Emergent Reasoning Engines (initialized after bootstrap)
+            blending_engine: None,
+            abductive_engine: None,
+            pattern_mining_engine: None,
+            synthesis_engine: None,
         };
 
         // v9.0: Initialize meaning pathway engines after bootstrap
@@ -311,11 +331,16 @@ impl Rsvs {
     /// v9.0: Initialize meaning pathway engines after bootstrap.
     ///
     /// Resolves seed NodeIds from the graph and creates all pathway engines.
+    /// v10.0: Also initializes the 4 emergent reasoning engines.
     fn init_meaning_pathways(&mut self) -> Result<(), RsvsError> {
         use crate::batch_spreading::BatchSeedSpreading;
         use crate::gap_detection::{GapDetector, GapDetectionConfig};
         use crate::seed_activation::{SeedActivationEngine, SeedActivationConfig};
         use crate::discourse_tracking::{DiscourseTracker, DiscourseConfig};
+        use crate::compositional_blending::{CompositionalBlendingEngine, BlendingConfig};
+        use crate::abductive_reasoning::{AbductiveReasoningEngine, AbductiveConfig};
+        use crate::pattern_mining::{PatternMiningEngine, PatternMiningConfig};
+        use crate::cross_pathway_synthesis::{CrossPathwaySynthesisEngine, SynthesisConfig};
 
         // Resolve seed NodeIds for each pathway
         let resolve_seeds = |labels: &[&str]| -> Vec<NodeId> {
@@ -352,6 +377,12 @@ impl Rsvs {
 
         // Create DiscourseTracker
         self.discourse_tracker = Some(DiscourseTracker::new(DiscourseConfig::default()));
+
+        // v10.0: Create Emergent Reasoning Engines
+        self.blending_engine = Some(CompositionalBlendingEngine::new(BlendingConfig::default()));
+        self.abductive_engine = Some(AbductiveReasoningEngine::new(AbductiveConfig::default()));
+        self.pattern_mining_engine = Some(PatternMiningEngine::new(PatternMiningConfig::default()));
+        self.synthesis_engine = Some(CrossPathwaySynthesisEngine::new(SynthesisConfig::default()));
 
         Ok(())
     }

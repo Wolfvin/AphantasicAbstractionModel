@@ -152,6 +152,10 @@ pub fn bootstrap(
             gap_annotations: HashMap::new(),
             sense_profiles: HashMap::new(),
             discourse_meta: None,
+            blend_results: HashMap::new(),
+            abductive_hypotheses: Vec::new(),
+            pattern_memberships: Vec::new(),
+            synthesis_results: HashMap::new(),
         };
 
         let id = graph.insert_node(node)?;

@@ -739,6 +739,10 @@ pub fn from_snapshot(snap: RsvsSnapshot) -> Rsvs {
             gap_annotations: HashMap::new(),
             sense_profiles: HashMap::new(),
             discourse_meta: None,
+            blend_results: HashMap::new(),
+            abductive_hypotheses: Vec::new(),
+            pattern_memberships: Vec::new(),
+            synthesis_results: HashMap::new(),
         };
         graph.label_to_id.insert(node.label.clone(), node.id);
         graph
@@ -934,6 +938,10 @@ pub fn from_snapshot(snap: RsvsSnapshot) -> Rsvs {
         seed_activation_engine: None,
         discourse_tracker: None,
         sentence_groups: Vec::new(),
+        blending_engine: None,
+        abductive_engine: None,
+        pattern_mining_engine: None,
+        synthesis_engine: None,
     };
 
     // v7.3: Restore domain calibration from saved data

@@ -232,6 +232,10 @@ impl Rsvs {
             gap_annotations: std::collections::HashMap::new(),
             sense_profiles: std::collections::HashMap::new(),
             discourse_meta: None,
+            blend_results: std::collections::HashMap::new(),
+            abductive_hypotheses: Vec::new(),
+            pattern_memberships: Vec::new(),
+            synthesis_results: std::collections::HashMap::new(),
         };
 
         let node_id = self.graph.insert_node(node)?;

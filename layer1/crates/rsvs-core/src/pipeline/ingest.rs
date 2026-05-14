@@ -167,6 +167,10 @@ impl Rsvs {
                 gap_annotations: std::collections::HashMap::new(),
                 sense_profiles: std::collections::HashMap::new(),
                 discourse_meta: None,
+                blend_results: std::collections::HashMap::new(),
+                abductive_hypotheses: Vec::new(),
+                pattern_memberships: Vec::new(),
+                synthesis_results: std::collections::HashMap::new(),
             })?;
 
             self.autonomy.register(id, 0.50, Tier::Tier2);
@@ -542,6 +546,136 @@ impl Rsvs {
                             }
                         }
                     }
+                }
+            }
+
+            // ================================================================
+            // v10.0: EMERGENT REASONING ENGINE PROCESSING
+            // Steps 5.10–5.13 from the emergent reasoning architecture.
+            // Runs AFTER P1/P2/P3 pathway processing is complete.
+            // ================================================================
+
+            // Step 5.10: Compositional Blending (Engine 1)
+            // Find pairs of nodes with shared compositions, create hybrid blends.
+            if let Some(blending_engine) = &self.blending_engine {
+                let blend_results = blending_engine.process_batch(
+                    &candidate_node_ids,
+                    &self.senses,
+                );
+
+                // Apply blend results to nodes
+                for blend in &blend_results {
+                    if let Some(node) = self.graph.get_node_mut(blend.source_a) {
+                        node.blend_results.entry(blend.sense_a).or_default().push(blend.clone());
+                    }
+                }
+
+                if !blend_results.is_empty() {
+                    self.emit_event(
+                        &correlation_id,
+                        "blending_completed",
+                        serde_json::json!({
+                            "blends_found": blend_results.len(),
+                            "high_emergence": blend_results.iter().filter(|b| b.emergence_potential > 0.3).count(),
+                        }),
+                    );
+                }
+            }
+
+            // Step 5.11: Abductive Reasoning (Engine 2)
+            // Find X→Y→Z patterns from shared activation + gap evidence.
+            if let Some(abductive_engine) = &self.abductive_engine {
+                if let Some(batch_cache) = &self.batch_seed_spreading {
+                    let hypotheses = abductive_engine.process_batch(
+                        &candidate_node_ids,
+                        &self.graph,
+                        &self.senses,
+                        batch_cache,
+                    );
+
+                    // Apply hypotheses to nodes
+                    for hyp in &hypotheses {
+                        if let Some(node) = self.graph.get_node_mut(hyp.node_x) {
+                            node.abductive_hypotheses.push(hyp.clone());
+                        }
+                    }
+
+                    if !hypotheses.is_empty() {
+                        self.emit_event(
+                            &correlation_id,
+                            "abductive_completed",
+                            serde_json::json!({
+                                "hypotheses_found": hypotheses.len(),
+                                "high_confidence": hypotheses.iter().filter(|h| h.confidence > 0.5).count(),
+                            }),
+                        );
+                    }
+                }
+            }
+
+            // Step 5.12: Pattern Mining (Engine 3)
+            // Detect recurring composition pairs, create named pattern nodes.
+            if let Some(pattern_engine) = &mut self.pattern_mining_engine {
+                let patterns = pattern_engine.process_batch(
+                    &candidate_node_ids,
+                    &self.senses,
+                    &self.seed_node_ids,
+                    &self.graph,
+                );
+
+                // Apply pattern memberships to exhibiting nodes
+                for pattern in &patterns {
+                    for &node_id in &pattern.exhibiting_nodes {
+                        if let Some(node) = self.graph.get_node_mut(node_id) {
+                            node.pattern_memberships.push(pattern.node_id);
+                        }
+                    }
+                }
+
+                if !patterns.is_empty() {
+                    self.emit_event(
+                        &correlation_id,
+                        "pattern_mining_completed",
+                        serde_json::json!({
+                            "patterns_found": patterns.len(),
+                            "patterns": patterns.iter().map(|p| serde_json::json!({
+                                "label": p.label,
+                                "support": p.support_count,
+                                "confidence": format!("{:.3}", p.confidence),
+                            })).collect::<Vec<_>>(),
+                        }),
+                    );
+                }
+            }
+
+            // Step 5.13: Cross-Pathway Synthesis (Engine 4)
+            // When P1 gap + P2 conflict on same node/sense → discover hidden meaning.
+            if let Some(synthesis_engine) = &self.synthesis_engine {
+                let synthesis_results = synthesis_engine.process_batch(
+                    &candidate_node_ids,
+                    &self.graph,
+                );
+
+                // Apply synthesis results to nodes
+                for result in &synthesis_results {
+                    if let Some(node) = self.graph.get_node_mut(result.node_id) {
+                        node.synthesis_results.entry(result.sense_id).or_default().push(result.clone());
+                    }
+                }
+
+                if !synthesis_results.is_empty() {
+                    self.emit_event(
+                        &correlation_id,
+                        "synthesis_completed",
+                        serde_json::json!({
+                            "syntheses_found": synthesis_results.len(),
+                            "hidden_meanings": synthesis_results.iter().map(|r| serde_json::json!({
+                                "description": r.hidden_meaning.description,
+                                "type": format!("{:?}", r.hidden_meaning.meaning_type),
+                                "confidence": format!("{:.3}", r.confidence),
+                            })).collect::<Vec<_>>(),
+                        }),
+                    );
                 }
             }
 

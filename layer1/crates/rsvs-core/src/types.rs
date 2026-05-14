@@ -1,4 +1,10 @@
-//! Core types for RSVS v6.1 — Compositional Architecture with Depth-Controlled Traversal
+//! Core types for RSVS v10.0 — Emergent Reasoning Engines
+//!
+//! v10.0 builds on v9.0 Meaning Pathways with 4 Emergent Reasoning Engines:
+//! - Compositional Blending: sense(A) + sense(B) → hybrid sense(A∧B)
+//! - Abductive Reasoning: X→Y→Z pattern hypothesis from shared activation
+//! - Pattern Mining: recurring composition pairs → named pattern nodes
+//! - Cross-Pathway Synthesis: P1 gap + P2 conflict → deeper hidden meaning
 //!
 //! v6.1 builds on v6.0 with:
 //! - `TraversalConfig`: Controls recursive composition expansion during queries
@@ -425,6 +431,147 @@ pub enum Quantifier {
     Generic,
 }
 
+// -----------------------------------------------------------------------
+// v10.0: Emergent Reasoning Engine Types
+// -----------------------------------------------------------------------
+
+/// A hybrid blend result from the Compositional Blending Engine.
+///
+/// When sense(A) and sense(B) are blended, the result is a new
+/// compositional sense that merges shared compositions and marks
+/// divergent ones. This is the structural basis for A+B→C emergence.
+///
+/// Example: sense(dikhianati) + sense(harga_diri) → sense(dikhianati∧harga_diri)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BlendResult {
+    /// The two source nodes that were blended.
+    pub source_a: NodeId,
+    pub source_b: NodeId,
+    /// Sense IDs from each source.
+    pub sense_a: SenseId,
+    pub sense_b: SenseId,
+    /// Shared compositions (present in both A and B).
+    pub shared_compositions: Vec<CompositionRef>,
+    /// Divergent compositions from A (not in B).
+    pub divergent_a: Vec<CompositionRef>,
+    /// Divergent compositions from B (not in A).
+    pub divergent_b: Vec<CompositionRef>,
+    /// The newly created hybrid node ID (if committed to graph).
+    pub hybrid_node_id: Option<NodeId>,
+    /// Blend quality score (0.0–1.0): higher = more shared structure.
+    pub blend_quality: f32,
+    /// Emergence potential: how much this blend opens new meaning.
+    /// High when divergent compositions from both sides are strong.
+    pub emergence_potential: f32,
+}
+
+/// An abductive hypothesis from the Abductive Reasoning Engine.
+///
+/// When X and Y both activate Z, and X has a gap toward Y, the engine
+/// hypothesizes that X→Y→Z is a single meaning pattern. This is the
+/// mechanism behind discovering "dikhianati → harga_diri → trauma".
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AbductiveHypothesis {
+    /// The starting node (X).
+    pub node_x: NodeId,
+    /// The intermediate node (Y) — linked by gap from X.
+    pub node_y: NodeId,
+    /// The convergent node (Z) — activated by both X and Y.
+    pub node_z: NodeId,
+    /// The gap that links X → Y.
+    pub linking_gap: GapAnnotation,
+    /// Shared seed activations between X and Z.
+    pub shared_seeds_xz: Vec<(NodeId, f32)>,
+    /// Shared seed activations between Y and Z.
+    pub shared_seeds_yz: Vec<(NodeId, f32)>,
+    /// Hypothesis confidence (0.0–1.0).
+    pub confidence: f32,
+    /// Whether this hypothesis created a pattern node in the graph.
+    pub committed: bool,
+}
+
+/// A named pattern discovered by the Pattern Mining Engine.
+///
+/// When composition pairs (e.g., risk+identity) appear in multiple nodes
+/// (dikhianati, trauma, sakit), the engine creates a "named pattern" node
+/// that abstracts this recurring structure.
+///
+/// Example: (risk+identity) recurring → pattern = "kekerasan_terhadap_identitas"
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NamedPattern {
+    /// The pattern node ID in the graph.
+    pub node_id: NodeId,
+    /// Human-readable label for this pattern.
+    pub label: String,
+    /// The seed composition pair that defines this pattern.
+    pub seed_composition: (NodeId, NodeId),
+    /// Nodes that exhibit this pattern.
+    pub exhibiting_nodes: Vec<NodeId>,
+    /// How many nodes exhibit this pattern (≥ min_support required).
+    pub support_count: usize,
+    /// Pattern confidence (0.0–1.0).
+    pub confidence: f32,
+    /// The composition overlap that defines this pattern.
+    pub defining_compositions: Vec<CompositionRef>,
+}
+
+/// A synthesis result from the Cross-Pathway Synthesis Engine.
+///
+/// When Pathway 1 finds a gap AND Pathway 2 finds a conflict on the
+/// same node, the engine triggers a deeper search for hidden meaning.
+///
+/// Example: dikhianati has gap→harga_diri + conflict(AffectiveSocial) →
+///   "makna tersembunyi: ini tentang harga diri"
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SynthesisResult {
+    /// The node where the synthesis was triggered.
+    pub node_id: NodeId,
+    /// The sense where both gap and conflict were found.
+    pub sense_id: SenseId,
+    /// The gap annotation from Pathway 1.
+    pub gap: GapAnnotation,
+    /// The conflict from Pathway 2.
+    pub conflict: PathwayConflict,
+    /// The hidden meaning discovered by synthesis.
+    pub hidden_meaning: HiddenMeaning,
+    /// Synthesis confidence (0.0–1.0).
+    pub confidence: f32,
+    /// The target node that represents the hidden meaning (if created).
+    pub meaning_node_id: Option<NodeId>,
+}
+
+/// Hidden meaning discovered by cross-pathway synthesis.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HiddenMeaning {
+    /// Human-readable description of the hidden meaning.
+    pub description: String,
+    /// The target node that the hidden meaning points to.
+    pub target_node: NodeId,
+    /// Seed trace supporting this hidden meaning.
+    pub seed_trace: Vec<NodeId>,
+    /// Type of hidden meaning discovered.
+    pub meaning_type: HiddenMeaningType,
+    /// Strength of evidence (0.0–1.0).
+    pub evidence_strength: f32,
+}
+
+/// Types of hidden meaning that can be discovered.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum HiddenMeaningType {
+    /// The surface meaning masks a deeper affective truth.
+    AffectiveDisguise,
+    /// A social dynamic is hidden beneath the literal content.
+    SocialConcealment,
+    /// The utterance is a performative act disguised as something else.
+    PerformativeMask,
+    /// A trauma pattern underlies the surface expression.
+    TraumaPattern,
+    /// Power dynamics hidden in the communication.
+    PowerDynamic,
+    /// General emergent meaning not fitting other categories.
+    Emergent,
+}
+
 /// A node ID. u32 = 4 bytes vs ~50 bytes for a String.
 pub type NodeId = u32;
 
@@ -519,6 +666,14 @@ pub enum EdgeSource {
     GapDetection,
     /// Created by discourse tracking (P3) — rhetorical/performative edges.
     Discourse,
+    /// v10.0: Created by compositional blending — hybrid A∧B edges.
+    Blending,
+    /// v10.0: Created by abductive reasoning — hypothetical X→Y→Z edges.
+    Abductive,
+    /// v10.0: Created by pattern mining — named pattern edges.
+    PatternMining,
+    /// v10.0: Created by cross-pathway synthesis — hidden meaning edges.
+    Synthesis,
 }
 
 /// L0-02: Relation type for edges — mirrors Python Layer 0 RelationType.
@@ -701,6 +856,27 @@ pub struct Node {
     /// rhetorical relation, and extensional set.
     #[serde(default)]
     pub discourse_meta: Option<DiscourseMeta>,
+
+    // === v10.0: Emergent Reasoning Engine Data ===
+
+    /// Blend results per sense — from Compositional Blending Engine.
+    /// Key = sense_id, Value = blend results for that sense.
+    #[serde(default)]
+    pub blend_results: HashMap<SenseId, Vec<BlendResult>>,
+
+    /// Abductive hypotheses — from Abductive Reasoning Engine.
+    /// Key = node_id of the hypothesis target (Z node).
+    #[serde(default)]
+    pub abductive_hypotheses: Vec<AbductiveHypothesis>,
+
+    /// Named patterns this node participates in — from Pattern Mining Engine.
+    #[serde(default)]
+    pub pattern_memberships: Vec<NodeId>,
+
+    /// Synthesis results — from Cross-Pathway Synthesis Engine.
+    /// Key = sense_id, Value = synthesis results for that sense.
+    #[serde(default)]
+    pub synthesis_results: HashMap<SenseId, Vec<SynthesisResult>>,
 }
 
 impl Default for Node {
@@ -723,6 +899,10 @@ impl Default for Node {
             gap_annotations: HashMap::new(),
             sense_profiles: HashMap::new(),
             discourse_meta: None,
+            blend_results: HashMap::new(),
+            abductive_hypotheses: Vec::new(),
+            pattern_memberships: Vec::new(),
+            synthesis_results: HashMap::new(),
         }
     }
 }

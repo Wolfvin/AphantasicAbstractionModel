@@ -1216,6 +1216,10 @@ mod graph_tests {
                 gap_annotations: HashMap::new(),
                 sense_profiles: HashMap::new(),
                 discourse_meta: None,
+                blend_results: HashMap::new(),
+                abductive_hypotheses: Vec::new(),
+                pattern_memberships: Vec::new(),
+                synthesis_results: HashMap::new(),
             })
             .unwrap();
         let expanded = g.expand(id);
@@ -1244,6 +1248,10 @@ mod graph_tests {
                 gap_annotations: HashMap::new(),
                 sense_profiles: HashMap::new(),
                 discourse_meta: None,
+                blend_results: HashMap::new(),
+                abductive_hypotheses: Vec::new(),
+                pattern_memberships: Vec::new(),
+                synthesis_results: HashMap::new(),
             })
             .unwrap();
         let a2 = g
@@ -1265,6 +1273,10 @@ mod graph_tests {
                 gap_annotations: HashMap::new(),
                 sense_profiles: HashMap::new(),
                 discourse_meta: None,
+                blend_results: HashMap::new(),
+                abductive_hypotheses: Vec::new(),
+                pattern_memberships: Vec::new(),
+                synthesis_results: HashMap::new(),
             })
             .unwrap();
         let id = g
@@ -1294,6 +1306,10 @@ mod graph_tests {
                 gap_annotations: HashMap::new(),
                 sense_profiles: HashMap::new(),
                 discourse_meta: None,
+                blend_results: HashMap::new(),
+                abductive_hypotheses: Vec::new(),
+                pattern_memberships: Vec::new(),
+                synthesis_results: HashMap::new(),
             })
             .unwrap();
         let expanded = g.expand(id);
@@ -1322,6 +1338,10 @@ mod graph_tests {
                 gap_annotations: HashMap::new(),
                 sense_profiles: HashMap::new(),
                 discourse_meta: None,
+                blend_results: HashMap::new(),
+                abductive_hypotheses: Vec::new(),
+                pattern_memberships: Vec::new(),
+                synthesis_results: HashMap::new(),
             })
             .unwrap();
         let id = g
@@ -1351,6 +1371,10 @@ mod graph_tests {
                 gap_annotations: HashMap::new(),
                 sense_profiles: HashMap::new(),
                 discourse_meta: None,
+                blend_results: HashMap::new(),
+                abductive_hypotheses: Vec::new(),
+                pattern_memberships: Vec::new(),
+                synthesis_results: HashMap::new(),
             })
             .unwrap();
         let expanded = g.expand(id);
@@ -1386,6 +1410,10 @@ mod graph_tests {
             gap_annotations: HashMap::new(),
             sense_profiles: HashMap::new(),
             discourse_meta: None,
+            blend_results: HashMap::new(),
+            abductive_hypotheses: Vec::new(),
+            pattern_memberships: Vec::new(),
+            synthesis_results: HashMap::new(),
         });
         assert!(matches!(result, Err(RsvsError::CircularRef { .. })));
     }
@@ -1412,6 +1440,10 @@ mod graph_tests {
                 gap_annotations: HashMap::new(),
                 sense_profiles: HashMap::new(),
                 discourse_meta: None,
+                blend_results: HashMap::new(),
+                abductive_hypotheses: Vec::new(),
+                pattern_memberships: Vec::new(),
+                synthesis_results: HashMap::new(),
             })
             .unwrap();
         let result = g.insert_edge(Edge {
@@ -1447,6 +1479,10 @@ mod graph_tests {
                 gap_annotations: HashMap::new(),
                 sense_profiles: HashMap::new(),
                 discourse_meta: None,
+                blend_results: HashMap::new(),
+                abductive_hypotheses: Vec::new(),
+                pattern_memberships: Vec::new(),
+                synthesis_results: HashMap::new(),
             })
             .unwrap();
         let n2 = g
@@ -1468,6 +1504,10 @@ mod graph_tests {
                 gap_annotations: HashMap::new(),
                 sense_profiles: HashMap::new(),
                 discourse_meta: None,
+                blend_results: HashMap::new(),
+                abductive_hypotheses: Vec::new(),
+                pattern_memberships: Vec::new(),
+                synthesis_results: HashMap::new(),
             })
             .unwrap();
         let result = g.insert_edge(Edge {
@@ -1529,6 +1569,10 @@ mod graph_tests {
             gap_annotations: HashMap::new(),
             sense_profiles: HashMap::new(),
             discourse_meta: None,
+            blend_results: HashMap::new(),
+            abductive_hypotheses: Vec::new(),
+            pattern_memberships: Vec::new(),
+            synthesis_results: HashMap::new(),
         })
         .unwrap();
         assert_eq!(g.node_count(), 1);
@@ -1570,6 +1614,10 @@ mod v60_node_tests {
             gap_annotations: HashMap::new(),
             sense_profiles: HashMap::new(),
             discourse_meta: None,
+            blend_results: HashMap::new(),
+            abductive_hypotheses: Vec::new(),
+            pattern_memberships: Vec::new(),
+            synthesis_results: HashMap::new(),
         };
         assert_eq!(node.kind, "node");
         assert_eq!(node.surface_label, "test@en");
@@ -1606,6 +1654,10 @@ mod v60_node_tests {
             gap_annotations: HashMap::new(),
             sense_profiles: HashMap::new(),
             discourse_meta: None,
+            blend_results: HashMap::new(),
+            abductive_hypotheses: Vec::new(),
+            pattern_memberships: Vec::new(),
+            synthesis_results: HashMap::new(),
         };
         assert!(node.is_seed);
         assert!(node.is_locked);
@@ -1647,6 +1699,10 @@ mod v60_node_tests {
             gap_annotations: HashMap::new(),
             sense_profiles: HashMap::new(),
             discourse_meta: None,
+            blend_results: HashMap::new(),
+            abductive_hypotheses: Vec::new(),
+            pattern_memberships: Vec::new(),
+            synthesis_results: HashMap::new(),
         };
         assert_eq!(
             node.semantic.compression_state,
@@ -1778,6 +1834,10 @@ mod transformer_bridge_tests {
             gap_annotations: HashMap::new(),
             sense_profiles: HashMap::new(),
             discourse_meta: None,
+            blend_results: HashMap::new(),
+            abductive_hypotheses: Vec::new(),
+            pattern_memberships: Vec::new(),
+            synthesis_results: HashMap::new(),
         }).unwrap();
         let n2 = graph.insert_node(Node {
             id: 0,
@@ -1797,6 +1857,10 @@ mod transformer_bridge_tests {
             gap_annotations: HashMap::new(),
             sense_profiles: HashMap::new(),
             discourse_meta: None,
+            blend_results: HashMap::new(),
+            abductive_hypotheses: Vec::new(),
+            pattern_memberships: Vec::new(),
+            synthesis_results: HashMap::new(),
         }).unwrap();
 
         let mut senses = std::collections::HashMap::new();

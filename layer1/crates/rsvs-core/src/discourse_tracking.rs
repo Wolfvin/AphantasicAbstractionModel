@@ -141,6 +141,10 @@ impl DiscourseTracker {
             gap_annotations: HashMap::new(),
             sense_profiles: HashMap::new(),
             discourse_meta: Some(DiscourseMeta::default()),
+            blend_results: HashMap::new(),
+            abductive_hypotheses: Vec::new(),
+            pattern_memberships: Vec::new(),
+            synthesis_results: HashMap::new(),
         })?;
 
         // Create composition edges from utterance to each token

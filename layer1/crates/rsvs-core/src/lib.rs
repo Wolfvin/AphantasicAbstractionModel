@@ -55,6 +55,12 @@ pub mod deps;
 pub mod session;
 pub mod meaning_pathway_tests;
 
+pub mod compositional_blending;
+pub mod abductive_reasoning;
+pub mod pattern_mining;
+pub mod cross_pathway_synthesis;
+pub mod emergent_reasoning_tests;
+
 pub use attention::{
     is_groundable_to_seeds, sentence_contains_seed, text_to_sentences, tokenize, AttentionComponent, AttentionConfig,
     CoocStats, DomainAttentionConfig, EntityDetector, RsvsAttention,
@@ -91,4 +97,8 @@ pub use batch_spreading::BatchSeedSpreading;
 pub use gap_detection::{GapDetector, GapDetectionConfig, MeaningGap, GapEvidence, ScalarScale, ScalarScaleIndex};
 pub use seed_activation::{SeedActivationEngine, SeedActivationConfig};
 pub use discourse_tracking::{DiscourseTracker, DiscourseConfig};
+pub use compositional_blending::{CompositionalBlendingEngine, BlendingConfig};
+pub use abductive_reasoning::{AbductiveReasoningEngine, AbductiveConfig};
+pub use pattern_mining::{PatternMiningEngine, PatternMiningConfig};
+pub use cross_pathway_synthesis::{CrossPathwaySynthesisEngine, SynthesisConfig};
 pub use types::*;
