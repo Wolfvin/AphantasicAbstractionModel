@@ -54,6 +54,18 @@ from layer3.reasoning import ReasoningEngine, DeductiveChain, DeductiveStep
 from layer3.policy import DeductivePolicyEngine
 from layer3.coder import DeductiveCoderLayer
 
+# 5-Pillar Validation Gates — full integration
+from validation_gates import (
+    SignalExtractionGate, SignalResult,
+    RegimeDetectionGate, RegimeState,
+    UncertaintyCalibrationGate, CalibrationRecord,
+    StatisticalEdgeGate, EdgeAssessment,
+    ExecutionDisciplineGate, DisciplineVerdict,
+)
+from validation_gates.signal_extraction import SignalVerdict
+from validation_gates.regime_detection import CognitiveRegime
+from validation_gates.statistical_edge import ReasoningPath
+
 logger = logging.getLogger(__name__)
 
 
@@ -476,6 +488,15 @@ class AamPipeline:
         self._last_maintenance_time: float = 0.0
         self._maintenance_log: list[dict] = []
 
+        # 5-Pillar Validation Gates — standalone pipeline-level instances
+        # These are used for pipeline-level checks and metadata collection
+        # in addition to the per-layer gate instances.
+        self.signal_gate = SignalExtractionGate()     # Gate 1: L0/L1 checkpoint
+        self.regime_gate = RegimeDetectionGate()      # Gate 2: L2 checkpoint
+        self.calibration_gate = UncertaintyCalibrationGate()  # Gate 3: L3 checkpoint
+        self.edge_gate = StatisticalEdgeGate()        # Gate 4: L4 checkpoint
+        self.discipline_gate = ExecutionDisciplineGate()  # Gate 5: L5 checkpoint
+
     # -------------------------------------------------------------------
     # Public API
     # -------------------------------------------------------------------
@@ -513,6 +534,27 @@ class AamPipeline:
         all_predictions: list[dict] = []
         all_belief_updates: list[dict] = []
         non_fatal_errors: list[dict] = []
+
+        # 5-Pillar Gate tracking for metadata
+        gate_results: dict[str, dict] = {}
+
+        # ══════════════════════════════════════════════════════════════
+        # 5-PILLAR GATE 1: Signal Extraction — filter noise before ingest
+        # ══════════════════════════════════════════════════════════════
+        try:
+            signal_result = self.signal_gate.evaluate(
+                raw_input=question,
+            )
+            gate_results["gate_1_signal"] = signal_result.to_dict()
+            if signal_result.verdict == SignalVerdict.REJECT:
+                logger.info("Gate 1 REJECTED input as noise: %s", signal_result.reason)
+                # Still process, but mark as low-signal
+                all_evidence.append({
+                    "type": "signal_gate_reject",
+                    "reason": signal_result.reason,
+                })
+        except Exception as exc:
+            logger.debug("Gate 1 (Signal) failed: %s", exc)
 
         # G2-6: Systematic chat ingest — every conversation enriches the graph
         # Analogi: Setiap percakapan yang Jin Soun dengar dicatat di Simhyeon Pavilion
@@ -571,6 +613,15 @@ class AamPipeline:
             )
             non_fatal_errors.append(err.to_dict())
             layer1_output = Layer1Output()
+
+        # ══════════════════════════════════════════════════════════════
+        # 5-PILLAR GATE 2: Regime Detection — detect current cognitive environment
+        # ══════════════════════════════════════════════════════════════
+        try:
+            regime_state = self.situation.current_regime
+            gate_results["gate_2_regime"] = regime_state.to_dict()
+        except Exception as exc:
+            logger.debug("Gate 2 (Regime) failed: %s", exc)
 
         # ---- Step 3: RSVS Core + Predictive Engine ----
         # Make predictions based on context
@@ -664,6 +715,22 @@ class AamPipeline:
                 non_fatal_errors.append(err.to_dict())
 
         # ---- Step 4.5: Layer 3 Deductive Reasoning (if applicable) ----
+        # ══════════════════════════════════════════════════════════════
+        # 5-PILLAR GATE 3: Uncertainty Calibration — calibrate confidence
+        # ══════════════════════════════════════════════════════════════
+        # Calibration is applied within ReasoningEngine.build_chain(),
+        # but we also record the pipeline-level calibration result here.
+        try:
+            raw_conf = pattern_result.confidence if pattern_result else 0.0
+            regime_str = self.situation.current_regime.regime.value if hasattr(self.situation.current_regime, 'regime') else ""
+            cal_result = self.calibration_gate.calibrate(
+                raw_confidence=raw_conf,
+                regime=regime_str,
+            )
+            gate_results["gate_3_calibration"] = cal_result.to_dict()
+        except Exception as exc:
+            logger.debug("Gate 3 (Calibration) failed: %s", exc)
+
         # Analogi: Setelah Jin Soun menarik pola, dia menelusuri
         # rantai deduksi — apakah ada bukti yang lebih kuat? Apakah
         # jawaban ini perlu diperkuat dengan penalaran deduktif?
@@ -693,6 +760,25 @@ class AamPipeline:
                 non_fatal_errors.append(err.to_dict())
 
         # ---- Step 5: Belief Update ----
+        # ══════════════════════════════════════════════════════════════
+        # 5-PILLAR GATE 4: Statistical Edge — validate reasoning has positive EV
+        # ══════════════════════════════════════════════════════════════
+        # Edge assessment is applied within PredictiveEngine,
+        # but we also record the pipeline-level assessment here.
+        try:
+            edge_path = ReasoningPath(
+                path_type=query_mode if query_mode != "general" else "pattern",
+                regime=self.situation.current_regime.regime.value if hasattr(self.situation.current_regime, 'regime') else "",
+                step_types=[s.step_type for s in (pattern_result.steps or [])[:3]],
+            )
+            edge_assessment = self.edge_gate.assess(
+                path=edge_path,
+                current_confidence=pattern_result.confidence if pattern_result else 0.0,
+            )
+            gate_results["gate_4_edge"] = edge_assessment.to_dict()
+        except Exception as exc:
+            logger.debug("Gate 4 (Edge) failed: %s", exc)
+
         if prediction:
             try:
                 belief_updates = self.predictive.observe_and_update(
@@ -916,6 +1002,8 @@ class AamPipeline:
                 "query_mode": query_mode,
                 "narrative_reliable": is_reliable,
                 "reliability_reason": reliability_reason,
+                # 5-Pillar Gate Results
+                "validation_gates": gate_results,
             },
             appraise_warning=appraise_warning,
             errors=non_fatal_errors,

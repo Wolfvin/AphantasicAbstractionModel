@@ -36,6 +36,9 @@ from typing import Any, Optional
 
 from .bridge import AbstractionBridge, RsvsBridge, get_bridge
 
+# 5-Pillar: Gate 5 — Execution Discipline
+from validation_gates.execution_discipline import ExecutionDisciplineGate, DisciplineVerdict
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -304,6 +307,9 @@ class PatternOutput:
         # History of processed triggers
         self._history: list[PatternResult] = []
 
+        # 5-Pillar: Gate 5 — Execution Discipline
+        self._discipline_gate = ExecutionDisciplineGate()
+
         if self.rsvs_available:
             logger.info("PatternOutput initialized with RSVS core (rust=%s)", self.is_rust_core)
         else:
@@ -434,6 +440,63 @@ class PatternOutput:
         else:
             result.confidence = 0.0
 
+        # 5-Pillar Gate 5: Enforce Execution Discipline on output
+        try:
+            evidence_count = len(evidence_nodes) if 'evidence_nodes' in dir() else sum(
+                len(s.evidence_nodes) for s in result.steps
+            )
+            discipline_verdict = self._discipline_gate.enforce(
+                confidence=result.confidence,
+                evidence_count=evidence_count,
+                output_text=result.narrative,
+                regime="",  # Regime populated by pipeline
+                anomalies=result.anomalies,
+                reasoning_steps=len(result.steps),
+            )
+
+            if not discipline_verdict.allowed:
+                # Output blocked — rewrite as structural-only response
+                logger.warning(
+                    "ExecutionDisciplineGate BLOCKED output: %s",
+                    discipline_verdict.reason,
+                )
+                structural_parts = []
+                for step in result.steps:
+                    if step.evidence_nodes:
+                        structural_parts.append(
+                            f"[{step.step_type}] {step.description} "
+                            f"(evidence: {', '.join(step.evidence_nodes[:3])}, "
+                            f"confidence: {step.confidence:.1%})"
+                        )
+                if structural_parts:
+                    result.narrative = "Output blocked by discipline gate. Structural analysis:\n" + "\n".join(structural_parts)
+                else:
+                    result.narrative = "Output blocked: insufficient evidence or confidence."
+                result.confidence = discipline_verdict.adjusted_confidence
+            else:
+                # Apply discipline adjustments
+                result.confidence = min(result.confidence, discipline_verdict.confidence_cap)
+                result.confidence = discipline_verdict.adjusted_confidence
+
+                # Add required caveats to narrative
+                if discipline_verdict.required_caveats:
+                    caveat_text = "\n\n--- Caveats ---\n" + "\n".join(
+                        f"- {c}" for c in discipline_verdict.required_caveats
+                    )
+                    result.narrative += caveat_text
+
+            # Store discipline info in evidence chain
+            result.evidence_chain.append({
+                "type": "discipline_gate",
+                "verdict": discipline_verdict.verdict,
+                "confidence_cap": discipline_verdict.confidence_cap,
+                "hallucination_risk": discipline_verdict.hallucination_risk,
+                "caveats": discipline_verdict.required_caveats,
+                "reason": discipline_verdict.reason,
+            })
+        except Exception as exc:
+            logger.debug("ExecutionDisciplineGate failed: %s", exc)
+
         # Store in history
         self._history.append(result)
 
@@ -446,6 +509,11 @@ class PatternOutput:
         )
 
         return result
+
+    @property
+    def discipline_gate(self) -> ExecutionDisciplineGate:
+        """Access the discipline gate for external queries."""
+        return self._discipline_gate
 
     # ==================================================================
     # Step 1: TRIGGER

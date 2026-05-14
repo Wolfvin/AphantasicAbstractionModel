@@ -83,6 +83,13 @@ class PerceptualTuple:
     Contoh:
         subject="apel", relation_type=DIFFERENTIAL, predicate="pir",
         dimension="bentuk", direction="lebih_bulat", confidence=0.85
+
+    5-Pillar Enrichment (Gate 1: Signal Extraction):
+        predictive_value: Estimated predictive value of this signal.
+            Causal signal (0.8) > Temporal (0.7) > Comparative (0.6) > Factual (0.3).
+            Used by SignalExtractionGate to filter noise from signal.
+        signal_type: Classification of the signal type extracted from this tuple.
+            Maps directly to the relation type for automated classification.
     """
     subject:         str
     relation_type:   RelationType
@@ -93,10 +100,54 @@ class PerceptualTuple:
     source_modality: ModalityType = ModalityType.TEXT
     metadata:        Union[PerceptualTupleMeta, dict] = field(default_factory=PerceptualTupleMeta)
 
+    # 5-Pillar: Gate 1 — Signal Extraction enrichment
+    predictive_value: float = 0.5
+    """Estimated predictive value: how much this signal helps predict future outcomes.
+    Causal=0.8, Temporal=0.7, Comparative=0.6, Relational=0.5, Categorical=0.4, Factual=0.3.
+    Set automatically by adapter.py when SignalExtractionGate is used."""
+
+    signal_type: str = ""
+    """Signal type classification from Gate 1.
+    Populated by SignalExtractionGate: causal, temporal, comparative, relational, categorical, factual."""
+
     def __post_init__(self):
-        """Ensure metadata is always PerceptualTupleMeta (backward compat)."""
+        """Ensure metadata is always PerceptualTupleMeta (backward compat).
+
+        Also auto-populate signal_type and predictive_value from relation_type
+        if they weren't explicitly set (5-Pillar Gate 1 enrichment).
+        """
         if isinstance(self.metadata, dict):
             self.metadata = PerceptualTupleMeta.from_dict(self.metadata)
+
+        # Auto-populate signal metadata from relation type if not explicitly set
+        if not self.signal_type:
+            self.signal_type = self._infer_signal_type()
+        if self.predictive_value == 0.5 and self.signal_type:
+            self.predictive_value = self._infer_predictive_value()
+
+    def _infer_signal_type(self) -> str:
+        """Infer signal type from relation type for 5-Pillar Gate 1."""
+        mapping = {
+            RelationType.CAUSAL: "causal",
+            RelationType.TEMPORAL: "temporal",
+            RelationType.DIFFERENTIAL: "comparative",
+            RelationType.CATEGORICAL: "categorical",
+            RelationType.FUNCTIONAL: "factual",
+            RelationType.SPATIAL: "factual",
+        }
+        return mapping.get(self.relation_type, "factual")
+
+    def _infer_predictive_value(self) -> float:
+        """Infer predictive value from signal type for 5-Pillar Gate 1."""
+        pv_map = {
+            "causal": 0.8,
+            "temporal": 0.7,
+            "comparative": 0.6,
+            "relational": 0.5,
+            "categorical": 0.4,
+            "factual": 0.3,
+        }
+        return pv_map.get(self.signal_type, 0.3) * self.confidence
 
     def get_metadata_dict(self) -> dict:
         """Get metadata as a plain dict regardless of internal type."""

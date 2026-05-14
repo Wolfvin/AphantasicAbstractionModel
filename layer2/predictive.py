@@ -35,6 +35,9 @@ from typing import Any, Optional
 
 from .bridge import AbstractionBridge, RsvsBridge, get_bridge
 
+# 5-Pillar: Gate 4 — Statistical Edge
+from validation_gates.statistical_edge import StatisticalEdgeGate, ReasoningPath
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -261,6 +264,9 @@ class PredictiveEngine:
         self._loop_interval: float = 30.0
         self._loop_thread: threading.Thread | None = None
 
+        # 5-Pillar: Gate 4 — Statistical Edge
+        self._edge_gate = StatisticalEdgeGate()
+
         # P2-7: Removed self._fallback_graph — now delegates to self._bridge
         # which always has a _FallbackGraph when Rust core is unavailable.
 
@@ -382,6 +388,25 @@ class PredictiveEngine:
             context=context,
         )
 
+        # 5-Pillar Gate 4: Assess statistical edge of this prediction
+        try:
+            path = ReasoningPath(
+                path_type="prediction",
+                regime="",  # Regime populated by pipeline
+                step_types=["predict"],
+            )
+            edge_result = self._edge_gate.assess(path, current_confidence=confidence)
+            if edge_result.verdict == "reject":
+                # No statistical edge — reduce prediction confidence
+                confidence *= 0.5
+                prediction.confidence = confidence
+            elif edge_result.verdict == "caution":
+                # Marginal edge — slightly reduce confidence
+                confidence *= 0.8
+                prediction.confidence = confidence
+        except Exception as exc:
+            logger.debug("StatisticalEdgeGate failed: %s", exc)
+
         self._predictions.append(prediction)
         logger.debug(
             "Prediction: '%s' → %s (confidence=%.3f, context=%s)",
@@ -460,6 +485,22 @@ class PredictiveEngine:
         if updates:
             new_anomalies = self.detect_anomalies()
             self._anomalies.extend(new_anomalies)
+
+            # 5-Pillar Gate 4: Record outcomes for edge tracking
+            for update in updates:
+                try:
+                    path = ReasoningPath(
+                        path_type="prediction_update",
+                        regime="",
+                        step_types=["observe_and_update"],
+                    )
+                    self._edge_gate.record_outcome(
+                        path=path,
+                        correct=(update.direction == "confirm"),
+                        confidence=update.new_confidence,
+                    )
+                except Exception as exc:
+                    logger.debug("Edge outcome recording failed: %s", exc)
 
         return updates
 

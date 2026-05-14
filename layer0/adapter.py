@@ -23,7 +23,10 @@ Usage:
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Protocol, runtime_checkable
+
+logger = logging.getLogger(__name__)
 
 from .base import (
     PerceptualObservation,
@@ -31,6 +34,9 @@ from .base import (
     RelationType,
     ModalityType,
 )
+
+# 5-Pillar: Gate 1 — Signal Extraction
+from validation_gates.signal_extraction import SignalExtractionGate, SignalVerdict
 
 
 # ---------------------------------------------------------------------------
@@ -165,20 +171,91 @@ def observation_to_ingest_dicts(obs: PerceptualObservation) -> list[dict]:
 # Ingest helper: one-call bridge
 # ---------------------------------------------------------------------------
 
-def ingest_observation(rsvs: RsvsIngestProtocol, obs: PerceptualObservation) -> Any:
-    """
-    High-level function: convert observation to ingest data and call
+def ingest_observation(
+    rsvs: RsvsIngestProtocol,
+    obs: PerceptualObservation,
+    signal_gate: SignalExtractionGate | None = None,
+) -> dict:
+    """High-level function: convert observation to ingest data and call
     rsvs.ingest() on it.
+
+    5-Pillar Enrichment (Gate 1: Signal Extraction):
+        Before ingesting, runs the SignalExtractionGate to evaluate
+        signal quality. If verdict is REJECT, the observation is NOT
+        ingested (noise filtered out). If WEAK, confidence is reduced.
 
     Args:
         rsvs: Any object with an ingest(text: str) method (typically PyRsvs)
         obs: PerceptualObservation from a Layer 0 abstractor
+        signal_gate: Optional SignalExtractionGate instance. If None,
+            a default gate is created and used.
 
     Returns:
-        The result of rsvs.ingest() — typically IngestStats or similar.
+        A dict with keys:
+            - "ingest_result": The result of rsvs.ingest() or None if rejected
+            - "signal_result": The SignalResult from Gate 1 evaluation
+            - "filtered_tuples": How many tuples were filtered (REJECT)
+            - "adjusted_tuples": How many tuples had confidence adjusted (WEAK)
     """
-    text = observation_to_ingest_data(obs)
-    return rsvs.ingest(text)
+    # 5-Pillar Gate 1: Run Signal Extraction before ingest
+    gate = signal_gate or SignalExtractionGate()
+    signal_result = gate.evaluate(
+        raw_input=" ".join(t.subject + " " + t.predicate for t in obs.tuples),
+        perceptual_tuples=obs.tuples,
+    )
+
+    filtered = 0
+    adjusted = 0
+
+    # Apply gate verdict to tuples
+    if signal_result.verdict == SignalVerdict.REJECT:
+        # All tuples rejected — noise only
+        logger.info(
+            "SignalExtractionGate REJECTED observation: %s",
+            signal_result.reason,
+        )
+        return {
+            "ingest_result": None,
+            "signal_result": signal_result.to_dict(),
+            "filtered_tuples": len(obs.tuples),
+            "adjusted_tuples": 0,
+            "reason": signal_result.reason,
+        }
+
+    # Filter individual tuples based on signal quality
+    accepted_tuples: list[PerceptualTuple] = []
+    for t in obs.tuples:
+        # Check if this specific tuple has meaningful signal
+        if t.predictive_value < 0.15 and t.confidence < 0.2:
+            filtered += 1
+            continue
+
+        # Adjust confidence for WEAK signals
+        if signal_result.verdict == SignalVerdict.WEAK:
+            t.confidence *= signal_result.confidence_modifier
+            adjusted += 1
+
+        accepted_tuples.append(t)
+
+    # Create filtered observation
+    filtered_obs = PerceptualObservation(
+        modality=obs.modality,
+        raw_input_ref=obs.raw_input_ref,
+        tuples=accepted_tuples,
+        context=obs.context,
+        timestamp=obs.timestamp,
+    )
+
+    # Ingest the filtered observation
+    text = observation_to_ingest_data(filtered_obs)
+    ingest_result = rsvs.ingest(text) if text else None
+
+    return {
+        "ingest_result": ingest_result,
+        "signal_result": signal_result.to_dict(),
+        "filtered_tuples": filtered,
+        "adjusted_tuples": adjusted,
+    }
 
 
 # ---------------------------------------------------------------------------

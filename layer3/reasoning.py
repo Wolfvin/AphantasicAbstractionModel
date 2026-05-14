@@ -28,6 +28,9 @@ from typing import Any, Optional
 from layer2.bridge import RsvsBridge, get_bridge
 from layer2.pattern import PatternResult, ReasoningStep
 
+# 5-Pillar: Gate 3 — Uncertainty Calibration
+from validation_gates.uncertainty_calibration import UncertaintyCalibrationGate
+
 logger = logging.getLogger(__name__)
 
 
@@ -155,6 +158,9 @@ class ReasoningEngine:
         self.rsvs_available = self._bridge.is_available
         self.is_rust_core = self._bridge.is_rust_core
 
+        # 5-Pillar: Gate 3 — Uncertainty Calibration
+        self._calibration_gate = UncertaintyCalibrationGate()
+
         if self.rsvs_available:
             logger.info("ReasoningEngine initialized with RSVS bridge (rust=%s)", self.is_rust_core)
         else:
@@ -222,6 +228,23 @@ class ReasoningEngine:
 
         # Calculate aggregate confidence
         chain.aggregate_confidence = self._calculate_aggregate_confidence(chain.steps)
+
+        # 5-Pillar Gate 3: Calibrate aggregate confidence
+        try:
+            calibration_result = self._calibration_gate.calibrate(
+                raw_confidence=chain.aggregate_confidence,
+                regime="",  # Regime populated by pipeline
+            )
+            chain.aggregate_confidence = calibration_result.calibrated_confidence
+
+            # Also calibrate individual step confidences
+            for step in chain.steps:
+                step_cal = self._calibration_gate.calibrate(
+                    raw_confidence=step.confidence,
+                )
+                step.confidence = step_cal.calibrated_confidence
+        except Exception as exc:
+            logger.debug("Calibration gate failed: %s", exc)
 
         # Build evidence summary
         chain.evidence_summary = self._build_evidence_summary(chain.steps)
@@ -548,6 +571,40 @@ class ReasoningEngine:
                 f"{anomaly_count} anomalies, and pattern confidence {pattern_conf:.3f}."
             ),
         )
+
+    # ==================================================================
+    # 5-Pillar: Gate 3 — Calibration outcome recording
+    # ==================================================================
+
+    def record_outcome(
+        self,
+        predicted_confidence: float,
+        actual_correct: bool,
+        regime: str = "",
+        context: str = "",
+    ) -> None:
+        """Record whether a reasoning outcome was correct (5-Pillar Gate 3).
+
+        This feeds the UncertaintyCalibrationGate with ground truth data
+        so that future confidence scores are better calibrated.
+
+        Args:
+            predicted_confidence: The confidence that was assigned.
+            actual_correct: Whether the reasoning was actually correct.
+            regime: The regime at the time of reasoning.
+            context: Context description.
+        """
+        self._calibration_gate.record_outcome(
+            predicted_confidence=predicted_confidence,
+            actual_correct=actual_correct,
+            regime=regime,
+            context=context,
+        )
+
+    @property
+    def calibration_gate(self) -> UncertaintyCalibrationGate:
+        """Access the calibration gate for external queries."""
+        return self._calibration_gate
 
     # ==================================================================
     # Utility methods

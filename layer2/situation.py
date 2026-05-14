@@ -21,6 +21,9 @@ from typing import Any, Optional
 
 from .bridge import AbstractionBridge, RsvsBridge, get_bridge
 
+# 5-Pillar: Gate 2 — Regime Detection
+from validation_gates.regime_detection import RegimeDetectionGate, RegimeState, CognitiveRegime
+
 logger = logging.getLogger(__name__)
 
 # How many recent messages to consider for "active" context
@@ -76,6 +79,10 @@ class SituationLayer:
         self._sense_last_seen: dict[str, float] = {}  # label → timestamp
         self._sense_events: list[dict] = []  # Parsed event log for tracking
 
+        # 5-Pillar: Gate 2 — Regime Detection
+        self._regime_gate = RegimeDetectionGate()
+        self._current_regime: RegimeState = RegimeState()
+
         if self.rsvs_available:
             # Capture the current event sequence so we only track new events
             try:
@@ -90,6 +97,15 @@ class SituationLayer:
     # ------------------------------------------------------------------
     # Chat message ingestion
     # ------------------------------------------------------------------
+
+    @property
+    def current_regime(self) -> RegimeState:
+        """Get the current cognitive regime (5-Pillar Gate 2).
+
+        Returns:
+            The current RegimeState detected by RegimeDetectionGate.
+        """
+        return self._current_regime
 
     def add_message(self, role: str, content: str) -> dict:
         """Ingest a chat message into the semantic graph.
@@ -162,6 +178,15 @@ class SituationLayer:
             # Extract simple keyword-like "atoms" from content
             result["active_atoms"] = self._fallback_atomize(content)
             self._update_active_senses_fallback()
+
+        # 5-Pillar Gate 2: Detect regime on every message
+        try:
+            self._current_regime = self._regime_gate.detect(
+                query=content,
+                active_senses=self._active_senses,
+            )
+        except Exception as exc:
+            logger.debug("RegimeDetectionGate failed: %s", exc)
 
         return result
 
