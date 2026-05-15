@@ -1,492 +1,860 @@
-# MD-3 — AAM Architecture Refactor After Semantic Ingestion Upgrade (Adjusted for Implementation)
+# MD-3 — AAM Elegant Architecture: Unified Abstractions (v12.0 Target)
 
-> **Adjustment Note (v11.0 alignment):** This document has been revised from a "full rebuild"
-> directive into a **hybrid additive refactor** plan. Key changes from original spec:
-> - Token-based ingest is NOT deprecated — it remains the foundation
-> - Frame-based ingest is an **additive Layer 0.5**, not a Layer 0 replacement
-> - Layer count stays at 4 (Layer 0-3), NOT expanded to 7
-> - "Raw text is no longer primary semantic primitive" is REJECTED — it remains primary
-> - All 1,081 existing tests must remain green at every phase
-> - Migration is additive-only; no existing code is deleted or rewritten
-> - Architectural shift is described as evolution, not revolution
+> **This is the FOUNDATION document.** All other MDs (MD1, MD2, MD4-MD6) reference the types
+> and patterns defined here. This document describes the target architecture for AAM v12.0,
+> built on 6 unified abstractions that replace the patchwork of overlapping types in v11.0.
 
 ---
 
-## Context
+## Why This Refactor Exists
 
-Assume the following have been completed:
+v11.0 has accumulated overlapping type systems:
 
-- MD-1: RSVS Semantic Frame Compiler (at least Phase 1: rule-based)
-- MD-2: Pre-Ingest Meaning Reasoner (at least Phase 1: 3 core rules)
+```text
+4 overlapping lifecycle enums:   NodeStatus, CandidateStatus, BeliefState, GroundingVerdict
+4 overlapping edge systems:      RelationType, EdgeSource, SemanticRole, ProvenanceSource
+3 structured grouping types:     EventFrame, HiddenMeaningCandidate, Composition
+2 ingest paths:                  token path + frame path (dual-track forever)
+```
 
-This document defines how the **AAM architecture** should evolve after these foundational upgrades.
+This creates confusion, maintenance burden, and prevents cross-type reasoning.
+A Composition and an EventFrame are the same concept — structured groups of nodes with typed
+relationships — yet they have separate type hierarchies and cannot be compared or merged.
 
-This is an **evolutionary refactor**, not a ground-up rebuild.
+The elegant architecture unifies these into **6 core abstractions**.
 
 ---
 
-## Executive Summary
+## The 6 Unified Abstractions
 
-AAM originally derived meaning through:
-
-```text
-tokens → co-occurrence → node promotion → sense induction → reasoning
-```
-
-MD-1 and MD-2 add a **parallel enrichment path**:
-
-```text
-sentences → event frames → hidden meaning candidates → enriched RSVS ingest
-```
-
-Both paths coexist. Token ingest remains the foundation. Frame ingest enriches it.
-
-Previous (token-only):
-
-```text
-Text → tokens → RSVS → reasoning
-```
-
-Now (hybrid):
-
-```text
-Text → tokens → RSVS → reasoning
-  └→ sentences → frames → hidden meanings → enriched RSVS → richer reasoning
-```
+| # | Abstraction | Replaces | Purpose |
+|---|------------|----------|---------|
+| 1 | **SemanticAtom** | Token, EventFrame, HiddenMeaningCandidate | Universal ingest primitive |
+| 2 | **Composition** | EventFrame, HiddenMeaningCandidate, Pattern, Hypothesis | Universal structured grouping |
+| 3 | **LifecycleState + EpistemicState** | NodeStatus, CandidateStatus, BeliefState, GroundingVerdict | Two orthogonal status axes |
+| 4 | **SemanticEdge** | Separate RelationType, EdgeSource, SemanticRole, ProvenanceSource | Single typed triple |
+| 5 | **Transform (DAG)** | Hardcoded pipeline stages | Declarative transform graph |
+| 6 | **Seed Anchoring** | Source trust weight system | Seed-driven epistemic confidence |
 
 ---
 
-## Core Architectural Principle
+## Abstraction 1: SemanticAtom — Unified Ingest Primitive
 
-### What Changed
+Every piece of knowledge entering RSVS passes through one type: `SemanticAtom`.
 
-```text
-Meaning CAN begin before ingest (when input is sentence-like).
-```
-
-### What Did NOT Change
-
-```text
-Token-based ingest is still the primary path.
-Raw text is still a valid semantic primitive.
-Node promotion and co-occurrence are still essential.
-```
-
-### Correct Model
-
-```text
-Pre-Ingest = semantic enrichment compiler / hypothesis generator
-RSVS = structural long-term reasoning engine (unchanged)
-Token Ingest = foundation (always active)
-Frame Ingest = enhancement (active when sentence detected)
-```
-
----
-
-## Architecture — Hybrid 4-Layer Model
-
-The architecture stays at 4 layers. New capabilities are ADDED within layers, not as new layers.
-
-```text
-Layer 0 — Perceptual Ingest
-────────────────────────────────────────────────────
-  [EXISTING] tokenizer, sentence splitter, co-occurrence
-  [NEW]      sentence detection
-  [NEW]      rule-based frame extraction (MD-1 Phase 1)
-  [NEW]      pre-ingest reasoning (MD-2 Phase 1)
-  [NEW]      frame ingest adapter
-
-Layer 1 — RSVS Memory Core
-────────────────────────────────────────────────────
-  [EXISTING] graph, senses, attention, compositions, grounding
-  [EXISTING] structural similarity, substitution, reflection
-  [EXISTING] convergence, pattern memory, consolidation
-  [NEW]      semantic role edges (SemanticRole type)
-  [NEW]      extended HiddenMeaningType variants
-  [NEW]      frame composition nodes
-
-Layer 2 — Predictive & Situational Reasoning
-────────────────────────────────────────────────────
-  [EXISTING] predictive completion, situation modeling
-  [EXISTING] latent signal synthesis, cross-pathway
-  [NEW]      event-aware completion (uses frame structure)
-  [NEW]      hidden candidate absorption into signals
-  [DEFERRED] full event-driven prediction (needs Phase 2+)
-
-Layer 3 — Deductive Reasoning & Narrative
-────────────────────────────────────────────────────
-  [EXISTING] deductive reasoning, conflict resolution
-  [EXISTING] evidence chains, appraisal, conclusion
-  [DEFERRED] event-level evidence chains (needs MD-4)
-  [DEFERRED] narrative contract change (needs MD-4+)
-```
-
----
-
-## Layer 0 — Additive Enhancement (NOT Rebuild)
-
-### Old Components (UNCHANGED)
-
-```text
-layer0/
-  base/       # base abstractor
-  text/       # text abstractor
-  adapter/    # pipeline adapter
-  ...
-```
-
-### New Components (ADDED)
-
-```text
-layer0/
-  frame_compiler/        # MD-1: Semantic Frame Compiler
-    mod.rs               # public API
-    types.rs             # EventFrame, Polarity, Voice, FrameSource, SemanticRole
-    rule_extractor.rs    # Phase 1: rule-based extraction
-    sentence_detect.rs   # heuristic sentence detection
-    ingest_adapter.rs    # EventFrame → RSVS bridge
-    tests.rs
-
-  pre_ingest_reasoning/  # MD-2: Pre-Ingest Meaning Reasoner
-    mod.rs               # public API
-    types.rs             # HiddenMeaningCandidate, etc.
-    rules.rs             # reasoning rules
-    scorer.rs            # confidence scoring
-    mapper.rs            # candidate → RSVS mapping
-    tests.rs
-```
-
-### How They Integrate
-
-The existing `ingest_text()` in `pipeline/ingest.rs` is extended, not replaced:
+A token, an event frame, a hidden meaning candidate — these are all atoms with varying
+richness. A token is a sparse atom. An event frame is a rich atom. A hidden meaning is
+a derived atom.
 
 ```rust
-fn ingest_text(&mut self, text: &str) -> IngestStats {
-    // === EXISTING PATH (unchanged) ===
-    let mut stats = self.tokenize_and_ingest(text);
+/// Universal ingest primitive.
+/// Every piece of knowledge entering RSVS is a SemanticAtom.
+/// Richness varies by atom_type: Token (sparse) vs Event (rich).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SemanticAtom {
+    pub id: String,
+    pub label: String,
+    pub atom_type: AtomType,
 
-    // === NEW PATH (additive) ===
-    if self.config.frame_compiler_enabled && is_sentence_like(text) {
-        if let Some(frame) = self.frame_compiler.extract(text) {
-            let hidden = self.pre_ingest_reasoner.reason_on_frame(&frame, &self.context());
-            stats.merge(self.frame_ingest_adapter.ingest_frame_with_candidates(&frame, &hidden));
-        }
-    }
+    // Structural metadata (populated for Event, HiddenMeaning; empty for Token)
+    pub roles: HashMap<SemanticRole, String>,   // role → target label
+    pub polarity: Option<Polarity>,
+    pub voice: Option<Voice>,
 
-    stats
+    // Type-specific classification
+    pub variant: Option<AtomVariant>,
+
+    // Provenance
+    pub confidence: f32,
+    pub source: EdgeSource,                      // unified with edge provenance
+}
+
+#[derive(Debug, Clone, PartialEq, Hash, Eq, Serialize, Deserialize)]
+pub enum AtomType {
+    Token,          // simple token extraction (sparse: roles = {})
+    Event,          // semantic frame extraction (rich: roles = {Arg0, Arg1, Cause, ...})
+    HiddenMeaning,  // pre-ingest reasoning output (rich: roles = {Problem, Solution, ...})
+    Pattern,        // pattern mining output (structured: roles = {Cause, Action, ...})
+    Hypothesis,     // abductive/predictive hypothesis
+    Acquisition,    // externally acquired knowledge
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum AtomVariant {
+    /// For AtomType::HiddenMeaning — which kind of hidden meaning
+    MeaningVariant(HiddenMeaningType),
+    /// For AtomType::Event — how was this frame extracted
+    FrameVariant(FrameSource),
+    /// For AtomType::Pattern — what pattern category
+    PatternVariant(PatternCategory),
+    /// For AtomType::Acquisition — how was this acquired
+    AcquisitionVariant(AcquisitionSource),
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum Polarity {
+    Positive,
+    Negative,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum Voice {
+    Active,
+    Passive,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum FrameSource {
+    RuleBased,        // Phase 1: deterministic rules
+    UdParse,          // Phase 2: dependency parsing
+    SrlLabel,         // Phase 2: semantic role labeling
+    AmrCompilation,   // Phase 3: AMR graph compilation
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum PatternCategory {
+    EventPattern,
+    CausalChain,
+    GoalAction,
+    RoleSubstitution,
+    TemporalSequence,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum AcquisitionSource {
+    PassiveRecall,
+    SelfStudy,
+    UserAnswer,
+    ExternalSource,
 }
 ```
 
-This is a **wrapper**, not a rewrite. The existing token path runs first, always. Frame enrichment runs second, only when applicable.
-
----
-
-## Layer 1 — RSVS Core Extension (NOT Refit)
-
-RSVS remains the heart. Changes are additive.
-
-### 1. Graph Core — New Edge Category
-
-Add `SemanticRole` as a parallel edge type alongside existing `RelationType`. No existing edge handling code is modified.
+### SemanticRole — Comprehensive Role Taxonomy
 
 ```rust
-// NEW — does not replace RelationType
+/// Unified semantic role taxonomy for all atom types.
+/// Event roles, hidden meaning roles, pattern roles — one enum.
+#[derive(Debug, Clone, PartialEq, Hash, Eq, Serialize, Deserialize)]
 pub enum SemanticRole {
-    Predicate, Arg0Agent, Arg1Patient, Arg2Recipient,
-    Cause, Purpose, Location, Time,
-    SourceEvent, HiddenCandidate, PatternType,
+    // === Event frame roles (from MD-1) ===
+    Predicate,
+    Arg0Agent,
+    Arg1Patient,
+    Arg2Recipient,
+    Cause,
+    Purpose,
+    Location,
+    Time,
+    Instrument,
+
+    // === Hidden meaning roles (from MD-2) ===
+    Problem,
+    Solution,
+    Beneficiary,
+    Tool,
+    Motivation,
+    PainPoint,
+    ImpliedGoal,
+
+    // === Pattern roles ===
+    PatternType,
+    Antecedent,
+    Consequent,
+
+    // === Structural roles ===
+    SourceAtom,       // reference to producing atom
+    SourceEvent,      // reference to source event
+    EquivalentOf,    // semantic equivalence link
 }
 ```
 
-### 2. Sense Engine — Extended Input Sources
+### How SemanticAtom Unifies Ingest
 
-Sense induction already uses contextual activation overlap. Frame-based compositions add a new input source:
-
+**Before (v11.0): Two separate paths:**
 ```text
-EXISTING sources:
-  token co-occurrence
-  contextual activation overlap
-  composition patterns
-
-NEW source:
-  event frame structure (predicate + arg0 + arg1 + cause)
-  hidden meaning candidate structure
+Token path: text → tokens → nodes → senses
+Frame path: text → EventFrame → ??? → nodes → senses
 ```
 
-The sense engine's `induce()` method gains an optional `frame_context` parameter. If absent, behavior is identical to current.
+**After (v12.0): One unified path:**
+```text
+text → Atomizer → Vec<SemanticAtom> → IngestAtoms → graph
+```
 
-### 3. Grounding Engine — No Change Yet
+Examples:
 
-Grounding already distinguishes confirming vs contradicting evidence via `GroundingEvidence`. No change needed until MD-4 adds epistemic governance.
+```text
+"raja"
+→ SemanticAtom { atom_type: Token, label: "raja", roles: {} }
 
-### 4. Structural Similarity — Frame-Aware Extension
+"Raymond membuat aplikasi karena lambat"
+→ SemanticAtom { atom_type: Event, label: "membuat",
+    roles: {Arg0Agent: "Raymond", Arg1Patient: "aplikasi", Cause: "lambat"} }
 
-Current `structural_similarity()` compares composition structure. With `SemanticRole` edges, similarity can become role-aware:
+[pre-ingest reasoning on above event]
+→ SemanticAtom { atom_type: HiddenMeaning, label: "problem_solution",
+    roles: {Problem: "lambat", Solution: "aplikasi", Agent: "Raymond"},
+    variant: MeaningVariant(ProblemSolutionPattern) }
+```
+
+All three enter through **one** ingest pipeline. No dual-track.
+
+---
+
+## Abstraction 2: Composition — Universal Structured Grouping
+
+When a SemanticAtom is ingested into the RSVS graph, it becomes a **Composition**:
+a structured group of nodes with typed roles, lifecycle state, epistemic state, and
+seed alignment scores.
+
+This replaces the separate EventFrame, HiddenMeaningCandidate, Pattern, and
+AbductiveHypothesis types with ONE grouping mechanism.
 
 ```rust
-fn structural_similarity(a: &Composition, b: &Composition) -> f32 {
-    let mut score = existing_similarity(a, b);  // unchanged
+/// Universal structured grouping in the RSVS graph.
+/// Every structured piece of knowledge is a Composition.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Composition {
+    pub id: CompositionId,
+    pub composition_type: CompositionType,
 
-    // NEW: bonus for role alignment
-    if has_semantic_role_edges(a) && has_semantic_role_edges(b) {
-        let role_alignment = compute_role_alignment(a, b);
-        score = score * 0.7 + role_alignment * 0.3;
-    }
+    // Members: which nodes participate, and in what role
+    pub members: Vec<CompositionMember>,
 
-    score
+    // Dual-axis status (Abstraction 3)
+    pub lifecycle: LifecycleState,
+    pub epistemic: EpistemicState,
+
+    // Confidence and provenance
+    pub confidence: f32,
+    pub provenance: ProvenanceChain,
+
+    // Seed alignment scores (Abstraction 6)
+    pub seed_scores: HashMap<SeedPrimitive, f32>,
+
+    // Metadata
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CompositionMember {
+    pub node_id: NodeId,
+    pub role: SemanticRole,
+    pub confidence: f32,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum CompositionType {
+    Event,          // was EventFrame
+    HiddenMeaning,  // was HiddenMeaningCandidate
+    Pattern,        // was pattern from PatternMining
+    Situation,      // was situation state fragment
+    Hypothesis,     // was AbductiveHypothesis
+    Acquisition,    // externally acquired knowledge
 }
 ```
 
-This is backward compatible — if compositions lack semantic role edges, the existing similarity formula is used unchanged.
+### Why This Unifies
 
-### 5. Substitution Analysis — Role-Aware Extension
+| Old Type | Becomes | composition_type | Key Roles |
+|----------|---------|-----------------|-----------|
+| EventFrame | Composition | Event | Arg0Agent, Arg1Patient, Cause, Purpose |
+| HiddenMeaningCandidate | Composition | HiddenMeaning | Problem, Solution, Agent |
+| Pattern | Composition | Pattern | Antecedent, Consequent, PatternType |
+| AbductiveHypothesis | Composition | Hypothesis | source nodes + inferred target |
+| SituationState | Composition | Situation | event refs + environmental context |
 
-Same pattern: existing substitution analysis continues to work. Role-aware substitution is an enhancement:
-
-```text
-EXISTING: raja ↔ ratu (token substitution)
-NEW:      membuat ↔ membangun (predicate substitution, same role structure)
-          aplikasi ↔ sistem (patient substitution in same event structure)
-```
-
-### 6. Pattern Memory — Event-Aware Patterns
-
-Pattern storage can now include:
+### What This Enables
 
 ```text
-EXISTING: abstract composition co-occurrence patterns
-NEW:      problem → solution patterns
-          agent → action → tool patterns
-          cause → action patterns
-          goal → action patterns
-```
+structural_similarity() can compare:
+  Event vs Event         — same event structure?
+  HiddenMeaning vs Event — does this hidden meaning align with this event?
+  Pattern vs Event       — does this event match a known pattern?
+  HiddenMeaning vs HiddenMeaning — do these overlap?
 
-New pattern types use `SemanticRole` edges. Existing pattern types unchanged.
+convergence can merge:
+  Active "Raymond membuat aplikasi" + Passive "Aplikasi dibuat oleh Raymond"
+  → same Composition(Event), unified
 
----
-
-## Layer 2 — Predictive Enhancement (NOT Refit)
-
-### 1. Predictive Completion — Event Completion
-
-Current prediction: pattern continuation from node activation.
-
-New capability: event completion from partial frame.
-
-```text
-Input:  cause = "proses manual lambat" + action = "membuat" + patient = ???
-Prediction: patient likely = tool/software/system
-```
-
-This is additive — only activates when frame context is available.
-
-### 2. Situation Modeling — Extended Input
-
-Situation aggregation can now include:
-
-```text
-EXISTING: nodes, senses, compositions, conflicts
-NEW:      event frames, hidden candidates, goals, agents
-```
-
-### 3. Latent Signal Synthesis — Absorb MD-2 Outputs
-
-MD-2 candidates (motivation, pain point, inefficiency) become latent signal sources.
-
-```text
-EXISTING signals: gap-based, pathway-based
-NEW signals: hidden meaning candidates from pre-ingest reasoning
-```
-
-### 4. Hypothesis Expansion — Defer
-
-Full hypothesis expansion from hidden meaning candidates is deferred to Phase 2. Current system already has `AbductiveHypothesis` and `AbductiveEngine`.
-
----
-
-## Layer 3 — Reasoning Enhancement (Defer Major Changes)
-
-Layer 3 changes are deferred until MD-4 (epistemic governance) is implemented. Current reasoning engines work fine with token-based evidence.
-
-Future capabilities (after MD-4):
-
-```text
-- Event-level evidence chains (not just node-level)
-- Typed conflict taxonomy (not just pathway-level)
-- Role-aware contradiction detection
-- Grounding-aware appraisal
+cross-type reasoning:
+  Event(Cause=lambat) + HiddenMeaning(Problem=lambat, Solution=aplikasi)
+  → the cause in the event IS the problem in the hidden meaning
+  → this is detectable because both are Compositions with role-based members
 ```
 
 ---
 
-## Existing Module Adjustments
+## Abstraction 3: Two Orthogonal Status Axes
 
-### Abductive Reasoning — No Change
+v11.0 has 4 overlapping lifecycle enums. v12.0 has **2 orthogonal axes**.
 
-Current abductive engine works with seed overlap. It does NOT need to change to "event-role hypothesis generation" yet. That's a Phase 2+ enhancement.
+```rust
+/// Axis 1: Structural lifecycle — how mature is this entity in the graph?
+/// Applies to: Nodes, Compositions, Senses
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub enum LifecycleState {
+    #[default]
+    New,         // just created
+    Candidate,   // under consideration
+    Stable,      // established
+    Deprecated,  // no longer trusted
+    Quarantine,  // isolated for review
+}
 
-### Pattern Mining — Extended Input
-
-Current pattern mining works with composition frequency. It can be extended to also mine role-aware event patterns, but this is additive.
-
-### Cross Pathway Synthesis — Extended Input
-
-Current synthesis engine produces `SynthesisResult`. MD-2 candidates map INTO `SynthesisResult.hidden_meaning`. No architectural change needed.
-
-### Reflection — No Change
-
-Current reflection engine inspects belief stability and grounding. No change until MD-4.
-
-### Convergence — Frame-Aware Extension
-
-Current convergence merges similar compositions. With semantic role edges, convergence can recognize that active and passive versions of the same event should merge:
-
-```text
-"Raymond membuat aplikasi" ≈ "Aplikasi dibuat oleh Raymond"
+/// Axis 2: Epistemic confidence — how confident are we in this knowledge?
+/// Applies to: Compositions, Knowledge Claims
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub enum EpistemicState {
+    #[default]
+    Observed,      // directly extracted from input
+    Inferred,      // derived by deterministic rule
+    Hypothesis,    // unconfirmed scenario reasoning
+    Grounded,      // repeatedly supported by independent evidence
+    Contradicted,  // opposed by evidence
+}
 ```
 
-This is an enhancement, not a rewrite.
+### Mapping from v11.0
+
+| v11.0 Type | v11.0 Values | v12.0 Mapping |
+|-----------|-------------|---------------|
+| NodeStatus | New, Candidate, Stable, Deprecated, Quarantine | LifecycleState (identical) |
+| CandidateStatus | Candidate, Confirmed, Contradicted, Deprecated | (Candidate, EpistemicState) pair |
+| BeliefState | Observed, Candidate, Inferred, Hypothesis, Grounded, Weak, Contradicted, Deprecated, Rejected, Recovered | EpistemicState + LifecycleState |
+| GroundingVerdict | WellGrounded, NeedsReview, NeedsRevision | Derived from (LifecycleState, EpistemicState) |
+
+### Semantic Combinations
+
+```text
+(New, Observed)         = fresh direct observation
+(Candidate, Inferred)   = rule-derived, under review
+(Stable, Grounded)      = well-established, repeatedly confirmed
+(Quarantine, Hypothesis)= unconfirmed scenario, isolated
+(Stable, Contradicted)  = was established, now contradicted
+(Deprecated, Contradicted) = abandoned belief
+(Candidate, Observed)   = fresh observation, not yet promoted
+```
+
+"BeliefState::Weak" from v11.0 maps to `(Candidate, Inferred)` with low confidence.
+"BeliefState::Rejected" maps to `(Deprecated, Contradicted)`.
+"BeliefState::Recovered" maps to transition from `(Stable, Contradicted)` back to `(Stable, Grounded)`.
+
+### Transition Rules
+
+```text
+Lifecycle transitions (structural maturity):
+  New → Candidate → Stable → Deprecated
+               ↓
+           Quarantine → Candidate (recovered)
+
+Epistemic transitions (truth confidence):
+  Observed → Inferred → Grounded
+  Hypothesis → Grounded (if confirmed)
+  Any → Contradicted (if opposing evidence)
+  Grounded → Contradicted → Grounded (recovery)
+
+Cross-axis: lifecycle and epistemic transitions are INDEPENDENT.
+  A node can become Stable while still Hypothesis.
+  A composition can become Contradicted while still Stable.
+```
+
+### GroundingVerdict as Derived Function
+
+```rust
+fn grounding_verdict(lifecycle: &LifecycleState, epistemic: &EpistemicState, confidence: f32) -> GroundingVerdict {
+    match (lifecycle, epistemic) {
+        (Stable, Grounded) if confidence > 0.8 => GroundingVerdict::WellGrounded,
+        (Stable | Candidate, Contradicted) => GroundingVerdict::NeedsRevision,
+        _ => GroundingVerdict::NeedsReview,
+    }
+}
+```
+
+No separate GroundingVerdict enum needed — it's derived from the two axes.
 
 ---
 
-## Migration Strategy — Additive Phases
+## Abstraction 4: SemanticEdge — Typed Triple
 
-### Phase 1 — Types + Frame Compiler (MD-1 Phase 1)
+v11.0 has 4 edge/classification systems. v12.0 has **1 edge structure** with 3 dimensions.
 
-Introduce:
+```rust
+/// Single edge type with three orthogonal dimensions.
+/// Every edge in the graph is a SemanticEdge.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SemanticEdge {
+    /// WHAT kind of semantic relation: Categorical, Causal, Functional, etc.
+    /// Classifies the nature of the relationship.
+    pub relation: RelationType,
 
-```text
-EventFrame, Polarity, Voice, FrameSource
-SemanticRole
-FrameCompiler variant in EdgeSource
-frame_compiler_enabled in PipelineConfig
+    /// OPTIONAL: role if this edge is part of a structured composition.
+    /// Only populated for edges linking composition members.
+    /// Token-based edges have role = None.
+    pub role: Option<SemanticRole>,
+
+    /// WHERE this edge came from: provenance.
+    /// Replaces separate ProvenanceSource — all provenance is EdgeSource.
+    pub source: EdgeSource,
+}
 ```
 
-**Tests affected**: 0 existing tests modified. New tests added for frame extraction.
+### RelationType (unchanged from v11.0)
 
-### Phase 2 — Pre-Ingest Reasoner (MD-2 Phase 1)
-
-Introduce:
-
-```text
-HiddenMeaningCandidate, MeaningNodeRef, CandidateStatus, CompositionHint
-Extended HiddenMeaningType variants
-Extended HiddenMeaning optional fields
-Pre-ingest reasoning module
+```rust
+#[non_exhaustive]
+pub enum RelationType {
+    Categorical,    // is-a, member-of
+    Differential,   // contrast, negation
+    Functional,     // enables, requires
+    Spatial,        // near, contains
+    Temporal,       // before, during
+    Causal,         // causes, prevents
+    Discursive,     // topic, reference
+}
 ```
 
-**Tests affected**: 0 existing tests modified. New tests added for reasoning rules.
+### EdgeSource (extended from v11.0)
 
-### Phase 3 — Hybrid Pipeline Integration
+```rust
+#[non_exhaustive]
+pub enum EdgeSource {
+    // v11.0 existing
+    Bootstrap,
+    Learned,
+    Composition,
+    GapDetection,
+    Discourse,
+    Blending,
+    Abductive,
+    PatternMining,
+    Synthesis,
+    CompoundDiscovery,
 
-Connect frame compiler + reasoner to ingest pipeline:
-
-```text
-Modify ingest_text() to add frame path alongside token path
-Add frame_ingest_adapter to pipeline
-Add pre_ingest_reasoner to pipeline
+    // v12.0 new (replaces ProvenanceSource)
+    FrameCompiler,         // from MD-1: semantic frame extraction
+    HiddenMeaningRule,     // from MD-2: pre-ingest reasoning
+    EpistemicGovernance,   // from MD-4: belief state transition
+    ExecutiveControl,      // from MD-5: executive routing
+    AcquisitionRecall,     // from MD-6: passive recall
+    AcquisitionSelfStudy,  // from MD-6: self-study
+    AcquisitionUserAnswer, // from MD-6: user answer
+    HumanAssertion,        // human override
+}
 ```
 
-**Tests affected**: 0 existing tests modified. Existing tests still use token path. Frame path tested separately.
+`ProvenanceSource` from the adjusted MD4 is **eliminated** — its variants are absorbed
+into `EdgeSource`. Provenance is a property of edges and compositions, tracked via
+`EdgeSource`, not a separate classification axis.
 
-### Phase 4 — Sense + Similarity Enhancement
-
-Extend sense induction and structural similarity to use frame context:
+### Examples
 
 ```text
-Optional frame_context parameter in sense induction
-Role-aware similarity bonus in structural_similarity
-Event-aware pattern mining
+Token-based edge:
+  SemanticEdge { relation: Categorical, role: None, source: Bootstrap }
+
+Event composition member edge:
+  SemanticEdge { relation: Categorical, role: Some(Arg0Agent), source: FrameCompiler }
+
+Hidden meaning composition member edge:
+  SemanticEdge { relation: Causal, role: Some(Problem), source: HiddenMeaningRule }
+
+Pattern composition member edge:
+  SemanticEdge { relation: Causal, role: Some(Antecedent), source: PatternMining }
 ```
-
-**Tests affected**: 0 existing tests modified. All changes are additive with fallback to existing behavior.
-
-### Phase 5 — Advanced Integration (after MD-4)
-
-Event-level reasoning, typed conflicts, narrative contract change.
 
 ---
 
-## Backward Compatibility — Absolute Rule
+## Abstraction 5: Transform — DAG of Declarative Processing
 
-```text
-ALL 1,081 EXISTING TESTS MUST REMAIN GREEN AT EVERY PHASE.
+v11.0 has a hardcoded pipeline: `ingest_text()` → tokenize → co-occurrence → promote → sense → batch → gap → discourse → etc.
 
-No existing test may be modified to accommodate new features.
-No existing type may be changed in a breaking way.
-No existing pipeline behavior may change without feature flag.
+v12.0 replaces this with a **declarative transform graph**: each processing step is a
+`Transform` that declares its input and output types. The pipeline engine routes data
+through available transforms based on type compatibility.
+
+```rust
+/// Declarative processing unit.
+/// Each transform declares what it consumes and produces.
+/// The pipeline engine routes data through transforms by type.
+pub trait Transform: Send + Sync {
+    type Input;
+    type Output;
+
+    fn id(&self) -> &'static str;
+    fn transform(&self, input: Self::Input, ctx: &mut PipelineContext) -> Self::Output;
+}
 ```
 
-Techniques for guaranteed compatibility:
+### Core Transforms (mapping from v11.0 pipeline stages)
 
-1. `#[non_exhaustive]` on all enums (already in place)
-2. `Option<T>` for all new struct fields
-3. Feature flags for new paths (`frame_compiler_enabled`)
-4. Fallback to existing behavior when frame context absent
-5. New modules are independent, not modifications of existing ones
+```text
+Transform           Input              Output              MD Source
+─────────────────── ────────────────── ─────────────────── ─────────
+Tokenize            RawText            Vec<SemanticAtom>   existing
+ExtractFrame        RawText            Option<SemanticAtom> MD-1
+ReasonFrame         SemanticAtom       Vec<SemanticAtom>   MD-2
+IngestAtoms         Vec<SemanticAtom>  GraphDelta          existing
+GovernBeliefs       GraphDelta         GovernedDelta       MD-4
+SeedAnchor          GovernedDelta      AnchoredDelta       MD-4
+RunPrediction       GraphSnapshot      Vec<SemanticAtom>   existing
+RunSituation        GraphSnapshot      SituationUpdate     existing
+DetectGaps          GraphSnapshot      Vec<KnowledgeGap>   MD-6
+SelectAcquisition   Vec<KnowledgeGap>  AcquisitionDecision MD-6
+RunReasoning        ReasoningRequest   ReasoningResult     existing
+Appraise            ReasoningResult    AppraiseVerdict     existing
+```
+
+### Pipeline Engine
+
+```rust
+pub struct PipelineEngine {
+    transforms: HashMap<TypeId, Box<dyn Transform>>,
+    context: PipelineContext,
+}
+
+impl PipelineEngine {
+    /// Run the full ingest pipeline
+    pub fn ingest(&mut self, text: &str) -> IngestResult {
+        // 1. Tokenize (always)
+        let mut atoms = self.run::<Tokenize>(text);
+
+        // 2. Extract frame (if sentence-like)
+        if is_sentence_like(text) {
+            if let Some(frame_atom) = self.run::<ExtractFrame>(text) {
+                atoms.push(frame_atom);
+            }
+        }
+
+        // 3. Reason on event atoms (if any)
+        let event_atoms: Vec<_> = atoms.iter()
+            .filter(|a| a.atom_type == AtomType::Event)
+            .cloned()
+            .collect();
+        for event in event_atoms {
+            let hidden = self.run::<ReasonFrame>(&event);
+            atoms.extend(hidden);
+        }
+
+        // 4. Ingest all atoms into graph
+        let delta = self.run::<IngestAtoms>(&atoms);
+
+        // 5. Govern beliefs
+        let governed = self.run::<GovernBeliefs>(&delta);
+
+        // 6. Seed-anchor confidence
+        let anchored = self.run::<SeedAnchor>(&governed);
+
+        // 7. Apply to graph
+        self.apply(anchored)
+    }
+}
+```
+
+### Adding a New MD = Adding a Transform
+
+```text
+To add MD-1:  implement ExtractFrame transform
+To add MD-2:  implement ReasonFrame transform
+To add MD-4:  implement GovernBeliefs + SeedAnchor transforms
+To add MD-6:  implement DetectGaps + SelectAcquisition transforms
+```
+
+No pipeline modifications needed. New transforms are registered and called.
 
 ---
 
-## What "Raw Text as Semantic Primitive" Means
+## Abstraction 6: Seed-Driven Epistemic Anchoring
 
-The original MD-3 stated:
+v11.0 already has 7 seed primitives working: value, risk, trust, identity, agent, goal, feedback.
+These seeds are activated during reasoning and drive meaning pathways.
 
-```text
-Raw text is no longer primary semantic primitive.
+Instead of creating a separate "source trust weight" system, **use seeds as epistemic anchors**:
+
+```rust
+/// Evaluate confidence of a composition using seed alignment.
+/// Seeds that are already proven in v11.0 become the foundation for belief evaluation.
+pub fn seed_anchored_confidence(
+    composition: &Composition,
+    graph: &Graph,
+    seed_engine: &SeedActivationEngine,
+) -> f32 {
+    let mut scores = HashMap::new();
+
+    // For each seed primitive, compute how well this composition aligns
+    for seed in SeedPrimitive::all() {
+        let alignment = seed_engine.alignment(&composition.members, seed, graph);
+        scores.insert(seed, alignment);
+    }
+
+    // Weighted combination — trust and risk dominate epistemic evaluation
+    let trust  = scores.get(&SeedPrimitive::Trust).copied().unwrap_or(0.5);
+    let risk   = scores.get(&SeedPrimitive::Risk).copied().unwrap_or(0.5);
+    let value  = scores.get(&SeedPrimitive::Value).copied().unwrap_or(0.5);
+    let goal   = scores.get(&SeedPrimitive::Goal).copied().unwrap_or(0.5);
+    let identity = scores.get(&SeedPrimitive::Identity).copied().unwrap_or(0.5);
+
+    trust * 0.30
+    + (1.0 - risk) * 0.25
+    + value * 0.20
+    + goal * 0.15
+    + identity * 0.10
+}
 ```
 
-This is **rejected**. The adjusted position:
+### Why Seed-Driven Is Better Than Source Trust Weights
 
 ```text
-Raw text / tokens remain the PRIMARY semantic primitive.
-Event frames are a SECONDARY semantic primitive that ENRICHES
-the graph when sentence-level structure is available.
+Source trust weights (adjusted approach):
+  - Separate system from reasoning
+  - Static weights per source type
+  - No connection to what the graph actually knows
+  - External configuration
 
-Early-stage graphs are sparse. Token co-occurrence is the
-foundation that builds the graph from nothing. Frame-based
-reasoning operates on top of that foundation.
+Seed-driven anchoring (elegant approach):
+  - Uses same primitives as reasoning (seeds already drive meaning pathways)
+  - Dynamic: alignment changes as graph matures
+  - Grounded in graph structure, not configuration
+  - A composition that aligns with trust seeds IS more trustworthy
+  - A composition that triggers risk seeds IS more risky
+  - Natural feedback loop: confidence → seed activation → reasoning → confidence update
 ```
 
-Correct relationship:
+### Seed Alignment Computation
+
+```rust
+impl SeedActivationEngine {
+    /// How well does a set of composition members align with a seed?
+    pub fn alignment(
+        &self,
+        members: &[CompositionMember],
+        seed: SeedPrimitive,
+        graph: &Graph,
+    ) -> f32 {
+        // 1. Find nodes in the graph that are activated by this seed
+        let seed_nodes = self.nodes_for_seed(seed);
+
+        // 2. Compute overlap between composition members and seed-activated nodes
+        let mut total_alignment = 0.0;
+        for member in members {
+            if seed_nodes.contains(&member.node_id) {
+                // Direct overlap — strong signal
+                total_alignment += 0.5;
+            } else {
+                // Indirect: check if member node has senses close to seed-activated nodes
+                let sense_overlap = graph.sense_overlap(member.node_id, &seed_nodes);
+                total_alignment += sense_overlap * 0.3;
+            }
+        }
+
+        // 3. Normalize by member count
+        if members.is_empty() { return 0.5; }
+        (total_alignment / members.len() as f32).clamp(0.0, 1.0)
+    }
+}
+```
+
+---
+
+## ProvenanceChain — Lightweight, Reuses EdgeSource
+
+```rust
+/// Provenance chain for a composition.
+/// Tracks where this knowledge came from.
+/// Uses EdgeSource (not a separate ProvenanceSource).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProvenanceChain {
+    pub origin: EdgeSource,                  // how this composition was created
+    pub origin_id: String,                   // event_id, rule_id, etc.
+    pub parent_composition_id: Option<CompositionId>,  // if derived from another
+    pub timestamp: String,                   // ISO 8601
+}
+```
+
+No separate `ProvenanceSource` enum. `EdgeSource` already captures where things come from.
+
+---
+
+## Full Architecture — Unified Pipeline
 
 ```text
-Tokens  →  graph foundation  →  sense induction  →  meaning
-Frames  →  event enrichment  →  hidden candidates →  deeper meaning
+Raw Text
+  ↓
+┌─────────────────────────────────────────┐
+│ Atomizer                                │
+│   Tokenize      → Vec<SemanticAtom>     │
+│   ExtractFrame  → Option<SemanticAtom>  │
+│   ReasonFrame   → Vec<SemanticAtom>     │
+└────────────┬────────────────────────────┘
+             ↓ Vec<SemanticAtom>
+┌─────────────────────────────────────────┐
+│ IngestAtoms                             │
+│   Create/update nodes for atom labels   │
+│   Create Composition per atom           │
+│   Add SemanticEdge per role             │
+│   Trigger sense induction               │
+└────────────┬────────────────────────────┘
+             ↓ GraphDelta
+┌─────────────────────────────────────────┐
+│ GovernBeliefs                           │
+│   Assign LifecycleState                 │
+│   Assign EpistemicState                 │
+│   Apply quarantine rules                │
+└────────────┬────────────────────────────┘
+             ↓ GovernedDelta
+┌─────────────────────────────────────────┐
+│ SeedAnchor                              │
+│   Compute seed alignment per composition│
+│   Adjust confidence via seed scores     │
+└────────────┬────────────────────────────┘
+             ↓ AnchoredDelta
+┌─────────────────────────────────────────┐
+│ RSVS Memory Core                        │
+│   Nodes + Compositions + SemanticEdges  │
+│   Sense profiles + Grounding evidence   │
+│   Pattern memory + Convergence state    │
+└────────────┬────────────────────────────┘
+             ↓ GraphSnapshot
+┌─────────────────────────────────────────┐
+│ Reasoning Engines                       │
+│   Prediction + Situation + Latent Signal│
+│   Cross-Pathway + Abduction + Pattern   │
+│   Reflection + Convergence              │
+└────────────┬────────────────────────────┘
+             ↓ ReasoningResult
+┌─────────────────────────────────────────┐
+│ Executive Control (if enabled)          │
+│   Mode selection + Budget + Stop cond.  │
+└────────────┬────────────────────────────┘
+             ↓
+┌─────────────────────────────────────────┐
+│ Acquisition (if gap detected)           │
+│   Passive Recall → Self Study → Ask User│
+└─────────────────────────────────────────┘
 ```
 
-Both contribute. Neither replaces the other.
+---
+
+## HiddenMeaningType — Extended (Unified with AtomVariant)
+
+```rust
+#[non_exhaustive]
+pub enum HiddenMeaningType {
+    // v11.0 meaning-pathway variants (EXISTING)
+    AffectiveDisguise,
+    SocialConcealment,
+    PerformativeMask,
+    TraumaPattern,
+    PowerDynamic,
+    Emergent,
+
+    // v12.0 event-structure variants (NEW)
+    ProblemSolutionPattern,
+    MotivationInference,
+    GoalInference,
+    AgentResponsibility,
+    CauseEffectPattern,
+    ToolUsePattern,
+    InefficiencySignal,
+    PolarityConflict,
+    PurposeConflict,
+    RoleAnomaly,
+}
+```
+
+Used via `AtomVariant::MeaningVariant(HiddenMeaningType)`.
+
+---
+
+## Migration Strategy — From v11.0 to v12.0
+
+### Phase A: Add New Types (Additive, Zero Breaking Changes)
+
+```text
+1. Add SemanticAtom, AtomType, AtomVariant, SemanticRole to types.rs
+2. Add Composition, CompositionType, CompositionMember to types.rs
+3. Add LifecycleState, EpistemicState to types.rs
+4. Add SemanticEdge to types.rs
+5. Add Transform trait to pipeline/
+6. Add ProvenanceChain to types.rs
+7. Extend EdgeSource with new variants
+8. Extend HiddenMeaningType with new variants
+
+All existing code UNCHANGED. All 1,081 tests green.
+```
+
+### Phase B: Implement Transforms (New Code Only)
+
+```text
+1. Implement Tokenize transform (wraps existing tokenizer)
+2. Implement ExtractFrame transform (MD-1)
+3. Implement ReasonFrame transform (MD-2)
+4. Implement IngestAtoms transform (wraps existing ingest)
+5. Implement GovernBeliefs transform (MD-4)
+6. Implement SeedAnchor transform (MD-4)
+
+All existing code UNCHANGED. New transforms tested independently.
+```
+
+### Phase C: Bridge Existing → New Types
+
+```text
+1. Add conversion: NodeStatus → LifecycleState
+2. Add conversion: BeliefState → (LifecycleState, EpistemicState)
+3. Add conversion: EventFrame (if created) → SemanticAtom
+4. Add conversion: HiddenMeaningCandidate → SemanticAtom
+5. Pipeline can emit both old and new types simultaneously
+
+All existing code UNCHANGED. Dual-emission ensures compatibility.
+```
+
+### Phase D: Switch Pipeline to Transform Engine
+
+```text
+1. PipelineEngine calls transforms instead of hardcoded stages
+2. Existing stages become transform implementations
+3. Feature flag: transform_pipeline_enabled
+
+When disabled: identical to v11.0 behavior.
+When enabled: uses new transform engine.
+```
+
+### Phase E: Deprecate Old Types (After Full Test Coverage)
+
+```text
+1. Mark NodeStatus as deprecated (→ LifecycleState)
+2. Mark BeliefState as deprecated (→ EpistemicState)
+3. Remove EventFrame, HiddenMeaningCandidate as separate types
+4. Remove ProvenanceSource (→ EdgeSource)
+5. Remove CandidateStatus (→ LifecycleState + EpistemicState)
+
+Only after 100% test coverage on new types.
+```
 
 ---
 
 ## Acceptance Criteria
 
-Architecture evolution is acceptable if:
+The elegant architecture is accepted if:
 
-1. Token ingest path is UNCHANGED and always active
-2. Frame ingest path is ADDITIVE and feature-flagged
-3. All 1,081 existing tests remain green
-4. New types are `#[non_exhaustive]` and backward compatible
-5. New struct fields are `Option<T>` and backward compatible
-6. Layer count remains at 4 (not expanded to 7)
-7. No existing module is deleted or rewritten
-8. `ingest_text()` wraps existing logic, does not replace it
-9. Structural similarity falls back to existing formula when no frame context
-10. Pipeline behavior is identical to v11.0 when `frame_compiler_enabled = false`
+1. **6 abstractions defined**: SemanticAtom, Composition, two-axis status, SemanticEdge, Transform, Seed Anchoring
+2. **4 overlapping enums → 2 orthogonal axes**: no "Candidate" in 3 places
+3. **4 edge systems → 1 typed triple**: no ProvenanceSource separate from EdgeSource
+4. **3 grouping types → 1 Composition**: cross-type comparison and convergence enabled
+5. **2 ingest paths → 1 unified path**: SemanticAtom handles all richness levels
+6. **Pipeline extensible by adding transforms**: no pipeline modifications for new MDs
+7. **Seed-driven confidence**: no separate source trust weight system
+8. **All 1,081 tests survive migration**: additive changes first, deprecation last
+9. **Feature-flagged at every phase**: can revert to v11.0 behavior at any point
 
 ---
 
 ## Final Statement
 
-The AAM refactor evolves the architecture from:
+This architecture replaces v11.0's patchwork of overlapping types with 6 unified abstractions.
+Every piece of knowledge is a SemanticAtom entering through one path. Every structured group
+is a Composition. Every entity has two status axes. Every edge is a typed triple. Every
+processing step is a Transform. Every confidence score is seed-anchored.
 
-```text
-token-driven symbolic reasoning (only)
-```
-
-to:
-
-```text
-token-driven + frame-enriched symbolic reasoning
-```
-
-This is additive evolution, not architectural revolution. The token foundation remains. Frame enrichment builds on top. Every downstream MD can leverage frame structure when available, while the system continues to function perfectly without it.
+The result: **less code, more reasoning power, zero conceptual overlap**.

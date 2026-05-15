@@ -1,552 +1,389 @@
-# MD-4 — Epistemic Truth & Belief Governance Layer (Adjusted for Implementation)
+# MD-4 — Epistemic Truth & Belief Governance (Elegant Architecture)
 
-> **Adjustment Note (v11.0 alignment):** This document has been revised for implementation
-> readiness. Key changes from original spec:
-> - Phase 1 implements BeliefState + ProvenanceChain ONLY; decay/arbitration deferred
-> - UNIFY with existing `GroundingEvidence` instead of creating parallel system
-> - Separate `EpistemicConflictType` from existing `ConflictType` (meaning-pathway vs epistemic)
-> - Unify `SourceType` with existing `EdgeSource` where possible
-> - Simplify `KnowledgeClaim` — start without heavy provenance/evidence/decay fields
-> - Use existing `PolicyMeta` as governance entry point, not a new system
-> - Hypothesis quarantine aligns with existing `NodeStatus::Quarantine`
-> - All 1,081 existing tests must remain green
-
----
-
-## Context
-
-Assume completed:
-
-- MD-1: RSVS Semantic Frame Compiler (at least Phase 1)
-- MD-2: Pre-Ingest Meaning Reasoner (at least Phase 1)
-- MD-3: AAM Architecture Refactor (hybrid additive approach)
-
-This document defines the epistemic governance layer required to prevent knowledge pollution, false certainty, contradiction collapse, and unstable long-term reasoning.
-
----
-
-## Core Problem
-
-AAM now handles multiple knowledge classes:
-
-```text
-surface event facts        (from MD-1 EventFrame)
-hidden meaning candidates  (from MD-2 Pre-Ingest Reasoner)
-inferred hypotheses        (from abductive/predictive engines)
-pattern-derived beliefs    (from pattern mining)
-grounded confirmations     (from grounding engine)
-contradictions             (from conflict detection)
-reflections                (from reflection engine)
-predictive projections     (from prediction engine)
-```
-
-Without governance:
-
-```text
-candidate inference may become treated as fact
-temporary assumptions may persist forever
-contradictions may poison graph state
-weak evidence may dominate strong evidence
-old beliefs may remain despite disproof
-equivalent facts may fragment
-```
-
-Result: memory corruption, semantic pollution, belief drift, hallucinated certainty.
+> **Prerequisite**: MD-3 defines LifecycleState, EpistemicState (two orthogonal axes),
+> Composition, SemanticEdge, ProvenanceChain, EdgeSource, Seed Anchoring.
+> This document defines the `GovernBeliefs` and `SeedAnchor` Transforms.
 
 ---
 
 ## Mission
 
-Create a deterministic epistemic governance framework.
+Implement belief governance as two Transforms:
 
-**Phase 1 responsibilities** (IMMEDIATE):
+1. **GovernBeliefs** — assigns and transitions LifecycleState + EpistemicState on Compositions
+2. **SeedAnchor** — evaluates confidence via seed alignment, replacing source trust weights
 
-- truth state management (BeliefState transitions)
-- provenance tracking (where did this belief come from?)
-- hypothesis quarantine (prevent premature grounding)
-
-**Phase 2 responsibilities** (DEFERRED):
-
-- contradiction arbitration (trust comparison, evidence volume)
-- temporal confidence decay (staleness management)
-- semantic deduplication (equivalent claims unify)
-- source trust evaluation (reliability weighting)
+These two transforms replace the entire patchwork of NodeStatus, CandidateStatus,
+BeliefState, GroundingVerdict, and source trust weight systems.
 
 ---
 
 ## Core Principle
 
-RSVS must distinguish:
+RSVS must distinguish **structural maturity** from **epistemic confidence**.
 
 ```text
-what was observed     → BeliefState::Observed
-what was inferred     → BeliefState::Inferred
-what is hypothesized  → BeliefState::Hypothesis
-what is weak          → BeliefState::Weak
-what is contradicted  → BeliefState::Contradicted
-what is deprecated    → BeliefState::Deprecated
-```
+LifecycleState:  how established is this entity in the graph?
+EpistemicState:  how confident are we in this knowledge?
 
-Knowledge is not binary. Belief states govern lifecycle.
+These are ORTHOGONAL. Changing one must not affect the other.
+```
 
 ---
 
-## Alignment with Existing Codebase
-
-### Existing Governance Types
-
-| Existing Type | Location | Fields/variants |
-|---------------|----------|-----------------|
-| `GroundingEvidence` | sense.rs:114 | confirming_contexts, contradicting_contexts, last_contradiction, revision_count |
-| `GroundingVerdict` | sense.rs:174 | WellGrounded, NeedsReview, NeedsRevision |
-| `NodeStatus` | types.rs:614 | New, Candidate, Stable, Deprecated, **Quarantine** |
-| `PolicyMeta` | types.rs:769 | policy_version, governance_score, candidate_evidence_pool, status_flip_count, seen_fingerprints |
-| `ConflictType` | types.rs:221 | AffectiveSocialMismatch, AffectivePragmaticMismatch, etc. (5 meaning-pathway variants) |
-| `AtomRecord` | autonomy.rs:38 | governance_score, candidate_evidence_pool, status_flip_count, access_count |
-
-**Key insight**: Governance infrastructure already exists at the node/sense level. MD-4 adds governance at the **knowledge claim** level — a layer above.
-
-### Relationship: Not Replacement, Layering
-
-```text
-Level 3: KnowledgeClaim (belief state, provenance)       ← MD-4 NEW
-Level 2: Sense + GroundingEvidence (sense grounding)      ← EXISTING
-Level 1: Node + NodeStatus (node lifecycle)               ← EXISTING
-Level 0: AtomRecord (activation governance)                ← EXISTING
-```
-
-MD-4 does NOT replace `GroundingEvidence` or `NodeStatus`. It adds a higher-level governance layer.
-
----
-
-## Type Design — Phase 1
-
-### BeliefState (NEW enum)
+## GovernBeliefs Transform
 
 ```rust
-/// Epistemic state of a knowledge claim.
-/// Governs lifecycle: observation → candidate → inference → grounding → deprecation.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum BeliefState {
-    Observed,      // Direct extracted event (from MD-1)
-    Candidate,     // Pre-ingest candidate (from MD-2)
-    Inferred,      // Derived by reasoning rule
-    Hypothesis,    // Unconfirmed scenario reasoning
-    Grounded,      // Repeatedly supported by evidence
-    Weak,          // Low evidence, at risk
-    Contradicted,  // Evidence opposes
-    Deprecated,    // No longer trusted
+/// GovernBeliefs Transform
+///
+/// Input:  GraphDelta (new nodes and compositions from ingest)
+/// Output: GovernedDelta (same + lifecycle/epistemic assignments + transitions)
+pub struct GovernBeliefs {
+    config: GovernanceConfig,
+}
+
+impl Transform for GovernBeliefs {
+    type Input = GraphDelta;
+    type Output = GovernedDelta;
+
+    fn id(&self) -> &'static str { "GovernBeliefs" }
+
+    fn transform(&self, delta: &Self::Input, ctx: &mut PipelineContext) -> Self::Output {
+        let mut governed = GovernedDelta::from(delta.clone());
+
+        for composition in &delta.new_compositions {
+            // 1. Assign initial states based on composition type and source
+            let (lifecycle, epistemic) = self.initial_states(composition);
+            governed.set_states(composition.id.clone(), lifecycle, epistemic);
+
+            // 2. Check for contradictions with existing graph
+            if let Some(contradiction) = self.detect_contradiction(composition, &ctx.graph) {
+                governed.mark_contradicted(composition.id.clone(), contradiction);
+            }
+
+            // 3. Check for promotion eligibility (existing compositions)
+            self.check_promotions(&mut governed, &ctx.graph);
+        }
+
+        governed
+    }
 }
 ```
 
-### BeliefState Transitions (IMMEDIATE)
-
-```text
-Observed → Candidate → Inferred → Grounded
-                ↓           ↓
-            Rejected    Contradicted → Deprecated
-Hypothesis → Grounded (if confirmed)
-Grounded   → Contradicted (if new contradiction)
-Contradicted → Recovered (if contradiction resolved) [Phase 2]
-```
-
-Phase 1 implements these transitions:
+### Initial State Assignment
 
 ```rust
-impl BeliefState {
-    pub fn can_transition_to(&self, target: &BeliefState) -> bool {
-        match (self, target) {
-            (Observed, Candidate) => true,
-            (Candidate, Inferred) => true,
-            (Candidate, Deprecated) => true,  // rejected
-            (Inferred, Grounded) => true,
-            (Inferred, Contradicted) => true,
-            (Hypothesis, Grounded) => true,
-            (Hypothesis, Contradicted) => true,
-            (Grounded, Contradicted) => true,
-            (Contradicted, Deprecated) => true,
-            _ => false,
+impl GovernBeliefs {
+    fn initial_states(&self, comp: &Composition) -> (LifecycleState, EpistemicState) {
+        match comp.composition_type {
+            // Events from direct extraction
+            CompositionType::Event => {
+                match comp.provenance.origin {
+                    EdgeSource::FrameCompiler => (LifecycleState::New, EpistemicState::Observed),
+                    _ => (LifecycleState::New, EpistemicState::Inferred),
+                }
+            },
+
+            // Hidden meanings from pre-ingest reasoning
+            CompositionType::HiddenMeaning => {
+                (LifecycleState::Quarantine, EpistemicState::Inferred)
+            },
+
+            // Patterns from mining
+            CompositionType::Pattern => {
+                (LifecycleState::Candidate, EpistemicState::Inferred)
+            },
+
+            // Hypotheses from abductive/predictive
+            CompositionType::Hypothesis => {
+                (LifecycleState::Quarantine, EpistemicState::Hypothesis)
+            },
+
+            // Externally acquired
+            CompositionType::Acquisition => {
+                match comp.provenance.origin {
+                    EdgeSource::AcquisitionUserAnswer => (LifecycleState::Candidate, EpistemicState::Observed),
+                    EdgeSource::AcquisitionSelfStudy => (LifecycleState::Quarantine, EpistemicState::Inferred),
+                    EdgeSource::AcquisitionRecall => (LifecycleState::Stable, EpistemicState::Grounded),
+                    _ => (LifecycleState::Candidate, EpistemicState::Inferred),
+                }
+            },
+
+            // Situations
+            CompositionType::Situation => {
+                (LifecycleState::Candidate, EpistemicState::Inferred)
+            },
         }
     }
 }
 ```
 
-### ProvenanceChain (NEW struct — Phase 1: lightweight)
+### Contradiction Detection
 
 ```rust
-/// Tracks where a belief came from.
-/// Phase 1: simple chain. Phase 2: full lineage with transformation records.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ProvenanceChain {
-    pub source_type: ProvenanceSource,
-    pub source_id: String,              // event_id, rule_id, etc.
-    pub timestamp: String,              // ISO 8601
-    pub parent_claim_id: Option<String>, // if derived from another claim
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum ProvenanceSource {
-    DirectObservation,
-    FrameExtraction,
-    HiddenMeaningRule,
-    PatternMining,
-    AbductiveInference,
-    DeductiveReasoning,
-    PredictiveCompletion,
-    Reflection,
-    HumanAssertion,
-}
-```
-
-Note: `ProvenanceSource` overlaps with `EdgeSource` conceptually but serves a different purpose. `EdgeSource` tracks graph edge origin. `ProvenanceSource` tracks knowledge claim origin. They coexist.
-
-### KnowledgeClaim (NEW struct — Phase 1: minimal)
-
-```rust
-/// A governed knowledge claim in the epistemic layer.
-/// Phase 1: belief state + provenance + confidence only.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct KnowledgeClaim {
-    pub claim_id: String,
-    pub belief_state: BeliefState,
-    pub confidence: f32,
-    pub provenance: ProvenanceChain,
-    pub created_at: String,
-    pub updated_at: String,
-
-    // Link to existing graph structures
-    pub node_id: Option<NodeId>,          // if claim is about a node
-    pub sense_id: Option<SenseId>,        // if claim is about a sense
-    pub event_id: Option<String>,         // if claim originated from an event frame
-
-    // Phase 2 fields (added later, all Option<T>)
-    pub supporting_evidence: Option<Vec<EvidenceRef>>,
-    pub contradicting_evidence: Option<Vec<EvidenceRef>>,
-    pub decay_profile: Option<DecayProfile>,
-    pub semantic_identity: Option<SemanticIdentity>,
-}
-```
-
-All Phase 2 fields are `Option<T>` — backward compatible when added.
-
-### EvidenceRef (Phase 2 — stub for now)
-
-```rust
-/// Reference to evidence supporting or contradicting a claim.
-/// Phase 2 implementation.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EvidenceRef {
-    pub evidence_id: String,
-    pub evidence_type: String,  // "event", "sense", "pattern", etc.
+pub struct Contradiction {
+    pub conflict_type: EpistemicConflictType,
+    pub opposing_composition_id: CompositionId,
     pub strength: f32,
 }
-```
 
----
-
-## Type Design — Phase 2 (DEFERRED)
-
-### EpistemicConflictType (NEW — separate from existing ConflictType)
-
-The existing `ConflictType` in `types.rs` has 5 meaning-pathway variants:
-
-```rust
-// EXISTING — DO NOT MODIFY
-pub enum ConflictType {
-    AffectiveSocialMismatch,
-    AffectivePragmaticMismatch,
-    SocialPragmaticMismatch,
-    AffectiveInternalConflict,
-    ConnotativeLiteralMismatch,
-}
-```
-
-MD-4 needs epistemic-level conflict types. These are a DIFFERENT classification axis:
-
-```rust
 /// Epistemic-level conflict taxonomy.
-/// Different axis from meaning-pathway ConflictType.
+/// Separate from v11.0's meaning-pathway ConflictType.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum EpistemicConflictType {
-    PolarityConflict,      // same event, opposite polarity
-    PurposeConflict,       // same event, different purpose
-    AgentConflict,         // same event, different agent
-    PatientConflict,       // same event, different patient
-    CauseConflict,         // same event, different cause
-    TemporalConflict,      // temporal inconsistency
-    LocationConflict,      // location inconsistency
-    SemanticContradiction, // general semantic clash
-    RoleReversal,          // agent-patient swap
-    EquivalenceMismatch,   // should be equivalent but differs
+    PolarityConflict,
+    PurposeConflict,
+    AgentConflict,
+    PatientConflict,
+    CauseConflict,
+    TemporalConflict,
+    LocationConflict,
+    SemanticContradiction,
+    RoleReversal,
+    EquivalenceMismatch,
+}
+
+impl GovernBeliefs {
+    fn detect_contradiction(&self, comp: &Composition, graph: &Graph) -> Option<Contradiction> {
+        // Find compositions with same predicate but conflicting roles
+        let same_predicate: Vec<&Composition> = graph.compositions()
+            .filter(|c| c.composition_type == CompositionType::Event)
+            .filter(|c| c.has_member_with_role(SemanticRole::Predicate, &comp))
+            .collect();
+
+        for other in same_predicate {
+            // Polarity conflict
+            if self.has_polarity_conflict(comp, other) {
+                return Some(Contradiction {
+                    conflict_type: EpistemicConflictType::PolarityConflict,
+                    opposing_composition_id: other.id.clone(),
+                    strength: 0.90,
+                });
+            }
+
+            // Role reversal
+            if self.has_role_reversal(comp, other) {
+                return Some(Contradiction {
+                    conflict_type: EpistemicConflictType::RoleReversal,
+                    opposing_composition_id: other.id.clone(),
+                    strength: 0.85,
+                });
+            }
+
+            // Purpose conflict
+            if self.has_purpose_conflict(comp, other) {
+                return Some(Contradiction {
+                    conflict_type: EpistemicConflictType::PurposeConflict,
+                    opposing_composition_id: other.id.clone(),
+                    strength: 0.70,
+                });
+            }
+        }
+
+        None
+    }
 }
 ```
 
-Rationale for separate type: meaning-pathway conflicts (existing) and epistemic conflicts (new) operate at different levels. A single claim can have both types. Merging them would break existing match statements.
+### Lifecycle Transitions
 
-### DecayProfile (Phase 2)
+```text
+New → Candidate     (after first sense induction)
+Candidate → Stable  (after grounding confirms)
+Stable → Deprecated (if contradicted + not recovered)
+Any → Quarantine    (if hypothesis detected or conflict unresolved)
+Quarantine → Candidate (if evidence supports)
+```
+
+### Epistemic Transitions
+
+```text
+Observed → Inferred → Grounded   (as evidence accumulates)
+Hypothesis → Grounded             (if independently confirmed)
+Any → Contradicted                (if opposing evidence stronger)
+Grounded → Contradicted           (if new contradiction)
+Contradicted → Grounded           (if contradiction resolved, Phase 2)
+```
+
+---
+
+## SeedAnchor Transform
+
+Replaces source trust weight system with seed-driven confidence evaluation.
 
 ```rust
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum DecayProfile {
-    Stable,       // historical facts, no decay
-    SlowDecay,    // long-lived states
-    MediumDecay,  // regular information
-    FastDecay,    // current states, intentions
-    Volatile,     // real-time observations
+/// SeedAnchor Transform
+///
+/// Input:  GovernedDelta
+/// Output: AnchoredDelta (same + seed_scores on each composition)
+pub struct SeedAnchor {
+    seed_engine: SeedActivationEngine,
+}
+
+impl Transform for SeedAnchor {
+    type Input = GovernedDelta;
+    type Output = AnchoredDelta;
+
+    fn id(&self) -> &'static str { "SeedAnchor" }
+
+    fn transform(&self, governed: &Self::Input, ctx: &mut PipelineContext) -> Self::Output {
+        let mut anchored = AnchoredDelta::from(governed.clone());
+
+        for composition in &governed.compositions {
+            // Compute seed alignment scores
+            let seed_scores = self.compute_seed_scores(composition, &ctx.graph);
+            anchored.set_seed_scores(composition.id.clone(), seed_scores.clone());
+
+            // Adjust confidence based on seed anchoring
+            let seed_confidence = self.seed_anchored_confidence(&seed_scores);
+            let adjusted = (composition.confidence * 0.6 + seed_confidence * 0.4).clamp(0.0, 1.0);
+            anchored.adjust_confidence(composition.id.clone(), adjusted);
+        }
+
+        anchored
+    }
 }
 ```
 
-### SemanticIdentity (Phase 2)
-
-For deduplicating equivalent claims:
+### Seed-Driven Confidence
 
 ```rust
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SemanticIdentity {
-    pub canonical_form: String,          // normalized representation
-    pub equivalent_forms: Vec<String>,   // passive/active, synonym variants
+impl SeedAnchor {
+    fn seed_anchored_confidence(&self, scores: &HashMap<SeedPrimitive, f32>) -> f32 {
+        let trust   = scores.get(&SeedPrimitive::Trust).copied().unwrap_or(0.5);
+        let risk    = scores.get(&SeedPrimitive::Risk).copied().unwrap_or(0.5);
+        let value   = scores.get(&SeedPrimitive::Value).copied().unwrap_or(0.5);
+        let goal    = scores.get(&SeedPrimitive::Goal).copied().unwrap_or(0.5);
+        let identity = scores.get(&SeedPrimitive::Identity).copied().unwrap_or(0.5);
+
+        // Trust and risk dominate epistemic evaluation
+        trust * 0.30
+        + (1.0 - risk) * 0.25
+        + value * 0.20
+        + goal * 0.15
+        + identity * 0.10
+    }
 }
+```
+
+### Why Seed-Driven Is Better
+
+```text
+Source trust weights:
+  - Static per source type
+  - No connection to graph content
+  - External configuration
+  - Separate from reasoning
+
+Seed-driven anchoring:
+  - Dynamic: changes as graph matures
+  - Grounded in graph structure
+  - Uses same primitives as reasoning
+  - Natural feedback: confidence → seed activation → reasoning → confidence
+  - A composition aligned with trust seeds IS more trustworthy
+  - A composition triggering risk seeds IS more risky
 ```
 
 ---
 
-## Hypothesis Quarantine — Align with Existing NodeStatus::Quarantine
+## Integration with v11.0 Existing Governance
 
-The existing `NodeStatus` enum already has a `Quarantine` variant:
+| v11.0 Type | v12.0 Equivalent | Migration |
+|-----------|-----------------|-----------|
+| `NodeStatus` | `LifecycleState` | Direct mapping (identical variants) |
+| `BeliefState` | `(LifecycleState, EpistemicState)` | Split across two axes |
+| `GroundingVerdict` | Derived function of (lifecycle, epistemic, confidence) | No separate type |
+| `GroundingEvidence` | Kept as-is on Sense | Composition references Sense |
+| `PolicyMeta` | Subsumed by Composition.seed_scores + provenance | Gradual migration |
+| `CandidateStatus` | `(LifecycleState, EpistemicState)` | Eliminated as separate type |
+
+---
+
+## GroundingVerdict as Derived Function
+
+No separate `GroundingVerdict` enum. It's computed from the two axes:
 
 ```rust
-pub enum NodeStatus {
-    New, Candidate, Stable, Deprecated, Quarantine,
+fn grounding_verdict(lifecycle: &LifecycleState, epistemic: &EpistemicState, confidence: f32) -> GroundingVerdict {
+    match (lifecycle, epistemic) {
+        (Stable, Grounded) if confidence > 0.8 => WellGrounded,
+        (_, Contradicted) => NeedsRevision,
+        (Quarantine, _) => NeedsRevision,
+        _ => NeedsReview,
+    }
 }
 ```
 
-MD-4's hypothesis quarantine should USE this existing mechanism:
-
-```text
-Hypotheses enter the graph with:
-  - node_status = Quarantine
-  - belief_state = Hypothesis
-
-Promotion conditions:
-  - repeated support (multiple confirming events)
-  - independent evidence (different sources confirm)
-  - pattern consistency (fits established patterns)
-  - no strong contradiction
-
-After promotion:
-  - node_status = Stable
-  - belief_state = Grounded
-```
-
-No new quarantine system needed. Extend existing one.
-
 ---
 
-## Integration with GroundingEvidence
-
-`GroundingEvidence` already tracks confirming/contradicting contexts:
-
-```rust
-pub struct GroundingEvidence {
-    pub confirming_contexts: usize,
-    pub contradicting_contexts: usize,
-    pub last_contradiction: Option<String>,
-    pub revision_count: usize,
-}
-```
-
-MD-4's `KnowledgeClaim` references grounding as evidence:
-
-```text
-KnowledgeClaim.supporting_evidence ← includes GroundingEvidence.confirming_contexts
-KnowledgeClaim.contradicting_evidence ← includes GroundingEvidence.contradicting_contexts
-```
-
-The relationship:
-
-```text
-KnowledgeClaim (epistemic level)
-  → references → Sense (has GroundingEvidence)
-  → references → Node (has NodeStatus)
-```
-
-No duplication. `KnowledgeClaim` is a governance view over existing data.
-
----
-
-## Confidence Governance — Phase 1 (Simple)
-
-Phase 1 uses a simple formula:
-
-```text
-claim.confidence = provenance_source_weight
-```
-
-Source weights (defaults, configurable):
-
-```text
-DirectObservation       0.85
-FrameExtraction         0.80
-HiddenMeaningRule       0.65
-PatternMining           0.60
-AbductiveInference      0.50
-PredictiveCompletion    0.45
-Reflection              0.40
-```
-
-Phase 2 adds:
-
-```text
-confidence = base_source_weight
-           + support_bonus
-           - contradiction_penalty
-           - decay_penalty
-           + consistency_bonus
-```
-
-Clamp: 0.0 to 1.0
-
----
-
-## Integration with MD-1 and MD-2
-
-### From MD-1 (EventFrame)
-
-```text
-EventFrame → KnowledgeClaim
-  belief_state = Observed
-  provenance.source_type = FrameExtraction
-  provenance.source_id = event_id
-  confidence = frame.confidence
-```
-
-### From MD-2 (HiddenMeaningCandidate)
-
-```text
-HiddenMeaningCandidate → KnowledgeClaim
-  belief_state = Candidate
-  provenance.source_type = HiddenMeaningRule
-  provenance.source_id = rule_id
-  confidence = candidate.confidence
-  node_status = Quarantine (hypothesis quarantine)
-```
-
-### Promotion Rules
-
-```text
-Candidate → Inferred:
-  when candidate receives independent supporting evidence
-
-Inferred → Grounded:
-  when 3+ independent confirming contexts exist
-  AND no strong contradiction
-
-Hypothesis → Grounded:
-  when pattern-consistent AND independently confirmed
-
-Any → Contradicted:
-  when strong contradiction with higher-trust source
-
-Contradicted → Deprecated:
-  when no recovery within N cycles
-```
-
----
-
-## Module Structure (Phase 1: Minimal)
+## Module Structure
 
 ```text
 layer1/crates/rsvs-core/src/
   epistemic/
-    mod.rs              // public API: register_claim(), promote(), contradict()
-    types.rs            // BeliefState, ProvenanceChain, ProvenanceSource, KnowledgeClaim, EvidenceRef
-    belief_state.rs     // BeliefState transition logic
-    claim_store.rs      // HashMap<ClaimId, KnowledgeClaim> + query methods
-    promotion.rs        // rules for belief state transitions
+    mod.rs              // GovernBeliefs + SeedAnchor Transforms
+    types.rs            // EpistemicConflictType, Contradiction, GovernedDelta, AnchoredDelta
+    governance.rs       // state assignment + transitions + contradiction detection
+    seed_anchor.rs      // seed-driven confidence evaluation
+    promotion.rs        // lifecycle + epistemic promotion rules
     tests.rs            // unit tests
 ```
 
-6 files for Phase 1. Much simpler than the original 10-file structure.
+6 files.
 
 ---
 
 ## Required Tests
 
-### Test 1 — Belief State Transitions Are Valid
+### Test 1 — Event → (New, Observed)
 
-```text
-Observed → Candidate → Inferred → Grounded  ✓
-Observed → Grounded  ✗ (skip not allowed)
-Candidate → Deprecated  ✓ (rejected)
-Grounded → Contradicted → Deprecated  ✓
-```
+Event from FrameCompiler → lifecycle=New, epistemic=Observed
 
-### Test 2 — Direct Observation Creates Claim with Correct State
+### Test 2 — HiddenMeaning → (Quarantine, Inferred)
 
-Input: EventFrame with source = FrameExtraction
+HiddenMeaning from ReasonFrame → lifecycle=Quarantine, epistemic=Inferred
 
-Expected:
+### Test 3 — Contradiction Detected → Epistemic Changes to Contradicted
 
-```text
-claim.belief_state = Observed
-claim.provenance.source_type = FrameExtraction
-claim.confidence = frame.confidence
-```
+Two compositions with polarity conflict → one becomes Contradicted
 
-### Test 3 — Hidden Meaning Candidate Enters as Candidate + Quarantine
+### Test 4 — Promotion: Candidate → Stable
 
-Input: HiddenMeaningCandidate
+Composition receives confirming evidence → lifecycle transitions to Stable
 
-Expected:
+### Test 5 — Hypothesis Cannot Auto-Promote to Grounded
 
-```text
-claim.belief_state = Candidate
-node.node_status = Quarantine
-```
+Hypothesis composition → must pass through Inferred first, cannot skip to Grounded
 
-### Test 4 — Promotion from Candidate to Inferred
+### Test 6 — Seed Anchor Adjusts Confidence
 
-Condition: 2+ independent supporting events
+Composition aligned with trust seeds → confidence increases
+Composition triggering risk seeds → confidence decreases
 
-Expected: `belief_state` changes from `Candidate` to `Inferred`
+### Test 7 — Provenance Is Traceable
 
-### Test 5 — Contradiction Demotes Grounded Belief
-
-Condition: strong contradiction from higher-trust source
-
-Expected: `belief_state` changes from `Grounded` to `Contradicted`
-
-### Test 6 — Prediction Does Not Become Grounded Automatically
-
-Condition: claim from PredictiveCompletion source
-
-Expected: `belief_state = Hypothesis`, never auto-promoted to Grounded
-
-### Test 7 — Provenance Chain Is Traceable
-
-Query: "Why do you believe X?"
-
-Expected: chain from claim → source event → frame → rule
+Query: "Why does the system believe X?"
+→ ProvenanceChain: origin=HiddenMeaningRule, origin_id=hm_3, parent=evt_1
 
 ---
 
 ## Acceptance Criteria
 
-Phase 1 is acceptable if:
-
-1. `BeliefState` enum exists with valid transition logic
-2. `ProvenanceChain` tracks claim origin
-3. `KnowledgeClaim` has belief state + provenance + confidence
-4. Hypothesis quarantine uses existing `NodeStatus::Quarantine`
-5. No hypotheses can silently become facts (must pass through promotion rules)
-6. Provenance is traceable (every claim knows where it came from)
-7. `EpistemicConflictType` is separate from existing `ConflictType`
-8. `KnowledgeClaim` references existing `GroundingEvidence` (no duplication)
-9. All 1,081 existing tests remain green
-10. Module structure is 6 files, not 10
+1. `GovernBeliefs` Transform assigns (LifecycleState, EpistemicState) correctly
+2. `SeedAnchor` Transform computes seed_scores and adjusts confidence
+3. Two axes replace four overlapping enums
+4. No hypothesis can silently become fact (quarantine + promotion rules)
+5. Provenance is traceable via ProvenanceChain (using EdgeSource)
+6. Contradiction detection works for polarity, purpose, role reversal
+7. `EpistemicConflictType` is separate from v11.0 `ConflictType`
+8. GroundingVerdict is derived, not a separate enum
+9. All existing tests remain green
 
 ---
 
 ## Final Statement
 
-MD-4 adds epistemic governance as a layer ABOVE existing governance mechanisms. It does not replace `GroundingEvidence`, `NodeStatus`, or `PolicyMeta`. It adds belief lifecycle management at the knowledge claim level. Phase 1 implements the minimum viable governance: belief states, provenance, and quarantine. Phase 2 adds decay, arbitration, deduplication, and source trust evaluation.
+MD-4 implements belief governance through two Transforms: GovernBeliefs (assigns and
+transitions the two status axes) and SeedAnchor (evaluates confidence through seed
+alignment). The two-axis model eliminates four overlapping enums. Seed-driven confidence
+replaces static source trust weights with dynamic, graph-grounded evaluation.

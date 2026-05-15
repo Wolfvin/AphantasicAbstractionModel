@@ -1,352 +1,355 @@
-# MD-1 — RSVS Semantic Frame Compiler (Adjusted for Implementation)
+# MD-1 — Semantic Frame Compiler (Elegant Architecture)
 
-> **Adjustment Note (v11.0 alignment):** This document has been revised from the original
-> research-direction spec into an implementation-ready blueprint. Key changes:
-> - Phased approach: rule-based frame extraction FIRST, UD/SRL deferred
-> - Parallel ingest mode alongside existing token pipeline (not replacement)
-> - Explicit type alignment with existing `types.rs`, `RelationType`, `EdgeSource`
-> - Operational reality: early-stage graphs ingest short repeated tokens, not full sentences
-> - EventFrame defined as NEW type to add, with migration bridge
-> - All 1,081 existing tests must remain green — every addition is additive
+> **Prerequisite**: MD-3 defines the unified types (SemanticAtom, AtomType, SemanticRole,
+> EdgeSource, Transform). This document defines the `ExtractFrame` Transform — the first
+> enrichment step in the unified pipeline.
 
 ---
 
-## Objective
+## Mission
 
-Design a **non-LLM semantic ingestion pipeline** for RSVS that can transform raw natural language text into structured graph representations suitable for compositional reasoning.
+Implement the `ExtractFrame` Transform: converts sentence-like text into
+`SemanticAtom(Event, ...)` atoms with semantic role structure.
 
-Core requirements:
-
-- No LLM intervention
-- Deterministic / auditable
-- Compatible with RSVS compositional graph architecture
-- Preserve semantic roles, relations, causality, and nested meaning
-- **Additive to existing token pipeline** — not a replacement
+This Transform is the bridge from raw text to structured event knowledge. It sits
+alongside `Tokenize` in the Atomizer stage. Both produce `SemanticAtom` — one sparse,
+one rich. The downstream pipeline treats them uniformly.
 
 ---
 
-## Problem Statement
+## Core Constraint
 
-A naive token/co-occurrence ingest pipeline loses structural meaning.
-
-Example:
-
-**Input:**
-
-```text
-Raymond membuat aplikasi untuk kantor karena proses manual terlalu lambat.
-```
-
-Naive token ingest:
-
-```text
-Raymond, membuat, aplikasi, kantor, proses, manual, lambat
-```
-
-This loses:
-
-- who did the action
-- what received the action
-- why the action happened
-- purpose of the action
-- clause structure
-
-RSVS can reason over relations, but only if relations are represented structurally.
-
-### Operational Reality Check
-
-Current RSVS v11.0 ingests **short repeated tokens** (`raja`, `ratu`, `keras`), not full sentences. The token-based ingest path will remain the primary path for node promotion and co-occurrence learning. Frame-based ingest is an **enhancement layer** that activates when input is a complete sentence or clause.
-
-Therefore:
-
-```text
-Token ingest = foundation (always active)
-Frame ingest = enhancement (active when sentence detected)
-```
-
-Both paths converge into the same RSVS graph.
+No LLMs. Deterministic. Auditable. Rule-based in Phase 1.
 
 ---
 
-## Implementation Phases
-
-### Phase 1 — Rule-Based Frame Extraction (IMMEDIATE)
-
-Implement EventFrame extraction using deterministic rules, WITHOUT requiring UD/SRL parsers.
-
-Rule-based strategies:
-
-```text
-1. Predicate-first extraction
-   - Identify likely predicate (verb) from sentence
-   - Extract surrounding noun phrases as agent/patient
-   - Detect "karena"/"because" → cause slot
-   - Detect "untuk"/"for" → purpose slot
-   - Detect "di"/"at" → location slot
-
-2. Pattern matching for common clause structures
-   - [Agent] [predicate] [Patient] (karena|because) [Cause]
-   - [Agent] [predicate] [Patient] (untuk|for) [Purpose]
-   - [Patient] (dibuat|di-verb) (oleh|by) [Agent]  → passive detection
-
-3. Negation detection
-   - "tidak"/"not" + predicate → polarity = negative
-
-4. Voice detection
-   - di- prefix on verb → passive voice
-   - me- prefix on verb → active voice
-```
-
-This is deterministic, language-aware but not language-locked, and requires zero external models.
-
-### Phase 2 — UD + SRL Integration (DEFERRED)
-
-After Phase 1 proves stable and useful, integrate actual UD parsing and SRL.
-
-Requires:
-
-- Trained dependency parser for target languages (Indonesian, English)
-- PropBank-style semantic role labeler
-- These are external model dependencies — must be optional plugins
-
-### Phase 3 — AMR-Style Full Semantic Graph (FUTURE)
-
-Full AMR-style nested semantic graph compilation. This is the research vision, not the immediate implementation target.
-
----
-
-## Research-Backed Architectural Direction (Reference)
-
-The full research direction remains:
-
-```text
-Universal Dependencies
-→ Semantic Role Labeling
-→ AMR-style semantic graph
-→ RSVS ingestion
-```
-
-Phase 1 implements the **spirit** of this direction using rule-based heuristics.
-Phase 2 adds proper NLP tooling when available.
-Phase 3 completes the vision.
-
----
-
-## Target Structured Representation — EventFrame (NEW TYPE)
-
-This type does NOT exist in the current v11.0 codebase. It must be added to `types.rs`.
+## Transform Definition
 
 ```rust
-/// Structured semantic event extracted from text.
-/// Produced by Semantic Frame Compiler (Layer 0.5).
-/// Enters RSVS via frame_ingest adapter.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EventFrame {
-    pub event_id: String,
-    pub predicate: String,
-    pub arg0_agent: Option<String>,
-    pub arg1_patient: Option<String>,
-    pub arg2: Option<String>,         // recipient/beneficiary/instrument
-    pub cause: Option<String>,
-    pub purpose: Option<String>,
-    pub location: Option<String>,
-    pub time: Option<String>,
-    pub polarity: Polarity,
-    pub voice: Voice,
-    pub confidence: f32,
-    pub source: FrameSource,           // RuleBased, UdParse, SrlLabel
+/// ExtractFrame Transform
+///
+/// Input:  &str (raw text)
+/// Output: Option<SemanticAtom> — Some if text is sentence-like and frame extracted
+///
+/// This transform runs AFTER Tokenize. Both produce SemanticAtom.
+/// The pipeline decides whether to call ExtractFrame based on is_sentence_like().
+pub struct ExtractFrame {
+    config: FrameCompilerConfig,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum Polarity {
-    Positive,
-    Negative,
-}
+impl Transform for ExtractFrame {
+    type Input = &'static str;
+    type Output = Option<SemanticAtom>;
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum Voice {
-    Active,
-    Passive,
-}
+    fn id(&self) -> &'static str { "ExtractFrame" }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum FrameSource {
-    RuleBased,        // Phase 1
-    UdParse,          // Phase 2
-    SrlLabel,         // Phase 2
-    AmrCompilation,   // Phase 3
-}
-```
-
----
-
-## Semantic Edge Types — EXTEND RelationType
-
-Current `RelationType` in `types.rs` has 7 variants:
-
-```rust
-pub enum RelationType {
-    Categorical, Differential, Functional,
-    Spatial, Temporal, Causal, Discursive,
-}
-```
-
-Add semantic role edges as a **new parallel edge category** rather than modifying `RelationType`:
-
-```rust
-/// Semantic role edges produced by Frame Compiler.
-/// Stored alongside existing RelationType edges.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum SemanticRole {
-    Predicate,       // event → predicate node
-    Arg0Agent,       // event → agent node
-    Arg1Patient,     // event → patient node
-    Arg2Recipient,   // event → recipient/instrument
-    Cause,           // event → cause node
-    Purpose,         // event → purpose node
-    Location,        // event → location node
-    Time,            // event → time node
-    SourceEvent,     // hidden_meaning → source event
-    HiddenCandidate, // event → hidden meaning node
-    PatternType,     // hidden_meaning → pattern classification
-}
-```
-
-Rationale: `RelationType` is used pervasively across 1,081 tests. Adding variants there would cascade changes. A parallel `SemanticRole` type keeps frame-based edges cleanly separated while still being usable in the graph.
-
----
-
-## RSVS Graph Mapping
-
-Transform EventFrame to graph nodes and edges:
-
-```text
-event_e1 (composition node)
-  --SemanticRole::Predicate--> membuat
-  --SemanticRole::Arg0Agent--> Raymond
-  --SemanticRole::Arg1Patient--> aplikasi
-  --SemanticRole::Purpose-->    kantor
-  --SemanticRole::Cause-->      proses_manual_terlalu_lambat
-```
-
-Each frame becomes a **composition node** with typed semantic edges to its role-fillers.
-
-This is compatible with existing composition machinery. The composition node uses `EdgeSource::FrameCompiler` (new variant to add to `EdgeSource`).
-
----
-
-## EdgeSource Extension
-
-Add one new variant to the existing `EdgeSource` enum:
-
-```rust
-pub enum EdgeSource {
-    // ... existing 10 variants ...
-    FrameCompiler,    // NEW: edge created by Semantic Frame Compiler
-}
-```
-
-This is a single additive change — backward compatible.
-
----
-
-## Hybrid Ingest Pipeline
-
-The frame compiler does NOT replace the token ingest path. Both coexist:
-
-```text
-Raw Text
-├── Token Path (existing, unchanged)
-│   → tokenizer
-│   → co-occurrence
-│   → node promotion
-│   → attention + sense induction
-│
-└── Frame Path (NEW)
-    → sentence detection
-    → rule-based frame extraction
-    → EventFrame construction
-    → frame_ingest adapter
-    → composition nodes with semantic edges
-```
-
-Decision logic:
-
-```rust
-fn ingest_text(text: &str) -> IngestResult {
-    // Always run token path (existing behavior)
-    let token_result = existing_token_ingest(text);
-
-    // Run frame path only if input looks like a sentence
-    if is_sentence_like(text) {
-        if let Some(frame) = frame_compiler.extract(text) {
-            let frame_result = frame_ingest_adapter.ingest(frame);
-            return merge_results(token_result, frame_result);
+    fn transform(&self, text: &Self::Input, ctx: &mut PipelineContext) -> Self::Output {
+        if !is_sentence_like(text) {
+            return None;
         }
-    }
 
-    token_result
-}
-```
+        let frame = self.extract_frame(text)?;
 
-`is_sentence_like()` heuristic:
-
-```text
-- contains at least one verb-like token
-- has 3+ tokens
-- not purely repetitive tokens
-```
-
-This ensures short token inputs (`raja`, `ratu`, `keras`) skip frame extraction entirely and use the fast existing path.
-
----
-
-## Frame Ingest Adapter
-
-Bridges EventFrame → RSVS graph:
-
-```rust
-pub struct FrameIngestAdapter {
-    graph: Arc<Graph>,
-}
-
-impl FrameIngestAdapter {
-    pub fn ingest(&self, frame: &EventFrame) -> FrameIngestResult {
-        // 1. Create event composition node
-        let event_node_id = self.graph.add_node(frame.event_id.clone());
-
-        // 2. Ensure role-filler nodes exist (or find existing)
-        let predicate_id = self.ensure_node(&frame.predicate);
-        let agent_id = frame.arg0_agent.as_ref().map(|a| self.ensure_node(a));
-        let patient_id = frame.arg1_patient.as_ref().map(|p| self.ensure_node(p));
-        // ... etc for all filled roles
-
-        // 3. Add typed semantic edges
-        self.graph.add_edge(event_node_id, predicate_id,
-            EdgeSource::FrameCompiler, SemanticRole::Predicate);
-        if let Some(aid) = agent_id {
-            self.graph.add_edge(event_node_id, aid,
-                EdgeSource::FrameCompiler, SemanticRole::Arg0Agent);
-        }
-        // ... etc
-
-        // 4. Trigger sense induction on new composition
-        // (reuses existing sense induction pipeline)
-
-        FrameIngestResult {
-            event_node_id,
-            nodes_created: ...,
-            edges_created: ...,
-        }
-    }
-
-    fn ensure_node(&self, label: &str) -> NodeId {
-        // Find existing node by label, or create new one
-        self.graph.find_by_label(label)
-            .unwrap_or_else(|| self.graph.add_node(label.to_string()))
+        Some(SemanticAtom {
+            id: format!("evt_{}", ctx.next_atom_id()),
+            label: frame.predicate,
+            atom_type: AtomType::Event,
+            roles: frame.roles,
+            polarity: Some(frame.polarity),
+            voice: Some(frame.voice),
+            variant: Some(AtomVariant::FrameVariant(FrameSource::RuleBased)),
+            confidence: frame.confidence,
+            source: EdgeSource::FrameCompiler,
+        })
     }
 }
 ```
+
+---
+
+## Frame Extraction — Phase 1: Rule-Based
+
+### ExtractionResult (internal, not a graph type)
+
+```rust
+/// Internal result of frame extraction.
+/// Converted to SemanticAtom by the Transform.
+struct ExtractionResult {
+    predicate: String,
+    roles: HashMap<SemanticRole, String>,
+    polarity: Polarity,
+    voice: Voice,
+    confidence: f32,
+}
+```
+
+### Rule-Based Strategies
+
+```rust
+impl ExtractFrame {
+    fn extract_frame(&self, text: &str) -> Option<ExtractionResult> {
+        // 1. Tokenize text
+        let tokens = tokenize(text);
+
+        // 2. Detect voice
+        let voice = detect_voice(&tokens);
+
+        // 3. Detect polarity
+        let polarity = detect_polarity(&tokens);
+
+        // 4. Extract predicate (verb-like token)
+        let predicate = extract_predicate(&tokens)?;
+
+        // 5. Extract roles based on clause patterns
+        let mut roles = HashMap::new();
+
+        // Agent/patient extraction
+        if voice == Voice::Active {
+            if let Some(agent) = extract_agent(&tokens, &predicate) {
+                roles.insert(SemanticRole::Arg0Agent, agent);
+            }
+            if let Some(patient) = extract_patient(&tokens, &predicate) {
+                roles.insert(SemanticRole::Arg1Patient, patient);
+            }
+        } else {
+            // Passive: patient is grammatical subject, agent is "oleh" phrase
+            if let Some(patient) = extract_passive_subject(&tokens, &predicate) {
+                roles.insert(SemanticRole::Arg1Patient, patient);
+            }
+            if let Some(agent) = extract_by_phrase(&tokens) {
+                roles.insert(SemanticRole::Arg0Agent, agent);
+            }
+        }
+
+        // 6. Extract cause ("karena"/"because" clause)
+        if let Some(cause) = extract_cause_clause(text) {
+            roles.insert(SemanticRole::Cause, cause);
+        }
+
+        // 7. Extract purpose ("untuk"/"for" clause)
+        if let Some(purpose) = extract_purpose_clause(text) {
+            roles.insert(SemanticRole::Purpose, purpose);
+        }
+
+        // 8. Compute confidence
+        let confidence = compute_frame_confidence(&roles, &polarity);
+
+        Some(ExtractionResult { predicate, roles, polarity, voice, confidence })
+    }
+}
+```
+
+### Sentence Detection
+
+```rust
+/// Heuristic: is this text likely a sentence (vs a single token)?
+pub fn is_sentence_like(text: &str) -> bool {
+    let tokens: Vec<&str> = text.split_whitespace().collect();
+
+    // Must have at least 3 tokens
+    if tokens.len() < 3 {
+        return false;
+    }
+
+    // Must contain at least one verb-like token
+    let has_verb = tokens.iter().any(|t| looks_predicate_like(t));
+    if !has_verb {
+        return false;
+    }
+
+    // Not purely repetitive tokens
+    let unique_count = tokens.iter().collect::<HashSet<_>>().len();
+    if unique_count < 2 {
+        return false;
+    }
+
+    true
+}
+
+fn looks_predicate_like(token: &str) -> bool {
+    // Indonesian: me- prefix, ber- prefix, di- prefix
+    // English: common verb suffixes
+    let lower = token.to_lowercase();
+    lower.starts_with("me") || lower.starts_with("ber") || lower.starts_with("di")
+    || lower.ends_with("ify") || lower.ends_with("ize") || lower.ends_with("ate")
+    || lower.ends_with("ing") || lower.ends_with("ed")
+}
+```
+
+### Voice Detection
+
+```rust
+fn detect_voice(tokens: &[&str]) -> Voice {
+    // Indonesian: di- prefix on predicate = passive
+    // English: "was"/"were"/"is" + past participle = passive
+    for token in tokens {
+        let lower = token.to_lowercase();
+        if lower.starts_with("di") && lower.len() > 3 {
+            return Voice::Passive;
+        }
+    }
+    Voice::Active
+}
+```
+
+### Polarity Detection
+
+```rust
+fn detect_polarity(tokens: &[&str]) -> Polarity {
+    // Indonesian: "tidak", "bukan", "tak", "jangan"
+    // English: "not", "no", "never", "don't"
+    let negation_markers = ["tidak", "bukan", "tak", "jangan", "not", "no", "never", "don't"];
+    for token in tokens {
+        if negation_markers.contains(&token.to_lowercase().as_str()) {
+            return Polarity::Negative;
+        }
+    }
+    Polarity::Positive
+}
+```
+
+### Cause/Purpose Clause Extraction
+
+```rust
+fn extract_cause_clause(text: &str) -> Option<String> {
+    // Split on "karena"/"because" and take the clause after it
+    let markers = ["karena", "because", "since", "sebab"];
+    for marker in markers {
+        if let Some(pos) = text.to_lowercase().find(marker) {
+            let clause = text[pos + marker.len()..].trim();
+            if !clause.is_empty() {
+                return Some(clause.to_string());
+            }
+        }
+    }
+    None
+}
+
+fn extract_purpose_clause(text: &str) -> Option<String> {
+    let markers = ["untuk", "for", "agar", "supaya", "in order to"];
+    for marker in markers {
+        if let Some(pos) = text.to_lowercase().find(marker) {
+            let clause = text[pos + marker.len()..].trim();
+            if !clause.is_empty() {
+                return Some(clause.to_string());
+            }
+        }
+    }
+    None
+}
+```
+
+### Confidence Computation
+
+```rust
+fn compute_frame_confidence(roles: &HashMap<SemanticRole, String>, polarity: &Polarity) -> f32 {
+    let mut score = 0.30; // base
+
+    if roles.contains_key(&SemanticRole::Arg0Agent) { score += 0.15; }
+    if roles.contains_key(&SemanticRole::Arg1Patient) { score += 0.15; }
+    if roles.contains_key(&SemanticRole::Cause) { score += 0.10; }
+    if roles.contains_key(&SemanticRole::Purpose) { score += 0.10; }
+
+    if *polarity == Polarity::Negative { score -= 0.05; } // slight penalty
+
+    score.clamp(0.0, 1.0)
+}
+```
+
+---
+
+## Graph Integration — IngestAtoms Transform
+
+When `IngestAtoms` receives a `SemanticAtom(Event, ...)`, it creates:
+
+1. **Nodes** for each role-filler label (or finds existing)
+2. **A Composition** of type `CompositionType::Event`
+3. **SemanticEdges** from the composition to each member node
+
+```rust
+// Inside IngestAtoms transform
+fn ingest_event_atom(&mut self, atom: &SemanticAtom, graph: &mut Graph) -> GraphDelta {
+    let mut delta = GraphDelta::new();
+
+    // 1. Create composition node
+    let comp_id = CompositionId::new();
+    let mut members = Vec::new();
+
+    // 2. Ensure predicate node exists
+    let predicate_id = graph.ensure_node(&atom.label);
+    members.push(CompositionMember {
+        node_id: predicate_id,
+        role: SemanticRole::Predicate,
+        confidence: atom.confidence,
+    });
+
+    // 3. For each role, ensure node and add composition member
+    for (role, label) in &atom.roles {
+        let node_id = graph.ensure_node(label);
+        members.push(CompositionMember {
+            node_id,
+            role: role.clone(),
+            confidence: atom.confidence,
+        });
+
+        // Add SemanticEdge
+        delta.add_edge(comp_id.clone(), node_id, SemanticEdge {
+            relation: RelationType::Categorical,  // membership relation
+            role: Some(role.clone()),
+            source: atom.source.clone(),
+        });
+    }
+
+    // 4. Create Composition
+    delta.add_composition(Composition {
+        id: comp_id,
+        composition_type: CompositionType::Event,
+        members,
+        lifecycle: LifecycleState::New,
+        epistemic: EpistemicState::Observed,
+        confidence: atom.confidence,
+        provenance: ProvenanceChain {
+            origin: atom.source.clone(),
+            origin_id: atom.id.clone(),
+            parent_composition_id: None,
+            timestamp: now_iso8601(),
+        },
+        seed_scores: HashMap::new(),  // filled by SeedAnchor transform
+        created_at: now_iso8601(),
+        updated_at: now_iso8601(),
+    });
+
+    delta
+}
+```
+
+---
+
+## Phase 2: UD + SRL Integration (Deferred)
+
+When proper NLP models are available, `ExtractFrame` gains additional strategies:
+
+```rust
+impl ExtractFrame {
+    fn extract_frame(&self, text: &str) -> Option<ExtractionResult> {
+        // Phase 1: try rule-based
+        if let Some(result) = self.rule_based_extract(text) {
+            return Some(result);
+        }
+
+        // Phase 2: try UD + SRL (if configured)
+        if self.config.use_ud_srl {
+            if let Some(result) = self.ud_srl_extract(text) {
+                return Some(result);
+            }
+        }
+
+        None
+    }
+}
+```
+
+The `AtomVariant::FrameVariant` distinguishes: `RuleBased` vs `UdParse` vs `SrlLabel`.
 
 ---
 
@@ -355,191 +358,79 @@ impl FrameIngestAdapter {
 ```text
 layer0/
   frame_compiler/
-    mod.rs              // public API: extract(), is_sentence_like()
-    types.rs            // EventFrame, Polarity, Voice, FrameSource, SemanticRole
-    rule_extractor.rs   // Phase 1: rule-based frame extraction
-    sentence_detect.rs  // heuristic sentence detection
-    ingest_adapter.rs   // EventFrame → RSVS graph bridge
-    tests.rs            // unit tests for frame extraction
-
-  // Future (Phase 2+):
-  // ud_parser.rs        // dependency parsing adapter
-  // srl_labeler.rs      // semantic role labeling adapter
-  // amr_compiler.rs     // AMR-style graph compilation
+    mod.rs              // ExtractFrame Transform + public API
+    rules.rs            // rule-based extraction strategies
+    sentence_detect.rs  // is_sentence_like() heuristic
+    confidence.rs       // frame confidence computation
+    tests.rs            // unit tests
 ```
 
-Note: This is 6 files, not 8+. Kept minimal for early stage.
+5 files. Minimal.
 
 ---
 
 ## Required Tests
 
-### Test 1 — Simple Active Sentence
-
-Input:
+### Test 1 — Active Sentence
 
 ```text
-Raymond membuat aplikasi
-```
-
-Expected frame:
-
-```json
-{
-  "predicate": "membuat",
-  "arg0_agent": "Raymond",
-  "arg1_patient": "aplikasi",
-  "polarity": "Positive",
-  "voice": "Active"
-}
+Input:  "Raymond membuat aplikasi"
+Output: SemanticAtom { atom_type: Event, label: "membuat",
+         roles: {Arg0Agent: "Raymond", Arg1Patient: "aplikasi"},
+         polarity: Positive, voice: Active }
 ```
 
 ### Test 2 — Sentence with Cause
 
-Input:
-
 ```text
-Raymond membuat aplikasi karena proses manual terlalu lambat
-```
-
-Expected frame:
-
-```json
-{
-  "predicate": "membuat",
-  "arg0_agent": "Raymond",
-  "arg1_patient": "aplikasi",
-  "cause": "proses manual terlalu lambat",
-  "polarity": "Positive",
-  "voice": "Active"
-}
+Input:  "Raymond membuat aplikasi karena proses manual terlalu lambat"
+Output: SemanticAtom { ..., roles: {Arg0Agent: "Raymond", Arg1Patient: "aplikasi",
+         Cause: "proses manual terlalu lambat"} }
 ```
 
 ### Test 3 — Passive Sentence
 
-Input:
-
 ```text
-Aplikasi dibuat oleh Raymond
-```
-
-Expected frame:
-
-```json
-{
-  "predicate": "membuat",
-  "arg0_agent": "Raymond",
-  "arg1_patient": "aplikasi",
-  "polarity": "Positive",
-  "voice": "Passive"
-}
+Input:  "Aplikasi dibuat oleh Raymond"
+Output: SemanticAtom { ..., voice: Passive,
+         roles: {Arg1Patient: "Aplikasi", Arg0Agent: "Raymond"} }
 ```
 
 ### Test 4 — Negated Sentence
 
-Input:
+```text
+Input:  "Raymond tidak membuat aplikasi"
+Output: SemanticAtom { ..., polarity: Negative }
+```
+
+### Test 5 — Token Input (No Frame)
 
 ```text
-Raymond tidak membuat aplikasi
+Input:  "raja"
+Output: None (is_sentence_like returns false)
 ```
 
-Expected frame:
+### Test 6 — Frame Atom Ingested as Composition
 
-```json
-{
-  "predicate": "membuat",
-  "arg0_agent": "Raymond",
-  "arg1_patient": "aplikasi",
-  "polarity": "Negative",
-  "voice": "Active"
-}
-```
-
-### Test 5 — Short Token Input (No Frame)
-
-Input:
-
-```text
-raja
-```
-
-Expected: `is_sentence_like()` returns false, no frame extraction attempted.
-
-### Test 6 — Frame Ingest Produces Correct Graph Structure
-
-Frame:
-
-```json
-{
-  "predicate": "membuat",
-  "arg0_agent": "Raymond",
-  "arg1_patient": "aplikasi"
-}
-```
-
-Expected graph:
-
-```text
-event_e1 --SemanticRole::Predicate--> membuat
-event_e1 --SemanticRole::Arg0Agent--> Raymond
-event_e1 --SemanticRole::Arg1Patient--> aplikasi
-```
-
-All edges have `EdgeSource::FrameCompiler`.
-
-### Test 7 — Hybrid Ingest Preserves Token Path
-
-Input:
-
-```text
-Raymond membuat aplikasi
-```
-
-Assert: Both token nodes AND frame composition node exist in graph.
-
----
-
-## Alignment with Existing Codebase
-
-| Existing Type | Relationship | Action |
-|---------------|-------------|--------|
-| `RelationType` (7 variants) | Kept unchanged | Add parallel `SemanticRole` |
-| `EdgeSource` (10 variants) | Add 1 variant | `FrameCompiler` |
-| `NodeId`, `Graph` | Reused directly | No change |
-| `SenseEngine`, sense induction | Triggered after frame ingest | No change to existing code |
-| `PipelineConfig` | Add `frame_compiler_enabled: bool` | Additive config field |
-| `ingest_text()` | Add frame path alongside token path | Wrapped, not replaced |
-| `Composition` machinery | Frame events become compositions | Reused |
+Verify that `IngestAtoms` creates a `Composition { composition_type: Event, ... }`
+with correct members and SemanticEdges.
 
 ---
 
 ## Acceptance Criteria
 
-Phase 1 is acceptable if:
-
-1. EventFrame type exists in `types.rs`
-2. SemanticRole type exists for typed edges
-3. Rule-based extraction works for: active, passive, negated, cause, purpose
-4. Short token inputs skip frame extraction entirely
-5. Frame ingest adapter creates composition nodes with semantic edges
-6. Existing token ingest path is UNCHANGED
-7. All 1,081 existing tests remain green
-8. Frame extraction is deterministic and auditable
-9. `is_sentence_like()` correctly distinguishes sentences from tokens
-10. Hybrid ingest merges both paths into the same graph
-
----
-
-## What This Enables Downstream
-
-- **MD2**: Pre-Ingest Meaning Reasoner operates on EventFrame outputs
-- **MD3**: Hybrid ingest pipeline is the foundation for architecture refactor
-- **MD4**: EventFrame provides structured input for epistemic governance
-- **MD5**: Frame complexity can inform cognitive mode selection
-- **MD6**: Missing frame fields trigger knowledge gap detection
+1. `ExtractFrame` Transform implemented and registered
+2. Produces `SemanticAtom(Event, ...)` for sentence-like input
+3. Returns `None` for token-like input
+4. Rule-based extraction covers: active, passive, negated, cause, purpose
+5. `is_sentence_like()` correctly distinguishes sentences from tokens
+6. Frame atoms ingested as `Composition(Event)` with `SemanticEdge` per role
+7. All existing tests remain green (Transform is additive)
 
 ---
 
 ## Final Statement
 
-MD-1 introduces structured semantic ingestion as an **additive parallel path**, not a replacement. Token-based ingest remains the foundation. Frame-based ingest enhances the graph with structured event knowledge when input is sentence-like. This ensures zero regression while enabling all downstream MDs.
+MD-1 implements the first enrichment Transform in the elegant architecture. It produces
+`SemanticAtom(Event, ...)` atoms that flow through the same unified pipeline as token atoms.
+No dual-track. No separate EventFrame type. One ingest path, varying richness.
