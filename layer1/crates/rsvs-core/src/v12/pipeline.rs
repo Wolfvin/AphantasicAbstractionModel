@@ -985,6 +985,7 @@ impl ErasedTransform for IngestAtoms {
                     node_id,
                     role: SemanticRole::Predicate,
                     confidence: atom.confidence,
+                    label: atom.label.clone(),
                 });
 
                 // Add role members.
@@ -994,6 +995,7 @@ impl ErasedTransform for IngestAtoms {
                         node_id: role_node_id,
                         role: role.clone(),
                         confidence: atom.confidence * 0.9,
+                        label: label.clone(),
                     });
                 }
 
@@ -1114,6 +1116,7 @@ impl ErasedTransform for EnrichComposition {
                     node_id: request.candidate_node_id,
                     role: request.role_to_fill.clone(),
                     confidence: request.confidence,
+                    label: request.candidate_label.clone(),
                 });
 
                 // Create a feedback edge.
@@ -1386,11 +1389,13 @@ mod tests {
                 node_id: a,
                 role: SemanticRole::Arg0Agent,
                 confidence: 1.0,
+                label: String::new(),
             });
             comp.members.push(CompositionMember {
                 node_id: b,
                 role: SemanticRole::Arg1Patient,
                 confidence: 1.0,
+                label: String::new(),
             });
             graph.compositions.insert(comp.id.clone(), comp);
         }
@@ -1439,6 +1444,7 @@ mod tests {
             node_id: 1,
             role: SemanticRole::Predicate,
             confidence: 0.3,
+            label: String::new(),
         });
         // Missing Arg0Agent and Arg1Patient.
         engine.graph.compositions.insert(comp.id.clone(), comp);
@@ -1452,16 +1458,19 @@ mod tests {
             node_id: 2,
             role: SemanticRole::Arg0Agent,
             confidence: 0.8,
+            label: String::new(),
         });
         comp2.members.push(CompositionMember {
             node_id: 3,
             role: SemanticRole::Arg1Patient,
             confidence: 0.8,
+            label: String::new(),
         });
         comp2.members.push(CompositionMember {
             node_id: 4,
             role: SemanticRole::Cause,
             confidence: 0.8,
+            label: String::new(),
         });
         engine.graph.compositions.insert(comp2.id.clone(), comp2);
 

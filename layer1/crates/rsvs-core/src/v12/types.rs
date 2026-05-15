@@ -492,6 +492,22 @@ impl Composition {
             .as_ref()
             .map(|c| c.opposing_composition_id.clone())
     }
+
+    /// Count independent provenance sources contributing to this composition.
+    /// A source is "independent" if it has a different `EdgeSource` origin.
+    /// Two members from `FrameCompiler` count as 1 source; one from `FrameCompiler`
+    /// and one from `EnrichmentFeedback` count as 2 independent sources.
+    ///
+    /// This is used by `can_promote_to_grounded()` in MD-4: the Inferred → Grounded
+    /// transition requires ≥ 2 independent sources.
+    pub fn provenance_source_count(&self, member_sources: &[EdgeSource]) -> usize {
+        let mut origins: HashSet<EdgeSource> = HashSet::new();
+        origins.insert(self.provenance.origin.clone());
+        for source in member_sources {
+            origins.insert(source.clone());
+        }
+        origins.len()
+    }
 }
 
 /// A member of a Composition — a node playing a specific role (MD-3 §2).
@@ -503,17 +519,19 @@ pub struct CompositionMember {
     pub role: SemanticRole,
     /// Confidence that this node correctly fills this role (0.0–1.0).
     pub confidence: f32,
+    /// Cached label for this member's node (avoids graph lookup for filtering).
+    /// Set during ingest from `graph.get_node(self.node_id).label`.
+    #[serde(default)]
+    pub label: String,
 }
 
 impl CompositionMember {
     /// Get the label for this member's node.
     ///
-    /// **Note**: In a full implementation, this would look up the node label
-    /// from the graph. For the type definition, we provide a placeholder.
-    /// The `has_member_with_role_and_label()` method on `Composition` uses this.
+    /// Returns the cached label set during ingest. This avoids a graph lookup
+    /// for filtering operations like `has_member_with_role_and_label()`.
     pub fn label(&self) -> &str {
-        // Placeholder — real impl uses `graph.get_node(self.node_id).label`
-        ""
+        &self.label
     }
 }
 
@@ -858,21 +876,125 @@ impl Default for PipelineContext {
     }
 }
 
-/// Extraction quality tracker (MD-1 feedback, Gap 10 fix).
+/// Tracks extraction quality per rule/pattern (MD-1 feedback loop).
 ///
-/// Tracks the quality of frame extractions across the pipeline,
-/// enabling the feedback loop to identify weak frames for re-extraction.
+/// Updated by the feedback loop when gap detection reveals extraction failures.
+/// When a rule consistently produces frames with missing roles, the system
+/// knows that rule is weak for certain patterns, and `ReExtractFrame` can use
+/// graph context to compensate.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExtractionQuality {
+    /// Which rule/pattern this quality record tracks.
+    pub rule_id: String,
+    /// Total number of extractions by this rule.
+    pub total_extractions: usize,
+    /// How many of those extractions produced gaps.
+    pub gaps_detected: usize,
+    /// How many gaps were successfully repaired by feedback loop.
+    pub gaps_repaired: usize,
+    /// Average confidence of extractions by this rule.
+    pub avg_confidence: f32,
+    /// The type of the most recent gap detected.
+    pub last_gap_type: Option<String>,
+}
+
+impl ExtractionQuality {
+    /// Gap rate: how often does this rule's extraction produce gaps?
+    pub fn gap_rate(&self) -> f32 {
+        if self.total_extractions == 0 { return 0.0; }
+        self.gaps_detected as f32 / self.total_extractions as f32
+    }
+
+    /// Repair rate: how often are the gaps successfully repaired?
+    pub fn repair_rate(&self) -> f32 {
+        if self.gaps_detected == 0 { return 1.0; }
+        self.gaps_repaired as f32 / self.gaps_detected as f32
+    }
+
+    /// Is this rule weak? (gap rate > 30% and repair rate < 50%)
+    pub fn is_weak(&self) -> bool {
+        self.gap_rate() > 0.30 && self.repair_rate() < 0.50
+    }
+}
+
+impl Default for ExtractionQuality {
+    fn default() -> Self {
+        Self {
+            rule_id: String::new(),
+            total_extractions: 0,
+            gaps_detected: 0,
+            gaps_repaired: 0,
+            avg_confidence: 0.0,
+            last_gap_type: None,
+        }
+    }
+}
+
+/// Global tracker for extraction quality across all rules (MD-1 feedback).
+///
+/// Stored in `PipelineContext` and updated by the feedback loop.
+/// When `ExtractionQualityTracker` marks a rule as weak (gap rate > 30%,
+/// repair rate < 50%), `ReExtractionRequest` can be produced by
+/// `SelectAcquisition`, and `ReExtractFrame` will use graph context
+/// to compensate for the rule's weaknesses.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ExtractionQualityTracker {
-    /// Number of frames successfully extracted.
+    /// Quality records indexed by rule ID.
+    #[serde(default)]
+    pub quality_by_rule: HashMap<String, ExtractionQuality>,
+    /// Number of frames successfully extracted (global).
     #[serde(default)]
     pub frames_extracted: usize,
-    /// Number of frames that were low-confidence (< 0.5).
+    /// Number of frames that were low-confidence (< 0.5) (global).
     #[serde(default)]
     pub low_confidence_frames: usize,
-    /// Average confidence of extracted frames.
+    /// Average confidence of extracted frames (global).
     #[serde(default)]
     pub average_confidence: f32,
+}
+
+impl ExtractionQualityTracker {
+    /// Record a successful extraction by a rule.
+    pub fn record_extraction(&mut self, rule_id: &str, confidence: f32) {
+        self.frames_extracted += 1;
+        if confidence < 0.5 {
+            self.low_confidence_frames += 1;
+        }
+        // Running average
+        self.average_confidence = (self.average_confidence * (self.frames_extracted - 1) as f32
+            + confidence) / self.frames_extracted as f32;
+
+        let entry = self.quality_by_rule.entry(rule_id.to_string())
+            .or_insert_with(|| ExtractionQuality {
+                rule_id: rule_id.to_string(),
+                ..Default::default()
+            });
+        entry.total_extractions += 1;
+        entry.avg_confidence = (entry.avg_confidence * (entry.total_extractions - 1) as f32
+            + confidence) / entry.total_extractions as f32;
+    }
+
+    /// Record that a gap was detected for a rule's extraction.
+    pub fn record_gap(&mut self, rule_id: &str, gap_type: &str) {
+        if let Some(entry) = self.quality_by_rule.get_mut(rule_id) {
+            entry.gaps_detected += 1;
+            entry.last_gap_type = Some(gap_type.to_string());
+        }
+    }
+
+    /// Record that a gap was repaired for a rule's extraction.
+    pub fn record_repair(&mut self, rule_id: &str) {
+        if let Some(entry) = self.quality_by_rule.get_mut(rule_id) {
+            entry.gaps_repaired += 1;
+        }
+    }
+
+    /// Get weak rules — candidates for graph-assisted re-extraction.
+    pub fn weak_rules(&self) -> Vec<&ExtractionQuality> {
+        self.quality_by_rule.values()
+            .filter(|q| q.is_weak())
+            .collect()
+    }
 }
 
 /// Placeholder for `KnowledgeGap` until the full MD-6 acquisition module is implemented.
@@ -1232,6 +1354,25 @@ impl GraphNeighborhood {
         }
         self.compositions.iter().map(|c| c.confidence).sum::<f32>() / self.compositions.len() as f32
     }
+
+    /// Build a graph neighborhood for the given keywords (MD-5).
+    ///
+    /// Instead of scanning the entire graph for contradictions or low confidence,
+    /// mode selection evaluates only the neighborhood relevant to current input.
+    /// This finds compositions whose members' labels match any of the keywords.
+    pub fn neighborhood_for(keywords: &[String], compositions: &[Composition]) -> Self {
+        let relevant: Vec<Composition> = compositions.iter()
+            .filter(|c| {
+                // A composition is relevant if any member's label matches a keyword
+                c.members.iter().any(|m| {
+                    let label_lower = m.label.to_lowercase();
+                    keywords.iter().any(|kw| label_lower.contains(&kw.to_lowercase()))
+                })
+            })
+            .cloned()
+            .collect();
+        Self { compositions: relevant }
+    }
 }
 
 impl Default for GraphNeighborhood {
@@ -1258,6 +1399,46 @@ impl Default for GraphSnapshot {
         Self {
             recent_atoms: Vec::new(),
             compositions: Vec::new(),
+        }
+    }
+}
+
+impl GraphSnapshot {
+    /// Build graph context for re-extracting a weak frame.
+    /// Returns `(SemanticRole, NodeId, f32)` triples from compositions
+    /// that share the same predicate, providing known role-fillers
+    /// as hints for the rule-based re-extraction.
+    pub fn context_for(&self, weak_frame: &WeakFrame) -> Vec<(SemanticRole, NodeId, f32)> {
+        let target_comp = self.compositions.iter()
+            .find(|c| c.id == weak_frame.composition_id);
+
+        match target_comp {
+            Some(comp) => {
+                let predicate = comp.member_with_role(&SemanticRole::Predicate)
+                    .map(|m| m.node_id);
+
+                match predicate {
+                    Some(pred_id) => {
+                        self.compositions.iter()
+                            .filter(|c| c.id != comp.id)
+                            .filter(|c| c.composition_type == CompositionType::Event)
+                            .filter(|c| {
+                                c.member_with_role(&SemanticRole::Predicate)
+                                    .map(|m| m.node_id == pred_id)
+                                    .unwrap_or(false)
+                            })
+                            .flat_map(|c| {
+                                c.members.iter()
+                                    .filter(|m| m.role != SemanticRole::Predicate)
+                                    .map(|m| (m.role.clone(), m.node_id, m.confidence))
+                                    .collect::<Vec<_>>()
+                            })
+                            .collect()
+                    },
+                    None => vec![],
+                }
+            },
+            None => vec![],
         }
     }
 }
@@ -1584,4 +1765,40 @@ impl Default for ResolutionType {
     fn default() -> Self {
         ResolutionType::Unresolved
     }
+}
+
+// ========================================================================
+// Utility Functions
+// ========================================================================
+
+/// Extract keywords from input text for neighborhood-based mode selection (MD-5).
+///
+/// This is a simple keyword extraction heuristic for the executive cognition layer.
+/// It tokenizes the input and filters out stop words, returning the remaining
+/// tokens as keywords. Used by `Graph::neighborhood_for()` to find compositions
+/// relevant to the current input.
+pub fn extract_keywords(input: &str) -> Vec<String> {
+    let stop_words = [
+        // Indonesian
+        "yang", "dan", "di", "ke", "dari", "ini", "itu", "dengan", "untuk",
+        "pada", "adalah", "akan", "telah", "sebuah", "seorang", "tidak", "bukan",
+        "juga", "sudah", "oleh", "karena", "supaya", "agar", "sebab",
+        // English
+        "the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
+        "have", "has", "had", "do", "does", "did", "will", "would", "could",
+        "should", "may", "might", "shall", "can", "to", "of", "in", "for",
+        "on", "with", "at", "by", "from", "as", "into", "through", "during",
+        "before", "after", "above", "below", "between", "out", "off", "over",
+        "under", "again", "further", "then", "once", "and", "but", "or",
+        "nor", "not", "so", "yet", "both", "either", "neither", "each",
+        "every", "all", "any", "few", "more", "most", "other", "some",
+        "such", "no", "only", "own", "same", "than", "too", "very",
+    ];
+
+    input
+        .split_whitespace()
+        .map(|t| t.to_lowercase())
+        .filter(|t| t.len() > 2)
+        .filter(|t| !stop_words.contains(&t.as_str()))
+        .collect()
 }

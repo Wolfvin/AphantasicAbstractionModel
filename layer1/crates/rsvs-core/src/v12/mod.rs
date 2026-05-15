@@ -73,12 +73,15 @@ pub use types::{
     GraphDelta, GovernedDelta, AnchoredDelta,
     // --- Feedback loop types (MD-3, MD-6) ---
     EnrichmentRequest, EnrichmentSource, ReExtractionRequest, RecallAction,
+    ExtractionQualityTracker,
     // --- Graph inspection types ---
     GraphNeighborhood, GraphSnapshot, WeakFrame,
     // --- Executive types (MD-5) ---
     ReflectionLoopResult, ReasoningState, ReasoningGoal,
     // --- Governance types (MD-4) ---
     GovernanceUpdate, PromotionVerdict, SeedAdjustment, ContradictionResolution, ResolutionType,
+    // --- Utility functions ---
+    extract_keywords,
 };
 
 // Re-export pipeline types for convenience.

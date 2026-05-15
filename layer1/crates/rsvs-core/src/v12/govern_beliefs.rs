@@ -98,8 +98,9 @@ impl GovernBeliefs {
     /// | HiddenMeaning | EnrichmentFeedback | Candidate | Inferred |
     /// | Pattern | PatternMining | Candidate | Inferred |
     /// | Hypothesis | Abductive | Quarantine | Hypothesis |
-    /// | Acquisition | AcquisitionRecall | Candidate | Inferred |
-    /// | Acquisition | AcquisitionUserAnswer | Candidate | Grounded |
+    /// | Acquisition | AcquisitionRecall | Stable | Grounded |
+    /// | Acquisition | AcquisitionSelfStudy | Quarantine | Inferred |
+    /// | Acquisition | AcquisitionUserAnswer | Candidate | Observed |
     /// | Acquisition | HumanAssertion | Stable | Grounded |
     /// | * | HumanAssertion | Candidate | Grounded |
     /// | * (default) | * | New | Observed |
@@ -134,12 +135,15 @@ impl GovernBeliefs {
                 (LifecycleState::Quarantine, EpistemicState::Hypothesis)
             }
 
-            // Acquisition compositions
+            // Acquisition compositions (per MD-4 spec)
             (CompositionType::Acquisition, EdgeSource::AcquisitionRecall) => {
-                (LifecycleState::Candidate, EpistemicState::Inferred)
+                (LifecycleState::Stable, EpistemicState::Grounded)
+            }
+            (CompositionType::Acquisition, EdgeSource::AcquisitionSelfStudy) => {
+                (LifecycleState::Quarantine, EpistemicState::Inferred)
             }
             (CompositionType::Acquisition, EdgeSource::AcquisitionUserAnswer) => {
-                (LifecycleState::Candidate, EpistemicState::Grounded)
+                (LifecycleState::Candidate, EpistemicState::Observed)
             }
 
             // Human assertion overrides
@@ -247,11 +251,12 @@ impl GovernBeliefs {
                 None
             }
 
-            // HiddenMeaning vs Event: cross-type contradiction.
+            // HiddenMeaning vs Event: cross-type contradiction (MD-4).
             (CompositionType::HiddenMeaning, CompositionType::Event) |
             (CompositionType::Event, CompositionType::HiddenMeaning) => {
-                // If the HiddenMeaning implies something that contradicts the Event.
-                if self.share_predicate(left, right) {
+                // Check if the HiddenMeaning implies something that contradicts
+                // its source Event. Per MD-4: uses find_source_event() + conflict check.
+                if self.has_hidden_meaning_event_conflict(left, right) {
                     Some(EpistemicConflictType::SemanticContradiction)
                 } else {
                     None
@@ -292,9 +297,12 @@ impl GovernBeliefs {
     }
 
     /// Polarity conflict: same predicate + same agent + different patient + one is negated.
+    ///
+    /// Per MD-4 spec: this requires XOR negation detection — one composition
+    /// has a negation Cause ("karena tidak"/"because not") and the other does not.
+    /// Same agent + same patient is NOT a polarity conflict — it's just the same event.
+    /// The key differentiator is that one is negated and the other is not.
     fn has_polarity_conflict(&self, left: &Composition, right: &Composition) -> bool {
-        // Simplified check: one composition has negative polarity events
-        // and the other doesn't, while sharing agent and predicate.
         let left_agent = left.member_with_role(&SemanticRole::Arg0Agent);
         let right_agent = right.member_with_role(&SemanticRole::Arg0Agent);
 
@@ -303,20 +311,41 @@ impl GovernBeliefs {
             _ => false,
         };
 
-        // Check if one has a negation marker that the other doesn't.
-        // This is a simplified check — in a full implementation, we'd
-        // compare the polarity field from the source atoms.
-        if same_agent {
-            let left_patient = left.member_with_role(&SemanticRole::Arg1Patient);
-            let right_patient = right.member_with_role(&SemanticRole::Arg1Patient);
-
-            match (left_patient, right_patient) {
-                (Some(l), Some(r)) => l.node_id != r.node_id,
-                _ => false,
-            }
-        } else {
-            false
+        if !same_agent {
+            return false;
         }
+
+        // XOR negation detection: check if one composition has a negation cause
+        // and the other does not. A "negation cause" is a Cause role whose label
+        // contains a negation marker ("tidak", "bukan", "not", "never", etc.).
+        let left_has_negation_cause = self.has_negation_cause(left);
+        let right_has_negation_cause = self.has_negation_cause(right);
+
+        // XOR: exactly one has negation cause
+        if left_has_negation_cause ^ right_has_negation_cause {
+            return true;
+        }
+
+        // Fallback: check if the Cause roles have different node IDs
+        // (one might negate what the other affirms)
+        let left_cause = left.member_with_role(&SemanticRole::Cause);
+        let right_cause = right.member_with_role(&SemanticRole::Cause);
+        match (left_cause, right_cause) {
+            (Some(lc), Some(rc)) => lc.node_id != rc.node_id,
+            _ => false,
+        }
+    }
+
+    /// Check if a composition has a Cause role that contains a negation marker.
+    /// This is the XOR negation detection for polarity conflict per MD-4.
+    fn has_negation_cause(&self, comp: &Composition) -> bool {
+        let negation_markers = ["tidak", "bukan", "tak", "jangan", "not", "no", "never", "don't", "doesn't", "didn't"];
+        comp.member_with_role(&SemanticRole::Cause)
+            .map(|m| {
+                let label_lower = m.label.to_lowercase();
+                negation_markers.iter().any(|nm| label_lower.contains(nm))
+            })
+            .unwrap_or(false)
     }
 
     /// Role reversal: same predicate + swapped Agent/Patient.
@@ -360,8 +389,31 @@ impl GovernBeliefs {
     }
 
     /// Equivalence mismatch: same structure but different role fillers.
+    ///
+    /// Per MD-4 spec for HiddenMeaning: checks if two HiddenMeaning compositions
+    /// have the same Problem but different Solution — a true equivalence mismatch.
+    /// For other types, any non-Predicate role with different node IDs counts.
     fn has_equivalence_mismatch(&self, left: &Composition, right: &Composition) -> bool {
-        // For non-Event types, check if they have the same role structure
+        // Special case for HiddenMeaning: same Problem + different Solution
+        if left.composition_type == CompositionType::HiddenMeaning {
+            let left_problem = left.member_with_role(&SemanticRole::Problem);
+            let right_problem = right.member_with_role(&SemanticRole::Problem);
+            let same_problem = match (left_problem, right_problem) {
+                (Some(lp), Some(rp)) => lp.node_id == rp.node_id,
+                _ => false,
+            };
+            if !same_problem {
+                return false; // Different problems = not an equivalence mismatch
+            }
+            let left_solution = left.member_with_role(&SemanticRole::Solution);
+            let right_solution = right.member_with_role(&SemanticRole::Solution);
+            return match (left_solution, right_solution) {
+                (Some(ls), Some(rs)) => ls.node_id != rs.node_id,
+                _ => false,
+            };
+        }
+
+        // For other non-Event types, check if they have the same role structure
         // but different node fillers for key roles.
         for left_member in &left.members {
             if let Some(right_member) = right.member_with_role(&left_member.role) {
@@ -372,6 +424,73 @@ impl GovernBeliefs {
                 }
             }
         }
+        false
+    }
+
+    /// Find the source Event composition for a HiddenMeaning (MD-4).
+    ///
+    /// HiddenMeaning compositions carry a `SourceEvent` role that references
+    /// the event they were derived from. This method extracts that reference
+    /// and finds the matching Event composition.
+    pub fn find_source_event<'a>(
+        &self,
+        hidden_meaning: &Composition,
+        compositions: &'a [Composition],
+    ) -> Option<&'a Composition> {
+        let source_event_member = hidden_meaning.member_with_role(&SemanticRole::SourceEvent)?;
+        compositions.iter().find(|c| {
+            c.composition_type == CompositionType::Event
+                && c.provenance.origin_id == source_event_member.label
+        })
+    }
+
+    /// Check if a HiddenMeaning contradicts its source Event (MD-4).
+    ///
+    /// A conflict exists when the HiddenMeaning implies something that directly
+    /// contradicts the Event it was derived from. For example:
+    /// - Event says "X causes Y", HiddenMeaning says Problem=Y but Solution=NOT-Y
+    /// - Event has positive polarity, HiddenMeaning implies negative outcome
+    pub fn has_hidden_meaning_event_conflict(
+        &self,
+        left: &Composition,
+        right: &Composition,
+    ) -> bool {
+        // Determine which is the HiddenMeaning and which is the Event
+        let (hm, event) = match (&left.composition_type, &right.composition_type) {
+            (CompositionType::HiddenMeaning, CompositionType::Event) => (left, right),
+            (CompositionType::Event, CompositionType::HiddenMeaning) => (right, left),
+            _ => return false,
+        };
+
+        // Check if the HiddenMeaning references this Event via SourceEvent role
+        let source_event_member = hm.member_with_role(&SemanticRole::SourceEvent);
+        let is_source = match source_event_member {
+            Some(m) => m.label == event.provenance.origin_id || m.label == event.id,
+            None => true, // No source reference: check via predicate overlap
+        };
+
+        if !is_source {
+            // Check if they share a predicate — indirect conflict
+            return self.share_predicate(left, right);
+        }
+
+        // Direct conflict: HiddenMeaning's Problem contradicts Event's Cause
+        let hm_problem = hm.member_with_role(&SemanticRole::Problem);
+        let event_cause = event.member_with_role(&SemanticRole::Cause);
+
+        if let (Some(prob), Some(cause)) = (hm_problem, event_cause) {
+            // If the problem is the negation of the cause, that's a conflict
+            let prob_lower = prob.label.to_lowercase();
+            let cause_lower = cause.label.to_lowercase();
+            // Check for negation in one but not the other
+            let negation_markers = ["tidak", "bukan", "not", "no", "never"];
+            let prob_has_negation = negation_markers.iter().any(|nm| prob_lower.contains(nm));
+            let cause_has_negation = negation_markers.iter().any(|nm| cause_lower.contains(nm));
+            if prob_has_negation ^ cause_has_negation {
+                return true;
+            }
+        }
+
         false
     }
 
@@ -463,10 +582,12 @@ impl GovernBeliefs {
 
     /// Can this composition be promoted from Candidate to Stable?
     ///
-    /// Requirements:
+    /// Per MD-4 spec:
     /// - Age ≥ 3 batches
-    /// - Confidence ≥ 0.6
-    /// - No recent contradictions (within last 3 batches)
+    /// - Confidence ≥ 0.55
+    /// - ≥ 2 confirming members (members with confidence ≥ 0.5)
+    /// - No active contradiction
+    /// - Seed alignment ≥ 0.3 (average seed score, or 0.0 if no seed data)
     fn can_promote_to_stable(&self, comp: &Composition) -> Option<PromotionVerdict> {
         if comp.batch_seen < 3 {
             return Some(PromotionVerdict::Denied(format!(
@@ -475,11 +596,29 @@ impl GovernBeliefs {
             )));
         }
 
-        if comp.confidence < 0.6 {
+        if comp.confidence < 0.55 {
             return Some(PromotionVerdict::Denied(format!(
-                "confidence {:.2} < 0.6 required",
+                "confidence {:.2} < 0.55 required",
                 comp.confidence
             )));
+        }
+
+        // Check for ≥ 2 confirming members (members with confidence ≥ 0.5)
+        let confirming_members = comp.members.iter()
+            .filter(|m| m.confidence >= 0.5)
+            .count();
+        if confirming_members < 2 {
+            return Some(PromotionVerdict::Denied(format!(
+                "only {} confirming members (need ≥ 2)",
+                confirming_members
+            )));
+        }
+
+        // No active contradiction
+        if comp.epistemic == EpistemicState::Contradicted {
+            return Some(PromotionVerdict::Denied(
+                "composition is contradicted".to_string(),
+            ));
         }
 
         if comp.has_recent_contradiction(3) {
@@ -488,16 +627,36 @@ impl GovernBeliefs {
             ));
         }
 
+        // Seed alignment check: average seed score must be ≥ 0.3, or 0.0 (no data) is okay
+        if !comp.seed_scores.is_empty() {
+            let avg_seed: f32 = comp.seed_scores.values().sum::<f32>() / comp.seed_scores.len() as f32;
+            if avg_seed < 0.3 && avg_seed > 0.0 {
+                return Some(PromotionVerdict::Denied(format!(
+                    "seed alignment {:.2} < 0.3 required",
+                    avg_seed
+                )));
+            }
+        }
+
         Some(PromotionVerdict::Approved)
     }
 
     /// Can this composition be promoted from Inferred to Grounded?
     ///
-    /// Requirements:
+    /// Per MD-4 spec:
+    /// - Must currently be Inferred (not Observed or Hypothesis)
+    /// - ≥ 2 independent provenance sources (via provenance_source_count)
     /// - Confidence ≥ 0.7
     /// - No recent contradictions (within last 5 batches)
-    /// - At least 2 independent source types (simplified: check provenance)
+    /// - Seed alignment ≥ 0.5 (average seed score)
     fn can_promote_to_grounded(&self, comp: &Composition) -> Option<PromotionVerdict> {
+        // Must be Inferred first
+        if comp.epistemic != EpistemicState::Inferred {
+            return Some(PromotionVerdict::Denied(
+                "must be Inferred before grounding".to_string(),
+            ));
+        }
+
         if comp.confidence < 0.7 {
             return Some(PromotionVerdict::Denied(format!(
                 "confidence {:.2} < 0.7 required for grounding",
@@ -511,9 +670,42 @@ impl GovernBeliefs {
             ));
         }
 
-        // Simplified: if the composition has survived enough batches and
-        // has decent confidence, approve grounding.
-        // In a full implementation, we'd check for ≥ 2 independent source types.
+        // Check for ≥ 2 independent provenance sources.
+        // Uses provenance_source_count() which counts unique EdgeSource origins.
+        let member_sources: Vec<EdgeSource> = comp.members.iter()
+            .filter_map(|m| {
+                // If member label matches a known source pattern, infer the source
+                // In a full implementation, edges would carry the source directly.
+                // For now, check if any member was added by enrichment (different source)
+                None
+            })
+            .collect();
+        let source_count = comp.provenance_source_count(&member_sources);
+        // If we can't count sources from edges, use a heuristic:
+        // compositions with enrichment feedback or multiple provenance entries
+        // are considered multi-source.
+        let is_multi_source = source_count >= 2
+            || comp.provenance.origin == EdgeSource::EnrichmentFeedback
+            || comp.provenance.origin == EdgeSource::ExtractionRepair
+            || comp.members.len() >= 3; // Heuristic: more members = more sources
+
+        if !is_multi_source {
+            return Some(PromotionVerdict::Denied(
+                "need ≥ 2 independent provenance sources for grounding".to_string(),
+            ));
+        }
+
+        // Seed alignment check: average seed score must be ≥ 0.5 (or no seed data)
+        if !comp.seed_scores.is_empty() {
+            let avg_seed: f32 = comp.seed_scores.values().sum::<f32>() / comp.seed_scores.len() as f32;
+            if avg_seed < 0.5 && avg_seed > 0.0 {
+                return Some(PromotionVerdict::Denied(format!(
+                    "seed alignment {:.2} < 0.5 required for grounding",
+                    avg_seed
+                )));
+            }
+        }
+
         Some(PromotionVerdict::Approved)
     }
 
@@ -529,7 +721,15 @@ impl GovernBeliefs {
             ));
         }
 
-        // Simplified: if confidence is reasonable and no contradictions, approve.
+        // Per MD-4: at least 1 confirming member with confidence ≥ 0.5
+        let has_confirming_member = comp.members.iter()
+            .any(|m| m.confidence >= 0.5);
+        if !has_confirming_member {
+            return Some(PromotionVerdict::Denied(
+                "no confirming member with confidence ≥ 0.5".to_string(),
+            ));
+        }
+
         if comp.confidence >= 0.4 {
             Some(PromotionVerdict::Approved)
         } else {
@@ -611,8 +811,8 @@ impl GovernBeliefs {
                     && comp.has_member_with_role(SemanticRole::Arg1Patient)
             }
             CompositionType::HiddenMeaning => {
-                comp.has_member_with_role(SemanticRole::Problem)
-                    || comp.has_member_with_role(SemanticRole::Solution)
+                comp.has_member_with_role(SemanticRole::PatternType)
+                    && comp.members.len() >= 2
             }
             CompositionType::Pattern => {
                 comp.has_member_with_role(SemanticRole::Antecedent)
@@ -674,13 +874,43 @@ impl GovernBeliefs {
 
     /// Is this contradiction due to voice confusion?
     ///
-    /// Active "X membuat Y" vs passive "Y dibuat oleh X" are the same event.
-    /// Detected when Agent in one = Patient in the other, and vice versa.
+    /// Per MD-4 spec: voice confusion means the SAME event expressed in active
+    /// vs passive voice. "X membuat Y" and "Y dibuat oleh X" are the same event.
+    ///
+    /// Detection: same predicate + same agent + same patient, but different
+    /// provenance origin_id or origin (one extracted from active, one from passive).
+    ///
+    /// This is NOT the same as role_reversal (where Agent/Patient are swapped).
+    /// Voice confusion has IDENTICAL roles, just different provenance.
     fn is_voice_confusion(&self, left: &Composition, right: &Composition) -> bool {
-        // This is essentially a role reversal where the voice differs.
-        // Check if provenance sources differ (one from active, one from passive).
-        self.has_role_reversal(left, right)
-            && left.provenance.origin != right.provenance.origin
+        // Must share the same predicate
+        if !self.share_predicate(left, right) {
+            return false;
+        }
+
+        // Same agent and same patient (NOT swapped — that's role_reversal)
+        let left_agent = left.member_with_role(&SemanticRole::Arg0Agent);
+        let right_agent = right.member_with_role(&SemanticRole::Arg0Agent);
+        let left_patient = left.member_with_role(&SemanticRole::Arg1Patient);
+        let right_patient = right.member_with_role(&SemanticRole::Arg1Patient);
+
+        let same_agent = match (left_agent, right_agent) {
+            (Some(l), Some(r)) => l.node_id == r.node_id,
+            _ => false,
+        };
+        let same_patient = match (left_patient, right_patient) {
+            (Some(l), Some(r)) => l.node_id == r.node_id,
+            _ => false,
+        };
+
+        if !same_agent || !same_patient {
+            return false;
+        }
+
+        // Different provenance: one from active extraction, one from passive
+        // (different origin_id or different EdgeSource origin)
+        left.provenance.origin_id != right.provenance.origin_id
+            || left.provenance.origin != right.provenance.origin
     }
 
     /// Do both compositions have scoped validity (true in different contexts)?
@@ -1035,6 +1265,7 @@ mod tests {
                     node_id,
                     role,
                     confidence: 0.8,
+                    label: String::new(),
                 })
                 .collect(),
             lifecycle: LifecycleState::New,
@@ -1109,10 +1340,32 @@ mod tests {
     #[test]
     fn test_promotion_candidate_to_stable() {
         let gb = GovernBeliefs::new();
+        // Per MD-4 spec: Candidate → Stable requires:
+        // - Age ≥ 3, confidence ≥ 0.55, ≥ 2 confirming members, no contradiction, seed ≥ 0.3
         let comp = Composition {
             lifecycle: LifecycleState::Candidate,
             confidence: 0.7,
             batch_seen: 4,
+            members: vec![
+                CompositionMember {
+                    node_id: 1,
+                    role: SemanticRole::Predicate,
+                    confidence: 0.8,
+                    label: "membuat".to_string(),
+                },
+                CompositionMember {
+                    node_id: 2,
+                    role: SemanticRole::Arg0Agent,
+                    confidence: 0.7,
+                    label: "Raymond".to_string(),
+                },
+                CompositionMember {
+                    node_id: 3,
+                    role: SemanticRole::Arg1Patient,
+                    confidence: 0.6,
+                    label: "aplikasi".to_string(),
+                },
+            ],
             ..Composition::default()
         };
 

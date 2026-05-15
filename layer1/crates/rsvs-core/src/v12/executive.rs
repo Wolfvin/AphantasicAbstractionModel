@@ -39,7 +39,7 @@ use std::collections::HashMap;
 
 use super::pipeline::{ErasedTransform, Graph, IngestResult, PipelineEngine};
 use super::types::*;
-use crate::types::EdgeSource;
+use crate::types::{EdgeSource, NodeId};
 
 // ========================================================================
 // CognitiveMode — How the Pipeline Processes Input
@@ -87,55 +87,77 @@ impl CognitiveMode {
 // ComputeBudget — Resource Limits Per Mode
 // ========================================================================
 
-/// Compute budget for a pipeline execution (MD-5).
+/// Compute budget for cognitive mode execution (MD-5 spec).
 ///
-/// Limits how much work the pipeline can do in a single ingest cycle.
-/// Higher budgets allow more enrichment passes and deeper analysis.
+/// Controls resource limits for different cognitive modes:
+/// - Reactive: minimal (0 enrichment rounds, 1 reasoning depth)
+/// - Analytical: moderate (1 enrichment round, 3 reasoning depth)
+/// - Reflective: generous (2 enrichment rounds, 5 reasoning depth)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ComputeBudget {
-    /// Maximum number of enrichment/reflection passes.
-    pub max_passes: usize,
-    /// Maximum milliseconds per pass.
-    pub max_ms_per_pass: u64,
-    /// Maximum number of gaps to address per pass.
-    pub max_gaps_per_pass: usize,
-    /// Minimum confidence improvement to continue looping.
-    pub min_confidence_delta: f32,
-    /// Whether enrichment is enabled.
-    pub enrichment_enabled: bool,
+    /// Maximum depth of reasoning chain.
+    pub max_reasoning_depth: usize,
+    /// Maximum number of reflection loops.
+    pub max_reflection_loops: usize,
+    /// Maximum branching factor for hypothesis exploration.
+    pub max_branching_factor: usize,
+    /// Maximum number of hypotheses to maintain.
+    pub max_hypothesis_count: usize,
+    /// Time budget in milliseconds.
+    pub time_budget_ms: u64,
+    /// Maximum enrichment rounds (Reactive=0, Analytical=1, Reflective=2).
+    pub max_enrichment_rounds: usize,
 }
 
 impl Default for ComputeBudget {
     fn default() -> Self {
-        Self::for_mode(&CognitiveMode::Reactive)
+        Self::analytical()
     }
 }
 
 impl ComputeBudget {
+    /// Budget for Reactive mode: minimal resources.
+    pub fn reactive() -> Self {
+        Self {
+            max_reasoning_depth: 1,
+            max_reflection_loops: 0,
+            max_branching_factor: 1,
+            max_hypothesis_count: 1,
+            time_budget_ms: 100,
+            max_enrichment_rounds: 0,
+        }
+    }
+
+    /// Budget for Analytical mode: moderate resources.
+    pub fn analytical() -> Self {
+        Self {
+            max_reasoning_depth: 3,
+            max_reflection_loops: 1,
+            max_branching_factor: 3,
+            max_hypothesis_count: 5,
+            time_budget_ms: 1000,
+            max_enrichment_rounds: 1,
+        }
+    }
+
+    /// Budget for Reflective mode: generous resources.
+    pub fn reflective() -> Self {
+        Self {
+            max_reasoning_depth: 5,
+            max_reflection_loops: 3,
+            max_branching_factor: 5,
+            max_hypothesis_count: 10,
+            time_budget_ms: 5000,
+            max_enrichment_rounds: 2,
+        }
+    }
+
     /// Create a budget appropriate for the given cognitive mode.
     pub fn for_mode(mode: &CognitiveMode) -> Self {
         match mode {
-            CognitiveMode::Reactive => Self {
-                max_passes: 0,
-                max_ms_per_pass: 0,
-                max_gaps_per_pass: 0,
-                min_confidence_delta: 0.0,
-                enrichment_enabled: false,
-            },
-            CognitiveMode::Analytical => Self {
-                max_passes: 3,
-                max_ms_per_pass: 1000,
-                max_gaps_per_pass: 5,
-                min_confidence_delta: 0.05,
-                enrichment_enabled: true,
-            },
-            CognitiveMode::Reflective => Self {
-                max_passes: 5,
-                max_ms_per_pass: 2000,
-                max_gaps_per_pass: 10,
-                min_confidence_delta: 0.02,
-                enrichment_enabled: true,
-            },
+            CognitiveMode::Reactive => Self::reactive(),
+            CognitiveMode::Analytical => Self::analytical(),
+            CognitiveMode::Reflective => Self::reflective(),
         }
     }
 }
@@ -175,8 +197,8 @@ impl StopCondition {
     /// Create from a compute budget.
     pub fn from_budget(budget: &ComputeBudget) -> Self {
         Self {
-            min_confidence_delta: budget.min_confidence_delta,
-            max_passes: budget.max_passes,
+            min_confidence_delta: 0.05,
+            max_passes: budget.max_enrichment_rounds,
             max_passes_without_evidence: 2,
         }
     }
@@ -216,42 +238,34 @@ impl StopCondition {
 // ReflectionFinding — Output of the Reflect Transform
 // ========================================================================
 
-/// Type of finding from reflection (MD-5).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+/// Types of findings from reflection (MD-5 spec).
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ReflectionFindingType {
-    /// A contradiction was resolved.
-    ContradictionResolved,
-    /// A knowledge gap was filled.
-    GapFilled,
-    /// A composition's confidence was improved.
-    ConfidenceImproved,
-    /// No improvement was possible.
-    NoImprovement,
-    /// The graph is in a healthy state.
-    HealthyState,
-    /// A new hidden meaning was discovered.
-    NewInsight,
+    /// Composition has been Inferred for >10 batches without progress.
+    StagnantInferred,
+    /// Composition meets promotion criteria.
+    PromotionCandidate,
+    /// Contradiction can potentially be resolved.
+    ContradictionResolvable,
+    /// Confidence has decayed below threshold after many batches.
+    DecayedConfidence,
+    /// Two compositions have overlapping structure.
+    OverlapDetected,
 }
 
-impl Default for ReflectionFindingType {
-    fn default() -> Self {
-        ReflectionFindingType::NoImprovement
-    }
-}
-
-/// Action recommended by reflection (MD-5).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+/// Actions proposed by reflection findings (MD-5 spec).
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ReflectionAction {
-    /// No further action needed.
+    /// Propose promoting a composition to a higher lifecycle/epistemic state.
+    ProposePromotion(CompositionId),
+    /// Propose resolving a contradiction between two compositions.
+    ProposeContradictionResolution(CompositionId, CompositionId),
+    /// Propose deprecating a composition that has decayed.
+    ProposeDeprecation(CompositionId),
+    /// Propose merging two overlapping compositions.
+    ProposeMerge(CompositionId, CompositionId),
+    /// No action needed.
     NoAction,
-    /// Run another enrichment pass.
-    EnrichFurther,
-    /// Request user input to resolve ambiguity.
-    AskUser(String),
-    /// Re-govern a specific composition.
-    ReGovern(CompositionId),
-    /// Re-extract a specific frame.
-    ReExtract(CompositionId),
 }
 
 impl Default for ReflectionAction {
@@ -284,7 +298,7 @@ pub struct ReflectionFinding {
 impl Default for ReflectionFinding {
     fn default() -> Self {
         Self {
-            finding_type: ReflectionFindingType::NoImprovement,
+            finding_type: ReflectionFindingType::StagnantInferred,
             description: String::new(),
             affected_compositions: Vec::new(),
             confidence_delta: 0.0,
@@ -323,67 +337,84 @@ impl Reflect {
     pub fn reflect(&self, result: &ReflectionLoopResult, graph: &Graph) -> Vec<ReflectionFinding> {
         let mut findings = Vec::new();
 
-        // Check for resolved contradictions.
+        // Check for resolved contradictions — now ContradictionResolvable.
         for comp_id in &result.resolved_contradictions {
             findings.push(ReflectionFinding {
-                finding_type: ReflectionFindingType::ContradictionResolved,
-                description: format!("Contradiction resolved for composition {}", comp_id),
+                finding_type: ReflectionFindingType::ContradictionResolvable,
+                description: format!("Contradiction can be resolved for composition {}", comp_id),
                 affected_compositions: vec![comp_id.clone()],
                 confidence_delta: 0.1,
-                action: ReflectionAction::ReGovern(comp_id.clone()),
+                action: ReflectionAction::NoAction,
             });
         }
 
-        // Check for filled gaps.
+        // Check for filled gaps — compositions with improved confidence are PromotionCandidate.
         for comp_id in &result.filled_gaps {
             findings.push(ReflectionFinding {
-                finding_type: ReflectionFindingType::GapFilled,
-                description: format!("Knowledge gap filled for composition {}", comp_id),
+                finding_type: ReflectionFindingType::PromotionCandidate,
+                description: format!("Composition {} improved after gap filling", comp_id),
                 affected_compositions: vec![comp_id.clone()],
                 confidence_delta: 0.05,
-                action: ReflectionAction::NoAction,
+                action: ReflectionAction::ProposePromotion(comp_id.clone()),
             });
         }
 
-        // Check overall confidence.
-        if result.current_confidence >= 0.8 {
-            findings.push(ReflectionFinding {
-                finding_type: ReflectionFindingType::HealthyState,
-                description: format!(
-                    "Graph is in healthy state (confidence: {:.2})",
-                    result.current_confidence
-                ),
-                affected_compositions: Vec::new(),
-                confidence_delta: 0.0,
-                action: ReflectionAction::NoAction,
-            });
-        } else if result.has_gaps {
-            findings.push(ReflectionFinding {
-                finding_type: ReflectionFindingType::NoImprovement,
-                description: format!(
-                    "Gaps remain after reflection (confidence: {:.2})",
-                    result.current_confidence
-                ),
-                affected_compositions: Vec::new(),
-                confidence_delta: 0.0,
-                action: ReflectionAction::EnrichFurther,
-            });
-        }
-
-        // Check for low-confidence compositions that could benefit from re-extraction.
+        // Check for stagnant inferred compositions.
         for composition in graph.compositions.values() {
-            if composition.confidence < 0.5 && composition.composition_type == CompositionType::Event {
-                if composition.source_text.is_some() {
-                    findings.push(ReflectionFinding {
-                        finding_type: ReflectionFindingType::ConfidenceImproved,
-                        description: format!(
-                            "Low-confidence event {} ({:.2}) could benefit from re-extraction",
-                            composition.id, composition.confidence
-                        ),
-                        affected_compositions: vec![composition.id.clone()],
-                        confidence_delta: 0.0,
-                        action: ReflectionAction::ReExtract(composition.id.clone()),
-                    });
+            if composition.epistemic == EpistemicState::Inferred && composition.batch_seen > 10 {
+                findings.push(ReflectionFinding {
+                    finding_type: ReflectionFindingType::StagnantInferred,
+                    description: format!(
+                        "Composition {} has been Inferred for {} batches without progress",
+                        composition.id, composition.batch_seen
+                    ),
+                    affected_compositions: vec![composition.id.clone()],
+                    confidence_delta: 0.0,
+                    action: ReflectionAction::ProposeDeprecation(composition.id.clone()),
+                });
+            }
+        }
+
+        // Check for decayed confidence compositions.
+        for composition in graph.compositions.values() {
+            if composition.confidence < 0.2 && composition.batch_seen > 5 {
+                findings.push(ReflectionFinding {
+                    finding_type: ReflectionFindingType::DecayedConfidence,
+                    description: format!(
+                        "Composition {} has decayed confidence ({:.2}) after {} batches",
+                        composition.id, composition.confidence, composition.batch_seen
+                    ),
+                    affected_compositions: vec![composition.id.clone()],
+                    confidence_delta: 0.0,
+                    action: ReflectionAction::ProposeDeprecation(composition.id.clone()),
+                });
+            }
+        }
+
+        // Check for overlapping compositions.
+        let comp_list: Vec<_> = graph.compositions.values().collect();
+        for i in 0..comp_list.len() {
+            for j in (i + 1)..comp_list.len() {
+                let a = comp_list[i];
+                let b = comp_list[j];
+                if a.composition_type == b.composition_type {
+                    let a_nodes: std::collections::HashSet<NodeId> =
+                        a.members.iter().map(|m| m.node_id).collect();
+                    let b_nodes: std::collections::HashSet<NodeId> =
+                        b.members.iter().map(|m| m.node_id).collect();
+                    let overlap = a_nodes.intersection(&b_nodes).count();
+                    if overlap > 0 && overlap >= a_nodes.len().min(b_nodes.len()) / 2 + 1 {
+                        findings.push(ReflectionFinding {
+                            finding_type: ReflectionFindingType::OverlapDetected,
+                            description: format!(
+                                "Compositions {} and {} have overlapping structure",
+                                a.id, b.id
+                            ),
+                            affected_compositions: vec![a.id.clone(), b.id.clone()],
+                            confidence_delta: 0.0,
+                            action: ReflectionAction::ProposeMerge(a.id.clone(), b.id.clone()),
+                        });
+                    }
                 }
             }
         }
@@ -439,6 +470,9 @@ impl ExecutiveOrchestrator {
     ///
     /// # Mode Selection Logic
     ///
+    /// Uses `extract_keywords()` on the input text and `neighborhood_for()`
+    /// to build a relevant `GraphNeighborhood`, then applies:
+    ///
     /// ```text
     /// if neighborhood has contradictions:
     ///     if contradictions are deep (multiple, cross-type):
@@ -450,7 +484,24 @@ impl ExecutiveOrchestrator {
     /// else:
     ///     mode = Reactive
     /// ```
-    pub fn select_cognitive_mode(&mut self, neighborhood: &GraphNeighborhood) -> CognitiveMode {
+    pub fn select_cognitive_mode(
+        &mut self,
+        input: &str,
+        compositions: &[Composition],
+    ) -> CognitiveMode {
+        let keywords = extract_keywords(input);
+        let neighborhood = GraphNeighborhood::neighborhood_for(&keywords, compositions);
+
+        // If no relevant neighborhood found, fall back to all compositions
+        // so that mode selection still works based on overall graph health.
+        let neighborhood = if neighborhood.compositions.is_empty() {
+            GraphNeighborhood {
+                compositions: compositions.to_vec(),
+            }
+        } else {
+            neighborhood
+        };
+
         if neighborhood.has_contradictions() {
             // Count how many compositions are contradicted.
             let contradicted_count = neighborhood
@@ -515,7 +566,7 @@ impl ExecutiveOrchestrator {
                 / snapshot.compositions.len() as f32
         };
 
-        for _pass in 0..self.budget.max_passes {
+        for _pass in 0..self.budget.max_enrichment_rounds {
             if stop_condition.should_stop(&state) {
                 break;
             }
@@ -609,17 +660,15 @@ impl ExecutiveOrchestrator {
     /// 3. If Analytical or Reflective, run the enrichment loop
     /// 4. If Reflective, produce reflection findings
     pub fn ingest(&mut self, text: &str, engine: &mut PipelineEngine) -> IngestResult {
-        // Step 1: Select cognitive mode.
-        let neighborhood = engine.snapshot();
-        let mode = self.select_cognitive_mode(&GraphNeighborhood {
-            compositions: neighborhood.compositions,
-        });
+        // Step 1: Select cognitive mode using extract_keywords + neighborhood_for.
+        let snapshot = engine.snapshot();
+        let mode = self.select_cognitive_mode(text, &snapshot.compositions);
 
         // Step 2: Run standard pipeline.
         let mut result = engine.ingest(text);
 
         // Step 3: If Analytical or Reflective, run enrichment loop.
-        if mode != CognitiveMode::Reactive && self.budget.enrichment_enabled {
+        if mode != CognitiveMode::Reactive && self.budget.max_enrichment_rounds > 0 {
             let loop_result = self.run_enrichment_loop(engine);
 
             // Merge enrichment results.
@@ -649,16 +698,16 @@ mod tests {
     #[test]
     fn test_cognitive_mode_budget() {
         let reactive = ComputeBudget::for_mode(&CognitiveMode::Reactive);
-        assert_eq!(reactive.max_passes, 0);
-        assert!(!reactive.enrichment_enabled);
+        assert_eq!(reactive.max_enrichment_rounds, 0);
+        assert_eq!(reactive.max_reasoning_depth, 1);
 
         let analytical = ComputeBudget::for_mode(&CognitiveMode::Analytical);
-        assert_eq!(analytical.max_passes, 3);
-        assert!(analytical.enrichment_enabled);
+        assert_eq!(analytical.max_enrichment_rounds, 1);
+        assert_eq!(analytical.max_reasoning_depth, 3);
 
         let reflective = ComputeBudget::for_mode(&CognitiveMode::Reflective);
-        assert_eq!(reflective.max_passes, 5);
-        assert!(reflective.enrichment_enabled);
+        assert_eq!(reflective.max_enrichment_rounds, 2);
+        assert_eq!(reflective.max_reasoning_depth, 5);
     }
 
     #[test]
@@ -721,57 +770,51 @@ mod tests {
     #[test]
     fn test_mode_selection_reactive() {
         let mut orchestrator = ExecutiveOrchestrator::new();
-        let neighborhood = GraphNeighborhood {
-            compositions: vec![Composition {
-                confidence: 0.8,
-                epistemic: EpistemicState::Observed,
-                ..Composition::default()
-            }],
-        };
+        let compositions = vec![Composition {
+            confidence: 0.8,
+            epistemic: EpistemicState::Observed,
+            ..Composition::default()
+        }];
 
-        let mode = orchestrator.select_cognitive_mode(&neighborhood);
+        let mode = orchestrator.select_cognitive_mode("test input", &compositions);
         assert_eq!(mode, CognitiveMode::Reactive);
     }
 
     #[test]
     fn test_mode_selection_analytical() {
         let mut orchestrator = ExecutiveOrchestrator::new();
-        let neighborhood = GraphNeighborhood {
-            compositions: vec![Composition {
-                confidence: 0.3,
-                epistemic: EpistemicState::Observed,
-                ..Composition::default()
-            }],
-        };
+        let compositions = vec![Composition {
+            confidence: 0.3,
+            epistemic: EpistemicState::Observed,
+            ..Composition::default()
+        }];
 
-        let mode = orchestrator.select_cognitive_mode(&neighborhood);
+        let mode = orchestrator.select_cognitive_mode("test input", &compositions);
         assert_eq!(mode, CognitiveMode::Analytical);
     }
 
     #[test]
     fn test_mode_selection_reflective() {
         let mut orchestrator = ExecutiveOrchestrator::new();
-        let neighborhood = GraphNeighborhood {
-            compositions: vec![
-                Composition {
-                    confidence: 0.5,
-                    epistemic: EpistemicState::Contradicted,
-                    ..Composition::default()
-                },
-                Composition {
-                    confidence: 0.4,
-                    epistemic: EpistemicState::Contradicted,
-                    ..Composition::default()
-                },
-                Composition {
-                    confidence: 0.3,
-                    epistemic: EpistemicState::Contradicted,
-                    ..Composition::default()
-                },
-            ],
-        };
+        let compositions = vec![
+            Composition {
+                confidence: 0.5,
+                epistemic: EpistemicState::Contradicted,
+                ..Composition::default()
+            },
+            Composition {
+                confidence: 0.4,
+                epistemic: EpistemicState::Contradicted,
+                ..Composition::default()
+            },
+            Composition {
+                confidence: 0.3,
+                epistemic: EpistemicState::Contradicted,
+                ..Composition::default()
+            },
+        ];
 
-        let mode = orchestrator.select_cognitive_mode(&neighborhood);
+        let mode = orchestrator.select_cognitive_mode("test input", &compositions);
         assert_eq!(mode, CognitiveMode::Reflective);
     }
 
@@ -790,8 +833,7 @@ mod tests {
         let graph = Graph::new();
         let findings = reflect.reflect(&result, &graph);
 
-        assert!(findings.iter().any(|f| f.finding_type == ReflectionFindingType::ContradictionResolved));
-        assert!(findings.iter().any(|f| f.finding_type == ReflectionFindingType::GapFilled));
-        assert!(findings.iter().any(|f| f.finding_type == ReflectionFindingType::HealthyState));
+        assert!(findings.iter().any(|f| f.finding_type == ReflectionFindingType::ContradictionResolvable));
+        assert!(findings.iter().any(|f| f.finding_type == ReflectionFindingType::PromotionCandidate));
     }
 }

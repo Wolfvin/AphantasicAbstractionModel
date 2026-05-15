@@ -653,7 +653,7 @@ pub enum Tier {
 
 /// Source type for edges.
 #[non_exhaustive]
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 pub enum EdgeSource {
     /// Created during seed bootstrap.
     #[default]

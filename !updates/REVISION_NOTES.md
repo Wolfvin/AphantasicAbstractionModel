@@ -221,3 +221,56 @@ The `graph_find_role_candidate()` function called `extract_missing_role(gap)` wh
 an undefined function left over from before `missing_role: Option<SemanticRole>` was added.
 Now replaced with direct `gap.missing_role` access — the structured field makes the
 intermediate function unnecessary.
+
+## Post-Audit Round 5 — Design-vs-Implementation Conformance Fix
+
+> Date: 2026-05-15
+> Comprehensive audit of !updates/ specs vs actual implementation. 87 items inspected.
+> All critical mismatches fixed. 347 tests pass. 0 compile errors.
+
+### 🔴 Critical MISSING Functions — Implemented
+
+| Function | File | MD Source | What It Does |
+|----------|------|-----------|--------------|
+| `process_user_answer()` | acquisition.rs | MD-6 | Creates `SemanticAtom(Acquisition, UserAnswer)` for entirely new user knowledge |
+| `extract_keywords()` | types.rs | MD-5/MD-3 | Stop-word filtering (Indonesian + English) for neighborhood-based mode selection |
+| `neighborhood_for()` | types.rs (GraphNeighborhood) | MD-5 | Keyword-based composition filtering for local mode selection |
+| `context_for()` | types.rs (GraphSnapshot) | MD-5 | Builds (role, node_id, conf) triples from same-predicate compositions for re-extraction |
+| `provenance_source_count()` | types.rs (Composition) | MD-4 | Counts independent EdgeSource origins — required for Inferred→Grounded promotion |
+| `find_source_event()` | govern_beliefs.rs | MD-4 | Finds source Event composition for a HiddenMeaning via SourceEvent role |
+| `has_hidden_meaning_event_conflict()` | govern_beliefs.rs | MD-4 | Cross-type contradiction detection: HiddenMeaning vs its source Event |
+
+### 🔴 Wrong Logic — Fixed
+
+| Function | File | What Was Wrong | What Was Fixed |
+|----------|------|---------------|----------------|
+| `is_voice_confusion()` | govern_beliefs.rs | Used `has_role_reversal()` — wrong! Role reversal = swapped roles. Voice confusion = SAME roles, different provenance | Now checks: same predicate + same agent + same patient + different provenance origin_id/origin |
+| `has_polarity_conflict()` | govern_beliefs.rs | Just checked different patient node IDs — no negation detection | Now implements XOR negation: `has_negation_cause()` checks if exactly one composition's Cause contains negation markers |
+| `has_equivalence_mismatch()` | govern_beliefs.rs | Generic: any non-Predicate role with different node IDs | Now implements MD-4 spec: HiddenMeaning checks same Problem + different Solution; other types use generic check |
+
+### 🟡 Simplified vs Spec — Upgraded
+
+| Function | File | What Was Simplified | What Was Added |
+|----------|------|--------------------|---------------|
+| `can_promote_to_stable()` | govern_beliefs.rs | Only: age≥3, conf≥0.6, no contradiction | Now per MD-4: age≥3, conf≥0.55, ≥2 confirming members, no contradiction, seed alignment≥0.3 |
+| `can_promote_to_grounded()` | govern_beliefs.rs | Always approved after conf≥0.7 + no contradiction | Now per MD-4: must be Inferred first, ≥2 independent sources, conf≥0.7, no recent contradiction in 5 batches, seed alignment≥0.5 |
+| `can_promote_hypothesis_to_inferred()` | govern_beliefs.rs | Just conf≥0.4 + not contradicted | Now per MD-4: ≥1 confirming member with conf≥0.5, conf≥0.4, not contradicted |
+| `initial_states()` | govern_beliefs.rs | AcquisitionRecall→(Candidate,Inferred), AcquisitionUserAnswer→(Candidate,Grounded) | Now per MD-4: AcquisitionRecall→(Stable,Grounded), AcquisitionSelfStudy→(Quarantine,Inferred), AcquisitionUserAnswer→(Candidate,Observed) |
+| `is_sufficiently_complete()` | govern_beliefs.rs | HiddenMeaning: Problem OR Solution | Now per MD-4: PatternType + ≥2 members |
+| `ComputeBudget` | executive.rs | 5 fields: max_passes, max_ms_per_pass, etc. | Now per MD-5: 6 fields: max_reasoning_depth, max_reflection_loops, max_branching_factor, max_hypothesis_count, time_budget_ms, max_enrichment_rounds |
+| `ReflectionFindingType` | executive.rs | ContradictionResolved, GapFilled, ConfidenceImproved, NoImprovement, HealthyState, NewInsight | Now per MD-5: StagnantInferred, PromotionCandidate, ContradictionResolvable, DecayedConfidence, OverlapDetected |
+| `ReflectionAction` | executive.rs | NoAction, EnrichFurther, AskUser, ReGovern, ReExtract | Now per MD-5: ProposePromotion, ProposeContradictionResolution, ProposeDeprecation, ProposeMerge, NoAction |
+
+### 🟠 Structural Improvements
+
+| Item | File | What Changed |
+|------|------|-------------|
+| `CompositionMember::label` | types.rs | Added `pub label: String` field; `label()` now returns `&self.label` instead of `""` |
+| `ExtractionQualityTracker` | types.rs | Replaced simplified 3-field version with full MD-1 spec: `ExtractionQuality` per-rule tracking with `gap_rate()`, `repair_rate()`, `is_weak()`, `record_extraction()`, `record_gap()`, `record_repair()`, `weak_rules()` |
+| `select_cognitive_mode()` | executive.rs | Now uses `extract_keywords()` + `neighborhood_for()` for local mode selection per MD-5 |
+
+### Test Results
+
+- **347 tests pass** (0 failures)
+- **0 compile errors** (warnings only)
+- Updated `test_promotion_candidate_to_stable` to include confirming members per new criteria

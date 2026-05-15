@@ -1096,6 +1096,36 @@ impl SelectAcquisition {
         })
     }
 
+    /// Process a user's answer by creating a new Acquisition atom (MD-6).
+    ///
+    /// Unlike `process_user_answer_merge()` which enriches an existing composition,
+    /// this creates a brand new `SemanticAtom(Acquisition, UserAnswer)` that will
+    /// be ingested through the standard pipeline. This is for cases where the user
+    /// provides entirely new knowledge (not just filling a gap).
+    ///
+    /// The new atom carries `AcquisitionSource::UserAnswer` as its variant and
+    /// `EdgeSource::AcquisitionUserAnswer` as its provenance source.
+    pub fn process_user_answer(
+        answer_text: &str,
+        roles: HashMap<SemanticRole, String>,
+        confidence: f32,
+        ctx: &mut PipelineContext,
+    ) -> SemanticAtom {
+        let atom_id = format!("acq_{}", ctx.next_atom_id());
+        SemanticAtom {
+            id: atom_id,
+            label: answer_text.to_string(),
+            atom_type: AtomType::Acquisition,
+            roles,
+            polarity: None,
+            voice: None,
+            variant: Some(AtomVariant::AcquisitionVariant(AcquisitionSource::UserAnswer)),
+            confidence,
+            source: EdgeSource::AcquisitionUserAnswer,
+            composition_id: None,
+        }
+    }
+
     /// Select strategies for all gaps.
     pub fn select_all(&mut self, gaps: &[KnowledgeGap], graph: &Graph) -> Vec<AcquisitionDecision> {
         gaps.iter()
@@ -1257,11 +1287,13 @@ mod tests {
                     node_id: 1,
                     role: SemanticRole::Predicate,
                     confidence: 0.8,
+                    label: String::new(),
                 },
                 CompositionMember {
                     node_id: 2,
                     role: SemanticRole::Arg1Patient,
                     confidence: 0.7,
+                    label: String::new(),
                 },
             ],
             ..Composition::default()
@@ -1333,6 +1365,7 @@ mod tests {
             node_id,
             role: SemanticRole::Arg0Agent,
             confidence: 0.8,
+            label: String::new(),
         });
         graph.compositions.insert("comp_other".to_string(), comp);
 
@@ -1393,6 +1426,7 @@ mod tests {
             node_id,
             role: SemanticRole::Arg0Agent,
             confidence: 0.8,
+            label: String::new(),
         });
         graph.compositions.insert("comp_1".to_string(), comp);
 
