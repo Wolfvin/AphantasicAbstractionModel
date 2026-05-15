@@ -76,6 +76,9 @@ pub use types::{
     ExtractionQualityTracker,
     // --- Graph inspection types ---
     GraphNeighborhood, GraphSnapshot, WeakFrame,
+    // --- Quality tracking (MD-1) ---
+    ExtractionQuality as ExtractionQualityStats,
+    KnowledgeGapPlaceholder,
     // --- Executive types (MD-5) ---
     ReflectionLoopResult, ReasoningState, ReasoningGoal,
     // --- Governance types (MD-4) ---
@@ -97,7 +100,7 @@ pub use pipeline::{
 // Re-export MD-1: ExtractFrame types.
 pub use extract_frame::{
     ExtractFrame,
-    ExtractionQuality,
+    ExtractionQuality as ExtractionQualityLevel,
     ExtractionQualityTrackerExt,
 };
 

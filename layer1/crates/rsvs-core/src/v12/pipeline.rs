@@ -457,6 +457,14 @@ impl PipelineEngine {
         &self.graph
     }
 
+    /// Get a mutable reference to the v12 [`Graph`].
+    ///
+    /// Use with caution — direct mutations bypass the pipeline's
+    /// governance. Prefer using transforms for production code.
+    pub fn graph_mut(&mut self) -> &mut Graph {
+        &mut self.graph
+    }
+
     /// Convenience method for running a specific transform by type.
     ///
     /// Creates a new instance of `T`, reads its input from the context,
