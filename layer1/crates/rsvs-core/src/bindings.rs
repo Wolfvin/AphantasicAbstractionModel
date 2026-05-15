@@ -19,6 +19,9 @@ use crate::mcts::MCTSConfig;
 use crate::consolidation::ConsolidationConfig;
 use crate::reflection::ReflectionConfig;
 
+#[cfg(feature = "v12")]
+use crate::v12_bindings;
+
 // -----------------------------------------------------------------------
 // Python-visible data classes (v6.0)
 // -----------------------------------------------------------------------
@@ -1627,5 +1630,19 @@ fn _rsvs(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     // v8.3 additions
     m.add_class::<PyRecoveryPlan>()?;
     m.add_class::<PyDEPSResult>()?;
+
+    // v12.0 additions (only when v12 feature is enabled)
+    #[cfg(feature = "v12")]
+    {
+        m.add_class::<v12_bindings::PyV12Pipeline>()?;
+        m.add_class::<v12_bindings::PySemanticAtom>()?;
+        m.add_class::<v12_bindings::PyComposition>()?;
+        m.add_class::<v12_bindings::PyCompositionMember>()?;
+        m.add_class::<v12_bindings::PyKnowledgeGap>()?;
+        m.add_class::<v12_bindings::PyAcquisitionDecision>()?;
+        m.add_class::<v12_bindings::PyInquiryQuestion>()?;
+        m.add_class::<v12_bindings::PyV12IngestResult>()?;
+    }
+
     Ok(())
 }

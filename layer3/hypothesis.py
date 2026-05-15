@@ -1570,3 +1570,21 @@ class HypothesisDrivenReasoner:
             results.append(result)
 
         return results
+
+
+# ---------------------------------------------------------------------------
+# v12-aware stubs
+# ---------------------------------------------------------------------------
+
+def create_v12_hypothesis_composition(label: str, roles: dict, bridge=None) -> dict | None:
+    """Create a v12 Hypothesis Composition.
+    
+    In v12, hypotheses are Compositions with composition_type=Hypothesis.
+    This function creates a hypothesis composition through the v12 pipeline.
+    
+    Note: Full hypothesis creation through v12 pipeline requires the 
+    PipelineEngine to support explicit composition creation. For now,
+    this returns None and will be implemented in a future update.
+    """
+    # TODO: Implement when PipelineEngine supports explicit composition creation
+    return None

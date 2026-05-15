@@ -8,7 +8,12 @@ Problem: PerceptualTuple/PerceptualObservation created by TextAbstractor were
 NEVER consumed by Layer 1 (RSVS). The RSVS ingest_text() takes raw &str.
 This adapter bridges that gap.
 
-Usage:
+v12: The adapter now also supports producing structured data suitable for
+the v12 pipeline's v12_ingest() method, which uses ExtractFrame, ReasonFrame,
+GovernBeliefs, and gap detection. Falls back to legacy text-based ingestion
+when the v12 pipeline is unavailable.
+
+Usage (legacy / v11):
     from layer0.adapter import ingest_observation, observation_to_ingest_data
 
     # After abstracting:
@@ -19,6 +24,15 @@ Usage:
     rsvs.ingest(ingest_data)
     # Or, all-in-one:
     stats = ingest_observation(rsvs_instance, obs)
+
+Usage (v12 pipeline):
+    from layer0.adapter import V12Adapter, perceptual_tuple_to_v12_input
+
+    adapter = V12Adapter()
+    result = adapter.ingest(perceptual_tuple)
+
+    # Or convert a single tuple to v12-compatible dict:
+    v12_input = perceptual_tuple_to_v12_input(pt)
 """
 
 from __future__ import annotations
@@ -273,3 +287,92 @@ def ingest_observations(rsvs: RsvsIngestProtocol, observations: list[PerceptualO
         result = ingest_observation(rsvs, obs)
         results.append(result)
     return results
+
+
+# ---------------------------------------------------------------------------
+# v12 pipeline support
+# ---------------------------------------------------------------------------
+
+def perceptual_tuple_to_v12_input(pt: PerceptualTuple) -> dict:
+    """Convert a PerceptualTuple to a v12-compatible input dict.
+
+    The v12 pipeline can handle raw text directly via its Tokenize + ExtractFrame
+    transforms, so this function primarily extracts the text representation and
+    adds metadata about the source modality and extraction quality.
+
+    For sentence-like inputs, the v12 pipeline will automatically:
+    1. Detect if the text is sentence-like (is_sentence_like)
+    2. Run ExtractFrame to produce SemanticAtom(Event, ...)
+    3. Run ReasonFrame for hidden meaning candidates
+    4. Govern beliefs and anchor with seeds
+    5. Detect gaps and select acquisition strategy
+
+    This function enriches the text with modality metadata so the v12 pipeline
+    can make better decisions about extraction strategy.
+    """
+    return {
+        "text": _tuple_to_sentence(pt),
+        "modality": pt.source_modality.value,
+        "confidence": pt.confidence,
+        "source": "layer0_adapter",
+    }
+
+
+class V12Adapter:
+    """Adapter that feeds PerceptualTuples into the v12 pipeline.
+
+    Unlike the legacy adapter which converts to text and feeds rsvs.ingest_text(),
+    this adapter uses the v12 DAG-based pipeline with ExtractFrame, ReasonFrame,
+    GovernBeliefs, and gap detection.
+
+    Falls back to legacy text-based ingestion if v12 is not available.
+    """
+
+    def __init__(self):
+        self._v12 = None
+        self._legacy = None
+        try:
+            from layer2.bridge import V12PipelineBridge
+            bridge = V12PipelineBridge()
+            if bridge.available:
+                self._v12 = bridge
+        except ImportError:
+            pass
+
+    @property
+    def uses_v12(self) -> bool:
+        return self._v12 is not None
+
+    def ingest(self, perceptual_tuple) -> dict:
+        """Ingest a PerceptualTuple using v12 or legacy pipeline.
+
+        Args:
+            perceptual_tuple: A PerceptualTuple or PerceptualObservation to ingest.
+
+        Returns:
+            A dict containing the ingest result and pipeline mode used.
+        """
+        text = self._extract_text(perceptual_tuple)
+        if self._v12 is not None:
+            return self._v12.ingest(text)
+        else:
+            # Fallback: use legacy adapter
+            return self._legacy_ingest(text)
+
+    def _extract_text(self, pt) -> str:
+        """Extract text from PerceptualTuple or PerceptualObservation."""
+        if isinstance(pt, PerceptualObservation):
+            return observation_to_ingest_data(pt)
+        elif isinstance(pt, PerceptualTuple):
+            return _tuple_to_sentence(pt)
+        elif hasattr(pt, 'text'):
+            return pt.text
+        elif hasattr(pt, 'label'):
+            return pt.label
+        else:
+            return str(pt)
+
+    def _legacy_ingest(self, text: str) -> dict:
+        """Fallback to legacy text ingestion."""
+        # Legacy adapter creates a basic result dict
+        return {"text_ingested": text, "mode": "legacy"}

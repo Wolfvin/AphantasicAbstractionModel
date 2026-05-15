@@ -23,11 +23,12 @@ Flow:
 from __future__ import annotations
 
 import json
+import logging
 import time
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
-from .bridge import RsvsBridge, get_bridge, is_rust_core_available
+from .bridge import RsvsBridge, V12PipelineBridge, get_bridge, is_rust_core_available, is_v12_available
 from .llm import generate_narrative
 from .context import ContextLayer
 from .situation import SituationLayer
@@ -37,6 +38,8 @@ from .scope_control import ScopeControl, ScopeConfig
 from .chat_index import SemanticChatIndex, ChatNode
 from .pattern import PatternOutput, ReasoningStep, PatternResult
 from .temporal import TemporalTracker
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -137,6 +140,23 @@ class GeniusPipeline:
         result = pipeline.ask("Berapa tarif pajak penghasilan?")
         pipeline.deactivate_scope()
 
+    v12 integration:
+        The GeniusPipeline can optionally use V12PipelineBridge for
+        executive-controlled ingestion when the v12 PipelineEngine is
+        available (Rust core built with ``--features v12,python``).
+
+        The v12 pipeline provides a DAG-based execution model with three
+        cognitive modes (Reactive, Analytical, Reflective) and built-in
+        gap detection.  When available, the pipeline can route ingestion
+        through the v12 path for richer structural analysis, while
+        falling back to the standard AbstractionBridge path otherwise.
+
+        To enable v12 ingestion:
+            pipeline = GeniusPipeline(use_v12=True)
+
+        The v12 bridge is also accessible directly:
+            pipeline.v12  # V12PipelineBridge instance
+
     Analogi novel:
         Ini adalah Jin Soun secara keseluruhan.
         - ContextLayer = Simhyeon Pavilion + kemampuan membatasi sumber
@@ -157,6 +177,7 @@ class GeniusPipeline:
         auto_search: bool = False,
         use_llm: bool = True,
         language: str = "id",
+        use_v12: bool = False,
     ):
         """Initialize the pipeline with all layers.
 
@@ -172,12 +193,18 @@ class GeniusPipeline:
             auto_search: Automatically search internet when confidence is low.
             use_llm: Whether to use LLM for narrative generation (default: True).
             language: Output language for narratives ("id" or "en").
+            use_v12: Whether to use V12PipelineBridge for executive-controlled
+                ingestion when available (default: False).  When True and the
+                v12 pipeline is available, the ``ingest()`` method routes text
+                through the v12 DAG-based pipeline for richer structural
+                analysis with cognitive mode selection and gap detection.
         """
         self._eta = eta
         self._anomaly_threshold = anomaly_threshold
         self._auto_search = auto_search
         self._use_llm = use_llm
         self._language = language
+        self._use_v12 = use_v12
 
         # Create a shared bridge so all layers use the same RSVS instance
         if bridge is not None:
@@ -204,6 +231,12 @@ class GeniusPipeline:
 
         # Temporal tracking layer (G1-1: temporal metadata for nodes)
         self.temporal = TemporalTracker()
+
+        # v12 pipeline bridge for executive-controlled ingestion
+        # Initialized lazily -- only creates a PyV12Pipeline if the Rust
+        # core was built with --features v12,python.  When unavailable,
+        # self.v12.available returns False and all methods degrade safely.
+        self.v12 = V12PipelineBridge()
 
         # Internal state
         self._conversation_history: list[dict] = []
@@ -473,21 +506,40 @@ class GeniusPipeline:
 
         Useful for pre-loading knowledge before asking questions.
 
+        When ``use_v12=True`` was passed at construction and the v12
+        pipeline is available, ingestion is routed through
+        V12PipelineBridge which runs the DAG-based pipeline
+        (ExtractFrame, ReasonFrame, GovernBeliefs) and returns
+        cognitive mode and gap detection info in addition to the
+        standard layer stats.
+
         Args:
             text: Text to ingest.
             source: Source type for trust scoring.
 
         Returns:
-            Stats from the ingestion process.
+            Stats from the ingestion process.  When v12 is active,
+            includes a ``"v12"`` key with the V12PipelineBridge.ingest()
+            result dict.
         """
         # Ingest through all layers
         context_stats = self.context.ingest_text(text, source=source)
         situation_stats = self.situation.add_message("system", text)
 
-        return {
+        result = {
             "context": context_stats,
             "situation": situation_stats,
         }
+
+        # Optional v12 pipeline ingestion for executive-controlled path
+        if self._use_v12 and self.v12.available:
+            try:
+                v12_stats = self.v12.ingest(text)
+                result["v12"] = v12_stats
+            except Exception as exc:
+                logger.warning("v12 ingestion failed, continuing with standard path: %s", exc)
+
+        return result
 
     def set_scope(self, allowed_sources: list[str]) -> None:
         """Set scope filter — only use these sources for answers.
@@ -544,6 +596,8 @@ class GeniusPipeline:
             "use_llm": self._use_llm,
             "language": self._language,
             "temporal_stats": self.temporal.get_stats(),
+            "v12_available": self.v12.available,
+            "use_v12": self._use_v12,
         }
 
     # -------------------------------------------------------------------

@@ -94,6 +94,31 @@ def is_rust_core_available() -> bool:
 
 
 # ---------------------------------------------------------------------------
+# Try to detect v12 pipeline availability (PyV12Pipeline)
+# ---------------------------------------------------------------------------
+
+_v12_available = False
+
+try:
+    from rsvs import PyV12Pipeline as _PyV12Pipeline  # type: ignore[import]
+    _v12_available = True
+except Exception:
+    pass
+
+
+def is_v12_available() -> bool:
+    """Check if the v12 PipelineEngine (PyV12Pipeline) is importable.
+
+    The v12 pipeline requires the Rust core to be built with
+    ``--features v12,python``.  When unavailable, V12PipelineBridge
+    degrades gracefully: ``available`` returns False and all methods
+    return safe defaults (empty lists, zero counts, etc.) instead of
+    raising.
+    """
+    return _v12_available
+
+
+# ---------------------------------------------------------------------------
 # Fallback graph — lightweight in-memory knowledge store with multi-sense
 # and compositional model (L2-03 fix)
 # ---------------------------------------------------------------------------
@@ -2244,3 +2269,255 @@ def get_bridge(rsvs_instance: Any = None) -> AbstractionBridge:
 
 # Backward compat
 RsvsBridge = AbstractionBridge
+
+
+# ---------------------------------------------------------------------------
+# V12PipelineBridge — adapter for the v12.0 DAG-based PipelineEngine
+# ---------------------------------------------------------------------------
+
+class V12PipelineBridge:
+    """Bridge to the v12.0 PipelineEngine -- DAG-based pipeline with cognitive modes.
+
+    The v12 pipeline introduces a directed-acyclic-graph (DAG) execution model
+    with three cognitive modes (Reactive, Analytical, Reflective) and built-in
+    gap detection.  It is the next-generation ingestion path for RSVS,
+    superseding the flat ingest-then-query model used by AbstractionBridge.
+
+    This bridge wraps ``PyV12Pipeline`` (exposed by the Rust core when built
+    with ``--features v12,python``) and converts its PyO3 result objects into
+    plain Python dicts so downstream layer2 code never touches PyO3 types
+    directly -- consistent with the design philosophy of AbstractionBridge.
+
+    Graceful degradation:
+        If the Rust core was not compiled with v12 support, ``available``
+        returns False.  All read-only methods return safe defaults (empty
+        lists, zero counts, empty JSON) and mutation methods raise
+        ``RuntimeError`` so callers can distinguish "unavailable" from
+        "legitimate empty result".
+
+    Usage:
+        v12 = V12PipelineBridge()
+        if v12.available:
+            result = v12.ingest("The cat sat on the mat.")
+            print(result["cognitive_mode"])   # e.g. "Reactive"
+            print(v12.composition_count())     # e.g. 3
+        else:
+            print("v12 pipeline not available -- build with --features v12,python")
+    """
+
+    def __init__(self) -> None:
+        try:
+            from rsvs import PyV12Pipeline  # type: ignore[import]
+            self._pipeline = PyV12Pipeline()
+            self._available = True
+        except (ImportError, Exception):
+            self._pipeline = None
+            self._available = False
+
+    @property
+    def available(self) -> bool:
+        """Whether the v12 pipeline is available.
+
+        Returns True only when the Rust core was built with
+        ``--features v12,python`` and PyV12Pipeline could be instantiated.
+        """
+        return self._available
+
+    def ingest(self, text: str) -> dict:
+        """Ingest text using the v12 pipeline.
+
+        The v12 ingestion path runs text through a DAG of processing
+        frames: ExtractFrame, ReasonFrame, GovernBeliefs, and optional
+        ReflectFrame (when the cognitive mode is Reflective).  This
+        produces atoms, compositions, and gap detections in a single
+        pass.
+
+        Args:
+            text: The text to ingest.
+
+        Returns:
+            A dict with keys:
+                atoms_created (int): Number of new atoms created.
+                compositions_created (int): Number of new compositions.
+                gaps_detected (int): Number of knowledge gaps found.
+                cognitive_mode (str): The selected cognitive mode
+                    ("Reactive", "Analytical", or "Reflective").
+
+        Raises:
+            RuntimeError: If the v12 pipeline is not available.
+        """
+        if not self._available:
+            raise RuntimeError("v12 pipeline not available")
+        result = self._pipeline.v12_ingest(text)
+        return {
+            "atoms_created": result.atoms_created,
+            "compositions_created": result.compositions_created,
+            "gaps_detected": result.gaps_detected,
+            "cognitive_mode": result.cognitive_mode,
+        }
+
+    def cognitive_mode(self, text: str) -> str:
+        """Select the cognitive mode for the given input text.
+
+        The v12 pipeline selects between three cognitive modes based on
+        input characteristics:
+            - "Reactive": Fast, pattern-matching response for familiar inputs.
+            - "Analytical": Deep structural reasoning for complex inputs.
+            - "Reflective": Meta-cognitive evaluation and self-correction.
+
+        Args:
+            text: Input text to classify.
+
+        Returns:
+            One of "Reactive", "Analytical", or "Reflective".
+
+        Raises:
+            RuntimeError: If the v12 pipeline is not available.
+        """
+        if not self._available:
+            raise RuntimeError("v12 pipeline not available")
+        return self._pipeline.select_cognitive_mode(text)
+
+    def compositions(self) -> list:
+        """Get all compositions in the v12 graph.
+
+        Returns:
+            List of PyComposition objects.  Returns an empty list if
+            the v12 pipeline is not available.
+        """
+        if not self._available:
+            return []
+        return self._pipeline.compositions()
+
+    def detect_gaps(self) -> list:
+        """Detect knowledge gaps in the current graph state.
+
+        Gap detection identifies areas where the graph lacks sufficient
+        connectivity or where compositions have weak grounding.  This is
+        a v12-specific feature that leverages the DAG structure to find
+        structural holes.
+
+        Returns:
+            List of PyKnowledgeGap objects.  Returns an empty list if
+            the v12 pipeline is not available.
+        """
+        if not self._available:
+            return []
+        return self._pipeline.detect_gaps()
+
+    def composition_count(self) -> int:
+        """Number of compositions in the v12 graph.
+
+        Returns:
+            Composition count, or 0 if the v12 pipeline is not available.
+        """
+        if not self._available:
+            return 0
+        return self._pipeline.composition_count()
+
+    def node_count(self) -> int:
+        """Number of nodes in the v12 graph.
+
+        Returns:
+            Node count, or 0 if the v12 pipeline is not available.
+        """
+        if not self._available:
+            return 0
+        return self._pipeline.node_count()
+
+    def get_composition(self, comp_id: str) -> dict | None:
+        """Get a specific composition by ID.
+
+        Converts the PyO3 PyComposition object into a plain dict with
+        member details, matching the bridge pattern of never exposing
+        PyO3 objects to downstream code.
+
+        Args:
+            comp_id: The composition identifier string.
+
+        Returns:
+            A dict with keys: id, composition_type, lifecycle, epistemic,
+            confidence, members.  Each member is a dict with keys:
+            node_id, role, label, confidence.
+            Returns None if the composition is not found or the v12
+            pipeline is not available.
+        """
+        if not self._available:
+            return None
+        comp = self._pipeline.get_composition(comp_id)
+        if comp is None:
+            return None
+        return {
+            "id": comp.id,
+            "composition_type": comp.composition_type,
+            "lifecycle": comp.lifecycle,
+            "epistemic": comp.epistemic,
+            "confidence": comp.confidence,
+            "members": [
+                {
+                    "node_id": m.node_id,
+                    "role": m.role,
+                    "label": m.label,
+                    "confidence": m.confidence,
+                }
+                for m in comp.members
+            ],
+        }
+
+    def find_weak_frames(self) -> list:
+        """Find weak frames in the v12 graph.
+
+        Weak frames are compositions with low confidence or insufficient
+        grounding evidence.  This is useful for identifying areas that
+        need reinforcement through additional ingestion.
+
+        Returns:
+            List of weak frame descriptors.  Returns an empty list if
+            the v12 pipeline is not available.
+        """
+        if not self._available:
+            return []
+        return self._pipeline.find_weak_frames()
+
+    def snapshot_json(self) -> str:
+        """Get a JSON snapshot of the v12 graph state.
+
+        The snapshot includes all nodes, compositions, gaps, and their
+        current state.  Useful for serialization, debugging, or
+        transferring graph state between processes.
+
+        Returns:
+            JSON string of the graph state.  Returns "{}" if the v12
+            pipeline is not available.
+        """
+        if not self._available:
+            return "{}"
+        return self._pipeline.snapshot_json()
+
+    def set_gap_detection(self, enabled: bool) -> None:
+        """Enable or disable gap detection in the v12 pipeline.
+
+        When disabled, ingest() will not run the gap detection pass,
+        which can improve performance for bulk ingestion where gaps
+        are not needed immediately.
+
+        Args:
+            enabled: Whether to enable gap detection.
+
+        Raises:
+            RuntimeError: If the v12 pipeline is not available.
+        """
+        if not self._available:
+            raise RuntimeError("v12 pipeline not available")
+        self._pipeline.set_gap_detection(enabled)
+
+    def gap_detection_enabled(self) -> bool:
+        """Check whether gap detection is currently enabled.
+
+        Returns:
+            True if gap detection is enabled, False otherwise.
+            Returns False if the v12 pipeline is not available.
+        """
+        if not self._available:
+            return False
+        return self._pipeline.gap_detection_enabled()

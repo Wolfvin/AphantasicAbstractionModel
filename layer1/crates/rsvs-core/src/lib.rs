@@ -65,6 +65,9 @@ pub mod emergent_reasoning_tests;
 #[cfg(feature = "v12")]
 pub mod v12;
 
+#[cfg(all(feature = "python", feature = "v12"))]
+pub mod v12_bindings;
+
 pub use attention::{
     is_groundable_to_seeds, sentence_contains_seed, text_to_sentences, tokenize, AttentionComponent, AttentionConfig,
     CoocStats, DomainAttentionConfig, EntityDetector, RsvsAttention,

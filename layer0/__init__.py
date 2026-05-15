@@ -32,4 +32,6 @@ from .adapter import (
     ingest_observation,
     ingest_observations,
     RsvsIngestProtocol,
+    perceptual_tuple_to_v12_input,
+    V12Adapter,
 )

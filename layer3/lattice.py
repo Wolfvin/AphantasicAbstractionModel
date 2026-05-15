@@ -1,6 +1,11 @@
 """
 AAM Layer 3 — Possibility Lattice: Dynamic Hypothesis Space
 
+NOTE: CompositionMode (imported from layer2.hypothesis_combinator) is a
+layer2/3 concept for hybrid statement composition (e.g. CONCATENATIVE vs
+LLM_DRIVEN). It is unrelated to v12's Composition type, which is a core
+graph construct (composition_type=Hypothesis, etc.).
+
 Inspirasi: Strategi permainan kartu — generate semua kemungkinan,
 eliminasi yang salah, hybrid yang komplementer, repeat sampai sisa 1.
 

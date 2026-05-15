@@ -679,3 +679,33 @@ class ReasoningEngine:
                     })
 
         return summary
+
+
+# ---------------------------------------------------------------------------
+# v12-aware stubs
+# ---------------------------------------------------------------------------
+
+class V12ReasoningBridge:
+    """Bridge to v12 reasoning capabilities.
+    
+    In v12.0, reasoning is handled by the ExecutiveOrchestrator which selects
+    cognitive mode (Reactive/Analytical/Reflective) and runs the appropriate
+    transforms. This bridge exposes v12 reasoning to layer3.
+    """
+    
+    def __init__(self, v12_bridge=None):
+        self._bridge = v12_bridge
+    
+    def analyze(self, text: str) -> dict:
+        """Analyze text using v12 cognitive mode selection."""
+        if self._bridge is None or not self._bridge.available:
+            return {"mode": "unavailable", "analysis": None}
+        
+        mode = self._bridge.cognitive_mode(text)
+        result = self._bridge.ingest(text)
+        return {
+            "mode": mode,
+            "atoms_created": result.get("atoms_created", 0),
+            "compositions_created": result.get("compositions_created", 0),
+            "gaps_detected": result.get("gaps_detected", 0),
+        }
