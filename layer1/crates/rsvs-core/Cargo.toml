@@ -29,6 +29,7 @@ path = "src/bin/rsvs-realtest.rs"
 [features]
 default = []
 python = ["pyo3", "pyo3/extension-module"]
+v12 = []
 
 [dependencies]
 pyo3 = { version = "0.28", features = ["extension-module"], optional = true }

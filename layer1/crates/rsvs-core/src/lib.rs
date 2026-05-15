@@ -62,6 +62,9 @@ pub mod cross_pathway_synthesis;
 pub mod compound_discovery;
 pub mod emergent_reasoning_tests;
 
+#[cfg(feature = "v12")]
+pub mod v12;
+
 pub use attention::{
     is_groundable_to_seeds, sentence_contains_seed, text_to_sentences, tokenize, AttentionComponent, AttentionConfig,
     CoocStats, DomainAttentionConfig, EntityDetector, RsvsAttention,

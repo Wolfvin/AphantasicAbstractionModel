@@ -676,6 +676,28 @@ pub enum EdgeSource {
     Synthesis,
     /// v10.1: Created by compound discovery — multi-word expression edges.
     CompoundDiscovery,
+
+    // v12.0: New provenance sources (replaces ProvenanceSource from MD-4)
+    /// v12.0: From MD-1: semantic frame extraction.
+    FrameCompiler,
+    /// v12.0: From MD-2: pre-ingest reasoning.
+    HiddenMeaningRule,
+    /// v12.0: From MD-4: belief state transition.
+    EpistemicGovernance,
+    /// v12.0: From MD-5: executive routing.
+    ExecutiveControl,
+    /// v12.0: From MD-6: passive recall.
+    AcquisitionRecall,
+    /// v12.0: From MD-6: self-study.
+    AcquisitionSelfStudy,
+    /// v12.0: From MD-6: user answer.
+    AcquisitionUserAnswer,
+    /// v12.0: Human override.
+    HumanAssertion,
+    /// v12.0: Feedback loop — composition enriched after gap detection.
+    EnrichmentFeedback,
+    /// v12.0: Feedback loop — frame re-extracted with graph context.
+    ExtractionRepair,
 }
 
 /// L0-02: Relation type for edges — mirrors Python Layer 0 RelationType.

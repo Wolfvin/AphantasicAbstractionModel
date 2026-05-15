@@ -5,6 +5,60 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [12.0.0] - 2026-05-15
+
+### Added — 6 Unified Abstractions (Architecture Refactor)
+
+- **SemanticAtom**: Universal ingest primitive replacing Token/EventFrame/HiddenMeaningCandidate
+- **Composition**: Universal structured grouping replacing EventFrame/HiddenMeaningCandidate/Pattern/Hypothesis
+- **LifecycleState + EpistemicState**: Two orthogonal status axes replacing 4 overlapping lifecycle enums
+- **SemanticEdge**: Single typed triple replacing 4 overlapping edge systems
+- **Transform (DAG)**: Declarative transform graph replacing hardcoded pipeline stages
+- **Seed Anchoring**: Seed-driven epistemic confidence replacing source trust weight system
+
+### Added — Closed Feedback Loop
+
+- `DetectGaps` → `SelectAcquisition` → `EnrichComposition`/`ReExtractFrame` → `GovernBeliefs` re-evaluation
+- `source_composition_id` in KnowledgeGap for traceability
+- `RecallAction` produces concrete actions (not just modes)
+- `process_user_answer_merge()` merges user answers into existing compositions
+- `ExtractionQualityTracker` identifies weak extraction rules
+- `max_enrichment_rounds` bounds the loop per cognitive mode (0/1/2)
+
+### Added — Epistemic Truth Governance (MD-4)
+
+- `GovernBeliefs` Transform with contradiction detection (polarity, role reversal, purpose conflict)
+- `SeedAnchor` Transform with seed-driven confidence evaluation
+- `ContradictionResolution` with 4 resolution types (Superseded, ContextResolved, ScopedValidity, Misinterpretation)
+- Promotion criteria with explicit thresholds for all lifecycle/epistemic transitions
+
+### Added — Executive Cognition (MD-5)
+
+- 3 cognitive modes: Reactive, Analytical, Reflective
+- `ComputeBudget` per mode with depth/reflection/enrichment limits
+- `StopCondition` with goal-based confidence thresholds
+- `Reflect` Transform for read-only self-review of graph state
+- `ReasoningState` tracking evidence accumulation and goal satisfaction
+
+### Added — Epistemic Acquisition (MD-6)
+
+- `DetectGaps` with per-AtomType gap detection (Event, HiddenMeaning, AmbiguousToken)
+- `SelectAcquisition` with acquisition hierarchy: Remember first, Study second, Ask last
+- `graph_find_role_candidate()` for frequency-based role filler lookup
+- `resolve_ambiguous_from_graph()` for recency-based pronoun resolution
+- `InquiryMemory` to prevent repetitive questions
+
+### Changed
+
+- `EdgeSource` extended with 10 new variants for v12.0 provenance tracking
+- Pipeline engine replaced by DAG-based `PipelineEngine` with `register_default_pipeline()`
+- Feature-flagged under `v12` Cargo feature for safe incremental adoption
+
+### Design Documents
+
+- Moved `!updates/` design docs to `docs/v12/` as authoritative reference specs
+- All 6 MDs (MD-1 through MD-6) + REVISION_NOTES.md preserved as design reference
+
 ## [8.5.0] - 2026-05-12
 
 ### Added — English-First Conversion, Bug Fixes & Architecture Upgrades

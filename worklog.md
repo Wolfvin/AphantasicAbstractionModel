@@ -91,3 +91,25 @@ Stage Summary:
 - 3 correctness blockers resolved: DAG engine, promotion criteria, SeedAnchor formula
 - Remaining gaps (3, 8) at medium severity also addressed
 - No remaining compile blockers or correctness blockers
+
+---
+Task ID: 5
+Agent: types-module-creator
+Task: Create v12.0 Rust types module
+
+Work Log:
+- Created directory: layer1/crates/rsvs-core/src/v12/
+- Created v12/mod.rs with module declarations and comprehensive re-exports (60 lines)
+- Created v12/types.rs with all v12.0 unified abstraction types (1587 lines)
+- Updated lib.rs with feature-flagged v12 module: `#[cfg(feature = "v12")] pub mod v12;`
+- Updated Cargo.toml with v12 feature flag: `v12 = []`
+- Extended existing EdgeSource enum in crate::types with 10 new v12.0 variants (FrameCompiler, HiddenMeaningRule, EpistemicGovernance, ExecutiveControl, AcquisitionRecall, AcquisitionSelfStudy, AcquisitionUserAnswer, HumanAssertion, EnrichmentFeedback, ExtractionRepair)
+
+Stage Summary:
+- Key types created: SemanticAtom, Composition, LifecycleState, EpistemicState, SemanticEdge, Transform trait, PipelineContext, SeedPrimitive, SemanticRole, and 30+ supporting types
+- Feature flag `v12` added for safe incremental adoption
+- All types derive Debug, Clone, Serialize, Deserialize where appropriate
+- #[serde(default)] used for backward compatibility on optional/new fields
+- #[non_exhaustive] on enums that may grow (AtomType, SemanticRole, CompositionType, etc.)
+- Comprehensive rustdoc comments with MD source references on every type
+- Existing v8.3 types (NodeId, SenseId, RelationType, EdgeSource, HiddenMeaningType) imported, not redefined
