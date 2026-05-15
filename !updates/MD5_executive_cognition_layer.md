@@ -1,887 +1,438 @@
-# MD-5 — Executive Cognition / Meta-Control Layer
+# MD-5 — Executive Cognition / Meta-Control Layer (Adjusted for Implementation)
+
+> **Adjustment Note (v11.0 alignment):** This document has been revised for implementation
+> readiness. Key changes from original spec:
+> - Phase 1: 3 cognitive modes only (Reactive, Analytical, Reflective), not 12
+> - Phase 1: Stop conditions + compute budget, not full executive architecture
+> - Layer position: NOT a new Layer 5 — integrated into existing Layer 2/3 orchestration
+> - ExecutiveState simplified from 12 states to 4
+> - Goal arbitration, task decomposition, attention router DEFERRED to Phase 2
+> - max_reasoning_depth aligned with current system (3-5), not 8
+> - Failure recovery deferred — current system already has convergence + reflection safety
+> - All 1,081 existing tests must remain green
+> - Executive cognition is premature without mature specialists — Phase 1 is MINIMAL
+
+---
 
 ## Context
 
 Assume completed:
 
-- MD-1: Semantic Frame Compiler
-- MD-2: Pre-Ingest Meaning Reasoner
-- MD-3: AAM Architecture Refactor
-- MD-4: Epistemic Truth & Belief Governance
+- MD-1: Semantic Frame Compiler (Phase 1)
+- MD-2: Pre-Ingest Meaning Reasoner (Phase 1)
+- MD-3: AAM Architecture Refactor (hybrid additive)
+- MD-4: Epistemic Truth & Belief Governance (Phase 1)
 
 This document defines the executive cognition layer for AAM.
 
-This is the central control system.
-
-Equivalent conceptual role:
-
-```text
-prefrontal cortex
-executive controller
-meta-cognitive governor
-cognitive operating system
-```
+**Important**: Executive cognition requires mature specialist engines (Predictive, Situation, Latent Signal, Cross-Pathway) to orchestrate. These are still evolving. Therefore Phase 1 is intentionally minimal — just enough meta-control to prevent runaway reasoning and wasted compute.
 
 ---
 
-# Core Problem
+## Core Problem
 
 By MD-4, AAM can:
 
-- parse semantic structure
-- infer hidden meaning
-- reason structurally
-- manage belief states
-- detect contradictions
-- govern truth confidence
-- maintain provenance
+```text
+parse semantic structure
+infer hidden meaning
+reason structurally
+manage belief states
+detect contradictions
+govern truth confidence
+maintain provenance
+```
 
-But this is not enough.
-
-Without executive control:
+But without meta-control:
 
 ```text
-reasoning may trigger unnecessarily
-deep reasoning may waste compute
-reflection may loop forever
-conflicts may consume all resources
+reasoning may trigger unnecessarily on trivial input
+deep reasoning may waste compute on simple queries
+reflection may loop without bound
+contradictions may consume all resources
 trivial tasks may use heavy reasoning
-high-stakes tasks may use shallow reasoning
-multiple goals may compete
-attention may explode across graph
-search branching may become unstable
 ```
 
-Result:
+Phase 1 addresses the most critical of these: **unbounded reasoning** and **unnecessary deep analysis**.
+
+---
+
+## Mission — Phase 1 (MINIMAL)
+
+Create a **minimal** deterministic executive control that:
+
+1. Selects cognitive mode based on input complexity
+2. Enforces stop conditions on reasoning
+3. Governs compute budget
+
+Everything else (attention routing, goal arbitration, task decomposition, failure recovery) is deferred.
+
+---
+
+## Architecture Position
+
+Executive cognition is NOT a new layer. It is a **control overlay** that integrates into the existing pipeline orchestration.
 
 ```text
-compute inefficiency
-reasoning drift
-decision instability
-resource exhaustion
-looping cognition
-goal confusion
+Layer 0: Perceptual Ingest
+Layer 1: RSVS Memory Core
+Layer 2: Predictive & Situational Reasoning
+Layer 3: Deductive Reasoning & Narrative
+
+Executive Control (cross-cutting):
+  - mode selection (called before reasoning starts)
+  - budget enforcement (called during reasoning)
+  - stop conditions (called after each reasoning step)
 ```
 
----
-
-# Mission
-
-Create a deterministic executive cognition layer.
-
-Responsibilities:
-
-- cognitive mode selection
-- reasoning depth control
-- attention routing
-- compute budgeting
-- goal arbitration
-- reflection triggering
-- verification escalation
-- uncertainty-aware strategy switching
-- stop condition enforcement
-- self-monitoring
-- task decomposition
-- failure recovery
+Executive control is a **service** consumed by the pipeline, not a separate layer.
 
 ---
 
-# Core Principle
+## Cognitive Modes — Phase 1: 3 Modes Only
 
-AAM must not only reason.
-
-AAM must decide:
-
-```text
-whether to reason
-how to reason
-how deeply to reason
-when to stop reasoning
-```
-
----
-
-# Executive Architecture Position
-
-New architecture:
-
-```text
-Layer 0
-Semantic ingest
-
-Layer 1
-RSVS memory core
-
-Layer 2
-Prediction / situation modeling
-
-Layer 3
-Reasoning engines
-
-Layer 4
-Epistemic governance
-
-Layer 5
-Executive cognition (THIS DOCUMENT)
-
-Layer 6
-Narrative rendering
-```
-
----
-
-# Executive State Machine
-
-```rust
-pub enum ExecutiveState {
-    Idle,
-    Observe,
-    Interpret,
-    Route,
-    Reason,
-    Reflect,
-    Verify,
-    Arbitrate,
-    Conclude,
-    Commit,
-    Suspend,
-    Recover,
-}
-```
-
----
-
-# Cognitive Modes
-
-## Required Modes
-
-```rust
-pub enum CognitiveMode {
-    Reactive,
-    FastLookup,
-    Analytical,
-    Deductive,
-    Abductive,
-    Predictive,
-    Reflective,
-    ConflictResolution,
-    Verification,
-    Exploratory,
-    MemoryRecovery,
-    SituationModeling,
-}
-```
-
----
-
-# Mode Descriptions
-
-## Reactive
+### Reactive Mode
 
 Use when:
 
 ```text
 simple direct retrieval
-low uncertainty
-known pattern
+low uncertainty (confidence > 0.8)
+known pattern (pattern familiarity high)
+no contradictions
 ```
 
-Cheap path.
-
----
-
-## FastLookup
-
-Use when:
+Behavior:
 
 ```text
-graph memory already contains answer
+max_reasoning_depth = 2
+no reflection
+no deep analysis
+fast lookup + shallow sense activation
 ```
 
-No deep reasoning.
-
----
-
-## Analytical
+### Analytical Mode
 
 Use when:
 
 ```text
 structured decomposition needed
+moderate uncertainty (0.4 < confidence < 0.8)
+new event frame detected
+hidden meaning candidates present
 ```
 
----
+Behavior:
 
-## Deductive
+```text
+max_reasoning_depth = 4
+1 reflection cycle allowed
+sense induction + frame analysis + hidden meaning processing
+```
+
+### Reflective Mode
 
 Use when:
 
 ```text
-facts are sufficient
-rules available
-```
-
----
-
-## Abductive
-
-Use when:
-
-```text
-hidden explanation required
-```
-
----
-
-## Predictive
-
-Use when:
-
-```text
-future completion or projection needed
-```
-
----
-
-## Reflective
-
-Use when:
-
-```text
-self-audit required
-low confidence
-internal inconsistency
-```
-
----
-
-## ConflictResolution
-
-Use when:
-
-```text
+high uncertainty (confidence < 0.4)
 contradictions detected
+belief state instability
+epistemic risk (hypothesis near promotion threshold)
 ```
+
+Behavior:
+
+```text
+max_reasoning_depth = 5
+2 reflection cycles allowed
+full analysis + grounding review + belief state audit
+```
+
+### Mode Selection Logic
+
+```rust
+fn select_cognitive_mode(context: &ExecutiveContext) -> CognitiveMode {
+    let has_contradiction = context.contradiction_count > 0;
+    let avg_confidence = context.average_confidence;
+
+    if has_contradiction || avg_confidence < 0.4 {
+        return CognitiveMode::Reflective;
+    }
+
+    if avg_confidence < 0.8 || context.has_hidden_meaning_candidates {
+        return CognitiveMode::Analytical;
+    }
+
+    CognitiveMode::Reactive
+}
+```
+
+Simple, deterministic, auditable. No 12-mode complexity.
 
 ---
 
-## Verification
+## Executive State — Simplified
 
-Use when:
-
-```text
-high stakes
-high uncertainty
-epistemic risk
+```rust
+#[derive(Debug, Clone, PartialEq)]
+pub enum ExecutiveState {
+    Idle,       // no active reasoning
+    Reasoning,  // actively reasoning (mode-specific depth)
+    Stopped,    // hit stop condition
+}
 ```
+
+Not 12 states. 3 states. The pipeline already manages its own state transitions — executive control only governs **when to start, how deep to go, and when to stop**.
 
 ---
 
-## Exploratory
-
-Use when:
-
-```text
-novel problem
-weak prior structure
-```
-
----
-
-## MemoryRecovery
-
-Use when:
-
-```text
-answer likely exists in memory
-```
-
----
-
-## SituationModeling
-
-Use when:
-
-```text
-multi-event scenario reasoning needed
-```
-
----
-
-# Trigger System
-
-Rules for mode activation.
-
----
-
-## Trigger Examples
-
-### High uncertainty
-
-```text
-confidence < threshold
-```
-
-Action:
-
-```text
-Reactive → Analytical
-Analytical → Verification
-```
-
----
-
-### Contradiction detected
-
-Trigger:
-
-```text
-conflict count > 0
-```
-
-Action:
-
-```text
-ConflictResolution
-```
-
----
-
-### Novel event
-
-Trigger:
-
-```text
-semantic familiarity low
-```
-
-Action:
-
-```text
-Exploratory
-```
-
----
-
-### Pattern confidence high
-
-Trigger:
-
-```text
-pattern familiarity high
-uncertainty low
-```
-
-Action:
-
-```text
-FastLookup
-```
-
----
-
-### High stakes
-
-Trigger:
-
-```text
-decision critical
-irreversible
-epistemic sensitivity
-```
-
-Action:
-
-```text
-Verification
-```
-
----
-
-# Attention Router
-
-Critical subsystem.
-
-Graph scale requires selective cognition.
-
-Responsibilities:
-
-```text
-choose relevant nodes
-choose relevant senses
-choose event clusters
-choose hypotheses
-choose evidence
-choose conflict targets
-```
-
----
-
-## Attention Scoring
-
-Candidate score dimensions:
-
-```text
-semantic relevance
-goal relevance
-recency
-grounding strength
-uncertainty contribution
-conflict significance
-pattern familiarity
-```
-
-Formula example:
-
-```text
-attention_score =
-semantic relevance
-+ goal weight
-+ uncertainty boost
-+ contradiction boost
-+ recency weight
-```
-
----
-
-# Compute Budget Manager
-
-Executive must control cost.
-
----
-
-## Budget Dimensions
+## Compute Budget — Phase 1
 
 ```rust
 pub struct ComputeBudget {
-    pub max_reasoning_depth: usize,
-    pub max_branching_factor: usize,
-    pub max_hypothesis_count: usize,
-    pub max_reflection_loops: usize,
-    pub max_verification_cycles: usize,
-    pub max_attention_targets: usize,
-    pub time_budget_ms: u64,
+    pub max_reasoning_depth: usize,       // default: 3 (current system range)
+    pub max_reflection_loops: usize,      // default: 1
+    pub max_branching_factor: usize,      // default: 5
+    pub max_hypothesis_count: usize,      // default: 10
+    pub time_budget_ms: u64,              // default: 5000
 }
 ```
 
----
-
-## Example Policy
-
-Low complexity:
+Mode-specific budgets:
 
 ```text
-depth 2
-branching 3
-reflection 0
+Reactive:   depth=2, reflection=0, branching=3, hypotheses=5,   time=1000ms
+Analytical: depth=4, reflection=1, branching=5, hypotheses=10,  time=5000ms
+Reflective: depth=5, reflection=2, branching=7, hypotheses=15,  time=10000ms
 ```
 
-High complexity:
-
-```text
-depth 8
-branching 12
-reflection 3
-verification enabled
-```
+Note: max depth is 5, not 8. Current system operates at depth 3-5. Setting depth 8 would allow runaway reasoning before specialist engines are mature enough to produce useful results at that depth.
 
 ---
 
-# Goal Arbitration
+## Stop Conditions — CRITICAL
 
-AAM may face multiple competing goals.
-
-Examples:
-
-```text
-answer query
-resolve contradiction
-repair belief
-explore hypothesis
-predict future
-validate claim
-```
-
-Need prioritization.
-
----
-
-## Goal Type
+Stop conditions prevent infinite cognition loops.
 
 ```rust
-pub enum GoalType {
-    AnswerQuestion,
-    ResolveConflict,
-    VerifyTruth,
-    RecoverMemory,
-    PredictOutcome,
-    ExploreUnknown,
-    RepairBelief,
-    ImproveSituationModel,
+pub struct StopCondition {
+    pub confidence_sufficient: f32,      // stop if confidence > this (default: 0.9)
+    pub no_new_evidence_loops: usize,    // stop after N loops with no new evidence (default: 2)
+    pub budget_exhausted: bool,          // stop when budget depleted
+    pub goal_satisfied: bool,            // stop when reasoning goal met
+}
+
+impl StopCondition {
+    pub fn should_stop(&self, state: &ReasoningState) -> bool {
+        if state.confidence >= self.confidence_sufficient {
+            return true;  // confidence sufficient
+        }
+        if state.loops_without_new_evidence >= self.no_new_evidence_loops {
+            return true;  // diminishing returns
+        }
+        if state.elapsed_ms >= state.budget.time_budget_ms {
+            return true;  // budget exhausted
+        }
+        if state.goal_met {
+            return true;  // goal satisfied
+        }
+        false
+    }
 }
 ```
 
----
-
-## Arbitration Strategy
-
-Priority dimensions:
-
-```text
-urgency
-importance
-epistemic risk
-resource cost
-user objective
-stability impact
-```
+This is the most important part of Phase 1. Without stop conditions, the system WILL loop.
 
 ---
 
-# Task Decomposition
-
-Complex tasks should split.
-
-Example:
-
-```text
-who did what, why, and what happens next?
-```
-
-Subtasks:
-
-```text
-identify event
-infer motivation
-simulate consequence
-verify uncertainty
-compose answer
-```
-
----
-
-# Stop Conditions
-
-Mandatory.
-
-Without stop conditions:
-
-infinite cognition loops.
-
----
-
-## Stop Triggers
-
-```text
-confidence sufficient
-budget exhausted
-no new evidence
-conflict unresolved but diminishing returns
-max reflection reached
-goal satisfied
-```
-
----
-
-# Reflection Policy
-
-Reflection must not run blindly.
-
----
-
-## Trigger Reflection If
-
-```text
-confidence low
-internal contradiction
-high novelty
-unstable hypothesis
-overconfident weak evidence
-```
-
----
-
-## Reflection Questions
-
-Executive should ask:
-
-```text
-Did I overfit?
-Did I ignore contradictions?
-Did I miss simpler explanation?
-Is evidence weak?
-Is current strategy appropriate?
-```
-
----
-
-# Verification Escalation
-
-High-risk cognition must escalate.
-
-Examples:
-
-```text
-belief conflict
-critical conclusion
-low-confidence decision
-contradiction under high stakes
-```
-
-Verification actions:
-
-```text
-re-check evidence
-re-run deduction
-compare alternative hypothesis
-demand stronger grounding
-```
-
----
-
-# Self Monitoring
-
-Executive self-observation.
-
-State metrics:
+## Executive Context
 
 ```rust
-pub struct CognitiveHealth {
-    pub uncertainty: f32,
-    pub contradiction_load: f32,
-    pub branching_pressure: f32,
-    pub confidence_stability: f32,
-    pub novelty_level: f32,
-    pub loop_risk: f32,
+pub struct ExecutiveContext {
+    // Input assessment
+    pub input_complexity: InputComplexity,  // Simple, Moderate, Complex
+    pub has_frame_context: bool,            // EventFrame available?
+    pub has_hidden_meaning: bool,           // HiddenMeaningCandidate available?
+
+    // Current reasoning state
+    pub average_confidence: f32,
+    pub contradiction_count: usize,
+    pub active_hypotheses: usize,
+    pub loops_completed: usize,
+
+    // Budget
+    pub budget: ComputeBudget,
+    pub stop_condition: StopCondition,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum InputComplexity {
+    Simple,    // single token or short phrase
+    Moderate,  // single sentence with structure
+    Complex,   // multi-sentence or multi-event
 }
 ```
 
 ---
 
-## Failure Signals
+## Integration with Pipeline
 
-Examples:
-
-```text
-loop risk high
-contradictions growing
-confidence oscillating
-attention explosion
-branching explosion
-```
-
----
-
-# Failure Recovery
-
-Recovery strategies:
-
-```text
-reduce branching
-switch to verification
-switch to fast lookup
-suspend weak hypotheses
-prune low-value paths
-fallback to stable evidence
-```
-
----
-
-# Executive Memory
-
-Executive should remember recent cognitive context.
-
-Short-term working memory:
-
-```text
-active goals
-current hypotheses
-active evidence
-current strategy
-visited reasoning paths
-```
-
----
-
-# Situation Routing
-
-Executive should decide:
-
-```text
-single event reasoning?
-multi-event scenario?
-conflict arbitration?
-prediction?
-```
-
----
-
-# Interaction with Layer 3
-
-Executive does not replace reasoning engines.
-
-Executive orchestrates them.
-
-Relationship:
-
-```text
-Layer 3 = specialists
-Layer 5 = conductor
-```
-
----
-
-# Interaction with Epistemic Layer
-
-Executive must respect belief governance.
-
-Cannot:
-
-```text
-promote weak hypothesis recklessly
-ignore contradiction arbitration
-```
-
----
-
-# Required Modules
-
-Suggested:
-
-```text
-executive/
-  mod.rs
-  state_machine.rs
-  mode_selection.rs
-  triggers.rs
-  attention_router.rs
-  budget.rs
-  goal_arbitration.rs
-  decomposition.rs
-  reflection_policy.rs
-  verification.rs
-  self_monitoring.rs
-  recovery.rs
-  working_memory.rs
-  tests.rs
-```
-
----
-
-# Required Traits
+The executive control is called from the pipeline at specific points:
 
 ```rust
-pub trait CognitiveStrategy {
-    fn execute(&self, context: &ExecutiveContext) -> StrategyResult;
+impl Rsvs {
+    pub fn context_query(&mut self, query: &str) -> QueryResult {
+        // 1. Assess input and select mode
+        let mode = self.executive.select_mode(query, &self.graph);
+
+        // 2. Apply budget
+        let budget = self.executive.budget_for_mode(&mode);
+
+        // 3. Run reasoning with stop conditions
+        let mut result = self.reason_with_budget(query, &budget, &mode);
+
+        // 4. Check stop conditions after each step
+        while !self.executive.should_stop(&result.state) {
+            result = self.reasoning_step(query, &mut result, &budget);
+        }
+
+        result
+    }
 }
 ```
 
----
-
-# Required Tests
-
-## Test 1
-
-Simple query.
-
-Expected:
-
-```text
-FastLookup
-```
+Existing pipeline methods are WRAPPED, not replaced. When `executive_control_enabled = false`, pipeline behaves identically to v11.0.
 
 ---
 
-## Test 2
+## Integration with MD-4 (Epistemic Governance)
 
-Contradiction detected.
-
-Expected:
+Executive must respect belief governance:
 
 ```text
-ConflictResolution
+- Cannot promote weak hypothesis recklessly
+- Must not ignore contradiction arbitration
+- Reflective mode triggered when belief states are unstable
+- Stop conditions consider epistemic risk
 ```
+
+But: executive does NOT override epistemic governance. It controls reasoning depth, not belief truth.
 
 ---
 
-## Test 3
+## Phase 2 — DEFERRED Features
 
-High uncertainty.
+These are architecturally important but premature without mature specialists:
 
-Expected:
+### Additional Cognitive Modes (9 more)
 
 ```text
-Verification
+FastLookup, Deductive, Abductive, Predictive,
+ConflictResolution, Verification, Exploratory,
+MemoryRecovery, SituationModeling
 ```
+
+### Attention Router
+
+Selective attention over large graphs. Requires graph-scale benchmarking first.
+
+### Goal Arbitration
+
+Prioritizing competing goals. Requires multi-goal scenarios first.
+
+### Task Decomposition
+
+Splitting complex tasks. Requires evidence that current reasoning can't handle complexity.
+
+### Self Monitoring + Failure Recovery
+
+`CognitiveHealth` metrics and recovery strategies. Requires failure mode analysis first.
+
+### Executive Working Memory
+
+Short-term reasoning context. Current session state may suffice.
 
 ---
 
-## Test 4
-
-Novel problem.
-
-Expected:
+## Module Structure (Phase 1: Minimal)
 
 ```text
-Exploratory
+layer1/crates/rsvs-core/src/
+  executive/
+    mod.rs              // public API: select_mode(), should_stop(), budget_for_mode()
+    types.rs            // CognitiveMode, ExecutiveState, ComputeBudget, StopCondition, ExecutiveContext
+    mode_selection.rs   // deterministic mode selection logic
+    budget.rs           // budget computation per mode
+    stop.rs             // stop condition evaluation
+    tests.rs            // unit tests
 ```
+
+6 files for Phase 1. Not 14.
 
 ---
 
-## Test 5
+## Required Tests
 
-Reflection loop prevention.
+### Test 1 — Simple Query → Reactive Mode
 
-Expected:
+Input: single token query, high pattern familiarity
 
-```text
-stop condition enforced
-```
+Expected: `CognitiveMode::Reactive`, depth=2
+
+### Test 2 — Contradiction → Reflective Mode
+
+Input: query where contradictions exist
+
+Expected: `CognitiveMode::Reflective`, depth=5
+
+### Test 3 — New Event Frame → Analytical Mode
+
+Input: sentence with EventFrame, moderate confidence
+
+Expected: `CognitiveMode::Analytical`, depth=4
+
+### Test 4 — Stop Condition: Confidence Sufficient
+
+Reasoning reaches confidence 0.92 (threshold 0.90)
+
+Expected: stop condition triggered
+
+### Test 5 — Stop Condition: Budget Exhausted
+
+Reasoning exceeds time budget
+
+Expected: stop condition triggered, graceful halt
+
+### Test 6 — Stop Condition: No New Evidence
+
+2 consecutive loops produce no new evidence
+
+Expected: stop condition triggered
+
+### Test 7 — Executive Disabled = Current Behavior
+
+With `executive_control_enabled = false`, pipeline behaves exactly like v11.0
 
 ---
 
-## Test 6
+## Acceptance Criteria
 
-Budget exhaustion.
+Phase 1 is acceptable if:
 
-Expected:
-
-```text
-graceful halt
-```
-
----
-
-# Acceptance Criteria
-
-Success if:
-
-- AAM chooses reasoning strategy explicitly
-- attention remains bounded
-- compute remains governed
-- contradictions trigger arbitration
-- uncertainty changes behavior
-- reflection is bounded
-- failure recovery works
-- goals are prioritized
-- reasoning specialists are orchestrated cleanly
+1. 3 cognitive modes implemented: Reactive, Analytical, Reflective
+2. Mode selection is deterministic and auditable
+3. Compute budget is enforced per mode
+4. Stop conditions prevent infinite reasoning loops
+5. Max reasoning depth is 5 (aligned with current system)
+6. Executive control is feature-flagged (can be disabled)
+7. Pipeline behavior is identical to v11.0 when disabled
+8. All 1,081 existing tests remain green
+9. Module structure is 6 files, not 14
+10. No 12-mode complexity, no 12-state state machine
 
 ---
 
-# Final Statement
+## Final Statement
 
-Without executive cognition:
-
-AAM has intelligence modules but no disciplined mind.
-
-This layer transforms AAM from:
-
-```text
-collection of reasoning systems
-```
-
-into:
-
-```text
-coherent controlled cognition
-```
+MD-5 Phase 1 introduces minimal executive control: mode selection, compute budgets, and stop conditions. This prevents the most dangerous failure modes (runaway reasoning, compute waste) without adding premature complexity. Full executive cognition (attention routing, goal arbitration, task decomposition) requires mature specialist engines that don't exist yet. Build the minimum, prove it works, then expand.

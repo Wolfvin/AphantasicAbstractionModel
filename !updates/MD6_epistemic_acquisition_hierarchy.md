@@ -1,28 +1,36 @@
-# MD-6 — Epistemic Acquisition Hierarchy & Inquiry Layer
+# MD-6 — Epistemic Acquisition Hierarchy & Inquiry Layer (Adjusted for Implementation)
 
-## Context
-
-Assume the following documents have already been implemented:
-
-- MD-1: Semantic Frame Compiler
-- MD-2: Pre-Ingest Meaning Reasoner / Hidden Meaning Compiler
-- MD-3: AAM Architecture Refactor
-- MD-4: Epistemic Truth & Belief Governance Layer
-- MD-5: Executive Cognition / Meta-Control Layer
-
-This document defines the next architectural layer:
-
-```text
-Epistemic Acquisition Hierarchy
-```
-
-This layer governs how AAM acquires missing knowledge before reasoning or committing new beliefs.
-
-It must be integrated with the current AAM codebase and the newly implemented MD1–MD5 architecture.
+> **Adjustment Note (v11.0 alignment):** This document has been revised for implementation
+> readiness. Key changes from original spec:
+> - Standalone callable module, NOT dependent on MD-5 Executive Cognition
+> - Can be called from pipeline directly OR from executive when available
+> - Python bridge for self-study (z-ai-web-dev-sdk in backend layer2)
+> - Phase 1: Passive Recall + gap detection + Ask User only
+> - Phase 2: Self Study via web search bridge
+> - Simplified KnowledgeGapType from 15 variants to 6 for Phase 1
+> - Reduced module structure from 9 files to 5
+> - No new validation gate in Phase 1 (AcquisitionDisciplineGate deferred)
+> - All 1,081 existing tests must remain green
 
 ---
 
-# Core Doctrine
+## Context
+
+Assume completed:
+
+- MD-1: Semantic Frame Compiler (Phase 1)
+- MD-2: Pre-Ingest Meaning Reasoner (Phase 1)
+- MD-3: AAM Architecture Refactor (hybrid additive)
+- MD-4: Epistemic Truth & Belief Governance (Phase 1)
+- MD-5: Executive Cognition (Phase 1, if available)
+
+This document defines the epistemic acquisition hierarchy — how AAM acquires missing knowledge.
+
+**Key independence**: MD-6 can function WITHOUT MD-5. Executive cognition is optional. The acquisition module can be called directly from the pipeline when knowledge gaps are detected.
+
+---
+
+## Core Doctrine
 
 AAM must not guess when knowledge is insufficient.
 
@@ -31,815 +39,490 @@ But AAM must also not ask the user too early.
 Correct acquisition order:
 
 ```text
-1. Passive Recall
-2. Self Study
-3. Ask User
+1. Passive Recall  — check existing graph memory
+2. Self Study      — research external sources (Phase 2)
+3. Ask User        — inquire only when necessary
 ```
 
-This is not a flat mode selection.
-
-This is a hierarchy.
-
-AAM should first attempt to solve the knowledge gap from memory.
-
-If memory is insufficient, AAM should attempt autonomous research.
-
-If autonomous research still cannot solve the gap, then AAM should ask the user.
+This is a hierarchy, not a flat mode selection.
 
 ---
 
-# Central Statement
+## Why This Layer Exists
+
+After MD-1 through MD-5, AAM has:
 
 ```text
-Minimize user burden.
-Maximize autonomous acquisition.
-Ask only when necessary.
-Preserve epistemic integrity.
+semantic event understanding
+hidden meaning inference
+architecture with frame enrichment
+truth governance
+minimal executive control
 ```
-
----
-
-# Why This Layer Exists
-
-After MD1–MD5, AAM has:
-
-- semantic event understanding
-- hidden meaning inference
-- architectural refactor
-- truth governance
-- executive control
 
 But early-stage AAM will often have:
 
-- sparse graph
-- immature senses
-- weak patterns
-- missing domain knowledge
-- unknown user context
-- ambiguous references
-- incomplete situational model
+```text
+sparse graph
+immature senses
+weak patterns
+missing domain knowledge
+unknown user context
+ambiguous references
+```
 
-If AAM concludes too early, it pollutes the graph.
-
-If AAM asks too early, it creates unnecessary friction.
-
-If AAM searches too freely, it may import low-quality or irrelevant information.
+If AAM concludes too early → pollutes the graph.
+If AAM asks too early → creates unnecessary friction.
+If AAM searches too freely → may import low-quality information.
 
 Therefore AAM needs an acquisition hierarchy.
 
 ---
 
-# High-Level Flow
+## High-Level Flow
 
 ```text
 Input
-→ Semantic Frame Compiler
-→ Pre-Ingest Meaning Reasoner
-→ Executive Cognition
-→ Knowledge Gap Detection
-→ Acquisition Strategy
-    1. Passive Recall
-    2. Self Study
-    3. Ask User
+→ Semantic Frame Compiler (MD-1)
+→ Pre-Ingest Meaning Reasoner (MD-2)
+→ Knowledge Gap Detection           ← NEW
+→ Acquisition Strategy Selection    ← NEW
+    1. Passive Recall (graph lookup)
+    2. Self Study (web search)      ← Phase 2
+    3. Ask User (inquiry)
 → Evidence Assimilation
-→ Epistemic Governance
+→ Epistemic Governance (MD-4)
 → RSVS Ingest / Reasoning
 ```
 
----
-
-# Acquisition Hierarchy
-
-## Tier 1 — Passive Recall
-
-Use existing AAM internal knowledge.
-
-Sources:
+The acquisition module can be called from:
 
 ```text
-RSVS graph
-grounded beliefs
-sense memory
-pattern memory
-situation state
-working memory
-epistemic claims
-previous user answers
-```
-
-Use when:
-
-```text
-graph confidence sufficient
-ambiguity low
-known domain
-existing grounded belief available
-no freshness requirement
-```
-
-Output:
-
-```text
-Continue reasoning without external acquisition.
+1. Pipeline directly (when gap detected during ingest)
+2. Executive cognition (MD-5, when available)
+3. Query handler (when reasoning hits a gap)
 ```
 
 ---
 
-## Tier 2 — Self Study
+## Acquisition Hierarchy — Phased
 
-If passive recall is insufficient, AAM independently researches.
-
-Sources:
+### Phase 1 — Passive Recall + Ask User
 
 ```text
-web search
-official documentation
-papers
-repositories
-uploaded files
-trusted corpora
-internal knowledge bases
+Knowledge gap detected
+→ Can existing graph resolve it?
+    yes → Passive Recall / continue
+    no  → Is the gap user-context dependent?
+        yes → Ask User
+        no  → Mark as "SelfStudyNeeded" (deferred to Phase 2)
 ```
 
-Use when:
+Phase 1 does NOT include web search. It establishes the gap detection and inquiry infrastructure.
+
+### Phase 2 — Self Study
 
 ```text
-public factual knowledge gap
-technical unknown
-fresh information required
-domain unfamiliarity
-objective external information needed
+Add Self Study between Passive Recall and Ask User:
+→ Can existing graph resolve it?
+    yes → Passive Recall
+    no  → Is missing knowledge public/researchable?
+        yes → Self Study → Did it resolve?
+            yes → assimilate, continue
+            no  → Ask User
+        no  → Ask User
 ```
 
-Output must be governed by MD-4.
-
-Self-study evidence must enter as:
-
-```text
-ExternalEvidence
-ObservedExternalClaim
-InferredCandidate
-```
-
-Never automatically as Grounded truth.
+Self Study uses Python bridge (z-ai-web-dev-sdk) in the backend layer.
 
 ---
 
-## Tier 3 — Ask User
+## Type Design — Phase 1
 
-Ask the user only when passive recall and self-study cannot solve the gap.
-
-Use when:
-
-```text
-private user context required
-subjective meaning required
-ambiguous pronoun/reference
-personal preference required
-goal unclear
-relationship context unknown
-user-owned project detail missing
-```
-
-Output:
-
-```text
-UserAnswerEvent
-ResolvedAmbiguity
-NewContextClaim
-```
-
-User answers should be remembered and governed by MD-4.
-
----
-
-# Decision Tree
-
-```text
-Knowledge gap detected?
-  no:
-    Passive Recall / continue
-
-  yes:
-    Can existing graph solve it?
-      yes:
-        Passive Recall / continue
-
-      no:
-        Is the missing knowledge public or externally researchable?
-          yes:
-            Self Study
-            Did self-study resolve the gap?
-              yes:
-                assimilate evidence, continue
-              no:
-                Ask User
-
-          no:
-            Ask User
-```
-
----
-
-# Knowledge Gap Types
-
-Add this taxonomy.
+### KnowledgeGapType (Simplified)
 
 ```rust
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum KnowledgeGapType {
-    NoGap,
-    SparseGraphGap,
-    PublicFactualGap,
-    FreshnessGap,
-    TechnicalDomainGap,
-    RepositoryContextGap,
-    FileContextGap,
-    PrivateContextGap,
-    SubjectiveMeaningGap,
-    AmbiguousReferenceGap,
-    GoalAmbiguityGap,
-    RelationshipContextGap,
-    ContradictionGap,
-    MissingConstraintGap,
-    LowGroundingGap,
+    NoGap,                    // no gap detected
+    SparseGraphGap,           // graph too sparse to reason
+    AmbiguousReferenceGap,    // pronoun/reference unclear
+    PrivateContextGap,        // user-specific context needed
+    MissingFieldGap,          // EventFrame missing required field
+    LowGroundingGap,          // sense grounding too weak
+    UnresolvableGap,          // gap exists but no acquisition path can fix it
 }
 ```
 
----
+7 variants, not 15. Phase 2 adds: PublicFactualGap, FreshnessGap, TechnicalDomainGap, etc.
 
-# Acquisition Mode
+### KnowledgeGap (Phase 1)
 
 ```rust
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KnowledgeGap {
+    pub gap_id: String,
+    pub gap_type: KnowledgeGapType,
+    pub description: String,
+    pub source: GapSource,             // what detected this gap
+    pub confidence: f32,               // how certain the gap exists
+    pub severity: f32,                 // how much it blocks reasoning
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum GapSource {
+    FrameMissingField,       // MD-1 frame has missing ARG0, etc.
+    CandidateLowConfidence,  // MD-2 candidate has low confidence
+    GroundingWeak,           // MD-4 grounding below threshold
+    GraphSparse,             // not enough nodes in relevant area
+    AmbiguousReference,      // pronoun or unclear reference
+}
+```
+
+### AcquisitionMode
+
+```rust
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum AcquisitionMode {
-    PassiveRecall,
-    SelfStudy,
-    AskUser,
-    Hybrid,
+    PassiveRecall,   // use existing graph
+    SelfStudy,       // research external sources (Phase 2)
+    AskUser,         // inquire user
+    Deferred,        // gap noted but no action taken yet
 }
 ```
 
----
-
-# Acquisition Decision
+### AcquisitionDecision
 
 ```rust
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AcquisitionDecision {
     pub mode: AcquisitionMode,
     pub gap_type: KnowledgeGapType,
     pub reason: String,
     pub confidence_before: f32,
-    pub expected_information_gain: f32,
-    pub user_burden_score: f32,
-    pub research_cost_score: f32,
-    pub epistemic_risk: f32,
+    pub expected_gain: f32,           // expected information gain
 }
 ```
 
----
-
-# Core Types
-
-## KnowledgeGap
+### InquiryQuestion
 
 ```rust
-pub struct KnowledgeGap {
-    pub gap_id: String,
-    pub gap_type: KnowledgeGapType,
-    pub source_event_id: Option<String>,
-    pub source_candidate_id: Option<String>,
-    pub description: String,
-    pub missing_fields: Vec<String>,
-    pub ambiguity_targets: Vec<String>,
-    pub confidence: f32,
-    pub severity: f32,
-}
-```
-
----
-
-## SelfStudyRequest
-
-```rust
-pub struct SelfStudyRequest {
-    pub request_id: String,
-    pub gap_id: String,
-    pub query: String,
-    pub source_policy: SourcePolicy,
-    pub max_sources: usize,
-    pub freshness_required: bool,
-    pub expected_answer_type: ExpectedAnswerType,
-}
-```
-
----
-
-## SelfStudyResult
-
-```rust
-pub struct SelfStudyResult {
-    pub request_id: String,
-    pub sources_used: Vec<SourceRef>,
-    pub extracted_claims: Vec<ExternalClaim>,
-    pub confidence: f32,
-    pub resolved_gap: bool,
-    pub provenance: ProvenanceChain,
-}
-```
-
----
-
-## InquiryQuestion
-
-```rust
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InquiryQuestion {
     pub question_id: String,
     pub gap_id: String,
     pub question_type: InquiryQuestionType,
     pub question_text: String,
     pub expected_answer_shape: ExpectedAnswerType,
-    pub information_gain_score: f32,
-    pub user_burden_score: f32,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum InquiryQuestionType {
+    IdentityClarification,    // "Who does 'dia' refer to?"
+    ReferenceClarification,  // "What does 'it' mean here?"
+    GoalClarification,       // "What should be improved?"
+    ConstraintClarification, // "What are the limitations?"
+    MissingFieldClarification, // "Who performed this action?"
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum ExpectedAnswerType {
+    Entity,
+    Definition,
+    Constraint,
+    Confirmation,
+    FreeText,
 }
 ```
 
----
-
-## UserAnswerEvent
+### UserAnswerEvent
 
 ```rust
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserAnswerEvent {
     pub answer_id: String,
     pub question_id: String,
     pub raw_answer: String,
-    pub parsed_claims: Vec<KnowledgeClaim>,
-    pub resolved_gaps: Vec<String>,
+    pub resolved_gaps: Vec<String>,  // gap_ids resolved
     pub confidence: f32,
 }
 ```
 
 ---
 
-# Inquiry Question Types
+## Gap Detection Logic
+
+### From MD-1 (EventFrame)
 
 ```rust
-pub enum InquiryQuestionType {
-    IdentityClarification,
-    ReferenceClarification,
-    GoalClarification,
-    ConstraintClarification,
-    PreferenceClarification,
-    DefinitionClarification,
-    RelationshipClarification,
-    TemporalClarification,
-    DomainClarification,
-    ConflictResolutionQuestion,
-    MissingEvidenceQuestion,
+fn detect_frame_gaps(frame: &EventFrame) -> Vec<KnowledgeGap> {
+    let mut gaps = Vec::new();
+
+    if frame.arg0_agent.is_none() {
+        gaps.push(KnowledgeGap {
+            gap_type: MissingFieldGap,
+            description: "Agent (ARG0) is missing from event frame".into(),
+            source: FrameMissingField,
+            confidence: 0.9,
+            severity: 0.7,
+            ..
+        });
+    }
+
+    if frame.arg1_patient.is_none() && frame.predicate_has_expected_patient() {
+        gaps.push(/* ... */);
+    }
+
+    if frame.confidence < 0.5 {
+        gaps.push(/* Low confidence gap */);
+    }
+
+    gaps
+}
+```
+
+### From MD-2 (HiddenMeaningCandidate)
+
+```rust
+fn detect_candidate_gaps(candidate: &HiddenMeaningCandidate, graph: &Graph) -> Vec<KnowledgeGap> {
+    let mut gaps = Vec::new();
+
+    if candidate.confidence < 0.4 {
+        gaps.push(KnowledgeGap {
+            gap_type: LowGroundingGap,
+            description: format!("Hidden meaning candidate '{}' has low confidence", candidate.candidate_id),
+            source: CandidateLowConfidence,
+            confidence: 0.8,
+            severity: 0.5,
+            ..
+        });
+    }
+
+    // Check if role-filler nodes exist in graph
+    for node_ref in &candidate.nodes {
+        if node_ref.node_id.is_none() && !graph.has_node(&node_ref.label) {
+            gaps.push(/* node not in graph, reference gap */);
+        }
+    }
+
+    gaps
+}
+```
+
+### From Graph State
+
+```rust
+fn detect_graph_gaps(graph: &Graph, focus_nodes: &[NodeId]) -> Vec<KnowledgeGap> {
+    let density = graph.local_density(focus_nodes);
+    if density < SPARSE_THRESHOLD {
+        return vec![KnowledgeGap {
+            gap_type: SparseGraphGap,
+            description: "Graph is too sparse in the relevant area".into(),
+            source: GraphSparse,
+            confidence: 0.9,
+            severity: 0.8,
+            ..
+        }];
+    }
+    vec![]
 }
 ```
 
 ---
 
-# Source Policy
-
-Self-study must not ingest random low-quality information.
+## Strategy Selection
 
 ```rust
-pub struct SourcePolicy {
-    pub prefer_official_sources: bool,
-    pub allow_web_search: bool,
-    pub allow_repositories: bool,
-    pub allow_papers: bool,
-    pub allow_uploaded_files: bool,
-    pub allow_low_quality_sources: bool,
-    pub require_citations: bool,
+fn select_strategy(gap: &KnowledgeGap, graph: &Graph) -> AcquisitionDecision {
+    match gap.gap_type {
+        KnowledgeGapType::NoGap => AcquisitionDecision {
+            mode: PassiveRecall,
+            gap_type: gap.gap_type.clone(),
+            reason: "No gap detected".into(),
+            confidence_before: 1.0,
+            expected_gain: 0.0,
+        },
+
+        KnowledgeGapType::SparseGraphGap => {
+            // Check if graph has any relevant nodes at all
+            if graph_has_relevant_context(graph, gap) {
+                AcquisitionDecision { mode: PassiveRecall, .. }
+            } else {
+                // Phase 2: SelfStudy
+                // Phase 1: Deferred
+                AcquisitionDecision { mode: Deferred, .. }
+            }
+        },
+
+        KnowledgeGapType::AmbiguousReferenceGap |
+        KnowledgeGapType::PrivateContextGap |
+        KnowledgeGapType::MissingFieldGap => {
+            // User context is needed
+            AcquisitionDecision { mode: AskUser, .. }
+        },
+
+        KnowledgeGapType::LowGroundingGap => {
+            // Try passive recall first
+            if graph_has_grounding_evidence(graph, gap) {
+                AcquisitionDecision { mode: PassiveRecall, .. }
+            } else {
+                AcquisitionDecision { mode: AskUser, .. }
+            }
+        },
+
+        KnowledgeGapType::UnresolvableGap => {
+            AcquisitionDecision { mode: Deferred, .. }
+        },
+    }
 }
 ```
 
-Default:
+---
+
+## Integration with MD-4 (Epistemic Governance)
+
+All acquired knowledge passes through epistemic governance:
+
+### Passive Recall
 
 ```text
-prefer official sources
-require provenance
-avoid low-quality sources
-never treat self-study as direct truth
+Uses grounded beliefs (BeliefState::Grounded) preferentially
+Does NOT create new claims
+```
+
+### Ask User
+
+```text
+User answer → UserAnswerEvent
+→ Semantic Frame Compiler (if sentence)
+→ Epistemic Governance (register as claim)
+  belief_state = Candidate (not auto-Grounded)
+  provenance.source_type = HumanAssertion
+  If user is source of personal context → high source trust (0.85)
+  If user makes factual public claim → still Candidate, may need verification
+```
+
+### Self Study (Phase 2)
+
+```text
+External claim → register as Candidate
+  provenance.source_type = ExternalEvidence
+  belief_state = Candidate (NEVER auto-Grounded)
+  Must pass through epistemic promotion rules
 ```
 
 ---
 
-# Expected Answer Type
+## Integration with MD-5 (Executive Cognition) — OPTIONAL
 
-```rust
-pub enum ExpectedAnswerType {
-    Entity,
-    Definition,
-    Constraint,
-    Preference,
-    Time,
-    Location,
-    Cause,
-    Purpose,
-    Evidence,
-    Confirmation,
-    Rejection,
-    FreeText,
-}
+When executive cognition is available:
+
+```text
+Executive detects knowledge gap → calls acquisition module
+Executive receives AcquisitionDecision → executes strategy
+Executive respects acquisition hierarchy (recall → study → ask)
 ```
+
+When executive cognition is NOT available:
+
+```text
+Pipeline detects gap during ingest → calls acquisition module directly
+Pipeline executes acquisition decision
+```
+
+The acquisition module is **self-contained** and does not require executive cognition.
 
 ---
 
-# Integration With MD-1
+## Python Bridge for Self Study (Phase 2)
 
-MD-1 produces EventFrame.
+Self Study requires web search, which is only available via Python backend (z-ai-web-dev-sdk), not in Rust layer1.
 
-MD-6 should inspect EventFrame for missing fields.
-
-Examples:
+Architecture:
 
 ```text
-missing ARG0
-missing ARG1
-ambiguous predicate
-low frame confidence
-unknown reference
+Rust layer1 (acquisition module)
+  → FFI call to Python bridge
+    → Python layer2 (web search via z-ai-web-dev-sdk)
+      → Search results
+    → Extract claims from results
+  → Return SelfStudyResult to Rust
 ```
 
-If missing field is public/domain knowledge:
-
-```text
-SelfStudy
-```
-
-If missing field is user-specific:
-
-```text
-AskUser
-```
-
----
-
-# Integration With MD-2
-
-MD-2 produces HiddenMeaningCandidate.
-
-MD-6 should inspect candidate quality.
-
-Ask or self-study if:
-
-```text
-candidate confidence low
-candidate depends on unknown node
-hidden meaning type unfamiliar
-candidate uses weak graph grounding
-candidate conflicts with existing belief
-```
-
-Example:
-
-```text
-problem_solution_pattern detected
-but "kantor" identity unknown
-```
-
-If “kantor” means user workplace, ask.
-
-If “kantor” is a public organization, self-study may help.
-
----
-
-# Integration With MD-3
-
-MD-3 refactored AAM into structured event reasoning.
-
-MD-6 must become part of the new global architecture:
-
-```text
-Layer 0: semantic ingest
-Layer 1: RSVS memory
-Layer 2: prediction / situation
-Layer 3: reasoning
-Layer 4: epistemic governance
-Layer 5: executive cognition
-Layer 6: epistemic acquisition
-Layer 7: narrative rendering
-```
-
-Alternative:
-
-MD-6 can be implemented as a subsystem under Executive Cognition.
-
-Recommended:
-
-```text
-executive/acquisition/
-```
-
-because acquisition strategy is an executive decision.
-
----
-
-# Integration With MD-4
-
-All acquired knowledge must pass through epistemic governance.
-
-## Passive Recall
-
-Use grounded beliefs preferentially.
-
-## Self Study
-
-Must create:
-
-```text
-ExternalEvidence
-ExternalClaim
-ProvenanceChain
-```
-
-State:
-
-```text
-ObservedExternalClaim
-```
-
-or:
-
-```text
-Candidate
-```
-
-Never:
-
-```text
-Grounded
-```
-
-unless confirmed by independent evidence and governance rules.
-
-## Ask User
-
-User answers create:
-
-```text
-UserAnswerEvent
-HumanAssertion
-```
-
-Still not always Grounded automatically.
-
-If user is source of personal context, assign high source trust.
-
-If user answer is factual public claim, still may need verification.
-
----
-
-# Integration With MD-5
-
-MD-5 Executive Cognition chooses reasoning strategy.
-
-MD-6 adds acquisition strategy.
-
-Executive should call MD-6 when:
-
-```text
-confidence low
-graph sparse
-ambiguity high
-contradiction unresolved
-missing constraints
-domain unknown
-freshness needed
-```
-
-Executive should receive:
-
-```text
-AcquisitionDecision
-```
-
-Then execute:
-
-```text
-PassiveRecall
-SelfStudy
-AskUser
-```
-
----
-
-# Integration With Current Codebase
-
-Based on current AAM structure, suggested location:
-
-```text
-layer2/acquisition/
-```
-
-or:
-
-```text
-executive/acquisition/
-```
-
-Recommended final structure:
-
-```text
-executive/
-  acquisition/
-    mod.rs
-    gap_detector.rs
-    strategy_selector.rs
-    passive_recall.rs
-    self_study.rs
-    inquiry.rs
-    answer_assimilation.rs
-    source_policy.rs
-    tests.rs
-```
-
-Python bridge layer can mirror:
-
-```text
-layer2/acquisition.py
-```
-
-or:
-
-```text
-executive/acquisition.py
-```
-
----
-
-# Current Code Adjustments
-
-## 1. `pipeline.py`
-
-Current pipeline already has context, situation, predictive, pattern, reasoning, appraise.
-
-Add acquisition stage before final reasoning when uncertainty is high:
-
-```text
-_run_context_layer
-_run_situation_layer
-_run_acquisition_layer
-_run_reasoning_layer
-_appraise
-```
-
-New stage:
+Python bridge stub (Phase 1):
 
 ```python
-def _run_acquisition_layer(self, layer0_output, layer1_output, reasoning_request):
-    gaps = self.acquisition.detect_gaps(...)
-    decision = self.acquisition.select_strategy(gaps, ...)
-    return self.acquisition.execute(decision)
+# layer2/acquisition/self_study.py
+
+class SelfStudyProvider:
+    """Phase 1: stub. Phase 2: web search integration."""
+
+    def research(self, request: SelfStudyRequest) -> SelfStudyResult:
+        # Phase 1: return empty result
+        return SelfStudyResult(
+            request_id=request.request_id,
+            sources_used=[],
+            extracted_claims=[],
+            confidence=0.0,
+            resolved_gap=False,
+        )
 ```
 
----
-
-## 2. `layer2/context.py`
-
-Current context layer appears responsible for external search.
-
-Refactor it into a self-study provider.
-
-It should not decide everything by itself.
-
-Executive/Acquisition decides whether to call it.
-
-Context layer becomes:
-
-```text
-SelfStudyProvider
-```
-
----
-
-## 3. `layer2/situation.py`
-
-Situation layer should expose missing context signals.
-
-Add:
+Phase 2 implementation:
 
 ```python
-detect_private_context_gap()
-detect_ambiguous_reference()
-detect_goal_ambiguity()
+import ZAI from 'z-ai-web-dev-sdk'
+
+class SelfStudyProvider:
+    def research(self, request: SelfStudyRequest) -> SelfStudyResult:
+        zai = ZAI.create()
+        results = zai.functions.invoke("web_search", {
+            query: request.query,
+            num: request.max_sources
+        })
+        # Extract claims from search results
+        claims = self.extract_claims(results, request.source_policy)
+        return SelfStudyResult(
+            sources_used=results,
+            extracted_claims=claims,
+            confidence=self.compute_confidence(claims),
+            resolved_gap=len(claims) > 0,
+        )
 ```
 
 ---
 
-## 4. `layer1/rsvs-core`
+## Inquiry Memory
 
-Add acquisition metadata to runtime events.
-
-Examples:
-
-```text
-knowledge_gap_detected
-acquisition_decision
-self_study_started
-self_study_completed
-user_question_generated
-user_answer_assimilated
-```
-
----
-
-## 5. `events.rs`
-
-Add new event payload types.
-
-Required runtime events:
-
-```text
-knowledge_gap_detected
-acquisition_mode_selected
-self_study_request_created
-external_claim_ingested
-inquiry_question_created
-user_answer_assimilated
-```
-
----
-
-## 6. `types.rs`
-
-Add shared types:
-
-```text
-KnowledgeGap
-KnowledgeGapType
-AcquisitionMode
-AcquisitionDecision
-InquiryQuestion
-SelfStudyResult
-```
-
----
-
-## 7. `validation_gates`
-
-Add a new gate:
-
-```text
-AcquisitionDisciplineGate
-```
-
-Purpose:
-
-Prevent bad behavior:
-
-```text
-asking too early
-researching private context
-using low-quality sources
-skipping acquisition when needed
-```
-
----
-
-# Acquisition Strategy Selector
-
-Pseudo logic:
+AAM must remember previous questions and answers to avoid repetition:
 
 ```rust
-fn select_strategy(gap: &KnowledgeGap, context: &ExecutiveContext) -> AcquisitionDecision {
-    if gap.gap_type == KnowledgeGapType::NoGap {
-        return PassiveRecall;
-    }
+pub struct InquiryMemory {
+    pub asked_questions: HashMap<String, InquiryQuestion>,  // question_id → question
+    pub received_answers: HashMap<String, UserAnswerEvent>,  // question_id → answer
+    pub resolved_gaps: HashSet<String>,                      // gap_ids that have been resolved
+}
 
-    if graph_can_resolve(gap) {
-        return PassiveRecall;
+impl InquiryMemory {
+    pub fn should_ask(&self, gap: &KnowledgeGap) -> bool {
+        // Don't ask about already-resolved gaps
+        if self.resolved_gaps.contains(&gap.gap_id) {
+            return false;
+        }
+        // Don't ask the same question twice
+        for (_, q) in &self.asked_questions {
+            if q.gap_id == gap.gap_id {
+                return false;  // already asked about this gap
+            }
+        }
+        true
     }
-
-    if is_public_or_researchable(gap) {
-        return SelfStudy;
-    }
-
-    return AskUser;
 }
 ```
 
 ---
 
-# Self Study Discipline
-
-Self-study should not be uncontrolled browsing.
-
-It must answer:
-
-```text
-What exactly am I trying to learn?
-Which sources are allowed?
-What claim did I extract?
-How reliable is the source?
-Did this resolve the gap?
-```
-
----
-
-# Ask User Discipline
+## Ask User Discipline
 
 Questions must be minimal and high-value.
 
@@ -847,217 +530,194 @@ Bad:
 
 ```text
 Can you clarify?
+Tell me more.
 ```
 
 Good:
 
 ```text
-Who does "dia" refer to here?
-```
-
-or:
-
-```text
+Who does "dia" refer to in this context?
 What specific action made you call it betrayal?
+Who performed this action? (ARG0 missing)
 ```
 
-AAM should ask only the smallest question needed to resolve the biggest uncertainty.
-
----
-
-# Inquiry Memory
-
-AAM must remember:
+Rules:
 
 ```text
-asked question
-user answer
-resolved gap
-new belief created
-assumption corrected
-```
-
-This prevents repeated questions.
-
----
-
-# User Answer Assimilation
-
-When user answers, run:
-
-```text
-Semantic Frame Compiler
-Pre-Ingest Meaning Reasoner
-Epistemic Governance
-RSVS Ingest
-```
-
-User answers are not plain chat responses.
-
-They are acquisition events.
-
----
-
-# Example 1 — Public Knowledge Gap
-
-Input:
-
-```text
-Explain quantum annealing.
-```
-
-Flow:
-
-```text
-Passive Recall: graph weak
-Self Study: research public sources
-Ask User: not needed
-```
-
-Output:
-
-```text
-External knowledge claims with provenance
+1. Ask the SMALLEST question needed to resolve the BIGGEST uncertainty
+2. One question per gap, not compound questions
+3. Never ask about something the graph already knows
+4. Never repeat a question
+5. User answers are acquisition events, not chat — process through MD-1 + MD-4
 ```
 
 ---
 
-# Example 2 — Private Context Gap
+## Module Structure (Phase 1: Minimal)
 
-Input:
+### Rust (layer1)
 
 ```text
-He betrayed me.
+layer1/crates/rsvs-core/src/
+  acquisition/
+    mod.rs              // public API: detect_gaps(), select_strategy(), ask_user()
+    types.rs            // KnowledgeGap, KnowledgeGapType, AcquisitionMode, AcquisitionDecision,
+                        // InquiryQuestion, UserAnswerEvent, InquiryMemory
+    gap_detector.rs     // gap detection from frame, candidate, graph state
+    strategy.rs         // acquisition strategy selection
+    inquiry.rs          // question generation + answer processing
+    tests.rs            // unit tests
 ```
 
-Flow:
+6 files for Phase 1.
+
+### Python (layer2) — Phase 2
 
 ```text
-Passive Recall: insufficient
-Self Study: impossible
-Ask User: required
-```
-
-Question:
-
-```text
-Who does "he" refer to, and what did he do?
-```
-
----
-
-# Example 3 — Project Architecture Gap
-
-Input:
-
-```text
-Improve my AAM architecture.
-```
-
-Flow:
-
-```text
-Passive Recall: use graph memory
-Self Study: inspect repo/docs if available
-Ask User: only if constraints remain missing
+layer2/
+  acquisition/
+    __init__.py
+    self_study.py       // web search integration via z-ai-web-dev-sdk
+    source_policy.py    // source trust and quality rules
+    bridge.py           // FFI bridge from Rust
 ```
 
 ---
 
-# Example 4 — Freshness Gap
+## Integration with Current Codebase
 
-Input:
+### Pipeline Integration
 
-```text
-What is the latest tax regulation?
+Add acquisition stage to pipeline (additive, feature-flagged):
+
+```python
+# pipeline.py — existing stages (unchanged)
+_run_context_layer
+_run_situation_layer
+
+# NEW stage (additive)
+if self.acquisition_enabled:
+    _run_acquisition_layer
+
+# existing stages (unchanged)
+_run_reasoning_layer
+_appraise
 ```
 
-Flow:
+### Event Emissions
+
+Add runtime events (additive):
 
 ```text
-Passive Recall: outdated risk
-Self Study: required
-Ask User: not needed unless local/personal constraint missing
+knowledge_gap_detected     // when gap detector finds a gap
+acquisition_mode_selected  // when strategy is chosen
+inquiry_question_created   // when user question is generated
+user_answer_assimilated    // when user answer is processed
 ```
+
+These use existing event emission infrastructure.
+
+### Types (additive to types.rs)
+
+```text
+KnowledgeGap, KnowledgeGapType, AcquisitionMode, AcquisitionDecision,
+InquiryQuestion, UserAnswerEvent, InquiryMemory, GapSource
+```
+
+All new types. No existing types modified.
 
 ---
 
-# Example 5 — Ambiguous Goal
+## Required Tests
 
-Input:
+### Test 1 — Missing ARG0 Detected
 
-```text
-Make it better.
-```
+Input: EventFrame with `arg0_agent = None`
 
-Flow:
+Expected: `KnowledgeGapType::MissingFieldGap` detected
 
-```text
-Passive Recall: insufficient
-Self Study: not enough because "it" is unclear
-Ask User: required
-```
+### Test 2 — Low Confidence Candidate Detected
 
-Question:
+Input: HiddenMeaningCandidate with confidence 0.2
 
-```text
-What exactly should be improved?
-```
+Expected: `KnowledgeGapType::LowGroundingGap` detected
 
----
+### Test 3 — Private Context Gap → Ask User
 
-# Acceptance Criteria
+Input: ambiguous pronoun reference
 
-Implementation succeeds if:
+Expected: `AcquisitionMode::AskUser` selected
 
-1. AAM detects knowledge gaps explicitly.
-2. AAM tries passive recall first.
-3. AAM self-studies before asking when the missing knowledge is public.
-4. AAM asks user only when needed.
-5. User answers become memory events.
-6. Self-study outputs are governed by MD-4.
-7. Acquisition decisions are recorded as runtime events.
-8. The system avoids repeated questions.
-9. The system does not research private/user-owned unknowns unnecessarily.
-10. The system does not treat researched claims as immediately grounded truth.
+### Test 4 — Sparse Graph → Deferred (Phase 1)
 
----
+Input: graph with no relevant nodes
 
-# Non-Goals
+Expected: `AcquisitionMode::Deferred` (SelfStudy not available in Phase 1)
 
-Do not implement:
+### Test 5 — No Gap → Passive Recall
 
-- open-ended autonomous internet crawling
-- uncontrolled background research
-- LLM-based hidden reasoning
-- direct truth promotion from search result
-- excessive questioning
-- user interrogation loops
+Input: fully specified frame, high confidence
+
+Expected: `AcquisitionMode::PassiveRecall`
+
+### Test 6 — Inquiry Memory Prevents Repeat Questions
+
+Input: same gap detected twice
+
+Expected: `should_ask()` returns false for second occurrence
+
+### Test 7 — User Answer Creates Claim with Correct Belief State
+
+Input: UserAnswerEvent
+
+Expected: `KnowledgeClaim` created with `belief_state = Candidate`, `provenance.source_type = HumanAssertion`
+
+### Test 8 — User Answer Not Auto-Grounded
+
+Input: UserAnswerEvent with factual claim
+
+Expected: `belief_state = Candidate` (NOT Grounded)
 
 ---
 
-# Final Statement
+## Phase 2 — Self Study Implementation
 
-MD-6 transforms AAM from:
+When Phase 2 is ready:
 
-```text
-a reasoning system that waits for enough data
-```
+1. Implement `SelfStudyProvider` in Python with z-ai-web-dev-sdk
+2. Add FFI bridge from Rust acquisition module to Python
+3. Add `PublicFactualGap`, `FreshnessGap`, `TechnicalDomainGap` to KnowledgeGapType
+4. Add `SourcePolicy` for self-study discipline
+5. Add `AcquisitionDisciplineGate` to validation gates
+6. Self-study results enter as `Candidate` claims (never auto-Grounded)
 
-into:
+---
 
-```text
-a knowledge-seeking cognitive system that knows how to acquire missing context
-```
+## Acceptance Criteria
 
-The acquisition hierarchy is:
+Phase 1 is acceptable if:
+
+1. Gap detection works for: missing frame fields, low-confidence candidates, sparse graph, ambiguous references
+2. Strategy selection follows hierarchy: Passive Recall → Ask User (SelfStudy deferred)
+3. User questions are minimal and targeted
+4. Inquiry memory prevents repeat questions
+5. User answers create KnowledgeClaims with Candidate status
+6. No user answer is auto-promoted to Grounded
+7. Acquisition module works WITHOUT MD-5 executive cognition
+8. Acquisition module CAN be called from executive when available
+9. All 1,081 existing tests remain green
+10. Module structure is 6 Rust files + Python stub
+
+---
+
+## Final Statement
+
+MD-6 transforms AAM from a system that waits for enough data into one that knows how to acquire missing context. Phase 1 establishes the gap detection and inquiry infrastructure without depending on executive cognition. Phase 2 adds autonomous self-study via web search. The acquisition hierarchy protects graph quality, minimizes user burden, and makes AAM capable of growing its own knowledge over time.
+
+The hierarchy is simple:
 
 ```text
 Remember first.
 Study second.
 Ask last.
 ```
-
-This is the correct discipline for early-stage graph intelligence.
-
-It protects graph quality, minimizes user burden, and makes AAM capable of growing its own knowledge structure over time.

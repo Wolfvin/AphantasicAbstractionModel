@@ -1,851 +1,492 @@
-# MD-3 — AAM Architecture Refactor After Semantic Ingestion Upgrade
+# MD-3 — AAM Architecture Refactor After Semantic Ingestion Upgrade (Adjusted for Implementation)
+
+> **Adjustment Note (v11.0 alignment):** This document has been revised from a "full rebuild"
+> directive into a **hybrid additive refactor** plan. Key changes from original spec:
+> - Token-based ingest is NOT deprecated — it remains the foundation
+> - Frame-based ingest is an **additive Layer 0.5**, not a Layer 0 replacement
+> - Layer count stays at 4 (Layer 0-3), NOT expanded to 7
+> - "Raw text is no longer primary semantic primitive" is REJECTED — it remains primary
+> - All 1,081 existing tests must remain green at every phase
+> - Migration is additive-only; no existing code is deleted or rewritten
+> - Architectural shift is described as evolution, not revolution
+
+---
 
 ## Context
 
-Assume the following have already been completed:
+Assume the following have been completed:
 
-- MD-1: RSVS Semantic Frame Compiler
-- MD-2: Pre-Ingest Meaning Reasoner / Hidden Meaning Compiler
+- MD-1: RSVS Semantic Frame Compiler (at least Phase 1: rule-based)
+- MD-2: Pre-Ingest Meaning Reasoner (at least Phase 1: 3 core rules)
 
-This document defines how the **entire AAM architecture** must be adjusted after these foundational upgrades.
+This document defines how the **AAM architecture** should evolve after these foundational upgrades.
 
-This is not a feature patch.
-
-This is an architectural refactor directive.
+This is an **evolutionary refactor**, not a ground-up rebuild.
 
 ---
 
-# Executive Summary
+## Executive Summary
 
-AAM originally assumed ingestion would primarily derive meaning through:
-
-- token activation
-- co-occurrence
-- node promotion
-- contextual activation
-- sense induction from active nodes
-- structural reasoning after ingest
-
-That assumption is now obsolete.
-
-Because MD-1 and MD-2 fundamentally change the semantic quality of incoming knowledge.
-
-Previously:
+AAM originally derived meaning through:
 
 ```text
-Text
-→ tokens
-→ promoted nodes
-→ sense induction
-→ reasoning
+tokens → co-occurrence → node promotion → sense induction → reasoning
 ```
 
-Now:
+MD-1 and MD-2 add a **parallel enrichment path**:
 
 ```text
-Text
-→ Semantic Frame Compiler
-→ Event Frames
-→ Pre-Ingest Meaning Reasoner
-→ Hidden Meaning Candidates
-→ RSVS semantic ingest
-→ reasoning
+sentences → event frames → hidden meaning candidates → enriched RSVS ingest
 ```
 
-This changes the role of nearly every layer.
+Both paths coexist. Token ingest remains the foundation. Frame ingest enriches it.
 
----
-
-# Core Architectural Shift
-
-Old worldview:
+Previous (token-only):
 
 ```text
-Meaning emerges mostly after ingest.
+Text → tokens → RSVS → reasoning
 ```
 
-New worldview:
+Now (hybrid):
 
 ```text
-Meaning begins before ingest.
-```
-
-Important clarification:
-
-This does NOT replace RSVS reasoning.
-
-Instead:
-
-Pre-ingest reasoning provides structured semantic candidates so RSVS can reason with higher-quality primitives.
-
-Correct model:
-
-```text
-Pre-Ingest = semantic compiler / hypothesis generator
-RSVS = structural long-term reasoning engine
+Text → tokens → RSVS → reasoning
+  └→ sentences → frames → hidden meanings → enriched RSVS → richer reasoning
 ```
 
 ---
 
-# Full AAM Architecture (New)
+## Core Architectural Principle
+
+### What Changed
 
 ```text
-Layer 0
-────────────────────────
-Raw Text
-Semantic Frame Compiler
-Pre-Ingest Meaning Reasoner
-Semantic Candidate Generator
-Frame Normalizer
-Frame Validator
+Meaning CAN begin before ingest (when input is sentence-like).
+```
 
-Layer 1
-────────────────────────
-RSVS Graph Core
-Node Registry
-Sense Engine
-Composition Engine
-Grounding Engine
-Structural Similarity
-Substitution Analysis
-Reflection
-Convergence
-Pattern Memory
+### What Did NOT Change
 
-Layer 2
-────────────────────────
-Predictive Completion
-Situation Modeling
-Latent Signal Synthesis
-Cross-Pathway Pattern Completion
-Hypothesis Expansion
+```text
+Token-based ingest is still the primary path.
+Raw text is still a valid semantic primitive.
+Node promotion and co-occurrence are still essential.
+```
 
-Layer 3
-────────────────────────
-Deductive Reasoning
-Conflict Resolution
-Evidence Chain Construction
-Appraisal
-Conclusion Formation
+### Correct Model
 
-Layer 4
-────────────────────────
-Narrative Surface Generator
-(diffusion body / renderer)
+```text
+Pre-Ingest = semantic enrichment compiler / hypothesis generator
+RSVS = structural long-term reasoning engine (unchanged)
+Token Ingest = foundation (always active)
+Frame Ingest = enhancement (active when sentence detected)
 ```
 
 ---
 
-# Global Design Principle
+## Architecture — Hybrid 4-Layer Model
 
-AAM should no longer treat raw text as the canonical meaning source.
-
-Canonical semantic primitive becomes:
+The architecture stays at 4 layers. New capabilities are ADDED within layers, not as new layers.
 
 ```text
-EventFrame
-HiddenMeaningCandidate
-Structured Composition
-```
+Layer 0 — Perceptual Ingest
+────────────────────────────────────────────────────
+  [EXISTING] tokenizer, sentence splitter, co-occurrence
+  [NEW]      sentence detection
+  [NEW]      rule-based frame extraction (MD-1 Phase 1)
+  [NEW]      pre-ingest reasoning (MD-2 Phase 1)
+  [NEW]      frame ingest adapter
 
-Not:
+Layer 1 — RSVS Memory Core
+────────────────────────────────────────────────────
+  [EXISTING] graph, senses, attention, compositions, grounding
+  [EXISTING] structural similarity, substitution, reflection
+  [EXISTING] convergence, pattern memory, consolidation
+  [NEW]      semantic role edges (SemanticRole type)
+  [NEW]      extended HiddenMeaningType variants
+  [NEW]      frame composition nodes
 
-```text
-raw token
-flat co-occurrence
+Layer 2 — Predictive & Situational Reasoning
+────────────────────────────────────────────────────
+  [EXISTING] predictive completion, situation modeling
+  [EXISTING] latent signal synthesis, cross-pathway
+  [NEW]      event-aware completion (uses frame structure)
+  [NEW]      hidden candidate absorption into signals
+  [DEFERRED] full event-driven prediction (needs Phase 2+)
+
+Layer 3 — Deductive Reasoning & Narrative
+────────────────────────────────────────────────────
+  [EXISTING] deductive reasoning, conflict resolution
+  [EXISTING] evidence chains, appraisal, conclusion
+  [DEFERRED] event-level evidence chains (needs MD-4)
+  [DEFERRED] narrative contract change (needs MD-4+)
 ```
 
 ---
 
-# MD-1 + MD-2 Artifacts That Must Become Global Types
+## Layer 0 — Additive Enhancement (NOT Rebuild)
 
-## EventFrame
-
-Canonical structured event meaning.
-
-Required global type.
-
-## HiddenMeaningCandidate
-
-Canonical hidden semantic hypothesis.
-
-Required global type.
-
-## CompositionHint
-
-Required shared ingest contract.
-
-## RoleRef
-
-Typed semantic role references.
-
-## ConflictType
-
-Unified contradiction/conflict taxonomy.
-
----
-
-# Layer-by-Layer Refactor
-
-# LAYER 0 — FULL REBUILD
-
-## Old Role
-
-Previously:
-
-- token extraction
-- sentence splitting
-- co-occurrence preparation
-
-## New Role
-
-Layer 0 becomes semantic compilation infrastructure.
-
-Pipeline:
-
-```text
-Raw Text
-→ tokenizer
-→ clause segmentation
-→ syntax parsing
-→ semantic frame extraction
-→ normalization
-→ hidden meaning generation
-→ candidate validation
-```
-
-## New Components
-
-Required:
+### Old Components (UNCHANGED)
 
 ```text
 layer0/
-  tokenizer
-  clause_segmenter
-  dependency_parser
-  semantic_frame_compiler
-  frame_normalizer
-  frame_validator
-  pre_ingest_reasoning
-  hidden_candidate_generator
+  base/       # base abstractor
+  text/       # text abstractor
+  adapter/    # pipeline adapter
+  ...
 ```
 
-## Remove Assumption
+### New Components (ADDED)
 
-No downstream layer should assume raw tokens are primary truth.
+```text
+layer0/
+  frame_compiler/        # MD-1: Semantic Frame Compiler
+    mod.rs               # public API
+    types.rs             # EventFrame, Polarity, Voice, FrameSource, SemanticRole
+    rule_extractor.rs    # Phase 1: rule-based extraction
+    sentence_detect.rs   # heuristic sentence detection
+    ingest_adapter.rs    # EventFrame → RSVS bridge
+    tests.rs
 
----
+  pre_ingest_reasoning/  # MD-2: Pre-Ingest Meaning Reasoner
+    mod.rs               # public API
+    types.rs             # HiddenMeaningCandidate, etc.
+    rules.rs             # reasoning rules
+    scorer.rs            # confidence scoring
+    mapper.rs            # candidate → RSVS mapping
+    tests.rs
+```
 
-# LAYER 1 — RSVS CORE REFIT
+### How They Integrate
 
-RSVS remains the heart.
-
-But ingestion semantics change dramatically.
-
----
-
-## 1. Graph Core
-
-### Old
-
-Graph stores:
-
-- nodes
-- edges
-- compositions
-
-### New
-
-Graph must support event-structured meaning.
-
-Add typed edge categories:
+The existing `ingest_text()` in `pipeline/ingest.rs` is extended, not replaced:
 
 ```rust
-Predicate
-Arg0Agent
-Arg1Patient
-Arg2Recipient
-Cause
-Purpose
-Location
-Time
-Instrument
-Polarity
-SourceEvent
-HiddenCandidate
-PatternType
-```
-
-Without typed semantic edges, event meaning collapses into flat relation soup.
-
----
-
-## 2. Sense Engine
-
-### Old Assumption
-
-Sense emerges from contextual activation overlap.
-
-### New Adjustment
-
-Sense induction must support:
-
-```text
-surface semantic roles
-hidden meaning candidates
-structured event compositions
-```
-
-Meaning:
-
-a sense can be induced from:
-
-```text
-predicate + arg0 + arg1 + cause
-```
-
-not merely token overlap.
-
----
-
-### New Sense Sources
-
-Sense induction input sources:
-
-```text
-explicit frame structure
-hidden candidate structure
-context activation
-existing graph compositions
-```
-
----
-
-## 3. Grounding Engine
-
-Major change required.
-
-Old model risks:
-
-absence = contradiction
-co-occurrence-based confirmation
-weak semantic specificity
-
-New model:
-
-```text
-confirming evidence
-contradicting evidence
-neutral evidence
-```
-
-Grounding must understand role semantics.
-
-Example:
-
-```text
-Raymond membuat aplikasi
-Raymond tidak membuat aplikasi
-```
-
-This is contradiction.
-
-But:
-
-```text
-Raymond membuat aplikasi
-Raymond berjalan ke kantor
-```
-
-is neutral.
-
----
-
-## 4. Structural Similarity
-
-Must become role-aware.
-
-Old risk:
-
-```text
-Raymond membuat aplikasi
-Aplikasi membuat Raymond
-```
-
-token similarity appears high.
-
-But semantics differ completely.
-
-New similarity must compare:
-
-```text
-predicate alignment
-role alignment
-role reversal
-semantic edge compatibility
-```
-
----
-
-## 5. Substitution Analysis
-
-Must become semantic substitution analysis.
-
-Example:
-
-```text
-raja ↔ ratu
-```
-
-still valid.
-
-But event substitution also needed:
-
-```text
-Raymond membuat aplikasi
-Raymond membangun sistem
-```
-
-Possible substitution:
-
-```text
-membuat ↔ membangun
-aplikasi ↔ sistem
-```
-
-Role-aware substitution required.
-
----
-
-## 6. Pattern Memory
-
-Pattern storage must evolve.
-
-Store patterns like:
-
-```text
-problem → solution
-agent → action → tool
-cause → action
-goal → action
-```
-
-not only abstract composition co-occurrence.
-
----
-
-# LAYER 2 — PREDICTIVE LAYER REFIT
-
-This layer becomes much stronger.
-
----
-
-## 1. Predictive Completion
-
-Previously:
-
-pattern continuation from node activation.
-
-Now:
-
-event completion.
-
-Example:
-
-Input:
-
-```text
-manual process too slow
-Raymond builds software
-```
-
-Prediction:
-
-```text
-software likely solves manual inefficiency
-```
-
----
-
-## 2. Situation Modeling
-
-This becomes much more important.
-
-Situation should aggregate:
-
-```text
-events
-hidden candidates
-conflicts
-goals
-agents
-environment
-```
-
-Situation becomes structured world-state.
-
----
-
-## 3. Latent Signal Synthesis
-
-This should absorb MD-2 outputs.
-
-Examples:
-
-```text
-motivation
-pain point
-operational inefficiency
-goal tension
-role anomaly
-```
-
----
-
-## 4. Hypothesis Expansion
-
-Should extend hidden meaning candidates into larger scenario hypotheses.
-
-Example:
-
-```text
-manual pain
-software creation
-office beneficiary
-```
-
-Expanded hypothesis:
-
-```text
-workflow automation initiative
-```
-
----
-
-# LAYER 3 — REASONING REFIT
-
-This layer requires major redesign.
-
----
-
-## 1. Deductive Reasoning
-
-Must shift from node reasoning to event reasoning.
-
-Canonical unit:
-
-```text
-EventFrame
-HiddenMeaningCandidate
-SituationState
-```
-
-Not raw nodes.
-
----
-
-## 2. Conflict Resolution
-
-Must use typed conflict taxonomy.
-
-Required conflicts:
-
-```rust
-PolarityConflict
-PurposeConflict
-AgentConflict
-PatientConflict
-CauseConflict
-TemporalConflict
-LocationConflict
-RoleReversal
-SemanticContradiction
-```
-
----
-
-## 3. Evidence Chains
-
-Evidence chain should reference:
-
-```text
-source events
-hidden candidates
-grounded senses
-supporting patterns
-```
-
-Not vague node activation.
-
----
-
-## 4. Appraisal
-
-Appraisal should classify:
-
-```text
-confirmed
-weak
-conflicted
-speculative
-unsupported
-```
-
----
-
-## 5. Conclusion Formation
-
-Conclusion should emerge from:
-
-```text
-deduction
-abduction
-grounding
-conflict resolution
-situation state
-```
-
----
-
-# DIFFUSION BODY / NARRATIVE LAYER
-
-Major contract change.
-
----
-
-## Old Input
-
-Likely:
-
-```text
-graph summary
-reasoning chain
-pattern outputs
-```
-
-## New Input
-
-Should receive:
-
-```json
-{
-  "events": [],
-  "hidden_meanings": [],
-  "situation_state": {},
-  "evidence_chain": [],
-  "conflicts": [],
-  "confidence_summary": {}
+fn ingest_text(&mut self, text: &str) -> IngestStats {
+    // === EXISTING PATH (unchanged) ===
+    let mut stats = self.tokenize_and_ingest(text);
+
+    // === NEW PATH (additive) ===
+    if self.config.frame_compiler_enabled && is_sentence_like(text) {
+        if let Some(frame) = self.frame_compiler.extract(text) {
+            let hidden = self.pre_ingest_reasoner.reason_on_frame(&frame, &self.context());
+            stats.merge(self.frame_ingest_adapter.ingest_frame_with_candidates(&frame, &hidden));
+        }
+    }
+
+    stats
 }
 ```
 
-Narrative body becomes renderer, not meaning discoverer.
+This is a **wrapper**, not a rewrite. The existing token path runs first, always. Frame enrichment runs second, only when applicable.
 
 ---
 
-# EXISTING MODULE ADJUSTMENTS
+## Layer 1 — RSVS Core Extension (NOT Refit)
 
-## Abductive Reasoning
+RSVS remains the heart. Changes are additive.
 
-Must evolve from:
+### 1. Graph Core — New Edge Category
+
+Add `SemanticRole` as a parallel edge type alongside existing `RelationType`. No existing edge handling code is modified.
+
+```rust
+// NEW — does not replace RelationType
+pub enum SemanticRole {
+    Predicate, Arg0Agent, Arg1Patient, Arg2Recipient,
+    Cause, Purpose, Location, Time,
+    SourceEvent, HiddenCandidate, PatternType,
+}
+```
+
+### 2. Sense Engine — Extended Input Sources
+
+Sense induction already uses contextual activation overlap. Frame-based compositions add a new input source:
 
 ```text
-seed overlap
+EXISTING sources:
+  token co-occurrence
+  contextual activation overlap
+  composition patterns
+
+NEW source:
+  event frame structure (predicate + arg0 + arg1 + cause)
+  hidden meaning candidate structure
+```
+
+The sense engine's `induce()` method gains an optional `frame_context` parameter. If absent, behavior is identical to current.
+
+### 3. Grounding Engine — No Change Yet
+
+Grounding already distinguishes confirming vs contradicting evidence via `GroundingEvidence`. No change needed until MD-4 adds epistemic governance.
+
+### 4. Structural Similarity — Frame-Aware Extension
+
+Current `structural_similarity()` compares composition structure. With `SemanticRole` edges, similarity can become role-aware:
+
+```rust
+fn structural_similarity(a: &Composition, b: &Composition) -> f32 {
+    let mut score = existing_similarity(a, b);  // unchanged
+
+    // NEW: bonus for role alignment
+    if has_semantic_role_edges(a) && has_semantic_role_edges(b) {
+        let role_alignment = compute_role_alignment(a, b);
+        score = score * 0.7 + role_alignment * 0.3;
+    }
+
+    score
+}
+```
+
+This is backward compatible — if compositions lack semantic role edges, the existing similarity formula is used unchanged.
+
+### 5. Substitution Analysis — Role-Aware Extension
+
+Same pattern: existing substitution analysis continues to work. Role-aware substitution is an enhancement:
+
+```text
+EXISTING: raja ↔ ratu (token substitution)
+NEW:      membuat ↔ membangun (predicate substitution, same role structure)
+          aplikasi ↔ sistem (patient substitution in same event structure)
+```
+
+### 6. Pattern Memory — Event-Aware Patterns
+
+Pattern storage can now include:
+
+```text
+EXISTING: abstract composition co-occurrence patterns
+NEW:      problem → solution patterns
+          agent → action → tool patterns
+          cause → action patterns
+          goal → action patterns
+```
+
+New pattern types use `SemanticRole` edges. Existing pattern types unchanged.
+
+---
+
+## Layer 2 — Predictive Enhancement (NOT Refit)
+
+### 1. Predictive Completion — Event Completion
+
+Current prediction: pattern continuation from node activation.
+
+New capability: event completion from partial frame.
+
+```text
+Input:  cause = "proses manual lambat" + action = "membuat" + patient = ???
+Prediction: patient likely = tool/software/system
+```
+
+This is additive — only activates when frame context is available.
+
+### 2. Situation Modeling — Extended Input
+
+Situation aggregation can now include:
+
+```text
+EXISTING: nodes, senses, compositions, conflicts
+NEW:      event frames, hidden candidates, goals, agents
+```
+
+### 3. Latent Signal Synthesis — Absorb MD-2 Outputs
+
+MD-2 candidates (motivation, pain point, inefficiency) become latent signal sources.
+
+```text
+EXISTING signals: gap-based, pathway-based
+NEW signals: hidden meaning candidates from pre-ingest reasoning
+```
+
+### 4. Hypothesis Expansion — Defer
+
+Full hypothesis expansion from hidden meaning candidates is deferred to Phase 2. Current system already has `AbductiveHypothesis` and `AbductiveEngine`.
+
+---
+
+## Layer 3 — Reasoning Enhancement (Defer Major Changes)
+
+Layer 3 changes are deferred until MD-4 (epistemic governance) is implemented. Current reasoning engines work fine with token-based evidence.
+
+Future capabilities (after MD-4):
+
+```text
+- Event-level evidence chains (not just node-level)
+- Typed conflict taxonomy (not just pathway-level)
+- Role-aware contradiction detection
+- Grounding-aware appraisal
+```
+
+---
+
+## Existing Module Adjustments
+
+### Abductive Reasoning — No Change
+
+Current abductive engine works with seed overlap. It does NOT need to change to "event-role hypothesis generation" yet. That's a Phase 2+ enhancement.
+
+### Pattern Mining — Extended Input
+
+Current pattern mining works with composition frequency. It can be extended to also mine role-aware event patterns, but this is additive.
+
+### Cross Pathway Synthesis — Extended Input
+
+Current synthesis engine produces `SynthesisResult`. MD-2 candidates map INTO `SynthesisResult.hidden_meaning`. No architectural change needed.
+
+### Reflection — No Change
+
+Current reflection engine inspects belief stability and grounding. No change until MD-4.
+
+### Convergence — Frame-Aware Extension
+
+Current convergence merges similar compositions. With semantic role edges, convergence can recognize that active and passive versions of the same event should merge:
+
+```text
+"Raymond membuat aplikasi" ≈ "Aplikasi dibuat oleh Raymond"
+```
+
+This is an enhancement, not a rewrite.
+
+---
+
+## Migration Strategy — Additive Phases
+
+### Phase 1 — Types + Frame Compiler (MD-1 Phase 1)
+
+Introduce:
+
+```text
+EventFrame, Polarity, Voice, FrameSource
+SemanticRole
+FrameCompiler variant in EdgeSource
+frame_compiler_enabled in PipelineConfig
+```
+
+**Tests affected**: 0 existing tests modified. New tests added for frame extraction.
+
+### Phase 2 — Pre-Ingest Reasoner (MD-2 Phase 1)
+
+Introduce:
+
+```text
+HiddenMeaningCandidate, MeaningNodeRef, CandidateStatus, CompositionHint
+Extended HiddenMeaningType variants
+Extended HiddenMeaning optional fields
+Pre-ingest reasoning module
+```
+
+**Tests affected**: 0 existing tests modified. New tests added for reasoning rules.
+
+### Phase 3 — Hybrid Pipeline Integration
+
+Connect frame compiler + reasoner to ingest pipeline:
+
+```text
+Modify ingest_text() to add frame path alongside token path
+Add frame_ingest_adapter to pipeline
+Add pre_ingest_reasoner to pipeline
+```
+
+**Tests affected**: 0 existing tests modified. Existing tests still use token path. Frame path tested separately.
+
+### Phase 4 — Sense + Similarity Enhancement
+
+Extend sense induction and structural similarity to use frame context:
+
+```text
+Optional frame_context parameter in sense induction
+Role-aware similarity bonus in structural_similarity
+Event-aware pattern mining
+```
+
+**Tests affected**: 0 existing tests modified. All changes are additive with fallback to existing behavior.
+
+### Phase 5 — Advanced Integration (after MD-4)
+
+Event-level reasoning, typed conflicts, narrative contract change.
+
+---
+
+## Backward Compatibility — Absolute Rule
+
+```text
+ALL 1,081 EXISTING TESTS MUST REMAIN GREEN AT EVERY PHASE.
+
+No existing test may be modified to accommodate new features.
+No existing type may be changed in a breaking way.
+No existing pipeline behavior may change without feature flag.
+```
+
+Techniques for guaranteed compatibility:
+
+1. `#[non_exhaustive]` on all enums (already in place)
+2. `Option<T>` for all new struct fields
+3. Feature flags for new paths (`frame_compiler_enabled`)
+4. Fallback to existing behavior when frame context absent
+5. New modules are independent, not modifications of existing ones
+
+---
+
+## What "Raw Text as Semantic Primitive" Means
+
+The original MD-3 stated:
+
+```text
+Raw text is no longer primary semantic primitive.
+```
+
+This is **rejected**. The adjusted position:
+
+```text
+Raw text / tokens remain the PRIMARY semantic primitive.
+Event frames are a SECONDARY semantic primitive that ENRICHES
+the graph when sentence-level structure is available.
+
+Early-stage graphs are sparse. Token co-occurrence is the
+foundation that builds the graph from nothing. Frame-based
+reasoning operates on top of that foundation.
+```
+
+Correct relationship:
+
+```text
+Tokens  →  graph foundation  →  sense induction  →  meaning
+Frames  →  event enrichment  →  hidden candidates →  deeper meaning
+```
+
+Both contribute. Neither replaces the other.
+
+---
+
+## Acceptance Criteria
+
+Architecture evolution is acceptable if:
+
+1. Token ingest path is UNCHANGED and always active
+2. Frame ingest path is ADDITIVE and feature-flagged
+3. All 1,081 existing tests remain green
+4. New types are `#[non_exhaustive]` and backward compatible
+5. New struct fields are `Option<T>` and backward compatible
+6. Layer count remains at 4 (not expanded to 7)
+7. No existing module is deleted or rewritten
+8. `ingest_text()` wraps existing logic, does not replace it
+9. Structural similarity falls back to existing formula when no frame context
+10. Pipeline behavior is identical to v11.0 when `frame_compiler_enabled = false`
+
+---
+
+## Final Statement
+
+The AAM refactor evolves the architecture from:
+
+```text
+token-driven symbolic reasoning (only)
 ```
 
 to:
 
 ```text
-event-role hypothesis generation
+token-driven + frame-enriched symbolic reasoning
 ```
 
----
-
-## Pattern Mining
-
-Must mine:
-
-```text
-role-aware event patterns
-```
-
-not only composition frequency.
-
----
-
-## Cross Pathway Synthesis
-
-Must synthesize:
-
-```text
-event contradictions
-goal conflicts
-role anomalies
-multi-event causal chains
-```
-
----
-
-## Reflection
-
-Should inspect:
-
-```text
-hidden candidate correctness
-conflict consistency
-grounding health
-pattern stability
-```
-
----
-
-## Convergence
-
-Should merge semantically equivalent events:
-
-Example:
-
-```text
-Raymond membuat aplikasi
-Aplikasi dibuat oleh Raymond
-```
-
-These should converge.
-
----
-
-# MIGRATION STRATEGY
-
-Recommended phases:
-
----
-
-## Phase 1
-
-Integrate MD-1 types.
-
-Introduce:
-
-```text
-EventFrame
-RoleRef
-Typed semantic edges
-```
-
----
-
-## Phase 2
-
-Integrate MD-2 hidden meaning candidates.
-
-Introduce:
-
-```text
-HiddenMeaningCandidate
-rule-based semantic hypotheses
-```
-
----
-
-## Phase 3
-
-Refit Layer 1 reasoning.
-
-Update:
-
-- grounding
-- structural similarity
-- substitution
-- convergence
-
----
-
-## Phase 4
-
-Refit Layer 2 predictive reasoning.
-
----
-
-## Phase 5
-
-Refit Layer 3 deductive reasoning.
-
----
-
-## Phase 6
-
-Refit narrative/diffusion contract.
-
----
-
-# BACKWARD COMPATIBILITY
-
-Decision needed.
-
-Option A:
-
-Full migration.
-
-Old token-centric ingest deprecated.
-
-Option B:
-
-Hybrid compatibility mode.
-
-Recommended:
-
-```text
-Hybrid transition mode first
-then deprecate old path
-```
-
----
-
-# ACCEPTANCE CRITERIA
-
-Architecture is considered successfully upgraded if:
-
-1. Raw text is no longer primary semantic primitive.
-2. EventFrame is canonical structured input.
-3. HiddenMeaningCandidate becomes global reasoning primitive.
-4. Structural similarity becomes role-aware.
-5. Grounding distinguishes neutral vs contradiction.
-6. Convergence merges semantic equivalents.
-7. Pattern mining becomes event-aware.
-8. Predictive layer uses situation state.
-9. Deductive reasoning consumes event-level evidence.
-10. Narrative layer acts as renderer, not discoverer.
-
----
-
-# Final Statement
-
-The AAM refactor changes the architecture from:
-
-```text
-token-driven symbolic reasoning
-```
-
-to:
-
-```text
-structured semantic event reasoning
-```
-
-This makes AAM capable of learning not merely:
-
-```text
-what co-occurred
-```
-
-but:
-
-```text
-what happened
-why it happened
-what it implies
-how events relate
-what conflicts
-what patterns emerge
-```
-
-This is a fundamental architectural evolution.
+This is additive evolution, not architectural revolution. The token foundation remains. Frame enrichment builds on top. Every downstream MD can leverage frame structure when available, while the system continues to function perfectly without it.

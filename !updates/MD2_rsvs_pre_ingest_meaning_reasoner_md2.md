@@ -1,10 +1,22 @@
-# MD-2 — Pre-Ingest Meaning Reasoner / Hidden Meaning Compiler
+# MD-2 — Pre-Ingest Meaning Reasoner / Hidden Meaning Compiler (Adjusted for Implementation)
+
+> **Adjustment Note (v11.0 alignment):** This document has been revised for implementation
+> readiness. Key changes from original spec:
+> - EXTENDS existing `HiddenMeaningType` (6 variants) instead of creating parallel hierarchy
+> - EXTENDS existing `SynthesisResult` instead of replacing
+> - Rule 5 negative markers made language-agnostic (graph-guided, not hardcoded word lists)
+> - Module structure simplified from 8 files to 5
+> - Phased: 3 core rules first, remaining rules in Phase 2
+> - Explicit type alignment with existing `types.rs` types
+> - All 1,081 existing tests must remain green
+
+---
 
 ## Context
 
-Assume **MD-1: RSVS Semantic Frame Compiler** has already been successfully implemented.
+Assume **MD-1: RSVS Semantic Frame Compiler** has been implemented (at least Phase 1: rule-based extraction).
 
-That means the system can already transform raw plain text into deterministic semantic event frames without using an LLM.
+That means the system can transform raw text into deterministic semantic event frames without using an LLM.
 
 Example input:
 
@@ -18,12 +30,13 @@ Expected MD-1 output:
 {
   "event_id": "e1",
   "predicate": "membuat",
-  "ARG0_agent": "Raymond",
-  "ARG1_patient": "aplikasi",
-  "PNC_purpose": "kantor",
-  "CAU_cause": "proses manual terlalu lambat",
-  "polarity": "positive",
-  "voice": "active"
+  "arg0_agent": "Raymond",
+  "arg1_patient": "aplikasi",
+  "purpose": "kantor",
+  "cause": "proses manual terlalu lambat",
+  "polarity": "Positive",
+  "voice": "Active",
+  "source": "RuleBased"
 }
 ```
 
@@ -31,13 +44,11 @@ MD-2 starts from this point.
 
 ---
 
-# Mission
+## Mission
 
 Build a **Pre-Ingest Meaning Reasoner**.
 
-This layer must run **after Semantic Frame Compiler** and **before RSVS graph ingestion**.
-
-Its job is not merely to parse subject, predicate, object, cause, or purpose.
+This layer runs **after Semantic Frame Compiler** and **before RSVS graph ingestion**.
 
 Its job is to discover **hidden meaning candidates** that are not directly visible on the surface of the sentence but are implied by the relationship between:
 
@@ -46,7 +57,6 @@ Its job is to discover **hidden meaning candidates** that are not directly visib
 - event frames
 - existing RSVS senses
 - context
-- situation
 - composition patterns
 - cause-effect structure
 - purpose/goal structure
@@ -58,7 +68,7 @@ Core statement:
 
 ---
 
-# Non-Negotiable Constraint
+## Non-Negotiable Constraint
 
 Do **not** use LLMs.
 
@@ -71,21 +81,15 @@ This must be:
 - explainable
 - testable
 
-No hidden model inference.
-
-No prompt-based extraction.
-
-No probabilistic black-box language model.
-
 ---
 
-# High-Level Pipeline
+## High-Level Pipeline
 
 ```text
 Raw Text
-→ Semantic Frame Compiler        // already implemented in MD-1
-→ Event Frames
-→ Pre-Ingest Meaning Reasoner    // this MD-2
+→ Semantic Frame Compiler        // MD-1
+→ EventFrames
+→ Pre-Ingest Meaning Reasoner    // THIS DOCUMENT (MD-2)
 → Hidden Meaning Candidates
 → RSVS Sense / Composition Ingest
 → Grounding + Reflection
@@ -99,224 +103,129 @@ Text → Frame → Hidden Meaning → RSVS
 
 ---
 
-# Why This Layer Exists
+## Type Alignment with Existing Codebase
 
-A semantic frame captures surface structure.
-
-Example:
-
-```json
-{
-  "predicate": "membuat",
-  "agent": "Raymond",
-  "patient": "aplikasi",
-  "purpose": "kantor",
-  "cause": "proses manual terlalu lambat"
-}
-```
-
-This is useful, but still incomplete.
-
-The hidden meaning is:
-
-```text
-manual_process_lambat → pain_point
-aplikasi → tool_solution
-Raymond → problem_solver / agent
-kantor → beneficiary / operational_context
-membuat_aplikasi → response_to_inefficiency
-```
-
-Therefore the system should emit meaning candidates such as:
-
-```json
-{
-  "type": "problem_solution_pattern",
-  "problem": "proses manual terlalu lambat",
-  "solution": "aplikasi",
-  "agent": "Raymond",
-  "beneficiary": "kantor",
-  "confidence": 0.86,
-  "evidence": ["CAU_cause", "ARG1_patient", "ARG0_agent", "PNC_purpose"]
-}
-```
-
----
-
-# Terminology
-
-## Surface Meaning
-
-Meaning explicitly stated in the event frame.
-
-Example:
-
-```text
-Raymond membuat aplikasi.
-```
-
-Surface meaning:
-
-```text
-agent = Raymond
-predicate = membuat
-patient = aplikasi
-```
-
-## Hidden Meaning
-
-Meaning inferred from structural relationships.
-
-Example:
-
-```text
-Raymond membuat aplikasi karena proses manual terlalu lambat.
-```
-
-Hidden meaning:
-
-```text
-The application is likely a solution to an operational inefficiency.
-```
-
-## Candidate, Not Fact
-
-Pre-ingest reasoning must output **candidates**, not absolute truth.
-
-A hidden meaning should not be committed as guaranteed truth immediately.
-
-It should enter RSVS with:
-
-- confidence
-- evidence links
-- source frame
-- reasoning rule
-- provisional status
-
----
-
-# Required Output Format
-
-The Pre-Ingest Meaning Reasoner should output:
-
-```json
-{
-  "source_event_id": "e1",
-  "surface_frame": {
-    "predicate": "membuat",
-    "ARG0_agent": "Raymond",
-    "ARG1_patient": "aplikasi",
-    "PNC_purpose": "kantor",
-    "CAU_cause": "proses manual terlalu lambat",
-    "polarity": "positive",
-    "voice": "active"
-  },
-  "hidden_meaning_candidates": [
-    {
-      "candidate_id": "hm1",
-      "type": "problem_solution_pattern",
-      "description": "The application is likely a solution to a slow manual process.",
-      "nodes": {
-        "problem": "proses manual terlalu lambat",
-        "solution": "aplikasi",
-        "agent": "Raymond",
-        "beneficiary": "kantor"
-      },
-      "composition_hints": [
-        "problem:proses_manual_terlalu_lambat",
-        "solution:aplikasi",
-        "agent:Raymond",
-        "beneficiary:kantor",
-        "pattern:problem_solution"
-      ],
-      "confidence": 0.86,
-      "evidence_roles": ["CAU_cause", "ARG1_patient", "ARG0_agent", "PNC_purpose"],
-      "rule_id": "CAUSE_ACTION_PURPOSE_TO_PROBLEM_SOLUTION",
-      "status": "candidate"
-    }
-  ]
-}
-```
-
----
-
-# Core Data Structures
-
-## EventFrame
-
-This should already exist from MD-1.
+### Existing `HiddenMeaningType` (types.rs:559-573) — MUST EXTEND, NOT REPLACE
 
 ```rust
-pub struct EventFrame {
-    pub event_id: String,
-    pub predicate: String,
-    pub arg0_agent: Option<String>,
-    pub arg1_patient: Option<String>,
-    pub arg2: Option<String>,
-    pub cause: Option<String>,
-    pub purpose: Option<String>,
-    pub location: Option<String>,
-    pub time: Option<String>,
-    pub polarity: Polarity,
-    pub voice: Voice,
+// EXISTING — DO NOT MODIFY
+pub enum HiddenMeaningType {
+    AffectiveDisguise,
+    SocialConcealment,
+    PerformativeMask,
+    TraumaPattern,
+    PowerDynamic,
+    Emergent,
+}
+```
+
+### Extended `HiddenMeaningType` — ADD new variants
+
+```rust
+#[non_exhaustive]  // Already non_exhaustive for forward compat
+pub enum HiddenMeaningType {
+    // === EXISTING (meaning-pathway focused) ===
+    AffectiveDisguise,
+    SocialConcealment,
+    PerformativeMask,
+    TraumaPattern,
+    PowerDynamic,
+    Emergent,
+
+    // === NEW (event-structure focused, from MD-2) ===
+    ProblemSolutionPattern,      // cause + action + object → problem-solution
+    MotivationInference,         // cause-based motivation
+    GoalInference,               // purpose-based goal
+    AgentResponsibility,         // agent + active predicate → responsibility
+    CauseEffectPattern,          // explicit cause-effect chain
+    ToolUsePattern,              // tool created due to pain point
+    InefficiencySignal,          // negative state in cause slot
+    PolarityConflict,            // same event, opposite polarity
+    PurposeConflict,             // same event, different purpose
+    RoleAnomaly,                 // agent-patient reversal
+}
+```
+
+The `#[non_exhaustive]` attribute already on the enum ensures this is a backward-compatible addition. All existing match statements will continue to compile (they must already have wildcard arms).
+
+### Existing `SynthesisResult` (types.rs:526-541) — EXTEND, NOT REPLACE
+
+```rust
+// EXISTING
+pub struct SynthesisResult {
+    pub node_id: NodeId,
+    pub sense_id: SenseId,
+    pub gap: GapAnnotation,
+    pub conflict: PathwayConflict,
+    pub hidden_meaning: HiddenMeaning,
     pub confidence: f32,
+    pub meaning_node_id: Option<NodeId>,
 }
 ```
 
-## HiddenMeaningCandidate
+The reasoner produces `HiddenMeaningCandidate` (new struct), which maps INTO the existing `HiddenMeaning` field during RSVS ingest. Do NOT create a parallel type hierarchy.
 
-Add a new structure:
+### Existing `HiddenMeaning` (types.rs:544-556) — ADD fields
 
 ```rust
+// EXISTING — add optional fields, backward compatible
+pub struct HiddenMeaning {
+    pub description: String,
+    pub target_node: NodeId,
+    pub seed_trace: Vec<NodeId>,
+    pub meaning_type: HiddenMeaningType,
+    pub evidence_strength: f32,
+    // === NEW optional fields from MD-2 ===
+    pub source_event_id: Option<String>,      // which frame produced this
+    pub rule_id: Option<String>,               // which reasoning rule
+    pub composition_hints: Option<Vec<CompositionHint>>, // ingest hints
+    pub candidate_status: Option<CandidateStatus>,       // lifecycle state
+}
+```
+
+All new fields are `Option<T>` — backward compatible. Existing code that constructs `HiddenMeaning` without these fields continues to work.
+
+---
+
+## New Types
+
+### HiddenMeaningCandidate (NEW)
+
+The primary output of the reasoner. Maps to `HiddenMeaning` during ingest.
+
+```rust
+/// Structured hidden meaning candidate produced by Pre-Ingest Reasoner.
+/// Enters RSVS as provisional composition with candidate status.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HiddenMeaningCandidate {
     pub candidate_id: String,
     pub source_event_id: String,
-    pub meaning_type: HiddenMeaningType,
+    pub meaning_type: HiddenMeaningType,  // uses EXTENDED enum
     pub description: String,
     pub nodes: Vec<MeaningNodeRef>,
     pub composition_hints: Vec<CompositionHint>,
-    pub evidence_roles: Vec<RoleRef>,
+    pub evidence_roles: Vec<String>,      // "CAU_cause", "ARG1_patient", etc.
     pub rule_id: String,
     pub confidence: f32,
     pub status: CandidateStatus,
 }
-```
 
-## HiddenMeaningType
-
-```rust
-pub enum HiddenMeaningType {
-    ProblemSolutionPattern,
-    MotivationInference,
-    GoalInference,
-    OperationalContextInference,
-    AgentResponsibility,
-    BeneficiaryInference,
-    CauseEffectPattern,
-    ToolUsePattern,
-    InefficiencySignal,
-    ContradictionSignal,
-    PolarityConflict,
-    PurposeConflict,
-    RoleAnomaly,
-    Unknown,
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MeaningNodeRef {
+    pub role: String,        // "problem", "solution", "agent", etc.
+    pub label: String,       // node label in graph
+    pub node_id: Option<NodeId>,  // resolved graph node (if exists)
 }
-```
 
-## CandidateStatus
-
-```rust
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum CandidateStatus {
     Candidate,
     Confirmed,
     Contradicted,
     Deprecated,
 }
-```
 
-## CompositionHint
-
-```rust
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CompositionHint {
     pub role: String,
     pub node_label: String,
@@ -326,676 +235,403 @@ pub struct CompositionHint {
 
 ---
 
-# Core Reasoning Rules
+## Core Reasoning Rules — Phased Implementation
 
-## Rule 1 — Cause + Action + Object → Problem-Solution Pattern
+### Phase 1 — 3 Core Rules (IMMEDIATE)
+
+These are the highest-value rules that unlock the most reasoning power.
+
+#### Rule 1 — Cause + Action + Object → Problem-Solution Pattern
 
 Trigger condition:
 
 ```text
-frame has CAU_cause
-AND frame has predicate
-AND frame has ARG1_patient
+frame.cause IS Some
+AND frame.predicate IS Some
+AND frame.arg1_patient IS Some
 AND predicate belongs to action/create/fix/build/solve family
 ```
 
-Example:
+Predicate family detection is **graph-guided**, not hardcoded:
 
-```text
-Raymond membuat aplikasi karena proses manual terlalu lambat.
+```rust
+fn is_action_predicate(predicate: &str, graph: &Graph) -> bool {
+    // 1. Check if predicate node has semantic edges to known action nodes
+    // 2. Check if predicate's senses overlap with action/create categories
+    // 3. Fallback: simple morphological check (me- prefix in Indonesian, -ify/-ize in English)
+    graph_has_action_sense(predicate) || has_action_morphology(predicate)
+}
 ```
 
 Output:
 
 ```json
 {
-  "type": "problem_solution_pattern",
-  "problem": "proses manual terlalu lambat",
-  "solution": "aplikasi",
-  "agent": "Raymond"
+  "meaning_type": "ProblemSolutionPattern",
+  "nodes": [
+    { "role": "problem", "label": "proses manual terlalu lambat" },
+    { "role": "solution", "label": "aplikasi" },
+    { "role": "agent", "label": "Raymond" }
+  ],
+  "rule_id": "CAUSE_ACTION_PURPOSE_TO_PROBLEM_SOLUTION"
 }
 ```
 
-Interpretation:
-
-```text
-The patient/object of the action is likely a solution to the cause.
-```
-
----
-
-## Rule 2 — Purpose Marker → Goal Inference
+#### Rule 2 — Purpose Marker → Goal Inference
 
 Trigger condition:
 
 ```text
-frame has PNC_purpose
-```
-
-Example:
-
-```text
-Raymond membuat aplikasi untuk kantor.
+frame.purpose IS Some
 ```
 
 Output:
 
 ```json
 {
-  "type": "goal_inference",
-  "goal": "kantor",
-  "action": "membuat",
-  "agent": "Raymond"
+  "meaning_type": "GoalInference",
+  "nodes": [
+    { "role": "goal", "label": "kantor" },
+    { "role": "action", "label": "membuat" },
+    { "role": "agent", "label": "Raymond" }
+  ],
+  "rule_id": "PURPOSE_TO_GOAL_INFERENCE"
 }
 ```
 
-Interpretation:
-
-```text
-The action is directed toward the purpose/beneficiary.
-```
-
----
-
-## Rule 3 — Agent + Active Predicate → Agent Responsibility
+#### Rule 3 — Same Event + Opposite Polarity → Direct Contradiction
 
 Trigger condition:
 
 ```text
-voice = active
-AND ARG0_agent exists
-AND predicate exists
+two frames with:
+  same predicate
+  same agent
+  same patient
+  opposite polarity
 ```
+
+This requires comparing current frame against **recent frames in the session**.
 
 Output:
 
 ```json
 {
-  "type": "agent_responsibility",
-  "agent": "Raymond",
-  "action": "membuat",
-  "patient": "aplikasi"
+  "meaning_type": "PolarityConflict",
+  "nodes": [
+    { "role": "event_a", "label": "e1" },
+    { "role": "event_b", "label": "e2" }
+  ],
+  "rule_id": "POLARITY_CONFLICT"
 }
 ```
 
-Interpretation:
+### Phase 2 — Additional Rules (AFTER Phase 1 is stable)
 
-```text
-The agent is responsible for performing the action.
-```
+#### Rule 4 — Agent + Active Predicate → Agent Responsibility
 
----
+Trigger: `voice == Active AND arg0_agent IS Some AND predicate IS Some`
 
-## Rule 4 — Passive Normalization
+#### Rule 5 — Cause Contains Negative Quality → Inefficiency Signal
 
-Trigger condition:
+Trigger: `cause IS Some AND cause has negative sentiment`
 
-```text
-voice = passive
-AND patient exists
-AND agent exists
-```
+**Important**: Negative sentiment detection must be **graph-guided, not hardcoded**:
 
-Example:
-
-```text
-Aplikasi dibuat oleh Raymond.
-```
-
-Normalize to:
-
-```json
-{
-  "predicate": "membuat",
-  "agent": "Raymond",
-  "patient": "aplikasi"
+```rust
+fn has_negative_sentiment(cause_text: &str, graph: &Graph) -> bool {
+    // 1. Tokenize cause text
+    // 2. For each token, check if graph has negative-valence sense
+    // 3. If any token is grounded as negative, return true
+    // 4. Fallback: small configurable seed list (NOT hardcoded in rule)
+    let tokens = tokenize(cause_text);
+    tokens.iter().any(|t| graph_has_negative_valence(t) || seed_negative_list.contains(t))
 }
 ```
 
-Interpretation:
+This avoids language-specific hardcoding. The seed list is configurable per-language, not baked into the rule.
 
-```text
-Passive and active versions should map to the same underlying event meaning.
-```
+#### Rule 6 — Tool/Object Created Due to Pain Point → Tool-Use Pattern
 
-This is important for RSVS convergence.
+Trigger: `ProblemSolutionPattern exists AND arg1_patient is tool-like`
+
+Tool-likeness is graph-guided (similar to action predicate detection).
+
+#### Rule 7 — Passive Normalization
+
+Trigger: `voice == Passive AND agent IS Some AND patient IS Some`
+
+Normalize passive to active equivalent for convergence.
+
+#### Rule 8 — Same Event + Different Purpose → Purpose Conflict
+
+Trigger: `same predicate + same agent + same patient + different purpose`
+
+#### Rule 9 — Agent-Patient Reversal → Role Anomaly
+
+Trigger: `event_a.agent == event_b.patient AND event_a.patient == event_b.agent`
 
 ---
 
-## Rule 5 — Cause Contains Negative Quality → Pain Point Signal
+## Graph-Guided Enhancement
 
-Trigger condition:
+The reasoner should not rely only on hardcoded rules. It should query RSVS graph to improve confidence.
 
-```text
-CAU_cause exists
-AND cause contains negative state markers
-```
+```rust
+fn adjust_confidence_by_graph(
+    candidate: &HiddenMeaningCandidate,
+    graph: &Graph,
+) -> f32 {
+    let mut adjusted = candidate.confidence;
 
-Negative state markers:
+    // Check if role-filler nodes exist and have appropriate senses
+    for node_ref in &candidate.nodes {
+        if let Some(node_id) = node_ref.node_id {
+            // If graph confirms the node plays the expected role
+            if graph_confirms_role(graph, node_id, &node_ref.role) {
+                adjusted += 0.05;
+            }
+            // If graph contradicts the role
+            if graph_contradicts_role(graph, node_id, &node_ref.role) {
+                adjusted -= 0.10;
+            }
+        }
+    }
 
-```text
-lambat
-gagal
-salah
-rusak
-mahal
-manual
-tidak efisien
-terlalu lama
-berulang
-repetitif
-rawan error
-```
-
-Output:
-
-```json
-{
-  "type": "inefficiency_signal",
-  "pain_point": "proses manual terlalu lambat"
+    adjusted.clamp(0.0, 1.0)
 }
 ```
 
----
-
-## Rule 6 — Tool/Object Created Due to Pain Point → Tool-Use Pattern
-
-Trigger condition:
+Graph-guided functions:
 
 ```text
-problem_solution_pattern exists
-AND ARG1_patient belongs to tool/software/system/document/process family
-```
-
-Output:
-
-```json
-{
-  "type": "tool_use_pattern",
-  "tool": "aplikasi",
-  "problem": "proses manual terlalu lambat",
-  "agent": "Raymond"
-}
+role_score(node, role)           → how well node fits role
+semantic_similarity(node, proto) → distance to prototype
+sense_grounding(node)            → grounding strength
+composition_overlap(node, proto) → structural overlap
 ```
 
 ---
 
-## Rule 7 — Same Event Structure + Opposite Polarity → Direct Contradiction
+## Confidence Scoring — Deterministic
 
-Trigger condition:
-
-```text
-same predicate
-same agent
-same patient
-opposite polarity
-```
-
-Example:
-
-```text
-Raymond membuat aplikasi.
-Raymond tidak membuat aplikasi.
-```
-
-Output:
-
-```json
-{
-  "type": "polarity_conflict",
-  "event_a": "e1",
-  "event_b": "e2",
-  "conflict": "same event but opposite polarity"
-}
-```
-
----
-
-## Rule 8 — Same Event + Different Purpose → Purpose Conflict
-
-Trigger condition:
-
-```text
-same predicate
-same agent
-same patient
-different PNC_purpose
-```
-
-Example:
-
-```text
-Raymond membuat aplikasi untuk kantor.
-Raymond membuat aplikasi untuk sekolah.
-```
-
-Output:
-
-```json
-{
-  "type": "purpose_conflict",
-  "event_a_purpose": "kantor",
-  "event_b_purpose": "sekolah"
-}
-```
-
----
-
-## Rule 9 — Agent-Patient Reversal → Role Anomaly
-
-Trigger condition:
-
-```text
-event_a.agent == event_b.patient
-AND event_a.patient == event_b.agent
-AND same predicate
-```
-
-Example:
-
-```text
-Raymond membuat aplikasi.
-Aplikasi membuat Raymond.
-```
-
-Output:
-
-```json
-{
-  "type": "role_anomaly",
-  "description": "Agent and patient roles are reversed for the same predicate."
-}
-```
-
-This is critical because flat token similarity would falsely treat both as similar.
-
----
-
-# Graph-Guided Enhancement
-
-The reasoner should not rely only on hardcoded rules.
-
-It should query RSVS graph to improve confidence.
-
-Examples:
-
-```text
-Is "aplikasi" close to tool/software/system?
-Is "proses manual terlalu lambat" close to inefficiency/pain_point?
-Is "membuat" close to create/build/produce/action?
-Is "kantor" close to beneficiary/organization/workplace?
-```
-
-If graph confirms role meaning, increase confidence.
-
-If graph contradicts role meaning, reduce confidence.
-
----
-
-# Confidence Scoring
-
-Use deterministic scoring.
-
-Example for problem-solution pattern:
+Example for ProblemSolutionPattern:
 
 ```text
 base = 0.40
 
-+0.15 if CAU_cause exists
-+0.15 if ARG1_patient exists
-+0.10 if ARG0_agent exists
-+0.10 if predicate belongs to create/build/fix/solve/action family
-+0.10 if cause contains negative/pain marker
-+0.10 if patient belongs to tool/system/software family
++0.15 if frame.cause exists
++0.15 if frame.arg1_patient exists
++0.10 if frame.arg0_agent exists
++0.10 if predicate belongs to action family (graph-guided)
++0.10 if cause has negative sentiment (graph-guided)
 -0.20 if polarity is negative
 ```
 
-Clamp:
+Clamp: `0.0 <= confidence <= 1.0`
 
-```text
-0.0 <= confidence <= 1.0
-```
-
-Example result:
-
-```text
-0.40 + 0.15 + 0.15 + 0.10 + 0.10 + 0.10 = 1.00
-```
-
-Then optionally cap candidate confidence at frame confidence:
+Candidate confidence capped at frame confidence:
 
 ```text
 candidate_confidence = min(rule_score, frame.confidence)
 ```
 
-If frame confidence is `0.94`, final confidence should not exceed `0.94`.
+Then optionally adjusted by graph context.
 
 ---
 
-# Integration With RSVS
+## Integration With RSVS — Mapping to Existing Types
 
-The Pre-Ingest Meaning Reasoner should emit candidates that can become RSVS compositions.
-
-Example candidate:
-
-```json
-{
-  "type": "problem_solution_pattern",
-  "problem": "proses manual terlalu lambat",
-  "solution": "aplikasi",
-  "agent": "Raymond",
-  "beneficiary": "kantor"
-}
-```
-
-Map to RSVS composition:
+HiddenMeaningCandidate maps to existing RSVS structures:
 
 ```text
-hidden_meaning_hm1
-  composition:
-    pattern:problem_solution
-    problem:proses_manual_terlalu_lambat
-    solution:aplikasi
-    agent:Raymond
-    beneficiary:kantor
+HiddenMeaningCandidate.meaning_type  → HiddenMeaning.meaning_type (extended enum)
+HiddenMeaningCandidate.description    → HiddenMeaning.description
+HiddenMeaningCandidate.source_event_id → HiddenMeaning.source_event_id (new field)
+HiddenMeaningCandidate.rule_id        → HiddenMeaning.rule_id (new field)
+HiddenMeaningCandidate.confidence     → HiddenMeaning.evidence_strength
+HiddenMeaningCandidate.nodes          → HiddenMeaning.seed_trace (resolved NodeIds)
 ```
 
-Typed edges:
+Composition hints become RSVS composition edges:
 
 ```text
-hm1 --pattern--> problem_solution
-hm1 --problem--> proses_manual_terlalu_lambat
-hm1 --solution--> aplikasi
-hm1 --agent--> Raymond
-hm1 --beneficiary--> kantor
-hm1 --source_event--> e1
+hm1 --SemanticRole::PatternType--> problem_solution
+hm1 --SemanticRole::Cause-->       proses_manual_terlalu_lambat
+hm1 --SemanticRole::Arg1Patient--> aplikasi
+hm1 --SemanticRole::Arg0Agent-->   Raymond
+hm1 --SemanticRole::SourceEvent--> e1
 ```
 
-Do not immediately treat hidden meaning as absolute truth.
+All edges have `EdgeSource::FrameCompiler` (shared with MD-1).
 
-Register as provisional candidate:
+Candidate enters RSVS as **provisional**:
 
 ```text
-status = candidate
+status = Candidate
 confidence = computed_score
 grounding = pending
-source = pre_ingest_reasoning
+source = FrameCompiler
 ```
 
 ---
 
-# Required Modules
-
-Suggested structure:
+## Module Structure (Simplified)
 
 ```text
-pre_ingest_reasoning/
-  mod.rs
-  types.rs
-  rules.rs
-  scorer.rs
-  graph_context.rs
-  candidate_generator.rs
-  contradiction_detector.rs
-  mapper.rs
-  tests.rs
+layer0/
+  pre_ingest_reasoning/
+    mod.rs                  // public API: reason_on_frame(), reason_on_batch()
+    types.rs                // HiddenMeaningCandidate, MeaningNodeRef, CandidateStatus, CompositionHint
+    rules.rs               // All reasoning rules (PreIngestRule trait + implementations)
+    scorer.rs              // Confidence scoring + graph-guided adjustment
+    mapper.rs              // HiddenMeaningCandidate → RSVS ingest mapping
+    tests.rs               // Unit tests for all rules
 ```
 
-## `types.rs`
+5 source files + 1 test file. NOT 8 files. Kept minimal.
 
-Defines:
-
-- HiddenMeaningCandidate
-- HiddenMeaningType
-- CandidateStatus
-- CompositionHint
-- RoleRef
-- ReasoningEvidence
-- RuleResult
-
-## `rules.rs`
-
-Contains deterministic rules.
-
-Each rule should implement:
+The `PreIngestRule` trait:
 
 ```rust
-pub trait PreIngestRule {
+pub trait PreIngestRule: Send + Sync {
     fn id(&self) -> &'static str;
     fn applies(&self, frame: &EventFrame, context: &ReasoningContext) -> bool;
     fn generate(&self, frame: &EventFrame, context: &ReasoningContext) -> Vec<HiddenMeaningCandidate>;
 }
+
+pub struct ReasoningContext {
+    pub recent_frames: Vec<EventFrame>,    // for cross-frame comparison
+    pub graph: Arc<Graph>,                 // for graph-guided confidence
+}
 ```
-
-## `scorer.rs`
-
-Contains deterministic confidence functions.
-
-## `graph_context.rs`
-
-Provides graph lookup helpers:
-
-```rust
-role_score(node, role)
-semantic_similarity(node, prototype)
-sense_grounding(node)
-composition_overlap(node, prototype)
-```
-
-## `candidate_generator.rs`
-
-Runs all rules on frames.
-
-## `contradiction_detector.rs`
-
-Compares current event frame against prior event frames.
-
-Detects:
-
-- polarity conflict
-- purpose conflict
-- role reversal
-- cause conflict
-- time conflict
-- location conflict
-
-## `mapper.rs`
-
-Converts hidden meaning candidates into RSVS ingest-ready composition hints.
 
 ---
 
-# Required Tests
+## Required Tests
 
-## Test 1 — Problem Solution Pattern
+### Test 1 — Problem Solution Pattern (Phase 1, Rule 1)
 
 Input frame:
 
 ```json
 {
+  "event_id": "e1",
   "predicate": "membuat",
-  "ARG0_agent": "Raymond",
-  "ARG1_patient": "aplikasi",
-  "PNC_purpose": "kantor",
-  "CAU_cause": "proses manual terlalu lambat"
+  "arg0_agent": "Raymond",
+  "arg1_patient": "aplikasi",
+  "purpose": "kantor",
+  "cause": "proses manual terlalu lambat"
 }
 ```
 
-Expected hidden meaning:
+Expected hidden meaning candidates:
 
 ```text
-problem_solution_pattern
-inefficiency_signal
-tool_use_pattern
-goal_inference
-agent_responsibility
+ProblemSolutionPattern   (Rule 1: cause + action + patient)
+GoalInference            (Rule 2: purpose exists)
 ```
 
----
+### Test 2 — Polarity Conflict (Phase 1, Rule 3)
 
-## Test 2 — Passive Normalization
-
-Input:
+Input events:
 
 ```text
-Aplikasi dibuat oleh Raymond.
+Frame A: Raymond membuat aplikasi (polarity: Positive)
+Frame B: Raymond tidak membuat aplikasi (polarity: Negative)
 ```
 
-Expected normalized event:
+Expected:
+
+```text
+PolarityConflict
+```
+
+### Test 3 — Purpose Conflict (Phase 2, Rule 8)
+
+Input events:
+
+```text
+Frame A: Raymond membuat aplikasi untuk kantor
+Frame B: Raymond membuat aplikasi untuk sekolah
+```
+
+Expected:
+
+```text
+PurposeConflict
+```
+
+### Test 4 — Role Reversal (Phase 2, Rule 9)
+
+Input events:
+
+```text
+Frame A: Raymond membuat aplikasi
+Frame B: Aplikasi membuat Raymond
+```
+
+Expected:
+
+```text
+RoleAnomaly
+```
+
+### Test 5 — No Hidden Meaning from Incomplete Frame
+
+Input frame:
 
 ```json
 {
-  "predicate": "membuat",
-  "agent": "Raymond",
-  "patient": "aplikasi"
+  "predicate": "membuat"
 }
 ```
 
-Expected hidden meaning:
+Expected: No hidden meaning candidates (no cause, no patient, no purpose).
 
-```text
-same as active equivalent
-```
+### Test 6 — Confidence Capped at Frame Confidence
 
----
+Frame confidence: 0.60
+Rule computed score: 0.85
 
-## Test 3 — Polarity Conflict
+Expected candidate confidence: 0.60 (capped)
 
-Input events:
+### Test 7 — Candidate Status Is Provisional
 
-```text
-Raymond membuat aplikasi.
-Raymond tidak membuat aplikasi.
-```
-
-Expected:
-
-```text
-polarity_conflict
-```
+All candidates from reasoner must have `status: Candidate`, never `Confirmed` or `Grounded`.
 
 ---
 
-## Test 4 — Purpose Conflict
+## Alignment with Existing Codebase
 
-Input events:
-
-```text
-Raymond membuat aplikasi untuk kantor.
-Raymond membuat aplikasi untuk sekolah.
-```
-
-Expected:
-
-```text
-purpose_conflict
-```
+| Existing Type | Relationship | Action |
+|---------------|-------------|--------|
+| `HiddenMeaningType` (6 variants) | EXTEND with 9 new variants | Backward compatible (`#[non_exhaustive]`) |
+| `HiddenMeaning` (struct) | ADD optional fields | Backward compatible (all `Option<T>`) |
+| `SynthesisResult` (struct) | Reasoner output maps INTO this | No modification needed |
+| `CrossPathwaySynthesis` engine | Reasoner complements, not replaces | Independent module |
+| `GapAnnotation`, `GapType` | Separate concern (predictive gaps vs hidden meaning) | No overlap |
+| `EdgeSource` | Use `FrameCompiler` variant from MD-1 | Already planned |
 
 ---
 
-## Test 5 — Role Reversal
+## Acceptance Criteria
 
-Input events:
+Phase 1 is acceptable if:
 
-```text
-Raymond membuat aplikasi.
-Aplikasi membuat Raymond.
-```
-
-Expected:
-
-```text
-role_anomaly
-```
-
----
-
-## Test 6 — Cause-Based Motivation
-
-Input:
-
-```text
-Raymond membuat aplikasi karena input manual sering salah.
-```
-
-Expected:
-
-```text
-motivation_inference
-pain_point = input manual sering salah
-implied_goal = reduce errors / improve accuracy
-```
+1. No LLMs used — all reasoning is deterministic
+2. `HiddenMeaningType` extended with 9 new variants (backward compatible)
+3. 3 core rules implemented: ProblemSolution, GoalInference, PolarityConflict
+4. Each candidate includes: type, source event, evidence roles, rule id, confidence, composition hints
+5. Confidence scoring is deterministic and auditable
+6. Graph-guided enhancement adjusts confidence (not hardcoded)
+7. Candidates map cleanly to existing `HiddenMeaning` during RSVS ingest
+8. Negative sentiment detection is graph-guided, not hardcoded word lists
+9. All 1,081 existing tests remain green
+10. Module structure is 5 files + tests, not 8+
 
 ---
 
-# Acceptance Criteria
+## Final Statement
 
-The implementation is acceptable if:
-
-1. It does not use LLMs.
-2. It accepts EventFrame outputs from MD-1.
-3. It emits HiddenMeaningCandidate structures.
-4. Each candidate includes:
-   - type
-   - source event
-   - evidence roles
-   - rule id
-   - confidence
-   - composition hints
-5. It can detect at least:
-   - problem_solution_pattern
-   - motivation_inference
-   - goal_inference
-   - agent_responsibility
-   - polarity_conflict
-   - purpose_conflict
-   - role_anomaly
-6. It can map candidates into RSVS composition hints.
-7. All reasoning is auditable through rule IDs and evidence roles.
-8. Tests pass for active, passive, negation, cause, purpose, conflict, and role reversal cases.
-
----
-
-# Non-Goals
-
-Do not implement:
-
-- LLM-based reasoning
-- text generation
-- large model training
-- probabilistic black-box extraction
-- UI
-- diffusion model integration
-- final answer generation
-
-This layer only prepares hidden meaning candidates for RSVS ingestion.
-
----
-
-# Important Design Principle
-
-Do not replace RSVS reasoning.
-
-This layer should not become the entire brain.
-
-It should produce **structured semantic hints** so RSVS can perform better sense induction, grounding, reflection, and pattern completion.
-
-Correct relationship:
-
-```text
-Pre-Ingest Meaning Reasoner = semantic compiler / candidate generator
-RSVS = long-term structural memory + sense reasoning + grounding engine
-```
-
----
-
-# Final Statement
-
-The purpose of MD-2 is to make RSVS ingest not only surface facts, but also structured candidate meanings implied by the relation between atoms, roles, senses, and situation.
-
-This enables RSVS to learn:
-
-```text
-not only what appeared together,
-but why those parts appeared together.
-```
+MD-2 extends the existing meaning-pathway infrastructure with event-structure-aware hidden meaning detection. It builds on MD-1's EventFrame output and feeds into RSVS's existing synthesis and composition machinery. Every new type extends or maps to existing types — no parallel hierarchies, no duplicated functionality.
