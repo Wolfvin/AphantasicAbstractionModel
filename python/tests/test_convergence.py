@@ -11,7 +11,7 @@ in the same sentence if we keep them in separate ingest batches).
 import pytest
 
 try:
-    from rsvs import Rsvs
+    from rsvs import PyV12Pipeline
     RSVS_AVAILABLE = True
 except ImportError:
     RSVS_AVAILABLE = False
@@ -53,7 +53,7 @@ A physician studies medicine for many years.
 @pytest.fixture(scope="module")
 def converged_rsvs():
     """Build RSVS with mirrored corpora for convergence testing."""
-    r = Rsvs(entity_promote_n=2, theta_assign=0.20)
+    r = PyV12Pipeline(entity_promote_n=2, theta_assign=0.20)
     r.ingest(CORPUS_A)
     r.ingest(CORPUS_B)
     # Run convergence detection explicitly if available

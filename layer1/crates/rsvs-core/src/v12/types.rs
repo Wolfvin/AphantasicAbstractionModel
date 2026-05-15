@@ -1,9 +1,9 @@
 //! # v12.0 Unified Abstraction Type Definitions
 //!
 //! This module contains ALL v12.0 type definitions as specified in the AAM design
-//! documents (MD-1 through MD-6). These types are the foundation for the entire
-//! v12.0 architecture and are **additive** — they do not replace existing v8.3 types
-//! (`Node`, `Edge`, `CompositionRef`, etc.).
+//! documents (MD-1 through MD-6). These types are the FOUNDATION of the v12.0
+//! architecture — they are the ONLY type system. The old v8.3 types (`Node`, `Edge`,
+//! `CompositionRef`) are legacy and only kept where still referenced by shared storage.
 //!
 //! ## Type Index
 //!
@@ -32,7 +32,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
 // Reuse existing v8.3 types — do NOT redefine them.
-use crate::types::{EdgeSource, HiddenMeaningType, NodeId, RelationType, SenseId};
+use crate::types::{EdgeSource, HiddenMeaningType, NodeId, RelationType};
 
 // ========================================================================
 // Abstraction 1: SemanticAtom — Unified Ingest Primitive

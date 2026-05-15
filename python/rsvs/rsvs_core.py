@@ -18,7 +18,7 @@ _RSVS_AVAILABLE = False
 _Rsvs: type[Any] | None = None
 
 try:
-    from rsvs import Rsvs as _RsvsClass  # type: ignore[import]
+    from rsvs import PyV12Pipeline as _RsvsClass  # type: ignore[import]
     _Rsvs = _RsvsClass
     _RSVS_AVAILABLE = True
 except Exception:

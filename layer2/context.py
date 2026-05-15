@@ -19,7 +19,7 @@ import logging
 import time
 from typing import Any, Optional
 
-from .bridge import AbstractionBridge, RsvsBridge, get_bridge
+from .bridge import V12PipelineBridge, get_bridge
 from .web_search import WebSearchEngine, _web_search
 
 logger = logging.getLogger(__name__)
@@ -64,7 +64,7 @@ class ContextLayer:
     def __init__(
         self,
         rsvs_instance: Any | None = None,
-        bridge: Optional[RsvsBridge] = None,
+        bridge: Optional[V12PipelineBridge] = None,
         web_search: Optional[WebSearchEngine] = None,
     ) -> None:
         """Initialize the Context Layer.
@@ -80,7 +80,7 @@ class ContextLayer:
         if bridge is not None:
             self._bridge = bridge
         elif rsvs_instance is not None:
-            self._bridge = RsvsBridge(rsvs_instance=rsvs_instance)
+            self._bridge = get_bridge()
         else:
             self._bridge = get_bridge()
 

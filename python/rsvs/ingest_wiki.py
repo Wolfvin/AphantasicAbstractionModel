@@ -95,15 +95,15 @@ def ingest_domains(
 
     Returns a summary dict with stats per domain.
     """
-    from rsvs import Rsvs
+    from rsvs import PyV12Pipeline
 
     p = Path(db_path)
     if p.exists():
-        r = Rsvs.load(str(p))
+        r = PyV12Pipeline.load(str(p))
         if verbose:
             print(f"Loaded existing DB: {db_path}")
     else:
-        r = Rsvs(entity_promote_n=3, theta_assign=0.12, n_warm=20, eta=0.1)
+        r = PyV12Pipeline(entity_promote_n=3, theta_assign=0.12, n_warm=20, eta=0.1)
         if verbose:
             print(f"Created new DB: {db_path}")
 
@@ -164,9 +164,9 @@ def ingest_domains(
 # -----------------------------------------------------------------------
 
 def print_report(db_path: str):
-    from rsvs import Rsvs
+    from rsvs import PyV12Pipeline
 
-    r = Rsvs.load(db_path)
+    r = PyV12Pipeline.load(db_path)
     st = r.status()
     atoms = sorted(r.atoms())
     cm = r.confidence_map()

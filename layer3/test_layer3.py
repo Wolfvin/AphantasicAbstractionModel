@@ -21,7 +21,7 @@ from layer3.reasoning import ReasoningEngine, DeductiveChain, DeductiveStep
 from layer3.policy import DeductivePolicyEngine, PolicyEngine, PolicyRule, PolicyViolation
 from layer3.coder import DeductiveCoderLayer, CoderLayer, CodeElement, CodeAnalysisResult
 from layer2.pattern import PatternResult, ReasoningStep
-from layer2.bridge import RsvsBridge, _FallbackGraph
+from layer2.bridge import V12PipelineBridge, _FallbackGraph
 from pipeline import AamResponse
 
 
@@ -29,9 +29,9 @@ from pipeline import AamResponse
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _make_bridge() -> RsvsBridge:
+def _make_bridge() -> V12PipelineBridge:
     """Create a bridge with fallback graph (no Rust core needed)."""
-    return RsvsBridge()
+    return V12PipelineBridge()
 
 
 def _make_pattern_result(

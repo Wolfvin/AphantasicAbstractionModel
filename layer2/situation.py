@@ -19,7 +19,7 @@ import logging
 import time
 from typing import Any, Optional
 
-from .bridge import AbstractionBridge, RsvsBridge, get_bridge
+from .bridge import V12PipelineBridge, get_bridge
 
 # 5-Pillar: Gate 2 — Regime Detection
 from validation_gates.regime_detection import RegimeDetectionGate, RegimeState, CognitiveRegime
@@ -49,7 +49,7 @@ class SituationLayer:
         is_rust_core: Whether the Rust core backend is being used.
     """
 
-    def __init__(self, rsvs_instance: Any | None = None, bridge: Optional[RsvsBridge] = None) -> None:
+    def __init__(self, rsvs_instance: Any | None = None, bridge: Optional[V12PipelineBridge] = None) -> None:
         """Initialize the Situation Layer.
 
         Args:
@@ -61,7 +61,7 @@ class SituationLayer:
         if bridge is not None:
             self._bridge = bridge
         elif rsvs_instance is not None:
-            self._bridge = RsvsBridge(rsvs_instance=rsvs_instance)
+            self._bridge = get_bridge()
         else:
             self._bridge = get_bridge()
 

@@ -35,11 +35,9 @@
 //! This module is only compiled when the `v12` feature is enabled.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-
-use super::pipeline::{ErasedTransform, Graph, IngestResult, PipelineEngine};
+use super::pipeline::{Graph, IngestResult, PipelineEngine};
 use super::types::*;
-use crate::types::{EdgeSource, NodeId};
+use crate::types::NodeId;
 
 // ========================================================================
 // CognitiveMode — How the Pipeline Processes Input
@@ -555,7 +553,7 @@ impl ExecutiveOrchestrator {
 
         let mut modified_compositions = Vec::new();
         let mut resolved_contradictions = Vec::new();
-        let mut filled_gaps = Vec::new();
+        let filled_gaps = Vec::new();
 
         // Compute initial confidence.
         let snapshot = engine.snapshot();

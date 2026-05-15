@@ -842,7 +842,7 @@ impl SelectAcquisition {
                         // Check if any other composition has the same predicate
                         // with the missing role filled.
                         let predicate = source_comp.member_with_role(&SemanticRole::Predicate);
-                        if let Some(pred) = predicate {
+                        if let Some(_pred) = predicate {
                             for comp in graph.compositions() {
                                 if comp.id == *comp_id {
                                     continue;
@@ -962,7 +962,7 @@ impl SelectAcquisition {
     pub fn resolve_ambiguous_from_graph(
         &self,
         graph: &Graph,
-        gap: &KnowledgeGap,
+        _gap: &KnowledgeGap,
     ) -> Option<(NodeId, String, f32)> {
         // Get recent compositions ordered by recency.
         let recent = graph.recent_compositions(10);
@@ -1155,7 +1155,7 @@ impl SelectAcquisition {
                     candidate_label,
                     confidence,
                 } => {
-                    if let Some(comp_id) = &decision.gap_id.split('_').next() {
+                    if let Some(_comp_id) = &decision.gap_id.split('_').next() {
                         // Try to find the source composition from the gap ID.
                         // Simplified: use the gap_id as a key.
                         enrichments.push(EnrichmentRequest {
@@ -1255,7 +1255,7 @@ impl ErasedTransform for SelectAcquisition {
         let (enrichments, reextractions) = sa.decisions_to_actions(&decisions, graph);
 
         let enrichments_count = enrichments.len();
-        let reextractions_count = reextractions.len();
+        let _reextractions_count = reextractions.len();
 
         // Write to pipeline context.
         ctx.pending_enrichments.extend(enrichments);

@@ -16,14 +16,20 @@ Modules:
   hypothesis_combinator: Combine complementary hypotheses into hybrids (A × B)
 
 Bridge:
-  bridge    : Unified adapter for PyO3 Rust core (AbstractionBridge)
+  bridge    : Unified adapter for PyO3 Rust core (V12PipelineBridge)
   llm       : Generate natural narrative FROM graph reasoning chain
   web_search: Live web search with caching
 """
 
 __version__ = "1.1.0-alpha"
 
-from .bridge import AbstractionBridge, RsvsBridge, get_bridge, is_rust_core_available
+from .bridge import (
+    V12PipelineBridge,
+    AbstractionBridge,  # backward-compat alias for V12PipelineBridge
+    RsvsBridge,         # backward-compat alias for V12PipelineBridge
+    get_bridge,
+    is_rust_core_available,
+)
 from .embedding import (
     EmbeddingProvider,
     SentenceTransformerProvider,

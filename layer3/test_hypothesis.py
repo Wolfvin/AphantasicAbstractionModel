@@ -25,16 +25,16 @@ from layer3.hypothesis import (
 from layer3.reasoning import ReasoningEngine, DeductiveChain, DeductiveStep
 from layer2.predictive import Anomaly
 from layer2.pattern import PatternResult, ReasoningStep
-from layer2.bridge import RsvsBridge
+from layer2.bridge import V12PipelineBridge
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _make_bridge() -> RsvsBridge:
+def _make_bridge() -> V12PipelineBridge:
     """Create a bridge with fallback graph (no Rust core needed)."""
-    return RsvsBridge()
+    return V12PipelineBridge()
 
 
 def _make_anomaly(

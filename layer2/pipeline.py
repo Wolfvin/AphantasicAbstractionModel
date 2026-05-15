@@ -171,7 +171,7 @@ class GeniusPipeline:
     def __init__(
         self,
         rsvs_instance=None,
-        bridge: Optional[RsvsBridge] = None,
+        bridge: Optional[V12PipelineBridge] = None,
         eta: float = 0.1,
         anomaly_threshold: float = 0.3,
         auto_search: bool = False,
@@ -206,7 +206,7 @@ class GeniusPipeline:
         if bridge is not None:
             self._bridge = bridge
         elif rsvs_instance is not None:
-            self._bridge = V12PipelineBridge()
+            self._bridge = get_bridge()
         else:
             self._bridge = get_bridge()
 
@@ -228,11 +228,10 @@ class GeniusPipeline:
         # Temporal tracking layer (G1-1: temporal metadata for nodes)
         self.temporal = TemporalTracker()
 
-        # v12 pipeline bridge for executive-controlled ingestion
-        # Initialized lazily -- only creates a PyV12Pipeline if the Rust
-        # core was built with --features v12,python.  When unavailable,
-        # self.v12.available returns False and all methods degrade safely.
-        self.v12 = V12PipelineBridge()
+        # v12 pipeline bridge — same singleton as self._bridge.
+        # Exposed as self.v12 for backward compatibility with code that
+        # accesses pipeline.v12 directly.
+        self.v12 = self._bridge
 
         # Internal state
         self._conversation_history: list[dict] = []

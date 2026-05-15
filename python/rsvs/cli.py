@@ -38,15 +38,15 @@ BANNER        = f"RSVS v{VERSION} — Recursive Symbolic Vocabulary System"
 
 def _load_rsvs(db_path: str):
     """Load from disk, or create fresh if not found."""
-    from rsvs import Rsvs
+    from rsvs import PyV12Pipeline
     p = Path(db_path)
     if p.exists():
         try:
-            r = Rsvs.load(str(p))
+            r = PyV12Pipeline.load(str(p))
             return r
         except Exception as e:
             _err(f"Failed to load {db_path}: {e}")
-    return Rsvs()
+    return PyV12Pipeline()
 
 def _save_rsvs(r, db_path: str):
     p = Path(db_path)
@@ -84,8 +84,8 @@ def cmd_init(args):
     if p.exists() and not args.force:
         _err(f"{db} already exists. Use --force to overwrite.")
 
-    from rsvs import Rsvs
-    r = Rsvs(
+    from rsvs import PyV12Pipeline
+    r = PyV12Pipeline(
         entity_promote_n=args.promote_n,
         theta_assign=args.theta,
         n_warm=args.n_warm,

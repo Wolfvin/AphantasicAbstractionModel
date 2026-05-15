@@ -64,7 +64,7 @@ from enum import Enum
 from typing import Any, Callable, Optional
 
 # Layer 2 & 3 imports
-from layer2.bridge import RsvsBridge, get_bridge
+from layer2.bridge import V12PipelineBridge, get_bridge
 from layer2.predictive import Anomaly, PredictiveEngine
 from layer2.pattern import PatternResult, PatternOutput, ReasoningStep
 from layer2.possibility_generator import PossibilityGenerator, GeneratedPossibility
@@ -413,7 +413,7 @@ class PossibilityLattice:
 
     def __init__(
         self,
-        bridge: Optional[RsvsBridge] = None,
+        bridge: Optional[V12PipelineBridge] = None,
         reasoner: Optional[HypothesisDrivenReasoner] = None,
         predictive_engine: Optional[PredictiveEngine] = None,
         *,

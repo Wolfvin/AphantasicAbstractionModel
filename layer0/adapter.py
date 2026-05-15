@@ -54,22 +54,22 @@ from validation_gates.signal_extraction import SignalExtractionGate, SignalVerdi
 
 
 # ---------------------------------------------------------------------------
-# V12PipelineBridge singleton — avoid creating a new instance per V12Adapter
+# V12PipelineBridge — use the global singleton from layer2.bridge
 # ---------------------------------------------------------------------------
-
-_v12_bridge_singleton = None
 
 
 def _get_v12_bridge():
-    """Get or create the shared V12PipelineBridge singleton."""
-    global _v12_bridge_singleton
-    if _v12_bridge_singleton is None:
-        try:
-            from layer2.bridge import V12PipelineBridge
-            _v12_bridge_singleton = V12PipelineBridge()
-        except ImportError:
-            pass
-    return _v12_bridge_singleton
+    """Get the shared V12PipelineBridge singleton from layer2.bridge.
+
+    This ensures all layers (L0, L2, L3) share the same bridge instance,
+    eliminating the triple-bridge problem where data ingested via one
+    instance was invisible to the others.
+    """
+    try:
+        from layer2.bridge import get_bridge
+        return get_bridge()
+    except ImportError:
+        return None
 
 
 # ---------------------------------------------------------------------------

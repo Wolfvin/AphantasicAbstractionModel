@@ -7,7 +7,7 @@ import json
 import os
 import tempfile
 import rsvs
-from rsvs import Rsvs
+from rsvs import PyV12Pipeline
 
 # -----------------------------------------------------------------------
 # Fixtures
@@ -34,7 +34,7 @@ def tmp_path_str():
 
 @pytest.fixture
 def trained():
-    r = Rsvs(entity_promote_n=3, theta_assign=0.12, n_warm=8, eta=0.1)
+    r = PyV12Pipeline(entity_promote_n=3, theta_assign=0.12, n_warm=8, eta=0.1)
     r.ingest(CORPUS_GEO)
     r.set_domain(2)
     r.ingest(CORPUS_WATER)
@@ -123,18 +123,18 @@ class TestSave:
 
 class TestLoad:
     def test_load_returns_rsvs(self, saved):
-        r = Rsvs.load(saved)
+        r = PyV12Pipeline.load(saved)
         assert r is not None
 
     def test_load_nonexistent_raises(self):
         with pytest.raises(Exception):
-            Rsvs.load("/nonexistent/path/rsvs.json")
+            PyV12Pipeline.load("/nonexistent/path/rsvs.json")
 
     def test_load_invalid_json_raises(self, tmp_path_str):
         with open(tmp_path_str, 'w') as f:
             f.write("not valid json {{{")
         with pytest.raises(Exception):
-            Rsvs.load(tmp_path_str)
+            PyV12Pipeline.load(tmp_path_str)
 
 # -----------------------------------------------------------------------
 # Roundtrip correctness tests
@@ -142,19 +142,19 @@ class TestLoad:
 
 class TestRoundtrip:
     def test_atoms_preserved(self, trained, saved):
-        r2 = Rsvs.load(saved)
+        r2 = PyV12Pipeline.load(saved)
         assert sorted(r2.atoms()) == sorted(trained.atoms())
 
     def test_total_contexts_preserved(self, trained, saved):
-        r2 = Rsvs.load(saved)
+        r2 = PyV12Pipeline.load(saved)
         assert r2.status()["total_contexts"] == trained.status()["total_contexts"]
 
     def test_warmup_state_preserved(self, trained, saved):
-        r2 = Rsvs.load(saved)
+        r2 = PyV12Pipeline.load(saved)
         assert r2.status()["warmed_up"] == trained.status()["warmed_up"]
 
     def test_confidence_values_preserved(self, trained, saved):
-        r2 = Rsvs.load(saved)
+        r2 = PyV12Pipeline.load(saved)
         conf1 = trained.confidence_map()
         conf2 = r2.confidence_map()
         for label in trained.atoms():
@@ -163,7 +163,7 @@ class TestRoundtrip:
                     f"Confidence mismatch for '{label}': {conf1[label]} vs {conf2[label]}"
 
     def test_similarity_works_after_load(self, trained, saved):
-        r2 = Rsvs.load(saved)
+        r2 = PyV12Pipeline.load(saved)
         sim_before = trained.similarity("stone", "hard")
         sim_after  = r2.similarity("stone", "hard")
         # Both should return result or both None
@@ -172,20 +172,20 @@ class TestRoundtrip:
             assert abs(sim_before.jaccard - sim_after.jaccard) < 0.001
 
     def test_query_works_after_load(self, trained, saved):
-        r2 = Rsvs.load(saved)
+        r2 = PyV12Pipeline.load(saved)
         result = r2.query("stone", "hard texture")
         # Either works or concept not learned — just check no crash
         assert result is None or hasattr(result, 'sense_idx')
 
     def test_senses_count_preserved(self, trained, saved):
-        r2 = Rsvs.load(saved)
+        r2 = PyV12Pipeline.load(saved)
         if "stone" in trained.atoms() and "stone" in r2.atoms():
             s1 = len(trained.senses("stone"))
             s2 = len(r2.senses("stone"))
             assert s1 == s2, f"Sense count: {s1} vs {s2}"
 
     def test_sense_coherence_preserved(self, trained, saved):
-        r2 = Rsvs.load(saved)
+        r2 = PyV12Pipeline.load(saved)
         if "stone" in trained.atoms() and "stone" in r2.atoms():
             senses1 = trained.senses("stone")
             senses2 = r2.senses("stone")
@@ -193,7 +193,7 @@ class TestRoundtrip:
                 assert abs(s1.coherence - s2.coherence) < 0.001
 
     def test_sense_status_preserved(self, trained, saved):
-        r2 = Rsvs.load(saved)
+        r2 = PyV12Pipeline.load(saved)
         if "stone" in trained.atoms() and "stone" in r2.atoms():
             senses1 = trained.senses("stone")
             senses2 = r2.senses("stone")
@@ -201,7 +201,7 @@ class TestRoundtrip:
                 assert s1.status == s2.status
 
     def test_atom_tier_preserved(self, trained, saved):
-        r2 = Rsvs.load(saved)
+        r2 = PyV12Pipeline.load(saved)
         for atom in trained.atoms():
             info1 = trained.atom_info(atom)
             info2 = r2.atom_info(atom)
@@ -209,14 +209,14 @@ class TestRoundtrip:
                 f"Tier mismatch for '{atom}': {info1.tier} vs {info2.tier}"
 
     def test_seed_atoms_still_conf_1(self, saved):
-        r2 = Rsvs.load(saved)
+        r2 = PyV12Pipeline.load(saved)
         cm = r2.confidence_map()
         for seed in ["exists", "feel", "before", "after"]:
             if seed in cm:
                 assert cm[seed] == 1.0, f"Seed '{seed}' conf={cm[seed]} after load"
 
     def test_status_count_matches(self, trained, saved):
-        r2 = Rsvs.load(saved)
+        r2 = PyV12Pipeline.load(saved)
         st1 = trained.status()
         st2 = r2.status()
         assert st1["total_atoms"] == st2["total_atoms"]
@@ -228,14 +228,14 @@ class TestRoundtrip:
 
 class TestPostLoad:
     def test_ingest_after_load(self, saved):
-        r = Rsvs.load(saved)
+        r = PyV12Pipeline.load(saved)
         atoms_before = set(r.atoms())
         r.ingest("Fire is hot luminous. Fire produces heat and light. Hot fire burns wood.")
         # System should still work — no crash
         assert r.status()["total_contexts"] > 0
 
     def test_can_ingest_new_domain_after_load(self, saved):
-        r = Rsvs.load(saved)
+        r = PyV12Pipeline.load(saved)
         r.set_domain(3)
         r.ingest("Fire is hot. Fire burns. Fire produces heat.")
         r.ingest("Hot fire is bright luminous. Fire and heat are related.")
@@ -248,9 +248,9 @@ class TestPostLoad:
         path2 = tmp_path_str.replace(".json", "_2.json")
 
         trained.save(tmp_path_str)
-        r2 = Rsvs.load(tmp_path_str)
+        r2 = PyV12Pipeline.load(tmp_path_str)
         r2.save(path2)
-        r3 = Rsvs.load(path2)
+        r3 = PyV12Pipeline.load(path2)
 
         assert sorted(r3.atoms()) == sorted(r2.atoms())
         assert r3.status()["total_contexts"] == r2.status()["total_contexts"]
@@ -260,7 +260,7 @@ class TestPostLoad:
 
     def test_similarity_consistent_after_load(self, saved):
         """Similarity results should be identical before and after load."""
-        r = Rsvs.load(saved)
+        r = PyV12Pipeline.load(saved)
         # Run query twice — should be deterministic
         sim1 = r.similarity("stone", "solid")
         sim2 = r.similarity("stone", "solid")
@@ -268,9 +268,9 @@ class TestPostLoad:
             assert sim1.jaccard == sim2.jaccard
 
     def test_repr_after_load(self, saved):
-        r = Rsvs.load(saved)
+        r = PyV12Pipeline.load(saved)
         s = repr(r)
-        assert "Rsvs(" in s
+        assert "PyV12Pipeline(" in s
 
 # -----------------------------------------------------------------------
 # JSON structure tests

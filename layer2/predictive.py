@@ -33,7 +33,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
-from .bridge import AbstractionBridge, RsvsBridge, get_bridge
+from .bridge import V12PipelineBridge, get_bridge
 
 # 5-Pillar: Gate 4 — Statistical Edge
 from validation_gates.statistical_edge import StatisticalEdgeGate, ReasoningPath
@@ -219,7 +219,7 @@ class PredictiveEngine:
     def __init__(
         self,
         rsvs_instance: Any | None = None,
-        bridge: Optional[RsvsBridge] = None,
+        bridge: Optional[V12PipelineBridge] = None,
         eta: float = _DEFAULT_ETA,
         anomaly_threshold: float = _DEFAULT_ANOMALY_THRESHOLD,
     ) -> None:
@@ -238,7 +238,7 @@ class PredictiveEngine:
         if bridge is not None:
             self._bridge = bridge
         elif rsvs_instance is not None:
-            self._bridge = RsvsBridge(rsvs_instance=rsvs_instance)
+            self._bridge = get_bridge()
         else:
             self._bridge = get_bridge()
 

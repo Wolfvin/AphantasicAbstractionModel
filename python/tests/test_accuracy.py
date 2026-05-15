@@ -10,7 +10,7 @@ import pytest
 
 # Try to import the native extension; skip entire module if unavailable
 try:
-    from rsvs import Rsvs
+    from rsvs import PyV12Pipeline
     RSVS_AVAILABLE = True
 except ImportError:
     RSVS_AVAILABLE = False
@@ -32,7 +32,7 @@ def trained_rsvs():
     import tempfile
     import os
 
-    r = Rsvs(entity_promote_n=2, theta_assign=0.20, n_warm=20, eta=0.1)
+    r = PyV12Pipeline(entity_promote_n=2, theta_assign=0.20, n_warm=20, eta=0.1)
 
     # Ingest all domains
     for domain_name, sentences in DOMAINS.items():

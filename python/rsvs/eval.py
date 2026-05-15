@@ -20,7 +20,7 @@ import statistics
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from rsvs import Rsvs
+from rsvs import PyV12Pipeline
 from rsvs.corpus import DOMAINS, domain_names, get_aligned_sentences, get_corpus, CORPUS_EN, CORPUS_ID
 from rsvs.ingest_wiki import ingest_domains
 
@@ -147,7 +147,7 @@ SIMILARITY_TRIPLES = [
     ("citizen",  "law",        "processor"),
 ]
 
-def benchmark_similarity_rank(r: Rsvs) -> BenchmarkResult:
+def benchmark_similarity_rank(r: PyV12Pipeline) -> BenchmarkResult:
     t0 = time.time()
     atoms = set(r.atoms())
 
@@ -217,7 +217,7 @@ def benchmark_similarity_rank(r: Rsvs) -> BenchmarkResult:
 # baseline (0.5 is the cold-start prior).
 # Also checks that multi-sense atoms have measurably distinct cores.
 
-def benchmark_sense_coherence(r: Rsvs) -> BenchmarkResult:
+def benchmark_sense_coherence(r: PyV12Pipeline) -> BenchmarkResult:
     t0 = time.time()
     atoms = r.atoms()
 
@@ -303,7 +303,7 @@ def benchmark_sense_coherence(r: Rsvs) -> BenchmarkResult:
 CROSS_DOMAIN_ATOMS  = ["energy", "material", "water", "force", "data"]
 SINGLE_DOMAIN_ATOMS = ["processor", "emperor", "chromosome", "basalt", "polymer"]
 
-def benchmark_confidence_growth(r: Rsvs) -> BenchmarkResult:
+def benchmark_confidence_growth(r: PyV12Pipeline) -> BenchmarkResult:
     t0 = time.time()
     cm = r.confidence_map()
 
@@ -448,7 +448,7 @@ def benchmark_discriminability(r) -> BenchmarkResult:
 # and that the adaptive system produces a different (better) sense count
 # than fixed thresholds.
 
-def benchmark_adaptive_threshold(r_adaptive: Rsvs, db_path_fixed: str,
+def benchmark_adaptive_threshold(r_adaptive: PyV12Pipeline, db_path_fixed: str,
                                    domains: list[str]) -> BenchmarkResult:
     """
     Compare adaptive vs fixed threshold systems.
@@ -465,11 +465,11 @@ def benchmark_adaptive_threshold(r_adaptive: Rsvs, db_path_fixed: str,
     threshold_changed = abs(theta_adaptive - fallback) > 0.001
 
     # Train a fixed-threshold system on same corpus
-    from rsvs import Rsvs as _Rsvs
+    from rsvs import PyV12Pipeline as _PyV12Pipeline
     from rsvs.ingest_wiki import ingest_domains as _ingest
     # Create a proper fixed DB (ingest creates the file)
     _ingest(db_path_fixed, domains, verbose=False)
-    r_fixed2 = _Rsvs.load(db_path_fixed)
+    r_fixed2 = _PyV12Pipeline.load(db_path_fixed)
 
     # Compare: adaptive should produce more nuanced sense structure
     atoms_adaptive = set(r_adaptive.atoms())
@@ -534,7 +534,7 @@ def benchmark_adaptive_threshold(r_adaptive: Rsvs, db_path_fixed: str,
     )
 
 
-def benchmark_speed_runtime(r: Rsvs) -> BenchmarkResult:
+def benchmark_speed_runtime(r: PyV12Pipeline) -> BenchmarkResult:
     t0 = time.time()
     samples = [
         "rock solid hard mineral geology",
@@ -590,7 +590,7 @@ def benchmark_speed_runtime(r: Rsvs) -> BenchmarkResult:
 # detect that the same concepts in two languages produce overlapping atoms
 # and related composition structures.
 
-def benchmark_cross_language_convergence(r: Rsvs | None = None) -> BenchmarkResult:
+def benchmark_cross_language_convergence(r: PyV12Pipeline | None = None) -> BenchmarkResult:
     """Test that English and Indonesian corpora converge in RSVS structure.
 
     Strategy:
@@ -606,7 +606,7 @@ def benchmark_cross_language_convergence(r: Rsvs | None = None) -> BenchmarkResu
     """
     import tempfile
     import os
-    from rsvs import Rsvs as _Rsvs
+    from rsvs import PyV12Pipeline as _PyV12Pipeline
     from rsvs.ingest_wiki import ingest_domains as _ingest
 
     t0 = time.time()
@@ -631,12 +631,12 @@ def benchmark_cross_language_convergence(r: Rsvs | None = None) -> BenchmarkResu
         # Build English RSVS from CORPUS_EN
         en_domains = list(CORPUS_EN.keys())
         _ingest(en_path, en_domains, verbose=False, corpus=CORPUS_EN)
-        r_en = _Rsvs.load(en_path)
+        r_en = _PyV12Pipeline.load(en_path)
 
         # Build Indonesian RSVS from CORPUS_ID
         id_domains = list(CORPUS_ID.keys())
         _ingest(id_path, id_domains, verbose=False, corpus=CORPUS_ID)
-        r_id = _Rsvs.load(id_path)
+        r_id = _PyV12Pipeline.load(id_path)
 
         # Compare: for each aligned domain, check atom overlap
         # by measuring how many key concepts appear in both
@@ -792,7 +792,7 @@ def run_eval(
     if db_path and Path(db_path).exists():
         if verbose:
             print(f"Loading existing DB: {db_path}")
-        r = Rsvs.load(db_path)
+        r = PyV12Pipeline.load(db_path)
     else:
         if not db_path:
             tmp_fd, tmp_path = tempfile.mkstemp(suffix='.json')
@@ -805,7 +805,7 @@ def run_eval(
                   f"({sum(len(DOMAINS[d]) for d in domains if d in DOMAINS)} sentences)...")
 
         ingest_domains(tmp_path, domains, verbose=verbose)
-        r = Rsvs.load(tmp_path)
+        r = PyV12Pipeline.load(tmp_path)
         db_path = tmp_path
 
     if verbose:

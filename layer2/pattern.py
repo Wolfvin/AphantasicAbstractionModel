@@ -34,7 +34,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
-from .bridge import AbstractionBridge, RsvsBridge, get_bridge
+from .bridge import V12PipelineBridge, get_bridge
 
 # 5-Pillar: Gate 5 — Execution Discipline
 from validation_gates.execution_discipline import ExecutionDisciplineGate, DisciplineVerdict
@@ -274,7 +274,7 @@ class PatternOutput:
         is_rust_core: Whether the Rust core is being used.
     """
 
-    def __init__(self, rsvs_instance: Any | None = None, bridge: Optional[RsvsBridge] = None, temporal_tracker: Any = None) -> None:
+    def __init__(self, rsvs_instance: Any | None = None, bridge: Optional[V12PipelineBridge] = None, temporal_tracker: Any = None) -> None:
         """Initialize the Pattern Output layer.
 
         Args:
@@ -289,7 +289,7 @@ class PatternOutput:
         if bridge is not None:
             self._bridge = bridge
         elif rsvs_instance is not None:
-            self._bridge = RsvsBridge(rsvs_instance=rsvs_instance)
+            self._bridge = get_bridge()
         else:
             self._bridge = get_bridge()
 

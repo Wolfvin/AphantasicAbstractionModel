@@ -37,7 +37,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, AsyncGenerator, Callable, Optional
 
-from layer2.bridge import AbstractionBridge, RsvsBridge, get_bridge, is_rust_core_available
+from layer2.bridge import V12PipelineBridge, get_bridge, is_rust_core_available
 from layer2.llm import generate_narrative
 from layer2.context import ContextLayer, SOURCE_TRUST
 from layer2.situation import SituationLayer
@@ -405,7 +405,7 @@ class AamPipeline:
     def __init__(
         self,
         rsvs_instance=None,
-        bridge: Optional[RsvsBridge] = None,
+        bridge: Optional[V12PipelineBridge] = None,
         eta: float = 0.1,
         anomaly_threshold: float = 0.3,
         auto_search: bool = False,
@@ -441,7 +441,7 @@ class AamPipeline:
         if bridge is not None:
             self._bridge = bridge
         elif rsvs_instance is not None:
-            self._bridge = RsvsBridge(rsvs_instance=rsvs_instance)
+            self._bridge = get_bridge()
         else:
             self._bridge = get_bridge()
 

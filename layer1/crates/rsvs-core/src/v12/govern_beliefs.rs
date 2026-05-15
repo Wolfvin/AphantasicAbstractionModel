@@ -43,12 +43,9 @@
 //!
 //! This module is only compiled when the `v12` feature is enabled.
 
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-
 use super::pipeline::{ErasedTransform, Graph, IngestResult};
 use super::types::*;
-use crate::types::{EdgeSource, NodeId};
+use crate::types::EdgeSource;
 
 // ========================================================================
 // GovernBeliefs — The Transform
@@ -673,7 +670,7 @@ impl GovernBeliefs {
         // Check for ≥ 2 independent provenance sources.
         // Uses provenance_source_count() which counts unique EdgeSource origins.
         let member_sources: Vec<EdgeSource> = comp.members.iter()
-            .filter_map(|m| {
+            .filter_map(|_m| {
                 // If member label matches a known source pattern, infer the source
                 // In a full implementation, edges would carry the source directly.
                 // For now, check if any member was added by enrichment (different source)
@@ -1066,7 +1063,7 @@ impl ErasedTransform for GovernBeliefs {
         "GovernBeliefs"
     }
 
-    fn execute(&self, ctx: &mut PipelineContext, graph: &mut Graph) -> IngestResult {
+    fn execute(&self, _ctx: &mut PipelineContext, graph: &mut Graph) -> IngestResult {
         let mut gb = self.clone();
 
         // Build a GraphDelta from the current graph state.
@@ -1224,7 +1221,7 @@ impl ErasedTransform for SeedAnchor {
         "SeedAnchor"
     }
 
-    fn execute(&self, ctx: &mut PipelineContext, graph: &mut Graph) -> IngestResult {
+    fn execute(&self, _ctx: &mut PipelineContext, graph: &mut Graph) -> IngestResult {
         // Build a GovernedDelta from the current graph state.
         let governed = GovernedDelta {
             compositions: graph.compositions.values().cloned().collect(),
@@ -1249,6 +1246,8 @@ impl ErasedTransform for SeedAnchor {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::NodeId;
+    use std::collections::HashMap;
 
     fn make_composition(
         id: &str,

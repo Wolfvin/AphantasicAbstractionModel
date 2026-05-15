@@ -6,7 +6,7 @@ compositional sense definitions, and autonomous tiered memory lifecycle.
 Architecture:
     Python HTTP layer + artifact persistence
          ↓
-    Rust core via PyO3 (rsvs._rsvs.Rsvs)
+    Rust core via PyO3 (rsvs._rsvs.PyV12Pipeline)
          ↓
     Graph, Attention, Autonomy, Sense, Pipeline
 """
@@ -20,7 +20,7 @@ _rust_core_available = False
 
 try:
     from ._rsvs import (
-        PyRsvs as Rsvs,
+        PyV12Pipeline,
         PyIngestStats as IngestStats,
         PyIngestMetaV1 as IngestMetaV1,
         PyQueryResult as QueryResult,
@@ -35,6 +35,7 @@ try:
         PyStructuralSimResult as StructuralSimResult,
         PySubstitutionResult as SubstitutionResult,
     )
+    Rsvs = PyV12Pipeline  # backward-compat alias
     _rust_core_available = True
 except ImportError:
     # Rust core not built — this is OK for import-time, the bridge server
@@ -46,7 +47,8 @@ __all__ = [
     "__schema_version__",
     "__api_version__",
     # Rust core types
-    "Rsvs",
+    "PyV12Pipeline",
+    "Rsvs",  # backward-compat alias
     "IngestStats",
     "IngestMetaV1",
     "QueryResult",

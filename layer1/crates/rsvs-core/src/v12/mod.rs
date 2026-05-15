@@ -33,10 +33,11 @@
 //!
 //! ## Design Principles
 //!
-//! - **Additive**: v12.0 types are ADDITIVE — they don't replace existing v8.3 types.
-//!   The existing `Node`, `Edge`, `CompositionRef` remain unchanged.
-//! - **Feature-flagged**: This module is only compiled when the `v12` feature is enabled,
-//!   ensuring safe incremental adoption.
+//! - **Unified**: v12.0 types are the ONLY architecture — the old v8.3 types
+//!   (`Node`, `Edge`, `CompositionRef`) are legacy and only kept where still
+//!   referenced by the v12 graph's `HashMap<NodeId, Node>` storage.
+//! - **Always compiled**: The `v12` feature flag exists but is enabled by default.
+//!   This module is always compiled in practice.
 //! - **Non-exhaustive**: Enums that may grow in future versions are marked `#[non_exhaustive]`.
 //! - **Backward-compatible**: `#[serde(default)]` is used where appropriate for
 //!   forward-compatible deserialization.

@@ -9,7 +9,7 @@ import tempfile
 from pathlib import Path
 
 import rsvs
-from rsvs import Rsvs
+from rsvs import PyV12Pipeline
 from rsvs.corpus import (
     DOMAINS, ALL_SENTENCES, get_domain_text, get_all_text, domain_names,
 )
@@ -133,14 +133,14 @@ class TestIngestDomains:
 
     def test_promotes_atoms(self, db):
         ingest_domains(db, ["geology", "water"], verbose=False)
-        r = Rsvs.load(db)
+        r = PyV12Pipeline.load(db)
         atoms = r.atoms()
         assert len(atoms) > 0
 
     def test_different_domains_produce_different_atoms(self, db):
         """Geology and water should produce some domain-specific atoms."""
         ingest_domains(db, ["geology", "water"], verbose=False)
-        r = Rsvs.load(db)
+        r = PyV12Pipeline.load(db)
         atoms = set(r.atoms())
         # At least some domain-specific terms should be promoted
         geo_terms   = {"stone", "rock", "mineral", "granite", "sedimentary"}
@@ -153,18 +153,18 @@ class TestIngestDomains:
     def test_multi_domain_increases_atoms(self, db):
         """More domains → more atoms."""
         ingest_domains(db, ["geology"], verbose=False)
-        r1 = Rsvs.load(db)
+        r1 = PyV12Pipeline.load(db)
         n1 = len(r1.atoms())
 
         ingest_domains(db, ["water"], verbose=False)
-        r2 = Rsvs.load(db)
+        r2 = PyV12Pipeline.load(db)
         n2 = len(r2.atoms())
 
         assert n2 >= n1, f"Adding water domain should not reduce atoms: {n1} vs {n2}"
 
     def test_load_after_ingest_and_query(self, db):
         ingest_domains(db, ["geology", "water"], verbose=False)
-        r = Rsvs.load(db)
+        r = PyV12Pipeline.load(db)
         atoms = r.atoms()
         if atoms:
             # Query should work for any promoted atom
@@ -200,7 +200,7 @@ class TestKnowledgeQuality:
         return db
 
     def test_promoted_meaningful_atoms(self, full_db):
-        r = Rsvs.load(full_db)
+        r = PyV12Pipeline.load(full_db)
         atoms = set(r.atoms())
         # At least some of these should be promoted from 150 sentences
         expected = {"solid", "material", "water", "energy", "rock", "stone"}
@@ -209,7 +209,7 @@ class TestKnowledgeQuality:
 
     def test_geology_water_atoms_distinct(self, full_db):
         """Geology atoms and water atoms should be in the graph separately."""
-        r = Rsvs.load(full_db)
+        r = PyV12Pipeline.load(full_db)
         atoms = set(r.atoms())
         has_geo   = bool(atoms & {"rock", "stone", "mineral", "granite"})
         has_water = bool(atoms & {"water", "liquid", "river"})
@@ -218,14 +218,14 @@ class TestKnowledgeQuality:
 
     def test_solid_appears_across_domains(self, full_db):
         """'solid' appears in geology, water, physics, materials → should be promoted."""
-        r = Rsvs.load(full_db)
+        r = PyV12Pipeline.load(full_db)
         assert "solid" in r.atoms(), \
             "'solid' should be promoted as it appears across many domains"
 
     def test_solid_has_multiple_senses(self, full_db):
         """'solid' in different contexts (rock solid, solid state, solid material)
         should produce multiple senses."""
-        r = Rsvs.load(full_db)
+        r = PyV12Pipeline.load(full_db)
         if "solid" not in r.atoms():
             pytest.skip("solid not promoted")
         senses = r.senses("solid")
@@ -233,7 +233,7 @@ class TestKnowledgeQuality:
 
     def test_cross_domain_similarity_nonzero(self, full_db):
         """Concepts that share atoms across domains should have nonzero similarity."""
-        r = Rsvs.load(full_db)
+        r = PyV12Pipeline.load(full_db)
         atoms = r.atoms()
         # Find two promoted atoms and check similarity
         for a in ["solid", "material", "energy", "water"]:
@@ -247,7 +247,7 @@ class TestKnowledgeQuality:
 
     def test_confidence_increases_with_frequency(self, full_db):
         """Atoms that appear more often should generally have higher confidence."""
-        r = Rsvs.load(full_db)
+        r = PyV12Pipeline.load(full_db)
         cm = r.confidence_map()
         # 'solid' appears in many domains → should have decent confidence
         if "solid" in cm:
@@ -256,7 +256,7 @@ class TestKnowledgeQuality:
 
     def test_warmed_up_after_150_contexts(self, full_db):
         """With n_warm=20, system should be warmed up after 150 contexts."""
-        r = Rsvs.load(full_db)
+        r = PyV12Pipeline.load(full_db)
         assert r.status()["warmed_up"] == 1.0
 
     def test_db_size_reasonable(self, full_db):
@@ -266,7 +266,7 @@ class TestKnowledgeQuality:
             f"Unexpected DB size: {size} bytes"
 
     def test_query_returns_result_for_known_atom(self, full_db):
-        r = Rsvs.load(full_db)
+        r = PyV12Pipeline.load(full_db)
         for atom in ["solid", "material", "water", "energy"]:
             if atom in r.atoms():
                 result = r.query(atom, "hard material solid")

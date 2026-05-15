@@ -1063,7 +1063,7 @@ impl Transform for IngestAtoms {
     fn transform(&self, input: &Self::Input, _ctx: &mut PipelineContext) -> Self::Output {
         // TODO: Full implementation that creates GraphDelta from atoms.
         let mut delta = GraphDelta::new();
-        for atom in input {
+        for _atom in input {
             delta.new_nodes.push(0); // Placeholder node IDs
         }
         delta
@@ -1210,7 +1210,7 @@ impl ErasedTransform for ReExtractFrame {
     fn execute(&self, ctx: &mut PipelineContext, _graph: &mut Graph) -> IngestResult {
         // TODO: Full implementation that re-extracts frames with graph context.
         // For now, just drain the pending re-extractions (no-op).
-        let count = ctx.pending_reextractions.len();
+        let _count = ctx.pending_reextractions.len();
         ctx.pending_reextractions.clear();
 
         IngestResult {

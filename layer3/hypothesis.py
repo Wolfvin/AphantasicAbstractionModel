@@ -55,7 +55,7 @@ from dataclasses import dataclass, field
 from typing import Any, Optional
 
 # Layer 2 & 3 imports
-from layer2.bridge import RsvsBridge, get_bridge
+from layer2.bridge import V12PipelineBridge, get_bridge
 from layer2.predictive import Anomaly, PredictiveEngine
 from layer2.pattern import PatternResult, PatternOutput, ReasoningStep
 from layer3.reasoning import ReasoningEngine, DeductiveChain, DeductiveStep
@@ -354,7 +354,7 @@ class HypothesisDrivenReasoner:
 
     def __init__(
         self,
-        bridge: Optional[RsvsBridge] = None,
+        bridge: Optional[V12PipelineBridge] = None,
         reasoning_engine: Optional[ReasoningEngine] = None,
         predictive_engine: Optional[PredictiveEngine] = None,
         *,

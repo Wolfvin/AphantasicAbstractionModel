@@ -41,12 +41,9 @@ logger = logging.getLogger(__name__)
 # Epistemological seed labels — must match Rust core's SEED_LABEL_LIST
 # ---------------------------------------------------------------------------
 
-SEED_LABELS = [
-    "exists", "entity", "relation", "state", "change", "time", "space",
-    "cause", "effect", "context", "signal", "pattern", "memory",
-    "attention", "value", "agent", "goal", "risk", "trust", "identity",
-    "language", "meaning", "action", "feedback",
-]
+# Must match Rust SeedPrimitive enum variants exactly.
+# Rust: pub enum SeedPrimitive { Trust, Risk, Value, Goal, Identity }
+SEED_LABELS = ["Trust", "Risk", "Value", "Goal", "Identity"]
 
 # ---------------------------------------------------------------------------
 # Try to import the Rust core v12 pipeline
@@ -95,11 +92,14 @@ class _FallbackGraph:
         self._compositions: dict[str, _FallbackComposition] = {}
         self._edges: dict[str, list[str]] = {}
         self._gaps: list[dict] = []
+        self._comp_seed_scores: dict[str, dict] = {}
+        self._next_comp_id: int = 0
 
     def ingest(self, text: str) -> dict:
-        """Ingest text by extracting keywords as nodes."""
+        """Ingest text by extracting keywords as nodes and creating a v12 composition."""
         words = self._extract_keywords(text)
         atoms_promoted = 0
+        edges_created = 0
 
         for word in words:
             if word not in self._nodes:
@@ -121,12 +121,50 @@ class _FallbackGraph:
                         self._edges[word] = []
                     if other not in self._edges[word]:
                         self._edges[word].append(other)
+                        edges_created += 1
+
+        # Create a v12-compatible Composition only when we have keywords
+        compositions_created = 0
+        gaps_detected = 0
+
+        if words:
+            comp_id = f"fallback-comp-{self._next_comp_id}"
+            self._next_comp_id += 1
+
+            # Confidence heuristic: fewer keywords → lower confidence
+            comp_confidence = min(0.6, 0.1 + len(words) * 0.1)
+
+            members = [
+                {
+                    "node_id": word,
+                    "role": "keyword",
+                    "label": word,
+                    "confidence": self._nodes[word]["confidence"],
+                }
+                for word in words
+            ]
+
+            composition = _FallbackComposition(
+                comp_id=comp_id,
+                composition_type="Event",
+                confidence=comp_confidence,
+                members=members,
+                source_text=text,
+                lifecycle="New",
+                epistemic="Observed",
+            )
+            self._compositions[comp_id] = composition
+            self._comp_seed_scores[comp_id] = {}  # placeholder
+            compositions_created = 1
+
+            # Count how many gaps this composition introduces
+            gaps_detected = 1 if comp_confidence < 0.3 else 0
 
         return {
             "atoms_created": atoms_promoted,
-            "compositions_created": 0,
-            "gaps_detected": 0,
-            "edges_created": 0,
+            "compositions_created": compositions_created,
+            "gaps_detected": gaps_detected,
+            "edges_created": edges_created,
             "enrichments_applied": 0,
             "governance_transitions": 0,
             "cognitive_mode": "Reactive",
@@ -138,8 +176,27 @@ class _FallbackGraph:
         return list(self._compositions.values())
 
     def detect_gaps(self) -> list[dict]:
-        """Return detected gaps (empty in fallback)."""
-        return self._gaps
+        """Return detected gaps for low-confidence compositions."""
+        gaps: list[dict] = []
+        for comp in self._compositions.values():
+            if comp.confidence < 0.3:
+                gaps.append({
+                    "gap_id": f"gap-{comp.comp_id}",
+                    "gap_type": "LowConfidence",
+                    "description": (
+                        f"Composition '{comp.comp_id}' has low confidence "
+                        f"({comp.confidence:.2f})"
+                    ),
+                    "confidence": comp.confidence,
+                    "severity": "low",
+                    "missing_role": "unknown",
+                    "source_composition_id": comp.comp_id,
+                })
+        return gaps
+
+    def comp_seed_scores(self, comp_id: str) -> dict:
+        """Return seed_scores dict for a composition (empty dict placeholder)."""
+        return self._comp_seed_scores.get(comp_id, {})
 
     def composition_count(self) -> int:
         return len(self._compositions)
@@ -325,7 +382,7 @@ class V12PipelineBridge:
                     "epistemic": c.epistemic,
                     "confidence": c.confidence,
                     "members": c.members,
-                    "seed_scores": [],
+                    "seed_scores": self._fallback.comp_seed_scores(c.comp_id),
                     "source_text": c.source_text,
                 }
                 for c in self._fallback.compositions()
@@ -591,7 +648,12 @@ class V12PipelineBridge:
 # Backward-compatible aliases
 # ---------------------------------------------------------------------------
 
-# RsvsBridge is now an alias for V12PipelineBridge — the ONLY bridge.
+# Backward-compatible aliases.
+# AbstractionBridge was the v8.3 bridge class — now unified into V12PipelineBridge.
+# RsvsBridge was the v8.3–v11 name — now also unified.
+# Both aliases exist so that existing import statements don't break,
+# but new code should use V12PipelineBridge directly.
+AbstractionBridge = V12PipelineBridge
 RsvsBridge = V12PipelineBridge
 
 

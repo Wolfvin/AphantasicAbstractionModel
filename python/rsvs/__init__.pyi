@@ -74,7 +74,7 @@ class StructuralSimResult:
     layer_b: int
 
     def __repr__(self) -> str: ...
-    def shared_labels(self, rsvs: Rsvs) -> list[tuple[str, int]]: ...
+    def shared_labels(self, rsvs: PyV12Pipeline) -> list[tuple[str, int]]: ...
 
 class SubstitutionResult:
     sense_idx_a: int
@@ -85,7 +85,7 @@ class SubstitutionResult:
     unpaired_only_b: list[tuple[int, int]]
 
     def __repr__(self) -> str: ...
-    def substitution_labels(self, rsvs: Rsvs) -> list[tuple[str, int, str, int]]: ...
+    def substitution_labels(self, rsvs: PyV12Pipeline) -> list[tuple[str, int, str, int]]: ...
 
 class NodeInfo:
     label: str
@@ -146,8 +146,8 @@ class RelateResult:
     structural_relations: list[tuple[int, float]]
 
     def __repr__(self) -> str: ...
-    def node_labels(self, rsvs: Rsvs) -> list[tuple[str, float]]: ...
-    def structural_labels(self, rsvs: Rsvs) -> list[tuple[str, float]]: ...
+    def node_labels(self, rsvs: PyV12Pipeline) -> list[tuple[str, float]]: ...
+    def structural_labels(self, rsvs: PyV12Pipeline) -> list[tuple[str, float]]: ...
 
 class MCTSResult:
     active_sense_idx: int
@@ -196,16 +196,16 @@ class TransformerBridgeConfig:
     def __repr__(self) -> str: ...
 
 # ---------------------------------------------------------------------------
-# Main Rsvs class (PyO3)
+# Main PyV12Pipeline class (PyO3)
 # ---------------------------------------------------------------------------
 
-class Rsvs:
+class PyV12Pipeline:
     """RSVS knowledge system — compositional symbolic engine with structural meaning.
 
     Create a new instance with optional hyperparameters:
 
-        >>> from rsvs import Rsvs
-        >>> r = Rsvs(entity_promote_n=3, theta_assign=0.12, n_warm=20, eta=0.1)
+        >>> from rsvs import PyV12Pipeline
+        >>> r = PyV12Pipeline(entity_promote_n=3, theta_assign=0.12, n_warm=20, eta=0.1)
     """
 
     def __init__(
@@ -277,7 +277,7 @@ class Rsvs:
     # --- Persistence ---
 
     def save(self, path: str) -> None: ...
-    def load(path: str) -> Rsvs: ...
+    def load(path: str) -> PyV12Pipeline: ...
     def snapshot_v1(self) -> str: ...
     def consume_events_v1(self, after_seq: Optional[int] = ..., limit: int = ...) -> str: ...
     def latest_seq_v1(self) -> int: ...
@@ -290,8 +290,11 @@ class Rsvs:
 # Lazy-loaded Python-side utilities
 # ---------------------------------------------------------------------------
 
-def get_rsvs_instance() -> Rsvs: ...
+def get_rsvs_instance() -> PyV12Pipeline: ...
 def run_mode(mode: str, text: str, **kwargs: object) -> dict[str, object]: ...
+
+# Backward-compat alias
+Rsvs = PyV12Pipeline
 
 # ---------------------------------------------------------------------------
 # Corpus data (lazy-loaded)
