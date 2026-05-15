@@ -499,10 +499,24 @@ impl ReasoningRule for PolarityConflictRule {
 /// Input:  SemanticAtom (Event) — read from ctx.current_atoms
 /// Output: Vec<SemanticAtom> (HiddenMeaning) — appended to ctx.current_atoms
 /// ```
-#[derive(Debug, Clone)]
 pub struct ReasonFrame {
     /// The reasoning rules to apply, in order.
     rules: Vec<Box<dyn ReasoningRule>>,
+}
+
+impl std::fmt::Debug for ReasonFrame {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ReasonFrame")
+            .field("rules_count", &self.rules.len())
+            .finish()
+    }
+}
+
+impl Clone for ReasonFrame {
+    fn clone(&self) -> Self {
+        // Rules are stateless deterministic — recreate them with the same default set.
+        Self::new()
+    }
 }
 
 impl Default for ReasonFrame {

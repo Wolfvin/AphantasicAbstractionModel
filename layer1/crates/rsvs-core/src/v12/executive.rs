@@ -497,6 +497,9 @@ impl ExecutiveOrchestrator {
             loops_without_new_evidence: 0,
             goal_met: false,
             goal: ReasoningGoal::UnderstandInput,
+            modified_compositions: Vec::new(),
+            evidence_count: 0,
+            evidence_at_loop_start: 0,
         };
 
         let mut modified_compositions = Vec::new();
@@ -671,6 +674,9 @@ mod tests {
             loops_without_new_evidence: 0,
             goal_met: false,
             goal: ReasoningGoal::UnderstandInput,
+            modified_compositions: Vec::new(),
+            evidence_count: 0,
+            evidence_at_loop_start: 0,
         };
         assert!(condition.should_stop(&state));
     }
@@ -685,6 +691,9 @@ mod tests {
             loops_without_new_evidence: 0,
             goal_met: true,
             goal: ReasoningGoal::UnderstandInput,
+            modified_compositions: Vec::new(),
+            evidence_count: 0,
+            evidence_at_loop_start: 0,
         };
         assert!(condition.should_stop(&state));
     }
@@ -702,6 +711,9 @@ mod tests {
             loops_without_new_evidence: 2,
             goal_met: false,
             goal: ReasoningGoal::UnderstandInput,
+            modified_compositions: Vec::new(),
+            evidence_count: 0,
+            evidence_at_loop_start: 0,
         };
         assert!(condition.should_stop(&state));
     }

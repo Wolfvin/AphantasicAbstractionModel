@@ -515,7 +515,7 @@ impl ExtractFrame {
 
 /// Implement the `Transform` trait for `ExtractFrame`.
 impl Transform for ExtractFrame {
-    type Input = str;
+    type Input = String;
     type Output = Option<SemanticAtom>;
 
     fn id(&self) -> &'static str {

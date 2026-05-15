@@ -197,7 +197,7 @@ impl Default for AcquisitionStrategy {
 }
 
 /// A question to ask the user (MD-6).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct InquiryQuestion {
     /// Unique question identifier.
     pub question_id: String,

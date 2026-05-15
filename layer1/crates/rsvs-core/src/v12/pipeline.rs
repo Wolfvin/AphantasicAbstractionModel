@@ -45,6 +45,10 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
 use super::types::*;
+use super::extract_frame::ExtractFrame;
+use super::reason_frame::ReasonFrame;
+use super::govern_beliefs::{GovernBeliefs, SeedAnchor};
+use super::acquisition::{DetectGaps, SelectAcquisition};
 use crate::types::NodeId;
 
 // ========================================================================
@@ -584,17 +588,15 @@ pub fn register_default_pipeline(engine: &mut PipelineEngine) {
     );
 
     // 2. ExtractFrame — depends on Tokenize, condition: is_sentence_like.
-    // TODO: Replace with real ExtractFrame when available.
     engine.register(
-        NoOpTransform::new("ExtractFrame"),
+        ExtractFrame::new(),
         vec!["Tokenize".to_string()],
         Some(Box::new(|ctx: &PipelineContext| ctx.is_sentence_like())),
     );
 
     // 3. ReasonFrame — depends on ExtractFrame, condition: has_event_atoms.
-    // TODO: Replace with real ReasonFrame when available.
     engine.register(
-        NoOpTransform::new("ReasonFrame"),
+        ReasonFrame::new(),
         vec!["ExtractFrame".to_string()],
         Some(Box::new(|ctx: &PipelineContext| ctx.has_event_atoms())),
     );
@@ -607,33 +609,29 @@ pub fn register_default_pipeline(engine: &mut PipelineEngine) {
     );
 
     // 5. GovernBeliefs — depends on IngestAtoms, always runs.
-    // TODO: Replace with real GovernBeliefs when available.
     engine.register(
-        NoOpTransform::new("GovernBeliefs"),
+        GovernBeliefs::new(),
         vec!["IngestAtoms".to_string()],
         None,
     );
 
     // 6. SeedAnchor — depends on GovernBeliefs, always runs.
-    // TODO: Replace with real SeedAnchor when available.
     engine.register(
-        NoOpTransform::new("SeedAnchor"),
+        SeedAnchor::new(),
         vec!["GovernBeliefs".to_string()],
         None,
     );
 
     // 7. DetectGaps — depends on SeedAnchor, condition: gap_detection_enabled.
-    // TODO: Replace with real DetectGaps when available.
     engine.register(
-        NoOpTransform::new("DetectGaps"),
+        DetectGaps::new(),
         vec!["SeedAnchor".to_string()],
         Some(Box::new(|ctx: &PipelineContext| ctx.gap_detection_enabled())),
     );
 
     // 8. SelectAcquisition — depends on DetectGaps, condition: has_gaps.
-    // TODO: Replace with real SelectAcquisition when available.
     engine.register(
-        NoOpTransform::new("SelectAcquisition"),
+        SelectAcquisition::new(),
         vec!["DetectGaps".to_string()],
         Some(Box::new(|ctx: &PipelineContext| ctx.has_gaps())),
     );
