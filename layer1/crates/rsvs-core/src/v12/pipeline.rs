@@ -49,6 +49,7 @@ use super::extract_frame::ExtractFrame;
 use super::reason_frame::ReasonFrame;
 use super::govern_beliefs::{GovernBeliefs, SeedAnchor};
 use super::acquisition::{DetectGaps, SelectAcquisition};
+// NodeId is imported from crate::types — not re-exported by super::types.
 use crate::types::NodeId;
 
 // ========================================================================
@@ -672,7 +673,7 @@ pub fn register_default_pipeline(engine: &mut PipelineEngine) {
 /// # Storage Model
 ///
 /// ```text
-/// nodes:         HashMap<NodeId, Node>          — v8.3 nodes (reused)
+/// nodes:         HashMap<NodeId, Node>          — v12.0 nodes (minimal)
 /// compositions:  HashMap<CompositionId, Composition> — v12.0 compositions
 /// edges:         Vec<(CompositionId, NodeId, SemanticEdge)> — v12.0 typed edges
 /// label_to_id:   HashMap<String, NodeId>        — label → NodeId index
@@ -687,8 +688,8 @@ pub fn register_default_pipeline(engine: &mut PipelineEngine) {
 /// they coexist.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Graph {
-    /// Nodes — reused from v8.3 `Node` type.
-    pub nodes: HashMap<NodeId, crate::types::Node>,
+    /// Nodes — v12.0 minimal nodes.
+    pub nodes: HashMap<NodeId, Node>,
 
     /// Compositions — v12.0 structured groupings.
     pub compositions: HashMap<CompositionId, Composition>,
@@ -737,10 +738,7 @@ impl Graph {
         let id = self.next_id;
         self.next_id += 1;
 
-        let mut node = crate::types::Node::default();
-        node.id = id;
-        node.label = label.to_string();
-        node.surface_label = label.to_string();
+        let node = Node::new(id, label);
 
         self.nodes.insert(id, node);
         self.label_to_id.insert(label.to_string(), id);
@@ -759,7 +757,7 @@ impl Graph {
     }
 
     /// Get a node by its ID.
-    pub fn get_node(&self, id: NodeId) -> Option<&crate::types::Node> {
+    pub fn get_node(&self, id: NodeId) -> Option<&Node> {
         self.nodes.get(&id)
     }
 

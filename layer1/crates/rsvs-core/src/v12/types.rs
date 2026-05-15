@@ -35,6 +35,63 @@ use std::collections::{HashMap, HashSet};
 use crate::types::{EdgeSource, HiddenMeaningType, NodeId, RelationType};
 
 // ========================================================================
+// v12.0 Node — Minimal Graph Node
+// ========================================================================
+
+/// Minimal node in the v12.0 graph.
+///
+/// Unlike the v8.3 `crate::types::Node` which carries 25+ fields accumulated
+/// over versions 6–11, this struct contains only the fields actually used by
+/// the v12.0 pipeline. All semantic structure is now expressed through
+/// `Composition`s and `SemanticEdge`s, not through node fields.
+///
+/// # Fields actually used by v12
+///
+/// - `id` — unique identifier
+/// - `label` — canonical label (used by `Graph::node_label()`)
+/// - `surface_label` — display form (set by `Graph::ensure_node()`)
+/// - `lifecycle` — structural maturity (replaces v8.3 `NodeStatus` + `Tier`)
+/// - `confidence` — overall confidence score
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Node {
+    /// Unique integer ID.
+    pub id: NodeId,
+    /// Canonical label (e.g., "raja").
+    pub label: String,
+    /// Display-only surface form (e.g., "raja", "dog").
+    pub surface_label: String,
+    /// Structural lifecycle state (v12.0 replaces NodeStatus + Tier).
+    pub lifecycle: LifecycleState,
+    /// Confidence score (0.0–1.0).
+    pub confidence: f32,
+}
+
+impl Default for Node {
+    fn default() -> Self {
+        Self {
+            id: 0,
+            label: String::new(),
+            surface_label: String::new(),
+            lifecycle: LifecycleState::New,
+            confidence: 0.0,
+        }
+    }
+}
+
+impl Node {
+    /// Create a new node with the given ID and label.
+    pub fn new(id: NodeId, label: &str) -> Self {
+        Self {
+            id,
+            label: label.to_string(),
+            surface_label: label.to_string(),
+            lifecycle: LifecycleState::New,
+            confidence: 0.0,
+        }
+    }
+}
+
+// ========================================================================
 // Abstraction 1: SemanticAtom — Unified Ingest Primitive
 // ========================================================================
 

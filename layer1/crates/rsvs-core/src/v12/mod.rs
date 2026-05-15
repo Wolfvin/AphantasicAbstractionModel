@@ -53,6 +53,8 @@ pub mod types;
 // Re-export key types for convenience.
 // Users can import from `rsvs::v12::SemanticAtom` instead of `rsvs::v12::types::SemanticAtom`.
 pub use types::{
+    // --- v12.0 Node ---
+    Node,
     // --- Abstraction 1: SemanticAtom ---
     SemanticAtom, AtomType, Polarity, Voice, AtomVariant, FrameSource, PatternCategory,
     AcquisitionSource,
