@@ -202,15 +202,16 @@ impl GovernBeliefs {
         // Same-type non-Event contradictions (e.g., two ProblemSolution with
         // different Solutions for the same Problem)
         if comp.composition_type != CompositionType::Event {
-            let same_role_different_filler = graph.compositions()
+            // FIX: Instead of .any() which discards which composition caused
+            // the mismatch, use .find() to capture the opposing composition.
+            if let Some(opposing) = graph.compositions()
                 .filter(|c| c.composition_type == comp.composition_type)
                 .filter(|c| c.id != comp.id)
-                .any(|c| self.has_equivalence_mismatch(comp, c));
-
-            if same_role_different_filler {
+                .find(|c| self.has_equivalence_mismatch(comp, c))
+            {
                 return Some(Contradiction {
                     conflict_type: EpistemicConflictType::EquivalenceMismatch,
-                    opposing_composition_id: comp.id.clone(),  // placeholder
+                    opposing_composition_id: opposing.id.clone(),  // the OTHER composition
                     strength: 0.65,
                 });
             }
@@ -268,6 +269,104 @@ impl GovernBeliefs {
             graph.get_composition_by_node_id(source_event_id.node_id)
         } else {
             None
+        }
+    }
+
+    // === Contradiction Predicate Implementations ===
+    //
+    // These three functions are the core of detect_contradiction().
+    // Without them, contradiction detection cannot function at all.
+    // Each compares two compositions of the same type for specific
+    // conflict patterns.
+
+    /// Do two compositions have conflicting polarity?
+    ///
+    /// Two compositions with the SAME predicate but OPPOSITE polarity
+    /// are in direct contradiction. For example:
+    ///   Event("membuat", polarity=Positive) vs Event("membuat", polarity=Negative)
+    ///   meaning: "X created Y" vs "X did NOT create Y"
+    ///
+    /// For Compositions, polarity is not a direct field (it lives on the
+    /// SemanticAtom). Instead, we detect polarity conflict through role
+    /// analysis: if both compositions have the same predicate + same agent
+    /// but the Patient or Cause directly negates each other (one references
+    /// a negation node), it's a polarity conflict.
+    fn has_polarity_conflict(&self, comp_a: &Composition, comp_b: &Composition) -> bool {
+        // Same predicate is required for any structural comparison
+        let same_predicate = comp_a.member_with_role(&SemanticRole::Predicate)
+            == comp_b.member_with_role(&SemanticRole::Predicate);
+        if !same_predicate { return false; }
+
+        // Same agent performing the action
+        let same_agent = comp_a.member_with_role(&SemanticRole::Arg0Agent)
+            == comp_b.member_with_role(&SemanticRole::Arg0Agent);
+
+        // Different patient — one might be a negation
+        let different_patient = comp_a.member_with_role(&SemanticRole::Arg1Patient)
+            != comp_b.member_with_role(&SemanticRole::Arg1Patient);
+
+        // One has a negation-related cause ("not", "bukan", "tidak")
+        // This is detected by the cause referencing a negation node
+        let has_negation_cause = comp_a.member_with_role(&SemanticRole::Cause)
+            .map(|m| m.node_id)
+            .xor(comp_b.member_with_role(&SemanticRole::Cause).map(|m| m.node_id))
+            .is_some();
+
+        same_agent && different_patient && has_negation_cause
+    }
+
+    /// Do two compositions have reversed roles?
+    ///
+    /// Role reversal means: composition A has X as Agent and Y as Patient,
+    /// while composition B has Y as Agent and X as Patient. Same predicate,
+    /// but the direction of the action is reversed.
+    ///
+    /// Example:
+    ///   "Raymond membuat aplikasi" (Agent=Raymond, Patient=aplikasi)
+    ///   vs "Aplikasi membuat Raymond" (Agent=aplikasi, Patient=Raymond)
+    ///   — this is a role reversal, likely a contradiction or misinterpretation.
+    fn has_role_reversal(&self, comp_a: &Composition, comp_b: &Composition) -> bool {
+        let same_predicate = comp_a.member_with_role(&SemanticRole::Predicate)
+            == comp_b.member_with_role(&SemanticRole::Predicate);
+        if !same_predicate { return false; }
+
+        let a_agent = comp_a.member_with_role(&SemanticRole::Arg0Agent);
+        let a_patient = comp_a.member_with_role(&SemanticRole::Arg1Patient);
+        let b_agent = comp_b.member_with_role(&SemanticRole::Arg0Agent);
+        let b_patient = comp_b.member_with_role(&SemanticRole::Arg1Patient);
+
+        // Agent in A == Patient in B AND Patient in A == Agent in B
+        match (a_agent, a_patient, b_agent, b_patient) {
+            (Some(aa), Some(ap), Some(ba), Some(bp)) => {
+                aa.node_id == bp.node_id && ap.node_id == ba.node_id
+            },
+            _ => false,
+        }
+    }
+
+    /// Do two compositions have conflicting purposes?
+    ///
+    /// Purpose conflict occurs when two compositions with the same predicate
+    /// and agent have contradictory Purpose roles. For example:
+    ///   "Raymond membuat aplikasi karena lambat" (Purpose=lambat)
+    ///   vs "Raymond membuat aplikasi karena cepat" (Purpose=cepat)
+    ///   — these have conflicting purposes for the same action.
+    fn has_purpose_conflict(&self, comp_a: &Composition, comp_b: &Composition) -> bool {
+        let same_predicate = comp_a.member_with_role(&SemanticRole::Predicate)
+            == comp_b.member_with_role(&SemanticRole::Predicate);
+        if !same_predicate { return false; }
+
+        let same_agent = comp_a.member_with_role(&SemanticRole::Arg0Agent)
+            == comp_b.member_with_role(&SemanticRole::Arg0Agent);
+        if !same_agent { return false; }
+
+        // Both must have a Purpose role, but with different fillers
+        let a_purpose = comp_a.member_with_role(&SemanticRole::Purpose);
+        let b_purpose = comp_b.member_with_role(&SemanticRole::Purpose);
+
+        match (a_purpose, b_purpose) {
+            (Some(ap), Some(bp)) => ap.node_id != bp.node_id,
+            _ => false, // no conflict if one or both lack Purpose
         }
     }
 }

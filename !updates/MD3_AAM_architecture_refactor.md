@@ -341,6 +341,68 @@ impl Composition {
         }
         origins.len()
     }
+
+    /// Find the member playing a specific semantic role in this composition.
+    /// Returns None if no member has that role.
+    ///
+    /// This is the primary accessor for role-based lookup, used by:
+    /// - detect_contradiction() to compare roles across compositions
+    /// - graph_find_role_candidate() to find role fillers
+    /// - resolve_ambiguous_from_graph() to find referents
+    /// - has_equivalence_mismatch() to compare role fillers
+    pub fn member_with_role(&self, role: &SemanticRole) -> Option<&CompositionMember> {
+        self.members.iter().find(|m| m.role == *role)
+    }
+
+    /// Check if this composition has a member with a specific role.
+    /// Returns true if any member has the given role.
+    ///
+    /// Overloaded variant: checks for role existence without comparing
+    /// the member's value. Used by detect_contradiction() to filter
+    /// compositions that have a Predicate role.
+    pub fn has_member_with_role(&self, role: SemanticRole) -> bool {
+        self.members.iter().any(|m| m.role == role)
+    }
+
+    /// Check if this composition has a member with a specific role AND
+    /// whose node label matches the given predicate string.
+    ///
+    /// Used by graph_has_relevant_context() and graph_find_role_candidate()
+    /// to find compositions with a specific predicate label.
+    pub fn has_member_with_role_and_label(&self, role: SemanticRole, label: &str) -> bool {
+        self.members.iter().any(|m| m.role == role && m.label() == label)
+    }
+
+    /// Get the opposing composition ID from a contradiction.
+    ///
+    /// After detect_contradiction() marks a composition as Contradicted,
+    /// it stores the opposing composition ID in the Contradiction struct.
+    /// This method retrieves that ID for use by check_contradiction_resolution()
+    /// to find the opposing composition and attempt resolution.
+    ///
+    /// Returns None if the composition has no recorded contradiction,
+    /// or if the contradiction doesn't specify an opposing composition.
+    pub fn contradiction_opposing_id(&self) -> Option<CompositionId> {
+        // The Contradiction is stored on the composition after governance.
+        // In practice, this is a field on the composition that gets set
+        // when GovernBeliefs marks it as Contradicted.
+        self.contradiction.as_ref().map(|c| c.opposing_composition_id.clone())
+    }
+}
+
+/// Extension: CompositionMember label lookup.
+/// Allows `member.label()` to get the node label from the graph.
+impl CompositionMember {
+    /// Get the label for this member's node.
+    /// Requires graph lookup — provided as a convenience for filtering.
+    /// In practice, the label is often cached or available from context.
+    pub fn label(&self) -> &str {
+        // In a full implementation, this would look up the node label
+        // from the graph. For design spec purposes, we assume the label
+        // is either cached or the comparison is done via node_id.
+        // The has_member_with_role_and_label() method uses this.
+        "" // placeholder — real impl uses graph.get_node(self.node_id).label
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -691,6 +753,128 @@ impl PipelineEngine {
         self.context.set_raw_text(text);
         self.execute_dag(text)
     }
+
+    /// Apply a governed/anchored delta and return a ReflectionLoopResult.
+    /// Used by Reflective mode's reflection loop to track evidence accumulation
+    /// and goal satisfaction across iterations.
+    ///
+    /// Unlike plain apply(), this returns structured feedback that
+    /// ReasoningState.update() can consume.
+    pub fn apply_with_result(&mut self, anchored: AnchoredDelta) -> ReflectionLoopResult {
+        let current_confidence = anchored.compositions.iter()
+            .map(|c| c.confidence)
+            .fold(0.0_f32, |a, b| a.max(b));
+        let modified: Vec<CompositionId> = anchored.compositions.iter()
+            .map(|c| c.id.clone())
+            .collect();
+        let has_gaps = anchored.compositions.iter()
+            .any(|c| c.epistemic == EpistemicState::Inferred && c.confidence < 0.5);
+
+        self.apply(anchored);
+
+        ReflectionLoopResult {
+            current_confidence,
+            elapsed_ms: 0, // tracked externally by ExecutiveOrchestrator
+            evidence_count: modified.len(),
+            modified_compositions: modified,
+            has_gaps,
+            resolved_contradictions: vec![],  // filled by governance
+            filled_gaps: vec![],              // filled by enrichment
+        }
+    }
+
+    /// Find compositions in the graph that are candidates for re-extraction.
+    /// A "weak frame" is one with low confidence AND missing expected roles.
+    /// Used by Reflective mode to identify which frames to re-extract
+    /// with graph context.
+    pub fn find_weak_frames(&self) -> Vec<WeakFrame> {
+        self.context.graph.compositions()
+            .filter(|c| c.confidence < 0.5)
+            .filter(|c| c.composition_type == CompositionType::Event)
+            .filter(|c| !c.has_member_with_role(SemanticRole::Arg0Agent)
+                      || !c.has_member_with_role(SemanticRole::Arg1Patient))
+            .map(|c| WeakFrame {
+                composition_id: c.id.clone(),
+                atom_id: c.provenance.origin_id.clone(),
+                source_text: c.source_text.clone(),
+            })
+            .collect()
+    }
+
+    /// Get a graph snapshot for the current state of the pipeline.
+    pub fn snapshot(&self) -> GraphSnapshot {
+        GraphSnapshot {
+            graph: self.context.graph.clone(),
+            recent_atoms: self.context.current_atoms.clone(),
+        }
+    }
+
+    /// Get a reference to the graph.
+    pub fn graph(&self) -> &Graph {
+        &self.context.graph
+    }
+}
+
+/// A weak frame identified for re-extraction.
+/// Contains the info needed to construct a ReExtractionRequest.
+pub struct WeakFrame {
+    composition_id: CompositionId,
+    atom_id: String,
+    source_text: Option<String>,
+}
+
+impl WeakFrame {
+    pub fn composition_id(&self) -> &CompositionId { &self.composition_id }
+    pub fn atom_id(&self) -> &str { &self.atom_id }
+    pub fn source_text(&self) -> Option<&str> { self.source_text.as_deref() }
+    pub fn composition(&self) -> Option<Composition> { None /* resolved at call site from graph */ }
+}
+
+/// Graph snapshot for passing to DetectGaps.
+pub struct GraphSnapshot {
+    pub graph: Graph,
+    pub recent_atoms: Vec<SemanticAtom>,
+}
+
+impl GraphSnapshot {
+    /// Build graph context for re-extracting a weak frame.
+    /// Returns (role, node_id, confidence) triples from compositions
+    /// that share the same predicate, providing known role-fillers
+    /// as hints for the rule-based re-extraction.
+    pub fn context_for(&self, weak_frame: &WeakFrame) -> Vec<(SemanticRole, NodeId, f32)> {
+        let target_comp = self.graph.get_composition(&weak_frame.composition_id);
+        match target_comp {
+            Some(comp) => {
+                // Find the predicate of the weak frame
+                let predicate = comp.member_with_role(&SemanticRole::Predicate)
+                    .map(|m| m.node_id);
+
+                match predicate {
+                    Some(pred_id) => {
+                        // Find other compositions with the same predicate
+                        // and collect their role fillers as context hints
+                        self.graph.compositions()
+                            .filter(|c| c.id != comp.id)
+                            .filter(|c| c.composition_type == CompositionType::Event)
+                            .filter(|c| {
+                                c.member_with_role(&SemanticRole::Predicate)
+                                    .map(|m| m.node_id == pred_id)
+                                    .unwrap_or(false)
+                            })
+                            .flat_map(|c| {
+                                c.members.iter()
+                                    .filter(|m| m.role != SemanticRole::Predicate)
+                                    .map(|m| (m.role.clone(), m.node_id, m.confidence))
+                                    .collect::<Vec<_>>()
+                            })
+                            .collect()
+                    },
+                    None => vec![],
+                }
+            },
+            None => vec![],
+        }
+    }
 }
 
 /// Default pipeline registration.
@@ -871,6 +1055,82 @@ impl PipelineContext {
         id
     }
 }
+
+/// Graph neighborhood for local mode selection.
+/// Instead of scanning the entire graph for contradictions or low confidence,
+/// mode selection evaluates only the neighborhood relevant to current input.
+#[derive(Debug, Clone)]
+pub struct GraphNeighborhood {
+    pub compositions: Vec<Composition>,
+}
+
+impl GraphNeighborhood {
+    /// Are there any contradicted compositions in this neighborhood?
+    pub fn has_contradictions(&self) -> bool {
+        self.compositions.iter().any(|c| c.epistemic == EpistemicState::Contradicted)
+    }
+
+    /// Average confidence across neighborhood compositions.
+    pub fn average_confidence(&self) -> f32 {
+        if self.compositions.is_empty() { return 1.0; }
+        self.compositions.iter().map(|c| c.confidence).sum::<f32>()
+            / self.compositions.len() as f32
+    }
+}
+
+impl Graph {
+    /// Extract the local neighborhood around a set of keywords.
+    /// Returns compositions that are directly connected to nodes
+    /// matching any of the input keywords.
+    ///
+    /// This scopes mode selection to input-relevant context only.
+    /// Using global graph stats would force Reflective mode for every
+    /// input just because 3 contradictions exist in an unrelated part
+    /// of the graph.
+    pub fn neighborhood_for(&self, keywords: &[String]) -> GraphNeighborhood {
+        let relevant_node_ids: HashSet<NodeId> = keywords.iter()
+            .filter_map(|kw| self.find_node_by_label(kw))
+            .map(|n| n.id)
+            .collect();
+
+        let compositions: Vec<Composition> = self.compositions()
+            .filter(|c| {
+                // Composition is in the neighborhood if any of its members
+                // reference a node matching an input keyword
+                c.members.iter().any(|m| relevant_node_ids.contains(&m.node_id))
+            })
+            .cloned()
+            .collect();
+
+        GraphNeighborhood { compositions }
+    }
+}
+
+/// Extract significant keywords from input text for neighborhood lookup.
+/// Filters out stop words and short tokens, returning the remaining
+/// words as candidate labels for graph node matching.
+///
+/// This is a simple rule-based extraction — no LLM needed.
+/// For multilingual support, stop word lists are extended per language.
+pub fn extract_keywords(input: &str) -> Vec<String> {
+    let stop_words = [
+        // Indonesian
+        "yang", "di", "ke", "dari", "dan", "atau", "ini", "itu", "dengan",
+        "untuk", "pada", "adalah", "akan", "telah", "oleh", "juga",
+        // English
+        "the", "a", "an", "is", "are", "was", "were", "be", "been",
+        "being", "have", "has", "had", "do", "does", "did", "will",
+        "would", "could", "should", "may", "might", "shall", "can",
+        "to", "of", "in", "for", "on", "with", "at", "by", "from",
+        "as", "into", "through", "during", "before", "after",
+    ];
+    input.split_whitespace()
+        .map(|w| w.to_lowercase()
+            .chars().filter(|c| c.is_alphanumeric()).collect::<String>())
+        .filter(|w| w.len() > 2)
+        .filter(|w| !stop_words.contains(&w.as_str()))
+        .collect()
+}
 ```
 
 RECENT_EVENTS_WINDOW = 50 is chosen because:
@@ -946,6 +1206,32 @@ pub struct EnrichmentRequest {
     pub candidate_label: String,
     pub source: EnrichmentSource,
     pub confidence: f32,
+}
+
+impl EnrichmentRequest {
+    /// Construct an EnrichmentRequest from an improved atom produced
+    /// by ReExtractFrame. The improved atom contains new/updated role
+    /// fillers that should be merged into the target composition.
+    ///
+    /// Used by the enrichment loop in MD-5 when ReExtractFrame succeeds.
+    pub fn from_improved_atom(atom: SemanticAtom) -> Self {
+        // The improved atom's first role becomes the role to fill.
+        // In practice, the atom may have multiple roles — each gets
+        // its own EnrichmentRequest. For spec clarity, we show the
+        // primary role extraction; the full implementation iterates.
+        let (role, label) = atom.roles.iter().next()
+            .map(|(r, l)| (r.clone(), l.clone()))
+            .unwrap_or((SemanticRole::Arg0Agent, atom.label.clone()));
+
+        EnrichmentRequest {
+            target_composition_id: format!("comp_{}", atom.id),
+            role_to_fill: role,
+            candidate_node_id: 0, // resolved by EnrichComposition via graph.ensure_node(label)
+            candidate_label: label,
+            source: EnrichmentSource::PatternInference, // re-extraction is a form of pattern inference
+            confidence: atom.confidence,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

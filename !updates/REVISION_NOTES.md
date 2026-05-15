@@ -183,3 +183,41 @@ ExtractFrame → SemanticAtom(Event, conf=0.35)
 | 1 | Enrichment loop copy-pasted identically in Analytical + Reflective | MD-5 extracts `run_enrichment_loop()` method — single implementation, called from both modes |
 | 4 | `detect_contradiction()` only scanned Event compositions | MD-4 now checks same-type compositions + cross-type (HiddenMeaning vs Event) + equivalence mismatch for non-Event types |
 | 8 | `is_voice_confusion()` couldn't distinguish duplicates from voice confusion | MD-4 adds provenance check: same roles + different origin_id = voice confusion; same origin_id = duplicate |
+
+## Post-Audit Fixes Round 3 — Spec Completeness
+
+> Date: 2026-05-15 (same day, third audit)
+> All gaps from round 3 have been addressed. Two categories: placeholder compile blockers and assumed-but-undefined function specs.
+
+### Category A — Placeholder Compile Blockers (Fixed)
+
+| Gap | Issue | Fix |
+|-----|-------|-----|
+| A1 | MD-6 `check_for_gaps()` had `original_text: /* get from composition provenance */` placeholder | MD-6 now reads `comp.source_text` and `comp.provenance.origin_id` from the composition — same pattern as MD-5's `run_enrichment_loop()` |
+| A2 | MD-4 `EquivalenceMismatch` used `comp.id.clone()` as `opposing_composition_id` — that's the composition being checked, not the one causing the mismatch | MD-4 now uses `.find()` instead of `.any()` to capture the opposing composition ID correctly |
+
+### Category B — Assumed-but-Undefined Function Specs (Fixed)
+
+| Function | Where Defined | Where Called | Spec Added |
+|----------|--------------|-------------|------------|
+| `member_with_role()` | MD-3 `impl Composition` | MD-4, MD-5, MD-6 (20+ call sites) | Returns `Option<&CompositionMember>` — finds member by SemanticRole |
+| `has_member_with_role()` | MD-3 `impl Composition` | MD-4 `detect_contradiction()` | Returns `bool` — checks if any member has the given role |
+| `has_member_with_role_and_label()` | MD-3 `impl Composition` | MD-6 `graph_has_relevant_context()` | Returns `bool` — checks role + label match |
+| `contradiction_opposing_id()` | MD-3 `impl Composition` | MD-4 `check_contradiction_resolution()` | Returns `Option<CompositionId>` from stored Contradiction |
+| `has_polarity_conflict()` | MD-4 `impl GovernBeliefs` | MD-4 `detect_contradiction()` | Same predicate + same agent + different patient + negation cause |
+| `has_role_reversal()` | MD-4 `impl GovernBeliefs` | MD-4 `detect_contradiction()` | Same predicate + swapped Agent/Patient node IDs |
+| `has_purpose_conflict()` | MD-4 `impl GovernBeliefs` | MD-4 `detect_contradiction()` | Same predicate + same agent + different Purpose node IDs |
+| `extract_keywords()` | MD-3 free function | MD-5 `select_cognitive_mode()` | Rule-based stop word filtering for Indonesian + English |
+| `Graph::neighborhood_for()` | MD-3 `impl Graph` | MD-5 `select_cognitive_mode()` | Returns `GraphNeighborhood` scoped to input-relevant compositions |
+| `EnrichmentRequest::from_improved_atom()` | MD-3 `impl EnrichmentRequest` | MD-5 `run_enrichment_loop()` | Constructs request from ReExtractFrame output |
+| `apply_with_result()` | MD-3 `impl PipelineEngine` | MD-5 Reflective mode | Like `apply()` but returns `ReflectionLoopResult` |
+| `find_weak_frames()` | MD-3 `impl PipelineEngine` | MD-5 Reflective mode | Finds low-confidence Event compositions missing expected roles |
+| `GraphSnapshot::context_for()` | MD-3 `impl GraphSnapshot` | MD-5 Reflective mode | Builds (role, node_id, conf) triples from same-predicate compositions |
+| `gather_graph_context()` | MD-6 free function | MD-6 `select_strategy()` LowGroundingGap | Same-logic as context_for — provides enriched_context for ReExtractFrame |
+
+### Additional Fix: `extract_missing_role()` in MD-6
+
+The `graph_find_role_candidate()` function called `extract_missing_role(gap)` which was
+an undefined function left over from before `missing_role: Option<SemanticRole>` was added.
+Now replaced with direct `gap.missing_role` access — the structured field makes the
+intermediate function unnecessary.

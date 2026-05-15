@@ -479,8 +479,11 @@ impl SelectAcquisition {
 /// find which node most often appears as Arg0Agent in Event compositions
 /// where the Predicate is "membuat".
 fn graph_find_role_candidate(graph: &Graph, gap: &KnowledgeGap) -> Option<RoleCandidate> {
-    // 1. Determine which role is missing
-    let missing_role = extract_missing_role(gap);
+    // 1. Determine which role is missing (from structured field, not string parsing)
+    let missing_role = match &gap.missing_role {
+        Some(role) => role.clone(),
+        None => return None,  // no structured role — cannot query graph
+    };
 
     // 2. Find compositions with the same predicate
     let predicate = extract_predicate_from_gap(gap);
@@ -703,6 +706,49 @@ fn extract_predicate_from_gap(gap: &KnowledgeGap) -> Option<String> {
         }
     }
     None
+}
+
+/// Gather graph context for a LowGroundingGap's composition.
+/// Returns (role, node_id, confidence) triples from the graph,
+/// providing known role-fillers as hints for re-extraction.
+///
+/// This is the concrete implementation that SelectAcquisition's
+/// LowGroundingGap strategy calls when producing a
+/// RecallAction::ReExtractFrame with enriched_context.
+pub fn gather_graph_context(graph: &Graph, gap: &KnowledgeGap) -> Vec<(SemanticRole, NodeId, f32)> {
+    let comp_id = match &gap.source_composition_id {
+        Some(id) => id,
+        None => return vec![],
+    };
+
+    let comp = match graph.get_composition(comp_id) {
+        Some(c) => c,
+        None => return vec![],
+    };
+
+    // Find the predicate of the target composition
+    let predicate = match comp.member_with_role(&SemanticRole::Predicate) {
+        Some(m) => m,
+        None => return vec![],
+    };
+
+    // Find other compositions with the same predicate and collect their
+    // role fillers as context hints for re-extraction
+    graph.compositions()
+        .filter(|c| c.id != comp.id)
+        .filter(|c| c.composition_type == comp.composition_type)
+        .filter(|c| {
+            c.member_with_role(&SemanticRole::Predicate)
+                .map(|m| m.node_id == predicate.node_id)
+                .unwrap_or(false)
+        })
+        .flat_map(|c| {
+            c.members.iter()
+                .filter(|m| m.role != SemanticRole::Predicate)
+                .map(|m| (m.role.clone(), m.node_id, m.confidence))
+                .collect::<Vec<_>>()
+        })
+        .collect()
 }
 ```
 
@@ -1029,9 +1075,16 @@ fn check_for_gaps(&self, engine: &mut PipelineEngine) -> Option<GapResolutionRes
             },
             Some(RecallAction::ReExtractFrame { target_composition_id, enriched_context }) => {
                 // Closed loop: re-extract with graph context
+                // Get source_text and origin_id from the composition (now available via MD-3)
+                let comp = graph.get_composition(target_composition_id);
+                let source_text = comp.and_then(|c| c.source_text.clone())
+                    .unwrap_or_default();
+                let atom_id = comp.map(|c| c.provenance.origin_id.clone())
+                    .unwrap_or_default();
+
                 let request = ReExtractionRequest {
-                    original_text: /* get from composition provenance */,
-                    original_atom_id: /* get from composition */,
+                    original_text: source_text,
+                    original_atom_id: atom_id,
                     target_composition_id: target_composition_id.clone(),
                     graph_context: enriched_context.clone(),
                 };
