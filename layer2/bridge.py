@@ -281,8 +281,13 @@ class V12PipelineBridge:
     # Core: ingest
     # ------------------------------------------------------------------
 
-    def ingest(self, text: str) -> dict:
+    def ingest(self, text: str, source_provenance: Optional[str] = None) -> dict:
         """Ingest text through the v12 DAG pipeline.
+
+        Args:
+            text: The text to ingest.
+            source_provenance: Optional provenance tag (e.g. "user", "recall").
+                In v12, this is logged but does not change pipeline behavior.
 
         Returns a dict with summary statistics including:
         - atoms_created: Number of new atoms created
@@ -642,6 +647,173 @@ class V12PipelineBridge:
         """Return confidence scores for all compositions."""
         comps = self.compositions()
         return {c["id"]: c.get("confidence", 0.5) for c in comps}
+
+    # ------------------------------------------------------------------
+    # Layer2 compatibility methods (for context, situation, predictive, pattern)
+    # ------------------------------------------------------------------
+
+    def appraise(self, text: str) -> dict:
+        """Appraise text — evaluate confidence and quality.
+
+        In v12, this delegates to ingest() and returns a quality
+        assessment of the result. Used by context.py and predictive.py.
+        """
+        result = self.ingest(text)
+        comps_count = self.composition_count()
+        avg_conf = 0.0
+        if comps_count > 0:
+            cmap = self.confidence_map()
+            avg_conf = sum(cmap.values()) / len(cmap) if cmap else 0.0
+
+        return {
+            "confidence": avg_conf,
+            "quality": "high" if avg_conf > 0.7 else "moderate" if avg_conf > 0.4 else "low",
+            "n_compositions": comps_count,
+            "n_gaps": len(self.detect_gaps()),
+            "positive": avg_conf >= 0.4,
+        }
+
+    def relate(self, concept: str) -> list[str]:
+        """Find concepts related to the given concept.
+
+        In v12, this uses composition membership and edge traversal
+        to find related nodes. Returns a list of related node labels.
+        """
+        related = set()
+        comps = self.compositions()
+        concept_lower = concept.lower()
+
+        for comp in comps:
+            members = comp.get("members", [])
+            labels_in_comp = [m.get("label", "").lower() for m in members]
+            if concept_lower in labels_in_comp:
+                for m in members:
+                    label = m.get("label", "")
+                    if label.lower() != concept_lower and label:
+                        related.add(label)
+
+        # Also check fallback edges if available
+        if self._fallback is not None:
+            edges = self._fallback._edges.get(concept.lower(), [])
+            related.update(e for e in edges if e.lower() != concept_lower)
+
+        return list(related)
+
+    def structural_similarity(self, a: str, b: str) -> float:
+        """Compute structural similarity between two concepts.
+
+        In v12, this uses Jaccard similarity on the neighborhoods
+        of nodes a and b. Returns a float in [0, 1].
+        """
+        neighbors_a = set(self.relate(a))
+        neighbors_b = set(self.relate(b))
+        neighbors_a.add(a.lower())
+        neighbors_b.add(b.lower())
+
+        if not neighbors_a and not neighbors_b:
+            return 0.0
+        intersection = neighbors_a & neighbors_b
+        union = neighbors_a | neighbors_b
+        return len(intersection) / len(union) if union else 0.0
+
+    def context_query(self, concept: str, context: str = "") -> Optional[dict]:
+        """Query a concept with optional context.
+
+        Combines relate() and query() for a richer result.
+        Used by predictive.py.
+        """
+        base = self.query(concept, context)
+        if base is None:
+            return None
+        base["related"] = self.relate(concept)
+        base["similarity_to_context"] = (
+            self.structural_similarity(concept, context) if context else 0.0
+        )
+        return base
+
+    def substitution_analysis(self, a: str, b: str) -> dict:
+        """Analyze whether concept a can substitute for concept b.
+
+        In v12, this uses structural similarity and shared composition
+        membership to determine substitutability.
+        """
+        sim = self.structural_similarity(a, b)
+        related_a = set(self.relate(a))
+        related_b = set(self.relate(b))
+        shared = related_a & related_b
+
+        return {
+            "similarity": sim,
+            "shared_contexts": len(shared),
+            "a_unique_contexts": len(related_a - related_b),
+            "b_unique_contexts": len(related_b - related_a),
+            "substitutable": sim > 0.5,
+        }
+
+    def node_info(self, label: str) -> Optional[dict]:
+        """Get information about a specific node.
+
+        Returns a dict with node details, or None if not found.
+        """
+        comps = self.compositions()
+        appearances = []
+        for comp in comps:
+            for m in comp.get("members", []):
+                if m.get("label", "").lower() == label.lower():
+                    appearances.append({
+                        "composition_id": comp["id"],
+                        "composition_type": comp.get("composition_type", "Unknown"),
+                        "role": m.get("role", "Unknown"),
+                        "confidence": m.get("confidence", 0.5),
+                    })
+
+        if not appearances:
+            return None
+
+        avg_conf = sum(a["confidence"] for a in appearances) / len(appearances)
+        return {
+            "label": label,
+            "n_appearances": len(appearances),
+            "avg_confidence": avg_conf,
+            "appearances": appearances,
+            "related": self.relate(label),
+        }
+
+    def latest_seq_v1(self) -> int:
+        """Get the latest event sequence number.
+
+        In v12, this returns the composition count as a proxy
+        for sequence tracking. Used by situation.py.
+        """
+        return self.composition_count()
+
+    def consume_events_v1(self, after_seq: int = 0) -> list[dict]:
+        """Consume events since the given sequence number.
+
+        In v12, this returns compositions created after the given
+        sequence. Used by situation.py and predictive.py.
+        """
+        all_comps = self.compositions()
+        # In fallback mode, return all compositions after the given index
+        if after_seq < len(all_comps):
+            return all_comps[after_seq:]
+        return []
+
+    def status(self) -> dict:
+        """Get the current status of the bridge and pipeline.
+
+        Returns a dict with operational status information.
+        Used by situation.py.
+        """
+        return {
+            "available": self.available,
+            "is_rust_core": self.is_rust_core,
+            "n_nodes": self.node_count(),
+            "n_compositions": self.composition_count(),
+            "n_gaps": len(self.detect_gaps()),
+            "gap_detection_enabled": self.gap_detection_enabled(),
+            "mode": "rust_v12" if self.is_rust_core else "fallback",
+        }
 
 
 # ---------------------------------------------------------------------------

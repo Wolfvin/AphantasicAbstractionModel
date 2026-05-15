@@ -1760,4 +1760,330 @@ mod tests {
         assert_eq!(weak.len(), 1);
         assert_eq!(weak[0].composition_id, "comp_weak_1");
     }
+
+    // ====================================================================
+    // New tests for previously-untested transforms
+    // ====================================================================
+
+    #[test]
+    fn test_tokenize_basic() {
+        let tok = Tokenize::new();
+        let mut ctx = PipelineContext::default();
+        ctx.raw_text = Some("karena harga naik".to_string());
+        let mut graph = Graph::new();
+
+        let result = tok.execute(&mut ctx, &mut graph);
+        assert_eq!(result.atoms_created, 3);
+        assert_eq!(ctx.current_atoms.len(), 3);
+        assert_eq!(ctx.current_atoms[0].label, "karena");
+        assert_eq!(ctx.current_atoms[1].label, "harga");
+        assert_eq!(ctx.current_atoms[2].label, "naik");
+        assert_eq!(ctx.current_atoms[0].atom_type, AtomType::Token);
+    }
+
+    #[test]
+    fn test_tokenize_empty() {
+        let tok = Tokenize::new();
+        let mut ctx = PipelineContext::default();
+        ctx.raw_text = Some(String::new());
+        let mut graph = Graph::new();
+
+        let result = tok.execute(&mut ctx, &mut graph);
+        assert_eq!(result.atoms_created, 0);
+        assert!(ctx.current_atoms.is_empty());
+    }
+
+    #[test]
+    fn test_tokenize_none_text() {
+        let tok = Tokenize::new();
+        let mut ctx = PipelineContext::default();
+        ctx.raw_text = None;
+        let mut graph = Graph::new();
+
+        let result = tok.execute(&mut ctx, &mut graph);
+        assert_eq!(result.atoms_created, 0);
+    }
+
+    #[test]
+    fn test_tokenize_lowercase() {
+        let tok = Tokenize::new();
+        let mut ctx = PipelineContext::default();
+        ctx.raw_text = Some("HARGA NAIK".to_string());
+        let mut graph = Graph::new();
+
+        let result = tok.execute(&mut ctx, &mut graph);
+        assert_eq!(result.atoms_created, 2);
+        assert_eq!(ctx.current_atoms[0].label, "harga");
+        assert_eq!(ctx.current_atoms[1].label, "naik");
+    }
+
+    #[test]
+    fn test_ingest_atoms_creates_nodes() {
+        let ingest = IngestAtoms::new();
+        let mut ctx = PipelineContext::default();
+        ctx.raw_text = Some("test text".to_string());
+
+        // Pre-populate atoms from Tokenize
+        let tok = Tokenize::new();
+        let mut graph = Graph::new();
+        tok.execute(&mut ctx, &mut graph);
+
+        let result = ingest.execute(&mut ctx, &mut graph);
+        assert_eq!(result.atoms_created, 2); // "test" and "text"
+        assert!(graph.node_count() >= 2);
+    }
+
+    #[test]
+    fn test_ingest_atoms_event_creates_composition() {
+        let ingest = IngestAtoms::new();
+        let mut ctx = PipelineContext::default();
+        ctx.raw_text = Some("dia pergi".to_string());
+
+        // Create an Event atom manually
+        let mut atom = SemanticAtom::default();
+        atom.id = "atom_0".to_string();
+        atom.label = "pergi".to_string();
+        atom.atom_type = AtomType::Event;
+        atom.confidence = 0.8;
+        atom.roles.insert(SemanticRole::Arg0Agent, "dia".to_string());
+        ctx.current_atoms.push(atom);
+
+        let mut graph = Graph::new();
+        let result = ingest.execute(&mut ctx, &mut graph);
+
+        assert!(result.compositions_created >= 1);
+        assert!(result.edges_created >= 1);
+        assert!(graph.composition_count() >= 1);
+    }
+
+    #[test]
+    fn test_ingest_atoms_empty() {
+        let ingest = IngestAtoms::new();
+        let mut ctx = PipelineContext::default();
+        let mut graph = Graph::new();
+
+        let result = ingest.execute(&mut ctx, &mut graph);
+        assert_eq!(result.atoms_created, 0);
+        assert_eq!(result.compositions_created, 0);
+    }
+
+    #[test]
+    fn test_enrich_composition_adds_member() {
+        let enrich = EnrichComposition::new();
+        let mut ctx = PipelineContext::default();
+        let mut graph = Graph::new();
+
+        // Create a composition
+        let pred_id = graph.ensure_node("pergi");
+        let comp_id = "comp_test".to_string();
+        let mut comp = Composition::default();
+        comp.id = comp_id.clone();
+        comp.composition_type = CompositionType::Event;
+        comp.confidence = 0.5;
+        comp.members.push(CompositionMember {
+            node_id: pred_id,
+            role: SemanticRole::Predicate,
+            confidence: 0.5,
+            label: "pergi".to_string(),
+        });
+        graph.compositions.insert(comp_id.clone(), comp);
+
+        // Create enrichment request
+        let agent_id = graph.ensure_node("dia");
+        ctx.pending_enrichments.push(EnrichmentRequest {
+            target_composition_id: comp_id.clone(),
+            role_to_fill: SemanticRole::Arg0Agent,
+            candidate_node_id: agent_id,
+            candidate_label: "dia".to_string(),
+            source: EnrichmentSource::PassiveRecall,
+            confidence: 0.7,
+        });
+
+        let result = enrich.execute(&mut ctx, &mut graph);
+
+        // Verify enrichment was applied
+        let enriched = graph.compositions.get(&comp_id).unwrap();
+        assert!(enriched.members.len() >= 2);
+        assert!(result.enrichments_applied >= 1);
+    }
+
+    #[test]
+    fn test_enrich_composition_duplicate_role_rejected() {
+        let enrich = EnrichComposition::new();
+        let mut ctx = PipelineContext::default();
+        let mut graph = Graph::new();
+
+        let pred_id = graph.ensure_node("pergi");
+        let agent_id = graph.ensure_node("dia");
+        let comp_id = "comp_dup".to_string();
+        let mut comp = Composition::default();
+        comp.id = comp_id.clone();
+        comp.composition_type = CompositionType::Event;
+        comp.members.push(CompositionMember {
+            node_id: pred_id,
+            role: SemanticRole::Predicate,
+            confidence: 0.5,
+            label: "pergi".to_string(),
+        });
+        comp.members.push(CompositionMember {
+            node_id: agent_id,
+            role: SemanticRole::Arg0Agent,
+            confidence: 0.7,
+            label: "dia".to_string(),
+        });
+        graph.compositions.insert(comp_id.clone(), comp);
+
+        // Try to add duplicate Agent role
+        let other_id = graph.ensure_node("mereka");
+        ctx.pending_enrichments.push(EnrichmentRequest {
+            target_composition_id: comp_id.clone(),
+            role_to_fill: SemanticRole::Arg0Agent, // duplicate!
+            candidate_node_id: other_id,
+            candidate_label: "mereka".to_string(),
+            source: EnrichmentSource::PassiveRecall,
+            confidence: 0.6,
+        });
+
+        let result = enrich.execute(&mut ctx, &mut graph);
+
+        // Should NOT add duplicate role — enrichments_applied should be 0
+        let enriched = graph.compositions.get(&comp_id).unwrap();
+        let agent_count = enriched.members.iter()
+            .filter(|m| m.role == SemanticRole::Arg0Agent)
+            .count();
+        assert_eq!(agent_count, 1); // Still only 1 Agent
+        assert_eq!(result.enrichments_applied, 0);
+    }
+
+    #[test]
+    fn test_enrich_composition_nonexistent_skipped() {
+        let enrich = EnrichComposition::new();
+        let mut ctx = PipelineContext::default();
+        let mut graph = Graph::new();
+
+        ctx.pending_enrichments.push(EnrichmentRequest {
+            target_composition_id: "nonexistent_comp".to_string(),
+            role_to_fill: SemanticRole::Arg0Agent,
+            candidate_node_id: 0,
+            candidate_label: "test".to_string(),
+            source: EnrichmentSource::PassiveRecall,
+            confidence: 0.7,
+        });
+
+        let result = enrich.execute(&mut ctx, &mut graph);
+        assert_eq!(result.enrichments_applied, 0);
+    }
+
+    #[test]
+    fn test_re_extract_frame_processes_pending() {
+        let re_extract = ReExtractFrame::new();
+        let mut ctx = PipelineContext::default();
+        let mut graph = Graph::new();
+
+        // Create a composition
+        let pred_id = graph.ensure_node("makan");
+        let comp_id = "comp_retest".to_string();
+        let mut comp = Composition::default();
+        comp.id = comp_id.clone();
+        comp.composition_type = CompositionType::Event;
+        comp.confidence = 0.3; // Low confidence — good re-extraction candidate
+        comp.members.push(CompositionMember {
+            node_id: pred_id,
+            role: SemanticRole::Predicate,
+            confidence: 0.3,
+            label: "makan".to_string(),
+        });
+        graph.compositions.insert(comp_id.clone(), comp);
+
+        // Queue a re-extraction request
+        ctx.pending_reextractions.push(ReExtractionRequest {
+            original_text: "kucing makan ikan".to_string(),
+            original_atom_id: String::new(),
+            target_composition_id: comp_id.clone(),
+            graph_context: Vec::new(),
+        });
+
+        let result = re_extract.execute(&mut ctx, &mut graph);
+
+        // Pending reextractions should be consumed
+        assert!(ctx.pending_reextractions.is_empty());
+    }
+
+    #[test]
+    fn test_re_extract_frame_empty_pending() {
+        let re_extract = ReExtractFrame::new();
+        let mut ctx = PipelineContext::default();
+        let mut graph = Graph::new();
+
+        let result = re_extract.execute(&mut ctx, &mut graph);
+        assert_eq!(result.compositions_created, 0);
+        assert_eq!(result.edges_created, 0);
+    }
+
+    #[test]
+    fn test_seed_anchor_adjusts_confidence() {
+        use crate::v12::govern_beliefs::SeedAnchor;
+
+        let anchor = SeedAnchor::new();
+        let mut ctx = PipelineContext::default();
+        let mut graph = Graph::new();
+
+        // Create a composition with seed scores
+        let pred_id = graph.ensure_node("pergi");
+        let comp_id = "comp_anchor".to_string();
+        let mut comp = Composition::default();
+        comp.id = comp_id.clone();
+        comp.composition_type = CompositionType::Event;
+        comp.confidence = 0.5;
+        comp.members.push(CompositionMember {
+            node_id: pred_id,
+            role: SemanticRole::Predicate,
+            confidence: 0.5,
+            label: "pergi".to_string(),
+        });
+        // Add seed scores
+        comp.seed_scores.insert(SeedPrimitive::Trust, 0.8);
+        comp.seed_scores.insert(SeedPrimitive::Risk, 0.2);
+        graph.compositions.insert(comp_id.clone(), comp);
+
+        let result = anchor.execute(&mut ctx, &mut graph);
+
+        // SeedAnchor should have run without error
+        assert!(result.governance_transitions <= 1); // At most 1 lifecycle transition
+    }
+
+    #[test]
+    fn test_seed_anchor_empty_graph() {
+        use crate::v12::govern_beliefs::SeedAnchor;
+
+        let anchor = SeedAnchor::new();
+        let mut ctx = PipelineContext::default();
+        let mut graph = Graph::new();
+
+        let result = anchor.execute(&mut ctx, &mut graph);
+        assert_eq!(result.governance_transitions, 0);
+    }
+
+    #[test]
+    fn test_full_pipeline_ingest() {
+        let mut engine = PipelineEngine::new();
+        register_default_pipeline(&mut engine);
+
+        let result = engine.ingest("karena harga naik, rakyat menderita");
+        assert!(result.atoms_created > 0, "Should create atoms");
+        assert!(result.compositions_created > 0, "Should create compositions");
+    }
+
+    #[test]
+    fn test_full_pipeline_multiple_ingests() {
+        let mut engine = PipelineEngine::new();
+        register_default_pipeline(&mut engine);
+
+        let r1 = engine.ingest("kucing makan ikan");
+        let r2 = engine.ingest("karena hujan, jalan basah");
+
+        assert!(r1.atoms_created > 0);
+        assert!(r2.atoms_created > 0);
+        assert!(engine.graph.node_count() > 3);
+    }
 }
