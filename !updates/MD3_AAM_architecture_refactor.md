@@ -287,6 +287,20 @@ pub struct Composition {
     // Seed alignment scores (Abstraction 6)
     pub seed_scores: HashMap<SeedPrimitive, f32>,
 
+    // Source text — the original raw text that produced this composition.
+    // Needed by ReExtractFrame to re-run extraction with graph context.
+    // None for compositions not derived from text (e.g., Pattern, Hypothesis).
+    pub source_text: Option<String>,
+
+    // Batch tracking — how many ingest batches has this composition survived?
+    // Incremented by GovernBeliefs at each ingest cycle.
+    // Used by promotion criteria: Candidate → Stable requires age ≥ 3 batches.
+    pub batch_seen: usize,
+
+    // Contradiction history — tracks which batches had contradictions involving
+    // this composition. Used by has_recent_contradiction() for promotion gating.
+    pub contradiction_batches: Vec<usize>,
+
     // Metadata
     pub created_at: String,
     pub updated_at: String,
@@ -297,6 +311,36 @@ pub struct CompositionMember {
     pub node_id: NodeId,
     pub role: SemanticRole,
     pub confidence: f32,
+}
+
+impl Composition {
+    /// How many ingest batches has this composition existed for?
+    /// GovernBeliefs increments batch_seen at the end of each ingest cycle.
+    pub fn age_in_batches(&self) -> usize {
+        self.batch_seen
+    }
+
+    /// Was this composition involved in a contradiction within the last N batches?
+    /// Used by can_promote_to_grounded() to deny promotion if recent contradictions exist.
+    pub fn has_recent_contradiction(&self, last_n: usize) -> bool {
+        let threshold = self.batch_seen.saturating_sub(last_n);
+        self.contradiction_batches.iter().any(|&b| b > threshold)
+    }
+
+    /// Count independent provenance sources contributing to this composition.
+    /// A source is "independent" if it has a different EdgeSource origin.
+    /// Two members from FrameCompiler count as 1 source; one from FrameCompiler
+    /// and one from EnrichmentFeedback count as 2 independent sources.
+    pub fn provenance_source_count(&self, graph: &Graph) -> usize {
+        let mut origins: HashSet<EdgeSource> = HashSet::new();
+        origins.insert(self.provenance.origin.clone());
+        for member in &self.members {
+            if let Some(edge) = graph.get_edge(self.id.clone(), member.node_id) {
+                origins.insert(edge.source.clone());
+            }
+        }
+        origins.len()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

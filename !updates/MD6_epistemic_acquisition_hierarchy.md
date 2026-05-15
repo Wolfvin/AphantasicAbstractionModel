@@ -95,6 +95,11 @@ pub struct KnowledgeGap {
     pub source: GapSource,
     pub confidence: f32,
     pub severity: f32,
+    // Structured role reference — replaces fragile string parsing.
+    // Set by detect_atom_gaps() when the gap is about a specific missing role.
+    // Used by graph_has_relevant_context() and graph_find_role_candidate()
+    // instead of parsing description strings.
+    pub missing_role: Option<SemanticRole>,
     // trace back to the composition that needs repair
     pub source_composition_id: Option<CompositionId>,  // NEW: composition that had the gap
     pub source_atom_id: Option<String>,                // NEW: trace to the original atom
@@ -129,6 +134,7 @@ impl DetectGaps {
                         source: GapSource::AtomMissingRole,
                         confidence: 0.9,
                         severity: 0.7,
+                        missing_role: Some(SemanticRole::Arg0Agent),
                         source_composition_id: atom.composition_id.clone(),
                         source_atom_id: Some(atom.id.clone()),
                     });
@@ -142,6 +148,7 @@ impl DetectGaps {
                         source: GapSource::AtomMissingRole,
                         confidence: 0.85,
                         severity: 0.6,
+                        missing_role: Some(SemanticRole::Arg1Patient),
                         source_composition_id: atom.composition_id.clone(),
                         source_atom_id: Some(atom.id.clone()),
                     });
@@ -155,6 +162,7 @@ impl DetectGaps {
                         source: GapSource::CandidateLowConfidence,
                         confidence: 0.8,
                         severity: 0.5,
+                        missing_role: None,  // not about a specific role
                         source_composition_id: atom.composition_id.clone(),
                         source_atom_id: Some(atom.id.clone()),
                         ..Default::default()
@@ -380,11 +388,12 @@ impl SelectAcquisition {
                             mode: AcquisitionMode::PassiveRecall,
                             action: Some(RecallAction::EnrichComposition {
                                 target_composition_id: comp_id.clone(),
-                                role_to_fill: extract_missing_role(gap),
+                                role_to_fill: gap.missing_role.clone()
+                                    .unwrap_or(SemanticRole::Arg0Agent),
                                 candidate_node_id: candidate.node_id,
                             }),
                             reason: format!("Graph node '{}' found as candidate for missing {}",
-                                candidate.label, format!("{:?}", extract_missing_role(gap))),
+                                candidate.label, format!("{:?}", gap.missing_role)),
                             ..Default::default()
                         }
                     } else {
@@ -434,8 +443,8 @@ impl SelectAcquisition {
                         mode: AcquisitionMode::PassiveRecall,
                         action: Some(RecallAction::EnrichComposition {
                             target_composition_id: gap.source_composition_id.clone().unwrap(),
-                            role_to_fill: extract_missing_role(gap),
-                            candidate_node_id: resolve_from_graph(graph, gap),
+                            role_to_fill: gap.missing_role.clone().unwrap_or(SemanticRole::Arg0Agent),
+                            candidate_node_id: resolve_ambiguous_from_graph(graph, gap),
                         }),
                         reason: "Ambiguous reference resolved from graph context".into(),
                         ..Default::default()
@@ -503,6 +512,47 @@ struct RoleCandidate {
     label: String,
     frequency: usize,
 }
+
+/// Resolve an ambiguous reference (pronoun, deictic) from graph context.
+///
+/// Strategy: find the most recently mentioned node that plays the missing role
+/// in nearby compositions. For example, if "dia" appears after "Raymond membuat aplikasi",
+/// the most recent Arg0Agent ("Raymond") is the strongest candidate.
+///
+/// Unlike graph_find_role_candidate (which uses predicate-based frequency),
+/// this function uses recency: the most recent referent wins, because
+/// pronoun resolution is primarily a discourse phenomenon.
+fn resolve_ambiguous_from_graph(graph: &Graph, gap: &KnowledgeGap) -> NodeId {
+    // 1. Get recent compositions (most recent first)
+    let recent: Vec<&Composition> = graph.recent_compositions(5)
+        .collect();
+
+    // 2. Determine which role we're trying to resolve
+    // Ambiguous tokens typically need Arg0Agent, but gap may specify differently
+    let target_role = gap.missing_role.clone()
+        .unwrap_or(SemanticRole::Arg0Agent);
+
+    // 3. Find the most recent composition that has this role filled
+    for comp in &recent {
+        if let Some(member) = comp.member_with_role(&target_role) {
+            return member.node_id;
+        }
+    }
+
+    // 4. Fallback: try any recent agent or patient (most recent wins)
+    for comp in &recent {
+        if let Some(member) = comp.member_with_role(&SemanticRole::Arg0Agent) {
+            return member.node_id;
+        }
+        if let Some(member) = comp.member_with_role(&SemanticRole::Arg1Patient) {
+            return member.node_id;
+        }
+    }
+
+    // 5. No referent found — should not happen because graph_has_relevant_context
+    //    returned true, but return 0 as safe fallback (AskUser will handle it)
+    0
+}
 ```
 
 ---
@@ -521,11 +571,15 @@ pub fn graph_has_relevant_context(graph: &Graph, gap: &KnowledgeGap) -> bool {
     match gap.gap_type {
         KnowledgeGapType::MissingFieldGap => {
             // Missing field: check if graph has nodes that frequently play
-            // the missing role for compositions with the same predicate
-            let missing_role = extract_missing_role_from_description(&gap.description);
+            // the missing role for compositions with the same predicate.
+            // Uses gap.missing_role (structured field) instead of string parsing.
+            let missing_role = match &gap.missing_role {
+                Some(role) => role,
+                None => return false,  // no structured role — can't check graph
+            };
             let predicate = extract_predicate_from_gap(gap);
 
-            if let (Some(role), Some(pred)) = (missing_role, predicate) {
+            if let Some(pred) = predicate {
                 // Find compositions with the same predicate
                 let same_predicate_comps: Vec<&Composition> = graph.compositions()
                     .filter(|c| c.composition_type == CompositionType::Event)
@@ -534,7 +588,7 @@ pub fn graph_has_relevant_context(graph: &Graph, gap: &KnowledgeGap) -> bool {
 
                 // Check if any of them have the missing role filled
                 let has_role_filler = same_predicate_comps.iter()
-                    .any(|c| c.member_with_role(&role).is_some());
+                    .any(|c| c.member_with_role(missing_role).is_some());
 
                 // Also check: is there a node with label matching any token in the gap description?
                 let has_label_match = gap.description.split_whitespace()
@@ -632,27 +686,14 @@ pub fn graph_has_grounding_evidence(graph: &Graph, gap: &KnowledgeGap) -> bool {
     confirming >= 1
 }
 
-/// Helper: extract the missing role from gap description.
-/// Gap descriptions follow a pattern like "Event 'membuat' missing agent (ARG0)"
-fn extract_missing_role_from_description(desc: &str) -> Option<SemanticRole> {
-    let lower = desc.to_lowercase();
-    if lower.contains("agent") || lower.contains("arg0") {
-        Some(SemanticRole::Arg0Agent)
-    } else if lower.contains("patient") || lower.contains("arg1") {
-        Some(SemanticRole::Arg1Patient)
-    } else if lower.contains("recipient") || lower.contains("arg2") {
-        Some(SemanticRole::Arg2Recipient)
-    } else if lower.contains("cause") {
-        Some(SemanticRole::Cause)
-    } else if lower.contains("purpose") {
-        Some(SemanticRole::Purpose)
-    } else {
-        None
-    }
-}
-
 /// Helper: extract predicate from gap description.
 /// Gap descriptions contain the predicate in single quotes: Event 'membuat' ...
+///
+/// NOTE: Role extraction is now done via gap.missing_role (structured field),
+/// NOT by parsing description strings. The old extract_missing_role_from_description()
+/// has been removed — it was fragile and would silently fail if description format
+/// changed. All KnowledgeGap instances now carry missing_role: Option<SemanticRole>
+/// which is set by detect_atom_gaps() at gap creation time.
 fn extract_predicate_from_gap(gap: &KnowledgeGap) -> Option<String> {
     // Parse from description: "Event 'membuat' missing agent (ARG0)"
     let desc = &gap.description;

@@ -149,9 +149,10 @@ pub enum EpistemicConflictType {
 
 impl GovernBeliefs {
     fn detect_contradiction(&self, comp: &Composition, graph: &Graph) -> Option<Contradiction> {
-        // Find compositions with same predicate but conflicting roles
+        // Find compositions with same predicate but conflicting roles.
+        // NOT limited to Events — HiddenMeaning, Pattern, etc. can also contradict.
         let same_predicate: Vec<&Composition> = graph.compositions()
-            .filter(|c| c.composition_type == CompositionType::Event)
+            .filter(|c| c.composition_type == comp.composition_type)  // same type
             .filter(|c| c.has_member_with_role(SemanticRole::Predicate, &comp))
             .collect();
 
@@ -184,7 +185,90 @@ impl GovernBeliefs {
             }
         }
 
+        // Cross-type contradictions: HiddenMeaning vs Event
+        // A HiddenMeaning that contradicts its source Event is a semantic contradiction.
+        if comp.composition_type == CompositionType::HiddenMeaning {
+            if let Some(source_event) = self.find_source_event(comp, graph) {
+                if self.has_hidden_meaning_event_conflict(comp, &source_event) {
+                    return Some(Contradiction {
+                        conflict_type: EpistemicConflictType::SemanticContradiction,
+                        opposing_composition_id: source_event.id.clone(),
+                        strength: 0.75,
+                    });
+                }
+            }
+        }
+
+        // Same-type non-Event contradictions (e.g., two ProblemSolution with
+        // different Solutions for the same Problem)
+        if comp.composition_type != CompositionType::Event {
+            let same_role_different_filler = graph.compositions()
+                .filter(|c| c.composition_type == comp.composition_type)
+                .filter(|c| c.id != comp.id)
+                .any(|c| self.has_equivalence_mismatch(comp, c));
+
+            if same_role_different_filler {
+                return Some(Contradiction {
+                    conflict_type: EpistemicConflictType::EquivalenceMismatch,
+                    opposing_composition_id: comp.id.clone(),  // placeholder
+                    strength: 0.65,
+                });
+            }
+        }
+
         None
+    }
+
+    /// Check if a HiddenMeaning contradicts its source Event.
+    /// Example: Event says "X causes Y" but HiddenMeaning says "Y is solution for X"
+    /// with inverted polarity — these are compatible, not contradictory.
+    /// But if HiddenMeaning says "X is NOT a problem" while Event says "X caused Y"
+    /// with negative polarity, that's a contradiction.
+    fn has_hidden_meaning_event_conflict(&self, hm: &Composition, event: &Composition) -> bool {
+        // HiddenMeaning's Problem should align with Event's cause or patient.
+        // If HiddenMeaning says Problem=X but Event says Cause=Y (X != Y),
+        // and the polarity is the same, it's a mismatch.
+        let hm_problem = hm.member_with_role(&SemanticRole::Problem);
+        let event_cause = event.member_with_role(&SemanticRole::Cause);
+
+        if let (Some(hm_p), Some(ev_c)) = (hm_problem, event_cause) {
+            // If the problem references a different node than the cause,
+            // AND both have same polarity — they're talking about different things,
+            // not contradictory. But if same predicate + different role filler — mismatch.
+            return hm_p.node_id == ev_c.node_id
+                && hm.members.len() > 1 && event.members.len() > 1
+                && self.has_role_reversal(hm, event);
+        }
+        false
+    }
+
+    /// Check if two compositions of the same type have the same roles
+    /// but different fillers — an equivalence mismatch.
+    /// Example: ProblemSolution(Problem=lambat, Solution=aplikasi)
+    /// vs       ProblemSolution(Problem=lambat, Solution=manual)
+    fn has_equivalence_mismatch(&self, comp_a: &Composition, comp_b: &Composition) -> bool {
+        // Same structure, but at least one role has a different filler
+        let same_predicate = comp_a.member_with_role(&SemanticRole::Predicate)
+            == comp_b.member_with_role(&SemanticRole::Predicate);
+
+        if !same_predicate { return false; }
+
+        // Check if Problem or PatternType matches but Solution or other role differs
+        let same_problem = comp_a.member_with_role(&SemanticRole::Problem)
+            == comp_b.member_with_role(&SemanticRole::Problem);
+        let different_solution = comp_a.member_with_role(&SemanticRole::Solution)
+            != comp_b.member_with_role(&SemanticRole::Solution);
+
+        same_problem && different_solution
+    }
+
+    /// Find the source event for a HiddenMeaning composition.
+    fn find_source_event(&self, hm: &Composition, graph: &Graph) -> Option<Composition> {
+        if let Some(source_event_id) = hm.member_with_role(&SemanticRole::SourceEvent) {
+            graph.get_composition_by_node_id(source_event_id.node_id)
+        } else {
+            None
+        }
     }
 }
 ```
@@ -379,9 +463,18 @@ impl GovernBeliefs {
             },
             EpistemicState::Inferred => {
                 // Enrichment with graph context strengthens inference
-                // If confidence rises above threshold, consider Grounded
-                if composition.confidence >= 0.7 {
-                    update.set_epistemic(EpistemicState::Grounded);
+                // BUT: must still pass full promotion criteria (independent sources,
+                // no recent contradiction, seed alignment) — NOT just confidence.
+                // This prevents enrichment from single-source compositions
+                // from auto-grounding without independent verification.
+                match self.can_promote_to_grounded(composition, graph) {
+                    PromotionVerdict::Approved => {
+                        update.set_epistemic(EpistemicState::Grounded);
+                    },
+                    PromotionVerdict::Denied(reason) => {
+                        // Enrichment wasn't enough to ground — stays Inferred
+                        // This is correct: enrichment from 1 source doesn't make it 2
+                    },
                 }
             },
             EpistemicState::Hypothesis => {
@@ -475,7 +568,7 @@ Current State              After Enrichment        Transition
 (Candidate, Inferred)      all roles filled         → (Stable, Inferred)
 (Quarantine, Inferred)     evidence supports        → (Candidate, Inferred)
 (Quarantine, Hypothesis)   evidence supports        → (Candidate, Inferred)
-(Candidate, Inferred)      confidence ≥ 0.7         → (Stable, Grounded)
+(Candidate, Inferred)      can_promote_to_grounded()   → (Candidate, Grounded)
 (Any, Contradicted)        enrichment contradicted   → stays Contradicted
 (Stable, Grounded)         enrichment confirms       → stays (Stable, Grounded)
 ```
@@ -569,19 +662,37 @@ impl GovernBeliefs {
 
     /// Active "Raymond membuat aplikasi" + Passive "Aplikasi dibuat oleh Raymond"
     /// These are NOT contradictions — they're the same event in different voice.
+    ///
+    /// FIX: Same predicate + agent + patient alone is NOT sufficient to detect
+    /// voice confusion — it would also match literal duplicates (same event said
+    /// twice). We must also verify that the two compositions come from DIFFERENT
+    /// extraction sources (one active, one passive provenance), OR that one
+    /// composition's provenance indicates passive extraction.
+    ///
+    /// Without Voice field on Composition, we check provenance:
+    /// - If both came from the same provenance origin_id, it's a DUPLICATE (not voice confusion)
+    /// - If they came from different origin_ids with the same roles, it's likely voice confusion
     fn is_voice_confusion(&self, comp_a: &Composition, comp_b: &Composition) -> bool {
-        // Same predicate, same agent+patient, but one is active and other is passive
-        // This is detectable because:
-        // - comp_a has members {Predicate, Arg0Agent=A, Arg1Patient=B}
-        // - comp_b has members {Predicate, Arg1Patient=B, Arg0Agent=A}
-        // but comp_b's edge has source indicating passive extraction
         let same_predicate = comp_a.member_with_role(&SemanticRole::Predicate)
             == comp_b.member_with_role(&SemanticRole::Predicate);
         let same_agent = comp_a.member_with_role(&SemanticRole::Arg0Agent)
             == comp_b.member_with_role(&SemanticRole::Arg0Agent);
         let same_patient = comp_a.member_with_role(&SemanticRole::Arg1Patient)
             == comp_b.member_with_role(&SemanticRole::Arg1Patient);
-        same_predicate && same_agent && same_patient
+
+        if !(same_predicate && same_agent && same_patient) {
+            return false;
+        }
+
+        // Same structural identity. Now distinguish:
+        // DUPLICATE: same provenance (same extraction of the same sentence)
+        // VOICE CONFUSION: different provenance (two different sentences, same event)
+        let different_origin = comp_a.provenance.origin_id != comp_b.provenance.origin_id;
+        let different_source = comp_a.provenance.origin != comp_b.provenance.origin;
+
+        // Voice confusion requires: same roles BUT from different source sentences.
+        // If they came from the same extraction (same origin_id), it's a duplicate.
+        different_origin || different_source
     }
 
     /// Both compositions are valid but in different contexts (scoped).

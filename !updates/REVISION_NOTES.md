@@ -154,3 +154,32 @@ ExtractFrame → SemanticAtom(Event, conf=0.35)
 | 3 | `Contradicted→Grounded` no mechanism | MD-4 now has `ContradictionResolution` with `ResolutionType` enum and `resolve_contradiction()` |
 | 7 | `KnowledgeGap` missing `source_composition_id` | MD-6 now has `source_composition_id: Option<CompositionId>` + `source_atom_id: Option<String>` |
 | 8 | `AtomType::Token` excluded from gap detection | MD-3 defines `AtomType::AmbiguousToken`; MD-6 now has `AtomType::AmbiguousToken` match arm producing `AmbiguousReferenceGap` or `MissingFieldGap` based on graph context |
+
+## Post-Audit Fixes Round 2 — 9-Gap Resolution
+
+> Date: 2026-05-15 (same day, second audit)
+> All 9 new gaps from fresh audit have been addressed.
+
+### Compile Blockers (Fixed)
+
+| Gap | Issue | Fix |
+|-----|-------|-----|
+| 2 | `original_text` not in Composition — `ReExtractionRequest` had no source | MD-3 adds `source_text: Option<String>` to Composition. MD-5's `run_enrichment_loop()` reads it via `comp.source_text` |
+| 6 | `resolve_from_graph()` undefined in MD-6 | MD-6 now has `resolve_ambiguous_from_graph()` — recency-based pronoun resolution (most recent Arg0Agent/Patient) |
+| 7 | `age_in_batches()`, `has_recent_contradiction()`, `provenance_source_count()` undefined | MD-3 adds `batch_seen: usize` + `contradiction_batches: Vec<usize>` to Composition + `impl Composition` with all 3 methods |
+
+### Correctness Bugs (Fixed)
+
+| Gap | Issue | Fix |
+|-----|-------|-----|
+| 3 | `re_govern_composition()` bypassed `can_promote_to_grounded()` criteria | MD-4 now uses `can_promote_to_grounded()` instead of raw confidence check. Enrichment from 1 source can no longer auto-Ground |
+| 5 | `extract_missing_role_from_description()` parsed role from string — fragile | MD-6 adds `missing_role: Option<SemanticRole>` to KnowledgeGap (structured field). String parser removed. All consumers use `gap.missing_role` |
+| 9 | Mode selection was global (`graph.has_contradictions()`) | MD-5 now uses `graph.neighborhood_for(&input_keywords)` for local scope. Only input-relevant contradictions trigger Reflective mode |
+
+### Medium Severity (Fixed)
+
+| Gap | Issue | Fix |
+|-----|-------|-----|
+| 1 | Enrichment loop copy-pasted identically in Analytical + Reflective | MD-5 extracts `run_enrichment_loop()` method — single implementation, called from both modes |
+| 4 | `detect_contradiction()` only scanned Event compositions | MD-4 now checks same-type compositions + cross-type (HiddenMeaning vs Event) + equivalence mismatch for non-Event types |
+| 8 | `is_voice_confusion()` couldn't distinguish duplicates from voice confusion | MD-4 adds provenance check: same roles + different origin_id = voice confusion; same origin_id = duplicate |

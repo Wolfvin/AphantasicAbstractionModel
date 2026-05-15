@@ -73,17 +73,30 @@ Behavior:
 
 ### Mode Selection
 
+Mode selection is LOCAL to the current input, not global to the entire graph.
+Using global graph state (e.g., `graph.has_contradictions()` across all 10,000
+compositions) would force Reflective mode for every input just because 3
+contradictions exist in an unrelated part of the graph. This wastes budget.
+
+Instead, mode selection evaluates only the graph neighborhood relevant to the
+current input — recent compositions and nodes directly connected to the input text.
+
 ```rust
 pub fn select_cognitive_mode(input: &str, graph: &Graph) -> CognitiveMode {
     let is_sentence = is_sentence_like(input);
-    let has_contradictions = graph.has_contradictions();
-    let avg_confidence = graph.average_confidence();
 
-    if has_contradictions || avg_confidence < 0.4 {
+    // LOCAL scope: only check contradictions and confidence in the
+    // neighborhood relevant to this input, not the entire graph.
+    let input_keywords = extract_keywords(input);
+    let neighborhood = graph.neighborhood_for(&input_keywords);
+    let has_local_contradictions = neighborhood.has_contradictions();
+    let local_avg_confidence = neighborhood.average_confidence();
+
+    if has_local_contradictions || local_avg_confidence < 0.4 {
         return CognitiveMode::Reflective;
     }
 
-    if is_sentence || avg_confidence < 0.8 {
+    if is_sentence || local_avg_confidence < 0.8 {
         return CognitiveMode::Analytical;
     }
 
@@ -507,6 +520,78 @@ pub struct ExecutiveOrchestrator {
 }
 
 impl ExecutiveOrchestrator {
+    /// Shared enrichment loop — used by both Analytical and Reflective modes.
+    /// Extracted to prevent code duplication (was copy-pasted identically twice).
+    ///
+    /// Returns true if any enrichment was applied (for logging/monitoring).
+    fn run_enrichment_loop(
+        &self,
+        engine: &mut PipelineEngine,
+        max_rounds: usize,
+    ) -> bool {
+        let mut enrichment_round = 0;
+        let mut any_enriched = false;
+
+        while enrichment_round < max_rounds {
+            let snapshot = engine.snapshot();
+            let gaps = engine.run::<DetectGaps>(&snapshot);
+            if gaps.is_empty() { break; }
+
+            let decisions = engine.run::<SelectAcquisition>(&gaps);
+            let mut enriched_any = false;
+
+            for decision in &decisions {
+                match &decision.action {
+                    Some(RecallAction::EnrichComposition { target_composition_id, role_to_fill, candidate_node_id }) => {
+                        let request = EnrichmentRequest {
+                            target_composition_id: target_composition_id.clone(),
+                            role_to_fill: role_to_fill.clone(),
+                            candidate_node_id: *candidate_node_id,
+                            candidate_label: engine.graph().node_label(*candidate_node_id).unwrap_or_default(),
+                            source: EnrichmentSource::PassiveRecall,
+                            confidence: 0.7,
+                        };
+                        let delta = engine.run::<EnrichComposition>(&request);
+                        let governed = engine.run::<GovernBeliefs>(&delta);
+                        let anchored = engine.run::<SeedAnchor>(&governed);
+                        engine.apply(anchored);
+                        enriched_any = true;
+                    },
+                    Some(RecallAction::ReExtractFrame { target_composition_id, enriched_context }) => {
+                        // Get source_text from the composition (now available via MD-3)
+                        let comp = engine.graph().get_composition(target_composition_id);
+                        let source_text = comp.and_then(|c| c.source_text.clone())
+                            .unwrap_or_default();
+                        let atom_id = comp.map(|c| c.provenance.origin_id.clone())
+                            .unwrap_or_default();
+
+                        let request = ReExtractionRequest {
+                            original_text: source_text,
+                            original_atom_id: atom_id,
+                            target_composition_id: target_composition_id.clone(),
+                            graph_context: enriched_context.clone(),
+                        };
+                        if let Some(improved) = engine.run::<ReExtractFrame>(&request) {
+                            let delta = engine.run::<EnrichComposition>(
+                                &EnrichmentRequest::from_improved_atom(improved));
+                            let governed = engine.run::<GovernBeliefs>(&delta);
+                            let anchored = engine.run::<SeedAnchor>(&governed);
+                            engine.apply(anchored);
+                            enriched_any = true;
+                        }
+                    },
+                    _ => {} // AskUser, Deferred, NoAction: handled externally
+                }
+            }
+
+            if !enriched_any { break; }
+            any_enriched = true;
+            enrichment_round += 1;
+        }
+
+        any_enriched
+    }
+
     pub fn ingest(&self, text: &str, engine: &mut PipelineEngine) -> IngestResult {
         // 1. Always run Tokenize
         let mut atoms = engine.run::<Tokenize>(text);
@@ -534,56 +619,8 @@ impl ExecutiveOrchestrator {
                 let anchored = engine.run::<SeedAnchor>(&governed);
                 let result = engine.apply(anchored);
 
-                // NEW: Gap detection + enrichment loop
-                let mut enrichment_round = 0;
-                while enrichment_round < self.budget.max_enrichment_rounds {
-                    let snapshot = engine.snapshot();
-                    let gaps = engine.run::<DetectGaps>(&snapshot);
-                    if gaps.is_empty() { break; }
-
-                    let decisions = engine.run::<SelectAcquisition>(&gaps);
-                    let mut enriched_any = false;
-
-                    for decision in &decisions {
-                        match &decision.action {
-                            Some(RecallAction::EnrichComposition { target_composition_id, role_to_fill, candidate_node_id }) => {
-                                let request = EnrichmentRequest {
-                                    target_composition_id: target_composition_id.clone(),
-                                    role_to_fill: role_to_fill.clone(),
-                                    candidate_node_id: *candidate_node_id,
-                                    candidate_label: engine.graph().node_label(*candidate_node_id).unwrap_or_default(),
-                                    source: EnrichmentSource::PassiveRecall,
-                                    confidence: 0.7,
-                                };
-                                let delta = engine.run::<EnrichComposition>(&request);
-                                let governed = engine.run::<GovernBeliefs>(&delta);
-                                let anchored = engine.run::<SeedAnchor>(&governed);
-                                engine.apply(anchored);
-                                enriched_any = true;
-                            },
-                            Some(RecallAction::ReExtractFrame { target_composition_id, enriched_context }) => {
-                                let request = ReExtractionRequest {
-                                    original_text: /* from composition */,
-                                    original_atom_id: /* from composition */,
-                                    target_composition_id: target_composition_id.clone(),
-                                    graph_context: enriched_context.clone(),
-                                };
-                                if let Some(improved) = engine.run::<ReExtractFrame>(&request) {
-                                    // Merge improved frame into existing composition
-                                    let delta = engine.run::<EnrichComposition>(&EnrichmentRequest::from_improved_atom(improved));
-                                    let governed = engine.run::<GovernBeliefs>(&delta);
-                                    let anchored = engine.run::<SeedAnchor>(&governed);
-                                    engine.apply(anchored);
-                                    enriched_any = true;
-                                }
-                            },
-                            _ => {} // AskUser, Deferred, NoAction: handled externally
-                        }
-                    }
-
-                    if !enriched_any { break; }
-                    enrichment_round += 1;
-                }
+                // Gap detection + enrichment loop (1 round)
+                self.run_enrichment_loop(engine, self.budget.max_enrichment_rounds);
 
                 result
             },
@@ -614,61 +651,17 @@ impl ExecutiveOrchestrator {
                     loops += 1;
                 }
 
-                // Force gap detection + enrichment loop (2 rounds)
-                let mut enrichment_round = 0;
-                while enrichment_round < self.budget.max_enrichment_rounds {
-                    let snapshot = engine.snapshot();
-                    let gaps = engine.run::<DetectGaps>(&snapshot);
-                    if gaps.is_empty() { break; }
-
-                    let decisions = engine.run::<SelectAcquisition>(&gaps);
-                    let mut enriched_any = false;
-
-                    for decision in &decisions {
-                        match &decision.action {
-                            Some(RecallAction::EnrichComposition { target_composition_id, role_to_fill, candidate_node_id }) => {
-                                let request = EnrichmentRequest {
-                                    target_composition_id: target_composition_id.clone(),
-                                    role_to_fill: role_to_fill.clone(),
-                                    candidate_node_id: *candidate_node_id,
-                                    candidate_label: engine.graph().node_label(*candidate_node_id).unwrap_or_default(),
-                                    source: EnrichmentSource::PassiveRecall,
-                                    confidence: 0.7,
-                                };
-                                let delta = engine.run::<EnrichComposition>(&request);
-                                let governed = engine.run::<GovernBeliefs>(&delta);
-                                let anchored = engine.run::<SeedAnchor>(&governed);
-                                engine.apply(anchored);
-                                enriched_any = true;
-                            },
-                            Some(RecallAction::ReExtractFrame { target_composition_id, enriched_context }) => {
-                                let request = ReExtractionRequest {
-                                    original_text: /* from composition */,
-                                    original_atom_id: /* from composition */,
-                                    target_composition_id: target_composition_id.clone(),
-                                    graph_context: enriched_context.clone(),
-                                };
-                                if let Some(improved) = engine.run::<ReExtractFrame>(&request) {
-                                    let delta = engine.run::<EnrichComposition>(&EnrichmentRequest::from_improved_atom(improved));
-                                    let governed = engine.run::<GovernBeliefs>(&delta);
-                                    let anchored = engine.run::<SeedAnchor>(&governed);
-                                    engine.apply(anchored);
-                                    enriched_any = true;
-                                }
-                            },
-                            _ => {} // AskUser, Deferred, NoAction: handled externally
-                        }
-                    }
-
-                    if !enriched_any { break; }
-                    enrichment_round += 1;
-                }
+                // Gap detection + enrichment loop (2 rounds)
+                self.run_enrichment_loop(engine, self.budget.max_enrichment_rounds);
 
                 // Re-run ExtractFrame with graph context for weak frames
                 let weak_frames = engine.find_weak_frames();
                 for weak_frame in &weak_frames {
+                    let source_text = weak_frame.source_text()
+                        .or_else(|| weak_frame.composition().and_then(|c| c.source_text.clone()))
+                        .unwrap_or_default();
                     let request = ReExtractionRequest {
-                        original_text: weak_frame.source_text().to_string(),
+                        original_text: source_text,
                         original_atom_id: weak_frame.atom_id(),
                         target_composition_id: weak_frame.composition_id().clone(),
                         graph_context: engine.snapshot().context_for(weak_frame),
