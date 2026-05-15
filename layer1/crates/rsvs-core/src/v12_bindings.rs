@@ -47,22 +47,32 @@ pub struct PySemanticAtom {
     pub polarity: Option<String>,
     /// Active or passive voice: "Active", "Passive", or None.
     pub voice: Option<String>,
+    /// Atom variant (e.g., specific sub-type), if applicable.
+    pub variant: Option<String>,
     /// Confidence score (0.0-1.0) for this atom's extraction quality.
     pub confidence: f32,
     /// Provenance: where this atom came from (EdgeSource as string).
     pub source: String,
+    /// ID of the composition this atom belongs to, if already assigned.
+    pub composition_id: Option<String>,
 }
 
 #[pymethods]
 impl PySemanticAtom {
     fn __repr__(&self) -> String {
+        let comp = self
+            .composition_id
+            .as_ref()
+            .map(|c| format!(", composition_id='{}'", c))
+            .unwrap_or_default();
         format!(
-            "SemanticAtom(id='{}', label='{}', type='{}', confidence={:.2}, roles={})",
+            "SemanticAtom(id='{}', label='{}', type='{}', confidence={:.2}, roles={}{})",
             self.id,
             self.label,
             self.atom_type,
             self.confidence,
-            self.roles.len()
+            self.roles.len(),
+            comp
         )
     }
 }
@@ -82,8 +92,10 @@ impl From<&v12::SemanticAtom> for PySemanticAtom {
             roles,
             polarity: atom.polarity.as_ref().map(|p| format!("{:?}", p)),
             voice: atom.voice.as_ref().map(|v| format!("{:?}", v)),
+            variant: atom.variant.as_ref().map(|v| format!("{:?}", v)),
             confidence: atom.confidence,
             source: format!("{:?}", atom.source),
+            composition_id: atom.composition_id.clone(),
         }
     }
 }
@@ -152,25 +164,40 @@ pub struct PyComposition {
     pub epistemic: String,
     /// Overall confidence score (0.0-1.0).
     pub confidence: f32,
+    /// Provenance origin as a string (e.g., "UserInput", "Inferred").
+    pub provenance: String,
+    /// Seed alignment scores: (seed_name, score) pairs.
+    pub seed_scores: Vec<(String, f32)>,
     /// Source text that produced this composition, if available.
     pub source_text: Option<String>,
     /// How many ingest batches this composition has survived.
     pub batch_seen: usize,
+    /// Contradiction conflict type, if this composition is contradicted.
+    pub contradiction: Option<String>,
     /// ISO 8601 timestamp when this composition was created.
     pub created_at: String,
+    /// ISO 8601 timestamp when this composition was last updated.
+    pub updated_at: String,
 }
 
 #[pymethods]
 impl PyComposition {
     fn __repr__(&self) -> String {
+        let contra = self
+            .contradiction
+            .as_ref()
+            .map(|c| format!(", contradiction='{}'", c))
+            .unwrap_or_default();
         format!(
-            "Composition(id='{}', type='{}', lifecycle='{}', epistemic='{}', confidence={:.2}, members={})",
+            "Composition(id='{}', type='{}', lifecycle='{}', epistemic='{}', confidence={:.2}, members={}, seed_scores={}{})",
             self.id,
             self.composition_type,
             self.lifecycle,
             self.epistemic,
             self.confidence,
-            self.members.len()
+            self.members.len(),
+            self.seed_scores.len(),
+            contra
         )
     }
 }
@@ -184,9 +211,20 @@ impl From<&v12::Composition> for PyComposition {
             lifecycle: format!("{:?}", comp.lifecycle),
             epistemic: format!("{:?}", comp.epistemic),
             confidence: comp.confidence,
+            provenance: format!("{:?}", comp.provenance.origin),
+            seed_scores: comp
+                .seed_scores
+                .iter()
+                .map(|(k, v)| (format!("{:?}", k), *v))
+                .collect(),
             source_text: comp.source_text.clone(),
             batch_seen: comp.batch_seen,
+            contradiction: comp
+                .contradiction
+                .as_ref()
+                .map(|c| format!("{:?}", c.conflict_type)),
             created_at: comp.created_at.clone(),
+            updated_at: comp.updated_at.clone(),
         }
     }
 }
@@ -240,6 +278,8 @@ impl From<&v12::KnowledgeGap> for PyKnowledgeGap {
             description: gap.description.clone(),
             confidence: gap.confidence,
             severity: 1.0 - gap.confidence,
+            // Debug format is intentional here: SemanticRole is an enum
+            // and Debug yields readable names like "Agent", "Patient", etc.
             missing_role: gap.missing_role.as_ref().map(|r| format!("{:?}", r)),
             source_composition_id: gap.source_composition_id.clone(),
         }
@@ -317,7 +357,11 @@ impl From<&v12::AcquisitionDecision> for PyAcquisitionDecision {
             gap_id: decision.gap_id.clone(),
             mode,
             reason,
-            confidence_before: 0.0, // Not tracked in current AcquisitionDecision
+            // Placeholder: the Rust AcquisitionDecision type does not track
+            // confidence-before-gain. A future schema revision should add
+            // `confidence_before` to AcquisitionDecision so we can populate
+            // this from the source instead of defaulting to 0.0.
+            confidence_before: 0.0,
             expected_gain: decision.expected_confidence_delta,
         }
     }
@@ -395,6 +439,12 @@ pub struct PyV12IngestResult {
     pub compositions_created: usize,
     /// Number of knowledge gaps detected.
     pub gaps_detected: usize,
+    /// Number of new edges created during this pipeline run.
+    pub edges_created: usize,
+    /// Number of enrichments applied to existing compositions.
+    pub enrichments_applied: usize,
+    /// Number of governance state transitions applied.
+    pub governance_transitions: usize,
     /// Cognitive mode selected for this input.
     pub cognitive_mode: String,
 }
@@ -403,10 +453,13 @@ pub struct PyV12IngestResult {
 impl PyV12IngestResult {
     fn __repr__(&self) -> String {
         format!(
-            "V12IngestResult(atoms={}, compositions={}, gaps={}, mode='{}')",
+            "V12IngestResult(atoms={}, compositions={}, gaps={}, edges={}, enrichments={}, governance={}, mode='{}')",
             self.atoms_created,
             self.compositions_created,
             self.gaps_detected,
+            self.edges_created,
+            self.enrichments_applied,
+            self.governance_transitions,
             self.cognitive_mode
         )
     }
@@ -444,6 +497,7 @@ impl PyV12IngestResult {
 #[pyclass]
 pub struct PyV12Pipeline {
     engine: v12::PipelineEngine,
+    orchestrator: v12::ExecutiveOrchestrator,
 }
 
 #[pymethods]
@@ -455,6 +509,7 @@ impl PyV12Pipeline {
         v12::register_default_pipeline(&mut engine);
         Ok(Self {
             engine,
+            orchestrator: v12::ExecutiveOrchestrator::new(),
         })
     }
 
@@ -465,8 +520,7 @@ impl PyV12Pipeline {
     fn v12_ingest(&mut self, text: &str) -> PyResult<PyV12IngestResult> {
         // Select cognitive mode before ingest.
         let snapshot = self.engine.snapshot();
-        let mut orchestrator = v12::ExecutiveOrchestrator::new();
-        let mode = orchestrator.select_cognitive_mode(text, &snapshot.compositions);
+        let mode = self.orchestrator.select_cognitive_mode(text, &snapshot.compositions);
 
         // Run the pipeline.
         let result = self.engine.ingest(text);
@@ -475,6 +529,9 @@ impl PyV12Pipeline {
             atoms_created: result.atoms_created,
             compositions_created: result.compositions_created,
             gaps_detected: result.gaps_detected,
+            edges_created: result.edges_created,
+            enrichments_applied: result.enrichments_applied,
+            governance_transitions: result.governance_transitions,
             cognitive_mode: mode.name().to_string(),
         })
     }
@@ -485,10 +542,9 @@ impl PyV12Pipeline {
     /// - Reactive: no contradictions, no gaps (fast path)
     /// - Analytical: contradictions or low confidence (enrichment loop)
     /// - Reflective: deep contradictions (extended reflection)
-    fn select_cognitive_mode(&self, text: &str) -> String {
+    fn select_cognitive_mode(&mut self, text: &str) -> String {
         let snapshot = self.engine.snapshot();
-        let mut orchestrator = v12::ExecutiveOrchestrator::new();
-        let mode = orchestrator.select_cognitive_mode(text, &snapshot.compositions);
+        let mode = self.orchestrator.select_cognitive_mode(text, &snapshot.compositions);
         mode.name().to_string()
     }
 
@@ -554,7 +610,8 @@ impl PyV12Pipeline {
     /// containing all compositions and their members.
     fn snapshot_json(&self) -> String {
         let snapshot = self.engine.snapshot();
-        serde_json::to_string(&snapshot).unwrap_or_else(|_| "{}".to_string())
+        serde_json::to_string(&snapshot)
+            .unwrap_or_else(|e| format!("{{\"error\": \"{}\"}}", e))
     }
 
     /// Enable or disable gap detection for subsequent ingest calls.

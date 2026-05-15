@@ -54,6 +54,25 @@ from validation_gates.signal_extraction import SignalExtractionGate, SignalVerdi
 
 
 # ---------------------------------------------------------------------------
+# V12PipelineBridge singleton — avoid creating a new instance per V12Adapter
+# ---------------------------------------------------------------------------
+
+_v12_bridge_singleton = None
+
+
+def _get_v12_bridge():
+    """Get or create the shared V12PipelineBridge singleton."""
+    global _v12_bridge_singleton
+    if _v12_bridge_singleton is None:
+        try:
+            from layer2.bridge import V12PipelineBridge
+            _v12_bridge_singleton = V12PipelineBridge()
+        except ImportError:
+            pass
+    return _v12_bridge_singleton
+
+
+# ---------------------------------------------------------------------------
 # Protocol for RSVS-like ingest target (duck typing, no hard dependency)
 # ---------------------------------------------------------------------------
 
@@ -331,13 +350,16 @@ class V12Adapter:
     def __init__(self):
         self._v12 = None
         self._legacy = None
-        try:
-            from layer2.bridge import V12PipelineBridge
-            bridge = V12PipelineBridge()
-            if bridge.available:
-                self._v12 = bridge
-        except ImportError:
-            pass
+        bridge = _get_v12_bridge()
+        if bridge is not None and bridge.available:
+            self._v12 = bridge
+        # Fallback: create a legacy RsvsBridge for non-v12 ingestion
+        if self._v12 is None:
+            try:
+                from layer2.bridge import get_bridge
+                self._legacy = get_bridge()
+            except ImportError:
+                self._legacy = None
 
     @property
     def uses_v12(self) -> bool:
@@ -373,6 +395,11 @@ class V12Adapter:
             return str(pt)
 
     def _legacy_ingest(self, text: str) -> dict:
-        """Fallback to legacy text ingestion."""
-        # Legacy adapter creates a basic result dict
-        return {"text_ingested": text, "mode": "legacy"}
+        """Fallback to legacy text ingestion via RsvsBridge."""
+        if self._legacy is not None:
+            try:
+                result = self._legacy.ingest(text)
+                return {"ingest_result": result, "mode": "legacy"}
+            except Exception as e:
+                logger.warning("Legacy ingest failed: %s", e)
+        return {"text_ingested": text, "mode": "legacy_fallback"}

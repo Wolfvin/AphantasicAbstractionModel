@@ -2342,6 +2342,9 @@ class V12PipelineBridge:
                 gaps_detected (int): Number of knowledge gaps found.
                 cognitive_mode (str): The selected cognitive mode
                     ("Reactive", "Analytical", or "Reflective").
+                edges_created (int): Number of new edges created.
+                enrichments_applied (int): Number of enrichments applied.
+                governance_transitions (int): Number of governance transitions.
 
         Raises:
             RuntimeError: If the v12 pipeline is not available.
@@ -2354,6 +2357,9 @@ class V12PipelineBridge:
             "compositions_created": result.compositions_created,
             "gaps_detected": result.gaps_detected,
             "cognitive_mode": result.cognitive_mode,
+            "edges_created": result.edges_created if hasattr(result, "edges_created") else 0,
+            "enrichments_applied": result.enrichments_applied if hasattr(result, "enrichments_applied") else 0,
+            "governance_transitions": result.governance_transitions if hasattr(result, "governance_transitions") else 0,
         }
 
     def cognitive_mode(self, text: str) -> str:
@@ -2378,32 +2384,73 @@ class V12PipelineBridge:
             raise RuntimeError("v12 pipeline not available")
         return self._pipeline.select_cognitive_mode(text)
 
-    def compositions(self) -> list:
-        """Get all compositions in the v12 graph.
+    def compositions(self) -> list[dict]:
+        """Get all compositions in the v12 graph as plain dicts.
 
         Returns:
-            List of PyComposition objects.  Returns an empty list if
-            the v12 pipeline is not available.
+            List of dicts with keys: id, composition_type, lifecycle, epistemic,
+            confidence, members, source_text, batch_seen, created_at, updated_at,
+            provenance, seed_scores, contradiction.
+            Each member is a dict with keys: node_id, role, label, confidence.
+            Returns an empty list if the v12 pipeline is not available.
         """
         if not self._available:
             return []
-        return self._pipeline.compositions()
+        result = []
+        for comp in self._pipeline.compositions():
+            d = {
+                "id": comp.id,
+                "composition_type": comp.composition_type,
+                "lifecycle": comp.lifecycle,
+                "epistemic": comp.epistemic,
+                "confidence": comp.confidence,
+                "members": [
+                    {
+                        "node_id": m.node_id,
+                        "role": m.role,
+                        "label": m.label,
+                        "confidence": m.confidence,
+                    }
+                    for m in comp.members
+                ],
+                "source_text": comp.source_text,
+                "batch_seen": comp.batch_seen,
+                "created_at": comp.created_at,
+            }
+            # Add v12.0 extended fields if present
+            for attr in ("updated_at", "provenance", "contradiction"):
+                if hasattr(comp, attr):
+                    d[attr] = getattr(comp, attr)
+            if hasattr(comp, "seed_scores"):
+                d["seed_scores"] = [(k, v) for k, v in comp.seed_scores]
+            result.append(d)
+        return result
 
-    def detect_gaps(self) -> list:
+    def detect_gaps(self) -> list[dict]:
         """Detect knowledge gaps in the current graph state.
 
-        Gap detection identifies areas where the graph lacks sufficient
-        connectivity or where compositions have weak grounding.  This is
-        a v12-specific feature that leverages the DAG structure to find
-        structural holes.
-
         Returns:
-            List of PyKnowledgeGap objects.  Returns an empty list if
-            the v12 pipeline is not available.
+            List of dicts with keys: gap_id, gap_type, description,
+            confidence, severity, missing_role, source_composition_id.
+            Returns an empty list if the v12 pipeline is not available.
         """
         if not self._available:
             return []
-        return self._pipeline.detect_gaps()
+        result = []
+        for gap in self._pipeline.detect_gaps():
+            d = {
+                "gap_id": gap.gap_id,
+                "gap_type": gap.gap_type,
+                "description": gap.description,
+                "confidence": gap.confidence,
+                "severity": gap.severity,
+            }
+            if hasattr(gap, "missing_role"):
+                d["missing_role"] = gap.missing_role
+            if hasattr(gap, "source_composition_id"):
+                d["source_composition_id"] = gap.source_composition_id
+            result.append(d)
+        return result
 
     def composition_count(self) -> int:
         """Number of compositions in the v12 graph.
