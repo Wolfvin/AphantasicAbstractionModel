@@ -43,11 +43,15 @@
 //!   forward-compatible deserialization.
 
 pub mod acquisition;
+pub mod convergence;
 pub mod executive;
 pub mod extract_frame;
 pub mod govern_beliefs;
+pub mod persistence;
 pub mod pipeline;
 pub mod reason_frame;
+pub mod spreading;
+pub mod temporal;
 pub mod types;
 
 // Re-export key types for convenience.
@@ -147,4 +151,35 @@ pub use acquisition::{
     AcquisitionStrategy,
     InquiryQuestion,
     InquiryMemory,
+};
+
+// Re-export Spreading Activation types.
+pub use spreading::{
+    SpreadingActivation,
+    SpreadingActivationTransform,
+    SpreadingConfig,
+    ActivationMap,
+};
+
+// Re-export Convergence Detection types.
+pub use convergence::{
+    ConvergenceDetection,
+    ConvergenceDetectionTransform,
+    ConvergenceConfig,
+    ConvergencePair,
+};
+
+// Re-export Temporal Decay types.
+pub use temporal::{
+    TemporalDecay,
+    TemporalDecayTransform,
+    DecayConfig,
+    DecayResult,
+};
+
+// Re-export Persistence types.
+pub use persistence::{
+    Persistence,
+    PersistenceError,
+    GraphStats,
 };

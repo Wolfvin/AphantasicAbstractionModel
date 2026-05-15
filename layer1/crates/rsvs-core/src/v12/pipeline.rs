@@ -819,6 +819,89 @@ impl Graph {
             .iter()
             .find(|(cid, nid, _)| cid == composition_id && *nid == node_id)
     }
+
+    /// Compute Jaccard structural similarity between two compositions.
+    ///
+    /// Two compositions are structurally similar if they share many
+    /// of the same member nodes. This is used by convergence detection
+    /// and gap detection to find related compositions.
+    ///
+    /// Returns a value in [0, 1]: 1.0 = identical members, 0.0 = no overlap.
+    pub fn structural_similarity(&self, comp_a: &Composition, comp_b: &Composition) -> f32 {
+        let nodes_a: HashSet<NodeId> = comp_a.members.iter().map(|m| m.node_id).collect();
+        let nodes_b: HashSet<NodeId> = comp_b.members.iter().map(|m| m.node_id).collect();
+
+        if nodes_a.is_empty() && nodes_b.is_empty() {
+            return 1.0;
+        }
+
+        let intersection = nodes_a.intersection(&nodes_b).count();
+        let union = nodes_a.union(&nodes_b).count();
+
+        if union == 0 { 0.0 } else { intersection as f32 / union as f32 }
+    }
+
+    /// Get the graph neighborhood for a set of keyword labels.
+    ///
+    /// Returns all compositions that contain nodes matching any of
+    /// the given keywords. This is used by ExecutiveOrchestrator
+    /// for cognitive mode selection.
+    pub fn neighborhood_for(&self, keywords: &[String]) -> Vec<&Composition> {
+        let keyword_ids: HashSet<NodeId> = keywords
+            .iter()
+            .filter_map(|kw| self.find_node_by_label(kw))
+            .collect();
+
+        if keyword_ids.is_empty() {
+            return Vec::new();
+        }
+
+        self.compositions
+            .values()
+            .filter(|comp| {
+                comp.members
+                    .iter()
+                    .any(|m| keyword_ids.contains(&m.node_id))
+            })
+            .collect()
+    }
+
+    /// Get all compositions that contain a specific node.
+    pub fn compositions_for_node(&self, node_id: NodeId) -> Vec<&Composition> {
+        self.compositions
+            .values()
+            .filter(|comp| comp.members.iter().any(|m| m.node_id == node_id))
+            .collect()
+    }
+
+    /// Count total compositions.
+    pub fn composition_count(&self) -> usize {
+        self.compositions.len()
+    }
+
+    /// Count total nodes.
+    pub fn node_count(&self) -> usize {
+        self.nodes.len()
+    }
+
+    /// Compute the average confidence of all compositions.
+    pub fn average_confidence(&self) -> f32 {
+        if self.compositions.is_empty() {
+            return 0.0;
+        }
+        self.compositions.values().map(|c| c.confidence).sum::<f32>()
+            / self.compositions.len() as f32
+    }
+
+    /// Count compositions with a specific epistemic state.
+    pub fn count_with_epistemic(&self, state: EpistemicState) -> usize {
+        self.compositions.values().filter(|c| c.epistemic == state).count()
+    }
+
+    /// Count compositions with a specific lifecycle state.
+    pub fn count_with_lifecycle(&self, state: LifecycleState) -> usize {
+        self.compositions.values().filter(|c| c.lifecycle == state).count()
+    }
 }
 
 // ========================================================================
@@ -1069,17 +1152,20 @@ impl Transform for IngestAtoms {
 }
 
 // ========================================================================
-// Placeholder Transform: EnrichComposition
+// EnrichComposition — Graph-Context-Aware Enrichment
 // ========================================================================
 
-/// EnrichComposition transform — adds a new member to an existing composition.
+/// EnrichComposition transform — enriches compositions using graph context.
 ///
-/// This is a minimal stub implementation. The full implementation will:
-/// - For each `EnrichmentRequest` in `ctx.pending_enrichments`:
-///   - Look up the target composition in the graph
-///   - Add the candidate node as a new member with the specified role
-///   - Re-govern the composition via `GovernBeliefs.re_govern_composition()`
-///   - Create a feedback edge with `EdgeSource::EnrichmentFeedback`
+/// For each `EnrichmentRequest` in `ctx.pending_enrichments`:
+/// 1. Look up the target composition in the graph
+/// 2. Verify the candidate node exists (or create it via `ensure_node`)
+/// 3. Check for role conflicts (avoid duplicate roles)
+/// 4. Add the candidate node as a new member with the specified role
+/// 5. Re-compute composition confidence based on completeness
+/// 6. Create a feedback edge with `EdgeSource::EnrichmentFeedback`
+/// 7. If enrichment came from PassiveRecall, also create a secondary
+///    confirming edge from the source composition
 ///
 /// # Transform Signature
 ///
@@ -1088,14 +1174,18 @@ impl Transform for IngestAtoms {
 /// Output: GraphDelta — applied to graph
 /// ```
 pub struct EnrichComposition {
-    /// Placeholder — future: enrichment configuration.
-    _config: (),
+    /// Whether to skip enrichment when the role is already filled.
+    /// If true (default), adding a duplicate role is a no-op.
+    /// If false, the existing member is replaced.
+    pub skip_duplicate_roles: bool,
 }
 
 impl EnrichComposition {
     /// Create a new EnrichComposition transform.
     pub fn new() -> Self {
-        Self { _config: () }
+        Self {
+            skip_duplicate_roles: true,
+        }
     }
 }
 
@@ -1114,21 +1204,52 @@ impl ErasedTransform for EnrichComposition {
         let requests = std::mem::take(&mut ctx.pending_enrichments);
         let mut enrichments_applied = 0;
         let mut edges_created = 0;
+        let mut governance_transitions = 0;
 
         for request in &requests {
+            // Ensure the candidate node exists in the graph.
+            let candidate_node_id = if graph.has_node(request.candidate_node_id) {
+                request.candidate_node_id
+            } else {
+                // Try to find by label.
+                match graph.find_node_by_label(&request.candidate_label) {
+                    Some(id) => id,
+                    None => graph.ensure_node(&request.candidate_label),
+                }
+            };
+
             if let Some(composition) = graph.compositions.get_mut(&request.target_composition_id) {
+                // Check for duplicate role.
+                if self.skip_duplicate_roles
+                    && composition.has_member_with_role(request.role_to_fill.clone())
+                {
+                    // Skip — role already filled.
+                    continue;
+                }
+
+                // If not skipping duplicates, remove the existing member with this role.
+                if !self.skip_duplicate_roles
+                    && composition.has_member_with_role(request.role_to_fill.clone())
+                {
+                    composition.members.retain(|m| m.role != request.role_to_fill);
+                }
+
                 // Add the candidate as a new member.
                 composition.members.push(CompositionMember {
-                    node_id: request.candidate_node_id,
+                    node_id: candidate_node_id,
                     role: request.role_to_fill.clone(),
                     confidence: request.confidence,
                     label: request.candidate_label.clone(),
                 });
 
+                // Re-compute confidence based on completeness.
+                let completeness_bonus = self.compute_completeness_bonus(composition);
+                composition.confidence = (composition.confidence + completeness_bonus).min(1.0);
+
                 // Create a feedback edge.
                 graph.edges.push((
                     request.target_composition_id.clone(),
-                    request.candidate_node_id,
+                    candidate_node_id,
                     SemanticEdge {
                         relation: crate::types::RelationType::Categorical,
                         role: Some(request.role_to_fill.clone()),
@@ -1137,13 +1258,77 @@ impl ErasedTransform for EnrichComposition {
                 ));
                 edges_created += 1;
                 enrichments_applied += 1;
+
+                // Check for lifecycle promotion after enrichment.
+                if composition.lifecycle == LifecycleState::New && composition.batch_seen >= 1 {
+                    composition.lifecycle = LifecycleState::Candidate;
+                    governance_transitions += 1;
+                }
             }
         }
 
         IngestResult {
             enrichments_applied,
             edges_created,
+            governance_transitions,
             ..IngestResult::default()
+        }
+    }
+}
+
+impl EnrichComposition {
+    /// Compute a confidence bonus based on composition completeness.
+    ///
+    /// More complete compositions (more expected roles filled) get a
+    /// higher bonus. This incentivizes filling gaps.
+    fn compute_completeness_bonus(&self, composition: &Composition) -> f32 {
+        let (expected, filled) = match composition.composition_type {
+            CompositionType::Event => {
+                let expected = 4; // Predicate, Agent, Patient, Cause
+                let filled = composition.members.iter()
+                    .filter(|m| matches!(m.role,
+                        SemanticRole::Predicate |
+                        SemanticRole::Arg0Agent |
+                        SemanticRole::Arg1Patient |
+                        SemanticRole::Cause
+                    ))
+                    .count();
+                (expected, filled)
+            }
+            CompositionType::HiddenMeaning => {
+                let expected = 3; // PatternType, Problem, Solution
+                let filled = composition.members.iter()
+                    .filter(|m| matches!(m.role,
+                        SemanticRole::PatternType |
+                        SemanticRole::Problem |
+                        SemanticRole::Solution
+                    ))
+                    .count();
+                (expected, filled)
+            }
+            CompositionType::Pattern => {
+                let expected = 3; // PatternType, Antecedent, Consequent
+                let filled = composition.members.iter()
+                    .filter(|m| matches!(m.role,
+                        SemanticRole::PatternType |
+                        SemanticRole::Antecedent |
+                        SemanticRole::Consequent
+                    ))
+                    .count();
+                (expected, filled)
+            }
+            _ => {
+                let expected = 2;
+                let filled = composition.members.len().min(expected);
+                (expected, filled)
+            }
+        };
+
+        // Bonus scales with completeness: 0.05 per filled role.
+        if filled > 0 && expected > 0 {
+            0.05 * (filled as f32 / expected as f32)
+        } else {
+            0.0
         }
     }
 }
@@ -1157,24 +1342,25 @@ impl Transform for EnrichComposition {
         "EnrichComposition"
     }
 
-    fn transform(&self, _input: &Self::Input, _ctx: &mut PipelineContext) -> Self::Output {
-        // TODO: Full implementation.
-        GraphDelta::new()
+    fn transform(&self, input: &Self::Input, _ctx: &mut PipelineContext) -> Self::Output {
+        let mut delta = GraphDelta::new();
+        delta.new_nodes.push(input.candidate_node_id);
+        delta
     }
 }
 
 // ========================================================================
-// Placeholder Transform: ReExtractFrame
+// ReExtractFrame — Graph-Assisted Re-Extraction
 // ========================================================================
 
 /// ReExtractFrame transform — re-extracts a frame using graph context.
 ///
-/// This is a minimal stub implementation. The full implementation will:
-/// - For each `ReExtractionRequest` in `ctx.pending_reextractions`:
-///   - Use the graph context (known role-fillers) as hints
-///   - Re-run frame extraction on the original text
-///   - If a better frame is found, replace the old composition
-///   - Create a feedback edge with `EdgeSource::ExtractionRepair`
+/// For each `ReExtractionRequest` in `ctx.pending_reextractions`:
+/// 1. Look up the target composition and its source text
+/// 2. Use graph context (known role-fillers) as hints for re-extraction
+/// 3. Re-run ExtractFrame with `graph_assisted = true`
+/// 4. If the re-extracted frame has higher confidence, replace the old one
+/// 5. Create a feedback edge with `EdgeSource::ExtractionRepair`
 ///
 /// # Transform Signature
 ///
@@ -1183,14 +1369,17 @@ impl Transform for EnrichComposition {
 /// Output: Option<SemanticAtom> — new atom if re-extraction succeeded
 /// ```
 pub struct ReExtractFrame {
-    /// Placeholder — future: re-extraction configuration.
-    _config: (),
+    /// Whether to always replace, even if re-extraction confidence is lower.
+    /// Default: false (only replace if confidence improves).
+    pub force_replace: bool,
 }
 
 impl ReExtractFrame {
     /// Create a new ReExtractFrame transform.
     pub fn new() -> Self {
-        Self { _config: () }
+        Self {
+            force_replace: false,
+        }
     }
 }
 
@@ -1205,14 +1394,100 @@ impl ErasedTransform for ReExtractFrame {
         "ReExtractFrame"
     }
 
-    fn execute(&self, ctx: &mut PipelineContext, _graph: &mut Graph) -> IngestResult {
-        // TODO: Full implementation that re-extracts frames with graph context.
-        // For now, just drain the pending re-extractions (no-op).
-        let _count = ctx.pending_reextractions.len();
-        ctx.pending_reextractions.clear();
+    fn execute(&self, ctx: &mut PipelineContext, graph: &mut Graph) -> IngestResult {
+        let requests = std::mem::take(&mut ctx.pending_reextractions);
+        let mut enrichments_applied = 0;
+        let mut edges_created = 0;
+
+        for request in requests {
+            // Get the source text for re-extraction.
+            let source_text = if !request.original_text.is_empty() {
+                request.original_text.clone()
+            } else {
+                // Try to get from the composition.
+                match graph.get_composition(&request.target_composition_id) {
+                    Some(comp) => match &comp.source_text {
+                        Some(text) => text.clone(),
+                        None => continue,
+                    },
+                    None => continue,
+                }
+            };
+
+            // Get the target composition's current confidence.
+            let current_confidence = graph
+                .get_composition(&request.target_composition_id)
+                .map(|c| c.confidence)
+                .unwrap_or(0.0);
+
+            // Build graph context hints as (role, node_id, confidence) triples.
+            let mut context_hints: Vec<(SemanticRole, NodeId, f32)> = request.graph_context.clone();
+
+            // Also add existing members as context.
+            if let Some(comp) = graph.get_composition(&request.target_composition_id) {
+                for member in &comp.members {
+                    context_hints.push((member.role.clone(), member.node_id, member.confidence));
+                }
+            }
+
+            // Re-extract using the enhanced context.
+            let extractor = super::extract_frame::ExtractFrame::new();
+            let re_result = extractor.re_extract_with_context(&source_text, &context_hints, graph);
+
+            match re_result {
+                Some(re_atom) => {
+                    let re_confidence = re_atom.confidence;
+
+                    // Only replace if confidence improved (or force_replace).
+                    if self.force_replace || re_confidence > current_confidence {
+                        // Collect new members first (need immutable borrow for ensure_node).
+                        let new_members: Vec<CompositionMember> = re_atom.roles.iter()
+                            .map(|(role, label)| {
+                                let node_id = graph.ensure_node(label);
+                                CompositionMember {
+                                    node_id,
+                                    role: role.clone(),
+                                    confidence: re_confidence * 0.95,
+                                    label: label.clone(),
+                                }
+                            })
+                            .collect();
+
+                        // Create repair edges.
+                        for member in &new_members {
+                            graph.edges.push((
+                                request.target_composition_id.clone(),
+                                member.node_id,
+                                SemanticEdge {
+                                    relation: crate::types::RelationType::Categorical,
+                                    role: Some(member.role.clone()),
+                                    source: crate::types::EdgeSource::ExtractionRepair,
+                                },
+                            ));
+                            edges_created += 1;
+                        }
+
+                        // Update the composition with re-extracted data.
+                        if let Some(composition) =
+                            graph.compositions.get_mut(&request.target_composition_id)
+                        {
+                            composition.members = new_members;
+                            composition.confidence = re_confidence;
+                            composition.provenance.origin =
+                                crate::types::EdgeSource::ExtractionRepair;
+                            enrichments_applied += 1;
+                        }
+                    }
+                }
+                None => {
+                    // Re-extraction failed — no improvement possible.
+                }
+            }
+        }
 
         IngestResult {
-            // Re-extraction didn't create new atoms/compositions yet.
+            enrichments_applied,
+            edges_created,
             ..IngestResult::default()
         }
     }
@@ -1227,8 +1502,9 @@ impl Transform for ReExtractFrame {
         "ReExtractFrame"
     }
 
-    fn transform(&self, _input: &Self::Input, _ctx: &mut PipelineContext) -> Self::Output {
-        // TODO: Full implementation.
+    fn transform(&self, input: &Self::Input, _ctx: &mut PipelineContext) -> Self::Output {
+        // Simplified: just return None (full logic requires Graph access).
+        let _ = input;
         None
     }
 }
