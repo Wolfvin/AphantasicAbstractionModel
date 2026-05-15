@@ -340,33 +340,21 @@ def perceptual_tuple_to_v12_input(pt: PerceptualTuple) -> dict:
 class V12Adapter:
     """Adapter that feeds PerceptualTuples into the v12 pipeline.
 
-    Unlike the legacy adapter which converts to text and feeds rsvs.ingest_text(),
-    this adapter uses the v12 DAG-based pipeline with ExtractFrame, ReasonFrame,
-    GovernBeliefs, and gap detection.
-
-    Falls back to legacy text-based ingestion if v12 is not available.
+    The v12 DAG-based pipeline is now the ONLY architecture. This adapter
+    converts PerceptualTuples to text and ingests them through the v12
+    pipeline with ExtractFrame, ReasonFrame, GovernBeliefs, and gap detection.
     """
 
     def __init__(self):
-        self._v12 = None
-        self._legacy = None
-        bridge = _get_v12_bridge()
-        if bridge is not None and bridge.available:
-            self._v12 = bridge
-        # Fallback: create a legacy RsvsBridge for non-v12 ingestion
-        if self._v12 is None:
-            try:
-                from layer2.bridge import get_bridge
-                self._legacy = get_bridge()
-            except ImportError:
-                self._legacy = None
+        self._bridge = _get_v12_bridge()
 
     @property
     def uses_v12(self) -> bool:
-        return self._v12 is not None
+        """Whether the v12 pipeline is available."""
+        return self._bridge is not None and self._bridge.available
 
     def ingest(self, perceptual_tuple) -> dict:
-        """Ingest a PerceptualTuple using v12 or legacy pipeline.
+        """Ingest a PerceptualTuple using the v12 pipeline.
 
         Args:
             perceptual_tuple: A PerceptualTuple or PerceptualObservation to ingest.
@@ -375,11 +363,9 @@ class V12Adapter:
             A dict containing the ingest result and pipeline mode used.
         """
         text = self._extract_text(perceptual_tuple)
-        if self._v12 is not None:
-            return self._v12.ingest(text)
-        else:
-            # Fallback: use legacy adapter
-            return self._legacy_ingest(text)
+        if self._bridge is not None:
+            return self._bridge.ingest(text)
+        return {"text_ingested": text, "mode": "fallback"}
 
     def _extract_text(self, pt) -> str:
         """Extract text from PerceptualTuple or PerceptualObservation."""
@@ -393,13 +379,3 @@ class V12Adapter:
             return pt.label
         else:
             return str(pt)
-
-    def _legacy_ingest(self, text: str) -> dict:
-        """Fallback to legacy text ingestion via RsvsBridge."""
-        if self._legacy is not None:
-            try:
-                result = self._legacy.ingest(text)
-                return {"ingest_result": result, "mode": "legacy"}
-            except Exception as e:
-                logger.warning("Legacy ingest failed: %s", e)
-        return {"text_ingested": text, "mode": "legacy_fallback"}

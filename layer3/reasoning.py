@@ -25,7 +25,7 @@ from dataclasses import dataclass, field
 from typing import Any, Optional
 
 # P1-2: Cross-package imports use absolute style (layer2 is a sibling package)
-from layer2.bridge import RsvsBridge, get_bridge
+from layer2.bridge import V12PipelineBridge, get_bridge
 from layer2.pattern import PatternResult, ReasoningStep
 
 # 5-Pillar: Gate 3 — Uncertainty Calibration
@@ -143,11 +143,11 @@ class ReasoningEngine:
         is_rust_core: Whether the Rust core is being used.
     """
 
-    def __init__(self, bridge: Optional[RsvsBridge] = None) -> None:
+    def __init__(self, bridge: Optional[V12PipelineBridge] = None) -> None:
         """Initialize the ReasoningEngine.
 
         Args:
-            bridge: Optional pre-built RsvsBridge instance. If None,
+            bridge: Optional pre-built V12PipelineBridge instance. If None,
                 a new bridge is created via get_bridge().
         """
         if bridge is not None:
@@ -155,7 +155,7 @@ class ReasoningEngine:
         else:
             self._bridge = get_bridge()
 
-        self.rsvs_available = self._bridge.is_available
+        self.rsvs_available = self._bridge.available
         self.is_rust_core = self._bridge.is_rust_core
 
         # 5-Pillar: Gate 3 — Uncertainty Calibration
@@ -173,7 +173,7 @@ class ReasoningEngine:
     def build_chain(
         self,
         pattern_result: PatternResult,
-        bridge: Optional[RsvsBridge] = None,
+        bridge: Optional[V12PipelineBridge] = None,
     ) -> DeductiveChain:
         """Build a deductive chain from a PatternResult.
 
@@ -265,7 +265,7 @@ class ReasoningEngine:
         self,
         pattern_result: PatternResult,
         evidence_labels: list[str],
-        bridge: RsvsBridge,
+        bridge: V12PipelineBridge,
     ) -> DeductiveStep:
         """Step 1: Extract activated nodes from PatternResult.
 
@@ -300,7 +300,7 @@ class ReasoningEngine:
         self,
         pattern_result: PatternResult,
         evidence_labels: list[str],
-        bridge: RsvsBridge,
+        bridge: V12PipelineBridge,
     ) -> DeductiveStep:
         """Step 2: Use bridge.compose() for structural reasoning.
 
@@ -318,7 +318,7 @@ class ReasoningEngine:
             step_groups.setdefault(step.step_type, []).extend(step.evidence_nodes)
 
         for step_type, nodes in step_groups.items():
-            if not nodes or not bridge.is_available:
+            if not nodes or not bridge.available:
                 continue
 
             # Create a composition node that represents this logical grouping
@@ -366,7 +366,7 @@ class ReasoningEngine:
     def _build_ground_step(
         self,
         evidence_labels: list[str],
-        bridge: RsvsBridge,
+        bridge: V12PipelineBridge,
     ) -> DeductiveStep:
         """Step 3: Connect claims to evidence nodes via bridge.senses().
 
@@ -379,7 +379,7 @@ class ReasoningEngine:
         grounded_count = 0
 
         for label in evidence_labels:
-            if bridge.is_available:
+            if bridge.available:
                 try:
                     senses = bridge.senses(label)
                     if senses and isinstance(senses, list):
@@ -428,7 +428,7 @@ class ReasoningEngine:
     def _build_explore_step(
         self,
         pattern_result: PatternResult,
-        bridge: RsvsBridge,
+        bridge: V12PipelineBridge,
     ) -> DeductiveStep:
         """Step 4: Use bridge.mcts_query() for complex chain exploration.
 
@@ -449,7 +449,7 @@ class ReasoningEngine:
         # Use the trigger as the concept to explore
         trigger_concept = pattern_result.trigger.strip()[:100]
 
-        if bridge.is_available and context_atoms:
+        if bridge.available and context_atoms:
             try:
                 mcts_result = bridge.mcts_query(
                     node_label=trigger_concept,
@@ -503,7 +503,7 @@ class ReasoningEngine:
         self,
         pattern_result: PatternResult,
         previous_steps: list[DeductiveStep],
-        bridge: RsvsBridge,
+        bridge: V12PipelineBridge,
     ) -> DeductiveStep:
         """Step 5: Build final conclusion from all evidence.
 
@@ -611,14 +611,14 @@ class ReasoningEngine:
     # ==================================================================
 
     def _get_node_grounding(
-        self, label: str, bridge: RsvsBridge
+        self, label: str, bridge: V12PipelineBridge
     ) -> tuple[str, str, float]:
         """Get grounding info for a node label.
 
         Returns:
             Tuple of (node_label, sense_id, grounding_score).
         """
-        if bridge.is_available:
+        if bridge.available:
             try:
                 senses = bridge.senses(label)
                 if senses and isinstance(senses, list) and len(senses) > 0:

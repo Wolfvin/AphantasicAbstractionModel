@@ -28,7 +28,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
-from .bridge import RsvsBridge, V12PipelineBridge, get_bridge, is_rust_core_available, is_v12_available
+from .bridge import V12PipelineBridge, get_bridge, is_rust_core_available
 from .llm import generate_narrative
 from .context import ContextLayer
 from .situation import SituationLayer
@@ -152,7 +152,7 @@ class GeniusPipeline:
         falling back to the standard AbstractionBridge path otherwise.
 
         To enable v12 ingestion:
-            pipeline = GeniusPipeline(use_v12=True)
+            pipeline = GeniusPipeline()
 
         The v12 bridge is also accessible directly:
             pipeline.v12  # V12PipelineBridge instance
@@ -177,7 +177,7 @@ class GeniusPipeline:
         auto_search: bool = False,
         use_llm: bool = True,
         language: str = "id",
-        use_v12: bool = False,
+
     ):
         """Initialize the pipeline with all layers.
 
@@ -193,24 +193,20 @@ class GeniusPipeline:
             auto_search: Automatically search internet when confidence is low.
             use_llm: Whether to use LLM for narrative generation (default: True).
             language: Output language for narratives ("id" or "en").
-            use_v12: Whether to use V12PipelineBridge for executive-controlled
-                ingestion when available (default: False).  When True and the
-                v12 pipeline is available, the ``ingest()`` method routes text
-                through the v12 DAG-based pipeline for richer structural
-                analysis with cognitive mode selection and gap detection.
+
         """
         self._eta = eta
         self._anomaly_threshold = anomaly_threshold
         self._auto_search = auto_search
         self._use_llm = use_llm
         self._language = language
-        self._use_v12 = use_v12
+        self._use_v12 = True  # v12 is now the ONLY architecture
 
         # Create a shared bridge so all layers use the same RSVS instance
         if bridge is not None:
             self._bridge = bridge
         elif rsvs_instance is not None:
-            self._bridge = RsvsBridge(rsvs_instance=rsvs_instance)
+            self._bridge = V12PipelineBridge()
         else:
             self._bridge = get_bridge()
 
@@ -597,7 +593,6 @@ class GeniusPipeline:
             "language": self._language,
             "temporal_stats": self.temporal.get_stats(),
             "v12_available": self.v12.available,
-            "use_v12": self._use_v12,
         }
 
     # -------------------------------------------------------------------

@@ -1,1648 +1,599 @@
-//! PyO3 bindings — RSVS v7.0 Deep Losion Integration
+//! PyO3 bindings for the v12.0 AAM pipeline engine and types.
 //!
-//! Exposes the Rsvs pipeline to Python with a clean, Pythonic API.
-//! v7.0: Full API — all v6.x features plus MCTS query, reflection, consolidation,
-//! thinking mode, paradigm router, spreading activation, neurosym verification,
-//! DEPS recovery, and entity candidates.
+//! This module exposes the v12.0 unified abstraction types and the DAG-based
+//! pipeline engine to Python. The old v8.3 bindings (PyRsvs) have been removed.
+//!
+//! ## Python Classes
+//!
+//! | Class | Wraps | Purpose |
+//! |-------|-------|---------|
+//! | `PySemanticAtom` | `SemanticAtom` | Universal ingest primitive |
+//! | `PyComposition` | `Composition` | Universal structured grouping |
+//! | `PyCompositionMember` | `CompositionMember` | A node in a composition |
+//! | `PyKnowledgeGap` | `KnowledgeGap` | A detected knowledge gap |
+//! | `PyAcquisitionDecision` | `AcquisitionDecision` | How to fill a gap |
+//! | `PyInquiryQuestion` | `InquiryQuestion` | A question to ask the user |
+//! | `PyV12Pipeline` | `PipelineEngine` | The main v12 pipeline engine |
+//! | `PyV12IngestResult` | `IngestResult` | Result of v12 ingest |
 
-use crate::error::RsvsError;
-use crate::events::{API_VERSION, SCHEMA_VERSION};
-use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use std::collections::HashMap;
 
-use crate::autonomy::AutonomyConfig;
-use crate::pipeline::{PipelineConfig, Rsvs};
-use crate::sense::{GroundingEvidence, SenseConfig, SenseInductionConfig};
-use crate::transformer_bridge::TransformerBridgeConfig;
-use crate::mcts::MCTSConfig;
-use crate::consolidation::ConsolidationConfig;
-use crate::reflection::ReflectionConfig;
+use crate::v12 as v12;
 
-#[cfg(feature = "v12")]
-use crate::v12_bindings;
+// ========================================================================
+// PySemanticAtom — Python wrapper for v12::SemanticAtom
+// ========================================================================
 
-// -----------------------------------------------------------------------
-// Python-visible data classes (v6.0)
-// -----------------------------------------------------------------------
-
-/// Stats returned after ingesting a block of text.
-#[pyclass(get_all)]
+/// Python wrapper for `v12::SemanticAtom` — the universal ingest primitive.
+///
+/// Every piece of knowledge entering RSVS passes through one type:
+/// `SemanticAtom`. A token, an event frame, a hidden meaning candidate
+/// -- these are all atoms with varying richness.
+#[pyclass(get_all, skip_from_py_object)]
 #[derive(Clone, Debug)]
-pub struct PyIngestStats {
-    pub sentences_processed: usize,
-    pub atoms_promoted: usize,
-    pub sense_assigned: usize,
-    pub sense_created: usize,
-    pub confidence_updated: usize,
-    pub frozen_batches: usize,
-    pub compositions_induced: usize,
-    /// v6.1: Number of atoms flagged as inactive by TTL.
-    pub atoms_flagged_inactive: usize,
-}
-
-#[pyclass(get_all)]
-#[derive(Clone, Debug)]
-pub struct PyIngestMetaV1 {
-    pub api_version: String,
-    pub schema_version: String,
-    pub correlation_id: String,
-    pub seq_start: u64,
-    pub seq_end: u64,
-    pub sentences_processed: usize,
-    pub atoms_promoted: usize,
-    pub sense_assigned: usize,
-    pub sense_created: usize,
-    pub confidence_updated: usize,
-    pub frozen_batches: usize,
-    pub compositions_induced: usize,
-    /// v6.1: Number of atoms flagged as inactive by TTL.
-    pub atoms_flagged_inactive: usize,
-}
-
-#[pymethods]
-impl PyIngestStats {
-    fn __repr__(&self) -> String {
-        format!(
-            "IngestStats(sentences={}, atoms_promoted={}, senses_created={}, compositions={}, inactive={})",
-            self.sentences_processed,
-            self.atoms_promoted,
-            self.sense_created,
-            self.compositions_induced,
-            self.atoms_flagged_inactive
-        )
-    }
-}
-
-/// Result of a context-aware query.
-#[pyclass(get_all)]
-#[derive(Clone, Debug)]
-pub struct PyQueryResult {
-    pub sense_idx: usize,
-    pub sense_n: usize,
-    pub atoms: Vec<(String, f32)>,
-    pub layer: u32,
-    pub grounding_score: f32,
-    pub compositions: Vec<(String, u32)>,
-    /// v8.2: Convergent nodes that contributed to this query result.
-    /// Each entry is (label, convergence_discount).
-    pub convergence_contributors: Vec<(String, f32)>,
-}
-
-#[pymethods]
-impl PyQueryResult {
-    fn __repr__(&self) -> String {
-        let top: Vec<_> = self
-            .atoms
-            .iter()
-            .take(3)
-            .map(|(l, s)| format!("{}:{:.2}", l, s))
-            .collect();
-        format!(
-            "QueryResult(sense={}, N={}, layer={}, atoms=[{}], comps={}, conv={})",
-            self.sense_idx,
-            self.sense_n,
-            self.layer,
-            top.join(", "),
-            self.compositions.len(),
-            self.convergence_contributors.len()
-        )
-    }
-
-    fn top_atoms(&self, k: usize) -> Vec<String> {
-        self.atoms.iter().take(k).map(|(l, _)| l.clone()).collect()
-    }
-}
-
-/// Similarity result between two concepts (flat, v4 compat).
-#[pyclass(get_all)]
-#[derive(Clone, Debug)]
-pub struct PySimResult {
-    pub jaccard: f32,
-    pub shared: Vec<String>,
-    pub only_a: Vec<String>,
-    pub only_b: Vec<String>,
-}
-
-#[pymethods]
-impl PySimResult {
-    fn __repr__(&self) -> String {
-        format!(
-            "SimResult(jaccard={:.3}, shared={:?})",
-            self.jaccard, self.shared
-        )
-    }
-}
-
-/// Structural similarity result (v6.0).
-#[pyclass(get_all)]
-#[derive(Clone, Debug)]
-pub struct PyStructuralSimResult {
-    pub sense_idx_a: usize,
-    pub sense_idx_b: usize,
-    pub structural_similarity: f32,
-    pub shared_compositions: Vec<(u32, u32)>,
-    pub only_a_compositions: Vec<(u32, u32)>,
-    pub only_b_compositions: Vec<(u32, u32)>,
-    pub layer_a: u32,
-    pub layer_b: u32,
-}
-
-#[pymethods]
-impl PyStructuralSimResult {
-    fn __repr__(&self) -> String {
-        format!(
-            "StructuralSim(score={:.3}, shared={}, only_a={}, only_b={}, layers={}/{})",
-            self.structural_similarity,
-            self.shared_compositions.len(),
-            self.only_a_compositions.len(),
-            self.only_b_compositions.len(),
-            self.layer_a,
-            self.layer_b
-        )
-    }
-
-    /// Get labels for shared compositions.
-    fn shared_labels(&self, rsvs: &PyRsvs) -> Vec<(String, u32)> {
-        self.shared_compositions
-            .iter()
-            .filter_map(|(node_id, sense_id)| {
-                let label = rsvs.inner.graph.get_node(*node_id)?.label.clone();
-                Some((label, *sense_id))
-            })
-            .collect()
-    }
-}
-
-/// Substitution analysis result (v6.0).
-#[pyclass(get_all)]
-#[derive(Clone, Debug)]
-pub struct PySubstitutionResult {
-    pub sense_idx_a: usize,
-    pub sense_idx_b: usize,
-    pub structural_similarity: f32,
-    /// (from_node_id, from_sense_id, to_node_id, to_sense_id)
-    pub substitutions: Vec<(u32, u32, u32, u32)>,
-    pub unpaired_only_a: Vec<(u32, u32)>,
-    pub unpaired_only_b: Vec<(u32, u32)>,
-}
-
-#[pymethods]
-impl PySubstitutionResult {
-    fn __repr__(&self) -> String {
-        format!(
-            "SubstitutionResult(sim={:.3}, subs={}, unpaired_a={}, unpaired_b={})",
-            self.structural_similarity,
-            self.substitutions.len(),
-            self.unpaired_only_a.len(),
-            self.unpaired_only_b.len()
-        )
-    }
-
-    /// Get labels for substitutions.
-    fn substitution_labels(&self, rsvs: &PyRsvs) -> Vec<(String, u32, String, u32)> {
-        self.substitutions
-            .iter()
-            .filter_map(|(from_id, from_sense, to_id, to_sense)| {
-                let from_label = rsvs.inner.graph.get_node(*from_id)?.label.clone();
-                let to_label = rsvs.inner.graph.get_node(*to_id)?.label.clone();
-                Some((from_label, *from_sense, to_label, *to_sense))
-            })
-            .collect()
-    }
-}
-
-/// Info about one node (v6.0: compositional)
-#[pyclass(get_all)]
-#[derive(Clone, Debug)]
-pub struct PyNodeInfo {
+pub struct PySemanticAtom {
+    /// Unique identifier for this atom (e.g., "atom_42").
+    pub id: String,
+    /// Human-readable label (e.g., "membuat", "problem_solution").
     pub label: String,
-    pub surface_label: String,
-    pub id: u32,
+    /// Classification of atom richness: "Token", "Event", "HiddenMeaning", etc.
+    pub atom_type: String,
+    /// Semantic role assignments as (role_name, label) pairs.
+    pub roles: Vec<(String, String)>,
+    /// Positive or negative polarity: "Positive", "Negative", or None.
+    pub polarity: Option<String>,
+    /// Active or passive voice: "Active", "Passive", or None.
+    pub voice: Option<String>,
+    /// Atom variant (e.g., specific sub-type), if applicable.
+    pub variant: Option<String>,
+    /// Confidence score (0.0-1.0) for this atom's extraction quality.
     pub confidence: f32,
-    pub tier: u8,
-    pub status: String,
-    pub is_seed: bool,
-    pub is_locked: bool,
-    pub is_stable: bool,
-    pub compression_state: String,
-    pub layer: u32,
-    pub atoms: Vec<u32>,
-    pub derived_from_node_ids: Vec<u32>,
-    pub compression_reason: Option<String>,
+    /// Provenance: where this atom came from (EdgeSource as string).
+    pub source: String,
+    /// ID of the composition this atom belongs to, if already assigned.
+    pub composition_id: Option<String>,
 }
 
 #[pymethods]
-impl PyNodeInfo {
+impl PySemanticAtom {
     fn __repr__(&self) -> String {
+        let comp = self
+            .composition_id
+            .as_ref()
+            .map(|c| format!(", composition_id='{}'", c))
+            .unwrap_or_default();
         format!(
-            "NodeInfo('{}', id={}, conf={:.3}, tier={}, layer={}, status={})",
-            self.label, self.id, self.confidence, self.tier, self.layer, self.status
+            "SemanticAtom(id='{}', label='{}', type='{}', confidence={:.2}, roles={}{})",
+            self.id,
+            self.label,
+            self.atom_type,
+            self.confidence,
+            self.roles.len(),
+            comp
         )
     }
 }
 
-/// Result of appraise() (v7.5)
-#[pyclass(get_all)]
-#[derive(Clone, Debug)]
-pub struct PyAppraiseResult {
-    pub agree_pct: f32,
-    /// Genuine structural clash score.
-    pub disagree_pct: f32,
-    /// Seeds excluded from scoring.
-    pub neutral_pct: f32,
-    pub verdict: String,
-    pub evidence: Vec<(String, f32)>,
-    pub convergence_info: Vec<(String, f32)>,
-    /// v7.5: Token pairs that structurally clash.
-    pub clash_pairs: Vec<(String, String)>,
-    /// v7.5: Number of domain clusters detected.
-    pub n_clusters: usize,
-}
-
-#[pymethods]
-impl PyAppraiseResult {
-    fn __repr__(&self) -> String {
-        format!(
-            "AppraiseResult(agree={:.1}%, clash={:.1}%, neutral={:.1}%, verdict='{}', clashes={})",
-            self.agree_pct, self.disagree_pct, self.neutral_pct, self.verdict, self.clash_pairs.len()
-        )
-    }
-}
-
-/// Result of relate() (v6.0)
-#[pyclass(get_all)]
-#[derive(Clone, Debug)]
-pub struct PyRelateResult {
-    pub related_nodes: Vec<(u32, f32)>,
-    pub related_edges: Vec<(u32, u32, f32)>,
-    pub structural_relations: Vec<(u32, f32)>,
-}
-
-#[pymethods]
-impl PyRelateResult {
-    fn __repr__(&self) -> String {
-        format!(
-            "RelateResult(nodes={}, edges={}, structural={})",
-            self.related_nodes.len(),
-            self.related_edges.len(),
-            self.structural_relations.len()
-        )
-    }
-
-    /// Get labels for related nodes.
-    fn node_labels(&self, rsvs: &PyRsvs) -> Vec<(String, f32)> {
-        self.related_nodes
+impl From<&v12::SemanticAtom> for PySemanticAtom {
+    fn from(atom: &v12::SemanticAtom) -> Self {
+        let roles: Vec<(String, String)> = atom
+            .roles
             .iter()
-            .filter_map(|(id, score)| {
-                let label = rsvs.inner.graph.get_node(*id)?.label.clone();
-                Some((label, *score))
-            })
-            .collect()
-    }
+            .map(|(role, label)| (format!("{:?}", role), label.clone()))
+            .collect();
 
-    /// Get labels for structural relations (v6.0).
-    fn structural_labels(&self, rsvs: &PyRsvs) -> Vec<(String, f32)> {
-        self.structural_relations
-            .iter()
-            .filter_map(|(id, score)| {
-                let label = rsvs.inner.graph.get_node(*id)?.label.clone();
-                Some((label, *score))
-            })
-            .collect()
+        PySemanticAtom {
+            id: atom.id.clone(),
+            label: atom.label.clone(),
+            atom_type: format!("{:?}", atom.atom_type),
+            roles,
+            polarity: atom.polarity.as_ref().map(|p| format!("{:?}", p)),
+            voice: atom.voice.as_ref().map(|v| format!("{:?}", v)),
+            variant: atom.variant.as_ref().map(|v| format!("{:?}", v)),
+            confidence: atom.confidence,
+            source: format!("{:?}", atom.source),
+            composition_id: atom.composition_id.clone(),
+        }
     }
 }
 
-/// Result of an MCTS traversal query (v7.0).
-#[pyclass(get_all)]
+// ========================================================================
+// PyCompositionMember — Python wrapper for v12::CompositionMember
+// ========================================================================
+
+/// Python wrapper for `v12::CompositionMember` — a node playing a role
+/// in a Composition.
+#[pyclass(get_all, skip_from_py_object)]
 #[derive(Clone, Debug)]
-pub struct PyMCTSResult {
-    /// Active sense index selected for the queried node.
-    pub active_sense_idx: usize,
-    /// Total number of senses for the node.
-    pub total_senses: usize,
-    /// Scored atoms: (label, score).
-    pub scored_atoms: Vec<(String, f32)>,
-    /// Compositional depth reached during traversal.
-    pub depth_reached: usize,
-    /// Which halting criterion stopped the traversal.
-    pub halt_reason: String,
-    /// Number of MCTS simulations run.
-    pub simulations_run: usize,
-    /// Best path found: (node_label, sense_idx) pairs.
-    pub best_path: Vec<(String, usize)>,
-    /// Layer of the active sense.
-    pub layer: u32,
-    /// Grounding score of the active sense.
-    pub grounding_score: f32,
+pub struct PyCompositionMember {
+    /// The node ID participating in this composition.
+    pub node_id: u32,
+    /// The semantic role this node plays (as string).
+    pub role: String,
+    /// Confidence that this node correctly fills this role (0.0-1.0).
+    pub confidence: f32,
+    /// Cached label for this member's node.
+    pub label: String,
 }
 
 #[pymethods]
-impl PyMCTSResult {
+impl PyCompositionMember {
     fn __repr__(&self) -> String {
         format!(
-            "MCTSResult(sense={}, sims={}, depth={}, halt={}, path_len={})",
-            self.active_sense_idx,
-            self.simulations_run,
-            self.depth_reached,
-            self.halt_reason,
-            self.best_path.len()
+            "CompositionMember(node_id={}, role='{}', label='{}', confidence={:.2})",
+            self.node_id, self.role, self.label, self.confidence
         )
     }
 }
 
-/// Result of a consolidation cycle (v7.0).
-#[pyclass(get_all)]
+impl From<&v12::CompositionMember> for PyCompositionMember {
+    fn from(member: &v12::CompositionMember) -> Self {
+        PyCompositionMember {
+            node_id: member.node_id,
+            role: format!("{:?}", member.role),
+            confidence: member.confidence,
+            label: member.label.clone(),
+        }
+    }
+}
+
+// ========================================================================
+// PyComposition — Python wrapper for v12::Composition
+// ========================================================================
+
+/// Python wrapper for `v12::Composition` — the universal structured grouping.
+///
+/// When a `SemanticAtom` is ingested into the RSVS graph, it becomes a
+/// `Composition`: a structured group of nodes with typed roles, lifecycle
+/// state, epistemic state, and seed alignment scores.
+#[pyclass(get_all, skip_from_py_object)]
 #[derive(Clone, Debug)]
-pub struct PyConsolidationResult {
-    /// Number of senses merged.
-    pub senses_merged: usize,
-    /// Number of senses removed.
-    pub senses_removed: usize,
-    /// Number of edges pruned.
-    pub edges_pruned: usize,
-    /// Number of atom records compacted.
-    pub atoms_compacted: usize,
+pub struct PyComposition {
+    /// Unique composition identifier.
+    pub id: String,
+    /// What kind of composition: "Event", "HiddenMeaning", "Pattern", etc.
+    pub composition_type: String,
+    /// Members: which nodes participate, and in what role.
+    pub members: Vec<PyCompositionMember>,
+    /// Structural maturity: "New", "Candidate", "Stable", "Deprecated", "Quarantine".
+    pub lifecycle: String,
+    /// Epistemic confidence: "Observed", "Inferred", "Hypothesis", "Grounded", "Contradicted".
+    pub epistemic: String,
+    /// Overall confidence score (0.0-1.0).
+    pub confidence: f32,
+    /// Provenance origin as a string (e.g., "UserInput", "Inferred").
+    pub provenance: String,
+    /// Seed alignment scores: (seed_name, score) pairs.
+    pub seed_scores: Vec<(String, f32)>,
+    /// Source text that produced this composition, if available.
+    pub source_text: Option<String>,
+    /// How many ingest batches this composition has survived.
+    pub batch_seen: usize,
+    /// Contradiction conflict type, if this composition is contradicted.
+    pub contradiction: Option<String>,
+    /// ISO 8601 timestamp when this composition was created.
+    pub created_at: String,
+    /// ISO 8601 timestamp when this composition was last updated.
+    pub updated_at: String,
 }
 
 #[pymethods]
-impl PyConsolidationResult {
+impl PyComposition {
     fn __repr__(&self) -> String {
+        let contra = self
+            .contradiction
+            .as_ref()
+            .map(|c| format!(", contradiction='{}'", c))
+            .unwrap_or_default();
         format!(
-            "ConsolidationResult(merged={}, removed={}, pruned={}, compacted={})",
-            self.senses_merged, self.senses_removed, self.edges_pruned, self.atoms_compacted
+            "Composition(id='{}', type='{}', lifecycle='{}', epistemic='{}', confidence={:.2}, members={}, seed_scores={}{})",
+            self.id,
+            self.composition_type,
+            self.lifecycle,
+            self.epistemic,
+            self.confidence,
+            self.members.len(),
+            self.seed_scores.len(),
+            contra
         )
     }
 }
 
-/// Result of a reflection cycle (v7.0).
-#[pyclass(get_all)]
-#[derive(Clone, Debug)]
-pub struct PyReflectionResult {
-    /// Total actions produced by reflection.
-    pub actions_total: usize,
-    /// Number of actions actually applied (REVISE + RETIRE).
-    pub actions_applied: usize,
-}
-
-#[pymethods]
-impl PyReflectionResult {
-    fn __repr__(&self) -> String {
-        format!(
-            "ReflectionResult(total={}, applied={})",
-            self.actions_total, self.actions_applied
-        )
+impl From<&v12::Composition> for PyComposition {
+    fn from(comp: &v12::Composition) -> Self {
+        PyComposition {
+            id: comp.id.clone(),
+            composition_type: format!("{:?}", comp.composition_type),
+            members: comp.members.iter().map(PyCompositionMember::from).collect(),
+            lifecycle: format!("{:?}", comp.lifecycle),
+            epistemic: format!("{:?}", comp.epistemic),
+            confidence: comp.confidence,
+            provenance: format!("{:?}", comp.provenance.origin),
+            seed_scores: comp
+                .seed_scores
+                .iter()
+                .map(|(k, v)| (format!("{:?}", k), *v))
+                .collect(),
+            source_text: comp.source_text.clone(),
+            batch_seen: comp.batch_seen,
+            contradiction: comp
+                .contradiction
+                .as_ref()
+                .map(|c| format!("{:?}", c.conflict_type)),
+            created_at: comp.created_at.clone(),
+            updated_at: comp.updated_at.clone(),
+        }
     }
 }
 
-/// A single recovery plan from DEPS analysis (v8.3).
-#[pyclass(get_all)]
+// ========================================================================
+// PyKnowledgeGap — Python wrapper for v12::KnowledgeGap
+// ========================================================================
+
+/// Python wrapper for `v12::KnowledgeGap` — a detected knowledge gap.
+#[pyclass(get_all, skip_from_py_object)]
 #[derive(Clone, Debug)]
-pub struct PyRecoveryPlan {
-    /// Human-readable description of the plan.
+pub struct PyKnowledgeGap {
+    /// Unique gap identifier.
+    pub gap_id: String,
+    /// Gap type: "MissingRole", "AmbiguousToken", "SparseGraph", etc.
+    pub gap_type: String,
+    /// Human-readable description of what's missing.
     pub description: String,
-    /// Estimated success rate (0.0–1.0).
-    pub estimated_success_rate: f32,
-    /// Simplicity score (0.0–1.0).
-    pub simplicity: f32,
-    /// Composite score: 60% success + 40% simplicity.
-    pub score: f32,
-    /// Whether this plan modifies the graph.
-    pub is_destructive: bool,
-    /// The action type as a string.
-    pub action: String,
+    /// Confidence that this is a real gap (0.0-1.0).
+    pub confidence: f32,
+    /// Severity of the gap (derived from confidence: 1.0 - confidence).
+    pub severity: f32,
+    /// The specific role that's missing (for MissingRole gaps).
+    pub missing_role: Option<String>,
+    /// The composition that has this gap, if applicable.
+    pub source_composition_id: Option<String>,
 }
 
 #[pymethods]
-impl PyRecoveryPlan {
+impl PyKnowledgeGap {
     fn __repr__(&self) -> String {
         format!(
-            "RecoveryPlan('{}', success={:.0}%, score={:.2}, destructive={})",
-            self.description,
-            self.estimated_success_rate * 100.0,
-            self.score,
-            self.is_destructive
+            "KnowledgeGap(id='{}', type='{}', confidence={:.2}, missing_role={:?})",
+            self.gap_id,
+            self.gap_type,
+            self.confidence,
+            self.missing_role
         )
     }
 }
 
-/// Result of a DEPS failure recovery analysis (v8.3).
-#[pyclass(get_all)]
+impl From<&v12::KnowledgeGap> for PyKnowledgeGap {
+    fn from(gap: &v12::KnowledgeGap) -> Self {
+        PyKnowledgeGap {
+            gap_id: gap.gap_id.clone(),
+            gap_type: format!("{:?}", gap.gap_type),
+            description: gap.description.clone(),
+            confidence: gap.confidence,
+            severity: 1.0 - gap.confidence,
+            missing_role: gap.missing_role.as_ref().map(|r| format!("{:?}", r)),
+            source_composition_id: gap.source_composition_id.clone(),
+        }
+    }
+}
+
+// ========================================================================
+// PyAcquisitionDecision — Python wrapper for v12::AcquisitionDecision
+// ========================================================================
+
+/// Python wrapper for `v12::AcquisitionDecision` — how to fill a gap.
+#[pyclass(get_all, skip_from_py_object)]
 #[derive(Clone, Debug)]
-pub struct PyDEPSResult {
-    /// The failure type classification.
-    pub failure_type: String,
-    /// Human-readable explanation of why the failure occurred.
-    pub explanation: String,
-    /// Available recovery plans, sorted by score (best first).
-    pub plans: Vec<PyRecoveryPlan>,
-    /// The recommended plan (highest score), if any.
-    pub recommended: Option<PyRecoveryPlan>,
+pub struct PyAcquisitionDecision {
+    /// The gap this decision addresses.
+    pub gap_id: String,
+    /// Acquisition mode: "PassiveRecall", "ReExtraction", "AskUser", "Defer".
+    pub mode: String,
+    /// Human-readable reason for this strategy choice.
+    pub reason: String,
+    /// Confidence before applying this strategy (estimated from gap).
+    pub confidence_before: f32,
+    /// Expected confidence gain if this strategy succeeds.
+    pub expected_gain: f32,
 }
 
 #[pymethods]
-impl PyDEPSResult {
+impl PyAcquisitionDecision {
     fn __repr__(&self) -> String {
         format!(
-            "DEPSResult(type={}, plans={}, recommended={})",
-            self.failure_type,
-            self.plans.len(),
-            self.recommended.is_some()
+            "AcquisitionDecision(gap='{}', mode='{}', expected_gain={:.2})",
+            self.gap_id, self.mode, self.expected_gain
         )
     }
 }
 
-/// Grounding evidence for a sense (v6.0).
+impl From<&v12::AcquisitionDecision> for PyAcquisitionDecision {
+    fn from(decision: &v12::AcquisitionDecision) -> Self {
+        let (mode, reason) = match &decision.strategy {
+            v12::AcquisitionStrategy::PassiveRecall {
+                candidate_label,
+                confidence,
+                ..
+            } => (
+                "PassiveRecall".to_string(),
+                format!(
+                    "Graph has candidate '{}' (confidence: {:.2})",
+                    candidate_label, confidence
+                ),
+            ),
+            v12::AcquisitionStrategy::ReExtraction {
+                target_composition_id,
+                ..
+            } => (
+                "ReExtraction".to_string(),
+                format!(
+                    "Re-extract with graph context for composition '{}'",
+                    target_composition_id
+                ),
+            ),
+            v12::AcquisitionStrategy::AskUser { question } => (
+                "AskUser".to_string(),
+                format!("Ask user: '{}'", question.question_text),
+            ),
+            v12::AcquisitionStrategy::Defer => (
+                "Defer".to_string(),
+                "Gap noted but not actionable now".to_string(),
+            ),
+        };
+
+        PyAcquisitionDecision {
+            gap_id: decision.gap_id.clone(),
+            mode,
+            reason,
+            confidence_before: 0.0,
+            expected_gain: decision.expected_confidence_delta,
+        }
+    }
+}
+
+// ========================================================================
+// PyInquiryQuestion — Python wrapper for v12::InquiryQuestion
+// ========================================================================
+
+/// Python wrapper for `v12::InquiryQuestion` — a question to ask the user.
+#[pyclass(get_all, skip_from_py_object)]
+#[derive(Clone, Debug)]
+pub struct PyInquiryQuestion {
+    /// Unique question identifier.
+    pub question_id: String,
+    /// The gap this question addresses.
+    pub gap_id: String,
+    /// Question type (derived from gap type).
+    pub question_type: String,
+    /// The question text to present to the user.
+    pub question_text: String,
+    /// What shape the answer should take (derived from target role).
+    pub expected_answer_shape: String,
+}
+
+#[pymethods]
+impl PyInquiryQuestion {
+    fn __repr__(&self) -> String {
+        format!(
+            "InquiryQuestion(id='{}', gap='{}', text='{}')",
+            self.question_id, self.gap_id, self.question_text
+        )
+    }
+}
+
+impl From<&v12::InquiryQuestion> for PyInquiryQuestion {
+    fn from(q: &v12::InquiryQuestion) -> Self {
+        let question_type = q
+            .target_role
+            .as_ref()
+            .map(|r| format!("{:?}", r))
+            .unwrap_or_else(|| "General".to_string());
+
+        let expected_answer_shape = q
+            .target_role
+            .as_ref()
+            .map(|r| format!("Entity filling the {:?} role", r))
+            .unwrap_or_else(|| "Any relevant information".to_string());
+
+        PyInquiryQuestion {
+            question_id: q.question_id.clone(),
+            gap_id: q.gap_id.clone(),
+            question_type,
+            question_text: q.question_text.clone(),
+            expected_answer_shape,
+        }
+    }
+}
+
+// ========================================================================
+// PyV12IngestResult — Result of v12 ingest
+// ========================================================================
+
+/// Result of ingesting text through the v12 pipeline.
+#[pyclass(get_all, skip_from_py_object)]
+#[derive(Clone, Debug)]
+pub struct PyV12IngestResult {
+    /// Number of new atoms created during this pipeline run.
+    pub atoms_created: usize,
+    /// Number of new compositions created.
+    pub compositions_created: usize,
+    /// Number of knowledge gaps detected.
+    pub gaps_detected: usize,
+    /// Number of new edges created during this pipeline run.
+    pub edges_created: usize,
+    /// Number of enrichments applied to existing compositions.
+    pub enrichments_applied: usize,
+    /// Number of governance state transitions applied.
+    pub governance_transitions: usize,
+    /// Cognitive mode selected for this input.
+    pub cognitive_mode: String,
+}
+
+#[pymethods]
+impl PyV12IngestResult {
+    fn __repr__(&self) -> String {
+        format!(
+            "V12IngestResult(atoms={}, compositions={}, gaps={}, edges={}, enrichments={}, governance={}, mode='{}')",
+            self.atoms_created,
+            self.compositions_created,
+            self.gaps_detected,
+            self.edges_created,
+            self.enrichments_applied,
+            self.governance_transitions,
+            self.cognitive_mode
+        )
+    }
+}
+
+// ========================================================================
+// PyV12Pipeline — Main class wrapping v12::PipelineEngine
+// ========================================================================
+
+/// The main v12.0 pipeline engine, exposed to Python.
 ///
-/// Tracks the full evidence trail for composition verification,
-/// replacing the simple grounding_score from v5.0.
-#[pyclass(get_all)]
-#[derive(Clone, Debug)]
-pub struct PyGroundingEvidence {
-    /// Contexts that confirmed the compositions.
-    pub confirming_contexts: usize,
-    /// Contexts that contradicted the compositions.
-    pub contradicting_contexts: usize,
-    /// Description of the last contradiction.
-    pub last_contradiction: Option<String>,
-    /// How many times compositions have been revised.
-    pub revision_count: usize,
-}
-
-/// Result of a context-aware traversal query (v6.1).
+/// Wraps `PipelineEngine` with a DAG-based transform pipeline that
+/// processes text through: Tokenize, ExtractFrame, ReasonFrame,
+/// IngestAtoms, GovernBeliefs, SeedAnchor, DetectGaps,
+/// SelectAcquisition, EnrichComposition, ReExtractFrame.
 ///
-/// Contains scored atoms with P(a|S,q) weighting, traversal metadata,
-/// and cycle detection info from depth-controlled lazy traversal.
-#[pyclass(get_all)]
-#[derive(Clone, Debug)]
-pub struct PyContextQueryResult {
-    /// The active sense index selected for the queried node.
-    pub active_sense_idx: usize,
-    /// Total number of senses for the node.
-    pub total_senses: usize,
-    /// Scored atoms: (label, P(a|S,q) score).
-    pub scored_atoms: Vec<(String, f32)>,
-    /// Compositional depth reached during traversal.
-    pub depth_reached: usize,
-    /// Which halting criterion stopped the traversal.
-    pub halt_reason: String,
-    /// Number of cycle detections encountered during traversal.
-    pub cycles_detected: usize,
-    /// Layer of the active sense.
-    pub layer: u32,
-    /// Grounding score of the active sense.
-    pub grounding_score: f32,
-}
-
-#[pymethods]
-impl PyContextQueryResult {
-    fn __repr__(&self) -> String {
-        let top: Vec<_> = self
-            .scored_atoms
-            .iter()
-            .take(3)
-            .map(|(l, s)| format!("{}:{:.2}", l, s))
-            .collect();
-        format!(
-            "ContextQueryResult(sense={}, layer={}, depth={}, halt={}, cycles={}, atoms=[{}])",
-            self.active_sense_idx,
-            self.layer,
-            self.depth_reached,
-            self.halt_reason,
-            self.cycles_detected,
-            top.join(", ")
-        )
-    }
-}
-
-#[pymethods]
-impl PyGroundingEvidence {
-    fn __repr__(&self) -> String {
-        format!(
-            "GroundingEvidence(confirming={}, contradicting={}, revisions={})",
-            self.confirming_contexts, self.contradicting_contexts, self.revision_count
-        )
-    }
-
-    /// Compute the grounding score from the confirming/contradicting ratio.
-    fn score(&self) -> f32 {
-        let total = self.confirming_contexts + self.contradicting_contexts;
-        if total == 0 {
-            0.5
-        } else {
-            self.confirming_contexts as f32 / total as f32
-        }
-    }
-}
-
-impl From<&GroundingEvidence> for PyGroundingEvidence {
-    fn from(ge: &GroundingEvidence) -> Self {
-        PyGroundingEvidence {
-            confirming_contexts: ge.confirming_contexts,
-            contradicting_contexts: ge.contradicting_contexts,
-            last_contradiction: ge.last_contradiction.clone(),
-            revision_count: ge.revision_count,
-        }
-    }
-}
-
-/// Configuration for the Transformer Bridge (v6.0).
-#[pyclass(get_all)]
-#[derive(Clone, Debug)]
-pub struct PyTransformerBridgeConfig {
-    /// Similarity threshold for considering two vectors "related".
-    pub similarity_threshold: f32,
-    /// Maximum compositions per induced sense from Transformer output.
-    pub max_compositions: usize,
-    /// Whether to use Transformer attention weights for composition weighting.
-    pub use_attention_weights: bool,
-}
-
-#[pymethods]
-impl PyTransformerBridgeConfig {
-    fn __repr__(&self) -> String {
-        format!(
-            "TransformerBridgeConfig(threshold={:.2}, max_comps={}, attention={})",
-            self.similarity_threshold, self.max_compositions, self.use_attention_weights
-        )
-    }
-}
-
-impl From<&TransformerBridgeConfig> for PyTransformerBridgeConfig {
-    fn from(cfg: &TransformerBridgeConfig) -> Self {
-        PyTransformerBridgeConfig {
-            similarity_threshold: cfg.similarity_threshold,
-            max_compositions: cfg.max_compositions,
-            use_attention_weights: cfg.use_attention_weights,
-        }
-    }
-}
-
-/// Info about one sense of an ID (v6.0: compositional with grounding evidence).
-#[pyclass(get_all)]
-#[derive(Clone, Debug)]
-pub struct PySenseInfo {
-    pub sense_idx: usize,
-    pub n_contexts: usize,
-    pub coherence: f32,
-    pub status: String,
-    pub core_atoms: Vec<String>,
-    pub layer: u32,
-    pub grounding_score: f32,
-    pub grounding_evidence: PyGroundingEvidence,
-    pub compositions: Vec<(String, u32)>,
-    /// v6.2: Optional condition label annotation.
-    pub condition_label: Option<String>,
-}
-
-#[pymethods]
-impl PySenseInfo {
-    fn __repr__(&self) -> String {
-        format!(
-            "SenseInfo(idx={}, N={}, coh={:.3}, layer={}, ground={:.3}, comps={})",
-            self.sense_idx,
-            self.n_contexts,
-            self.coherence,
-            self.layer,
-            self.grounding_score,
-            self.compositions.len()
-        )
-    }
-}
-
-// -----------------------------------------------------------------------
-// Helper: convert RsvsError to PyErr
-// -----------------------------------------------------------------------
-
-fn to_py_err(e: RsvsError) -> PyErr {
-    pyo3::exceptions::PyRuntimeError::new_err(e.to_string())
-}
-
-// -----------------------------------------------------------------------
-// PyRsvs — main Python class (v6.0)
-// -----------------------------------------------------------------------
-
-/// RSVS knowledge system (v6.0 — Compositional Architecture).
+/// # Usage from Python
+///
+/// ```python
+/// from rsvs import PyV12Pipeline
+///
+/// pipeline = PyV12Pipeline()
+/// result = pipeline.v12_ingest("Raymond membuat aplikasi karena lambat")
+/// print(f"Created {result.atoms_created} atoms, {result.compositions_created} compositions")
+///
+/// # Inspect the graph
+/// for comp in pipeline.compositions():
+///     print(f"  {comp.id}: {comp.composition_type} (confidence={comp.confidence:.2f})")
+///
+/// # Detect gaps
+/// gaps = pipeline.detect_gaps()
+/// for gap in gaps:
+///     print(f"  Gap: {gap.gap_type} - {gap.description}")
+/// ```
 #[pyclass]
-pub struct PyRsvs {
-    inner: Rsvs,
+pub struct PyV12Pipeline {
+    engine: v12::PipelineEngine,
+    orchestrator: v12::ExecutiveOrchestrator,
 }
 
 #[pymethods]
-impl PyRsvs {
-    /// Create a new RSVS instance (v6.0).
+impl PyV12Pipeline {
+    /// Create a new v12 pipeline engine with the default transform DAG.
     #[new]
-    #[pyo3(signature = (
-        entity_promote_n=3,
-        theta_assign=0.12,
-        n_warm=20,
-        eta=0.1
-    ))]
-    fn new(entity_promote_n: usize, theta_assign: f32, n_warm: usize, eta: f32) -> PyResult<Self> {
-        let config = PipelineConfig {
-            entity_promote_n,
-            sense: SenseConfig {
-                theta_assign,
-                ..SenseConfig::default()
-            },
-            autonomy: AutonomyConfig {
-                n_warm,
-                eta,
-                threshold_global_delta: 5.0,
-                ..AutonomyConfig::default()
-            },
-            ..PipelineConfig::default()
-        };
-        let inner = Rsvs::new(config).map_err(to_py_err)?;
-        Ok(Self { inner })
-    }
-
-    // -------------------------------------------------------------------
-    // Core operations
-    // -------------------------------------------------------------------
-
-    /// Ingest a block of text and update the knowledge graph.
-    fn ingest(&mut self, text: &str) -> PyResult<PyIngestStats> {
-        let s = self.inner.ingest_text(text).map_err(to_py_err)?;
-        Ok(PyIngestStats {
-            sentences_processed: s.sentences_processed,
-            atoms_promoted: s.atoms_promoted,
-            sense_assigned: s.sense_assigned,
-            sense_created: s.sense_created,
-            confidence_updated: s.confidence_updated,
-            frozen_batches: s.frozen_batches,
-            compositions_induced: s.compositions_induced,
-            atoms_flagged_inactive: s.atoms_flagged_inactive,
+    fn new() -> PyResult<Self> {
+        let mut engine = v12::PipelineEngine::new();
+        v12::register_default_pipeline(&mut engine);
+        Ok(Self {
+            engine,
+            orchestrator: v12::ExecutiveOrchestrator::new(),
         })
     }
 
-    /// Ingest with stable API metadata and seq range.
-    #[pyo3(signature = (text, domain_id=None))]
-    fn ingest_with_meta_v1(
-        &mut self,
-        text: &str,
-        domain_id: Option<usize>,
-    ) -> PyResult<PyIngestMetaV1> {
-        if let Some(d) = domain_id {
-            self.inner.config.current_domain = d;
-        }
-        let before = self.inner.latest_seq_v1();
-        let s = self.inner.ingest_text(text).map_err(to_py_err)?;
-        let after = self.inner.latest_seq_v1();
+    /// Ingest text using the v12 pipeline (DAG-based, with ExtractFrame,
+    /// ReasonFrame, GovernBeliefs, DetectGaps, etc.).
+    fn v12_ingest(&mut self, text: &str) -> PyResult<PyV12IngestResult> {
+        let snapshot = self.engine.snapshot();
+        let mode = self.orchestrator.select_cognitive_mode(text, &snapshot.compositions);
+        let result = self.engine.ingest(text);
 
-        let batch = self.inner.consume_events_v1(Some(before), 10_000);
-        let correlation_id = batch
-            .events
-            .first()
-            .map(|e| e.correlation_id.clone())
-            .unwrap_or_else(|| "ingest_00000000".to_string());
-
-        Ok(PyIngestMetaV1 {
-            api_version: API_VERSION.to_string(),
-            schema_version: SCHEMA_VERSION.to_string(),
-            correlation_id,
-            seq_start: before + 1,
-            seq_end: after,
-            sentences_processed: s.sentences_processed,
-            atoms_promoted: s.atoms_promoted,
-            sense_assigned: s.sense_assigned,
-            sense_created: s.sense_created,
-            confidence_updated: s.confidence_updated,
-            frozen_batches: s.frozen_batches,
-            compositions_induced: s.compositions_induced,
-            atoms_flagged_inactive: s.atoms_flagged_inactive,
+        Ok(PyV12IngestResult {
+            atoms_created: result.atoms_created,
+            compositions_created: result.compositions_created,
+            gaps_detected: result.gaps_detected,
+            edges_created: result.edges_created,
+            enrichments_applied: result.enrichments_applied,
+            governance_transitions: result.governance_transitions,
+            cognitive_mode: mode.name().to_string(),
         })
     }
 
-    /// Query a concept with a context string.
-    fn query(&self, concept: &str, context: &str) -> Option<PyQueryResult> {
-        let r = self.inner.query(concept, context)?;
-        Some(PyQueryResult {
-            sense_idx: r.active_sense_idx,
-            sense_n: r.active_sense_n,
-            atoms: r.scored_atoms,
-            layer: r.layer,
-            grounding_score: r.grounding_score,
-            compositions: r.compositions,
-            convergence_contributors: r.convergence_contributors,
-        })
+    /// Select cognitive mode for the given input text.
+    fn select_cognitive_mode(&mut self, text: &str) -> String {
+        let snapshot = self.engine.snapshot();
+        let mode = self.orchestrator.select_cognitive_mode(text, &snapshot.compositions);
+        mode.name().to_string()
     }
 
-    /// v6.1: Context-aware query using depth-controlled lazy traversal.
-    ///
-    /// This query method uses P(a|S,q) scoring, cycle detection,
-    /// and adaptive halting criteria for recursive composition expansion.
-    ///
-    /// # Arguments
-    /// * `concept` - The concept label to query
-    /// * `context_atoms` - Context atom labels to disambiguate the query
-    /// * `max_depth` - Maximum traversal depth (default: from pipeline config)
-    /// * `gamma` - Stability halting threshold (default: from pipeline config)
-    /// * `halt_confidence` - Confidence halting threshold (default: from pipeline config)
-    /// * `tau_relevance` - Relevance gating threshold (default: from pipeline config)
-    #[pyo3(signature = (concept, context_atoms, max_depth=None, gamma=None, halt_confidence=None, tau_relevance=None))]
-    fn context_query(
-        &self,
-        concept: &str,
-        context_atoms: Vec<String>,
-        max_depth: Option<usize>,
-        gamma: Option<f32>,
-        halt_confidence: Option<f32>,
-        tau_relevance: Option<f32>,
-    ) -> Option<PyContextQueryResult> {
-        let default_config = &self.inner.config.traversal;
-        let config = crate::types::TraversalConfig {
-            max_depth: max_depth.unwrap_or(default_config.max_depth),
-            gamma: gamma.unwrap_or(default_config.gamma),
-            halt_epsilon: default_config.halt_epsilon,
-            halt_confidence: halt_confidence.unwrap_or(default_config.halt_confidence),
-            tau_relevance: tau_relevance.unwrap_or(default_config.tau_relevance),
-            epsilon_ig: default_config.epsilon_ig,
-        };
-
-        let context_refs: Vec<&str> = context_atoms.iter().map(|s| s.as_str()).collect();
-        let result = self.inner.context_query(concept, &context_refs, Some(&config))?;
-
-        Some(PyContextQueryResult {
-            active_sense_idx: result.active_sense_idx,
-            total_senses: result.total_senses,
-            scored_atoms: result.scored_atoms,
-            depth_reached: result.depth_reached,
-            halt_reason: format!("{:?}", result.halt_reason),
-            cycles_detected: result.cycles_detected,
-            layer: result.layer,
-            grounding_score: result.grounding_score,
-        })
-    }
-
-    /// Compute flat similarity between two concepts (v4 compat).
-    fn similarity(&self, a: &str, b: &str) -> Option<PySimResult> {
-        let sim = self.inner.similarity(a, b)?;
-        let node_label = |id: u32| -> String {
-            self.inner
-                .graph
-                .get_node(id)
-                .map(|n| n.label.clone())
-                .unwrap_or_else(|| format!("#{}", id))
-        };
-        Some(PySimResult {
-            jaccard: sim.jaccard,
-            shared: sim.shared.iter().map(|&id| node_label(id)).collect(),
-            only_a: sim.only_a.iter().map(|&id| node_label(id)).collect(),
-            only_b: sim.only_b.iter().map(|&id| node_label(id)).collect(),
-        })
-    }
-
-    /// v6.0: Compute structural similarity between two concepts.
-    ///
-    /// This compares concepts at the sense level — shared/differing compositions.
-    /// Example: raja and ratu share 2/3 compositions → score = 0.667.
-    fn structural_similarity(&self, a: &str, b: &str) -> Option<PyStructuralSimResult> {
-        let sim = self.inner.structural_similarity(a, b)?;
-        Some(PyStructuralSimResult {
-            sense_idx_a: sim.sense_idx_a,
-            sense_idx_b: sim.sense_idx_b,
-            structural_similarity: sim.structural_similarity,
-            shared_compositions: sim
-                .shared_compositions
-                .iter()
-                .map(|c| (c.node_id, c.sense_id))
-                .collect(),
-            only_a_compositions: sim
-                .only_a_compositions
-                .iter()
-                .map(|c| (c.node_id, c.sense_id))
-                .collect(),
-            only_b_compositions: sim
-                .only_b_compositions
-                .iter()
-                .map(|c| (c.node_id, c.sense_id))
-                .collect(),
-            layer_a: sim.layer_a,
-            layer_b: sim.layer_b,
-        })
-    }
-
-    /// v6.0: Analyze what substitution transforms one concept into another.
-    ///
-    /// Example: raja → ratu requires substituting (laki_laki, 0) → (perempuan, 0).
-    fn substitution_analysis(&self, a: &str, b: &str) -> Option<PySubstitutionResult> {
-        let sub = self.inner.substitution_analysis(a, b)?;
-        Some(PySubstitutionResult {
-            sense_idx_a: sub.sense_idx_a,
-            sense_idx_b: sub.sense_idx_b,
-            structural_similarity: sub.structural_similarity,
-            substitutions: sub
-                .substitutions
-                .iter()
-                .map(|(from, to)| (from.node_id, from.sense_id, to.node_id, to.sense_id))
-                .collect(),
-            unpaired_only_a: sub
-                .unpaired_only_a
-                .iter()
-                .map(|c| (c.node_id, c.sense_id))
-                .collect(),
-            unpaired_only_b: sub
-                .unpaired_only_b
-                .iter()
-                .map(|c| (c.node_id, c.sense_id))
-                .collect(),
-        })
-    }
-
-    /// v6.2: Context-weighted similarity between two concepts.
-    ///
-    /// Unlike structural_similarity which compares compositions structurally,
-    /// this method weighs each composition based on its relevance to the
-    /// provided context labels. Returns a float score in [0.0, 1.0].
-    ///
-    /// Example: context_similarity("batu", "tulang", ["kekerasan"]) may be high
-    /// because both score high for "hard" in the context of "kekerasan".
-    fn context_similarity(&self, a: &str, b: &str, context: Vec<String>) -> Option<f32> {
-        let context_refs: Vec<&str> = context.iter().map(|s| s.as_str()).collect();
-        self.inner.context_similarity(a, b, &context_refs)
-    }
-
-    /// Appraise text against the graph.
-    fn appraise(&self, text: &str) -> PyAppraiseResult {
-        let r = self.inner.appraise(text);
-        PyAppraiseResult {
-            agree_pct: r.agree_pct,
-            disagree_pct: r.disagree_pct,
-            neutral_pct: r.neutral_pct,
-            verdict: r.verdict,
-            evidence: r.evidence,
-            convergence_info: r.convergence_info,
-            clash_pairs: r.clash_pairs,
-            n_clusters: r.n_clusters,
-        }
-    }
-
-    /// Find related nodes and edges for a concept.
-    fn relate(&self, concept: &str) -> Option<PyRelateResult> {
-        let r = self.inner.relate(concept)?;
-        Some(PyRelateResult {
-            related_nodes: r.related_nodes,
-            related_edges: r.related_edges,
-            structural_relations: r.structural_relations,
-        })
-    }
-
-    /// Set the current domain tag.
-    fn set_domain(&mut self, domain_id: usize) {
-        self.inner.config.current_domain = domain_id;
-    }
-
-    /// v6.3.1: Set per-domain attention weights (alpha, beta, gamma).
-    ///
-    /// Creates or updates a DomainAttentionConfig for the given domain_id.
-    /// The weights are automatically normalized to sum to 1.0.
-    /// After at least 5 observations, these weights override the global
-    /// attention config for that domain.
-    ///
-    /// # Arguments
-    /// * `domain_id` - The domain identifier
-    /// * `alpha` - Weight for NPMI term (will be normalized)
-    /// * `beta` - Weight for Jaccard term (will be normalized)
-    /// * `gamma` - Weight for co-occurrence term (will be normalized)
-    fn set_domain_attention(
-        &mut self,
-        domain_id: usize,
-        alpha: f32,
-        beta: f32,
-        gamma: f32,
-    ) {
-        let dc = crate::attention::DomainAttentionConfig::new(domain_id, alpha, beta, gamma);
-        // Preserve existing observation count if domain already tracked
-        let obs = self.inner.domain_configs.get(&domain_id)
-            .map(|c| c.observation_count)
-            .unwrap_or(0);
-        let mut dc = dc;
-        dc.observation_count = obs;
-        self.inner.domain_configs.insert(domain_id, dc);
-    }
-
-    /// Stable runtime snapshot for UI/subscribers.
-    fn snapshot_v1(&self) -> PyResult<String> {
-        serde_json::to_string(&self.inner.snapshot_v1())
-            .map_err(|e| PyValueError::new_err(format!("snapshot_v1 serialization failed: {}", e)))
-    }
-
-    /// Pull incremental events after given seq.
-    #[pyo3(signature = (after_seq=None, limit=500))]
-    fn consume_events_v1(&self, after_seq: Option<u64>, limit: usize) -> PyResult<String> {
-        let batch = self.inner.consume_events_v1(after_seq, limit);
-        serde_json::to_string(&batch).map_err(|e| {
-            PyValueError::new_err(format!("consume_events_v1 serialization failed: {}", e))
-        })
-    }
-
-    /// Latest monotonic event sequence number.
-    fn latest_seq_v1(&self) -> u64 {
-        self.inner.latest_seq_v1()
-    }
-
-    // -------------------------------------------------------------------
-    // Inspection (v6.0)
-    // -------------------------------------------------------------------
-
-    /// Get info about a specific node by label.
-    fn node_info(&self, label: &str) -> PyResult<PyNodeInfo> {
-        let &id = self
-            .inner
-            .token_to_id
-            .get(label)
-            .ok_or_else(|| PyValueError::new_err(format!("Node '{}' not found", label)))?;
-
-        let node = self
-            .inner
-            .graph
-            .get_node(id)
-            .ok_or_else(|| PyValueError::new_err(format!("Node ID {} not in graph", id)))?;
-
-        let conf = self
-            .inner
-            .autonomy
-            .confidence(id)
-            .unwrap_or(node.confidence);
-        let tier_num = match self.inner.autonomy.tier(id) {
-            Some(crate::types::Tier::Tier1) => 1u8,
-            Some(crate::types::Tier::Tier2) => 2,
-            _ => 3,
-        };
-        let status_str = match self.inner.autonomy.status(id).unwrap_or(&node.status) {
-            crate::types::NodeStatus::New => "new",
-            crate::types::NodeStatus::Candidate => "candidate",
-            crate::types::NodeStatus::Stable => "stable",
-            crate::types::NodeStatus::Deprecated => "deprecated",
-            crate::types::NodeStatus::Quarantine => "quarantine",
-        };
-        let is_stable = matches!(
-            self.inner.autonomy.memory_class(id),
-            Some(crate::autonomy::MemoryClass::Stable)
-        );
-        let compression_str = match node.semantic.compression_state {
-            crate::types::CompressionState::Raw => "raw",
-            crate::types::CompressionState::Compressed => "compressed",
-        };
-
-        Ok(PyNodeInfo {
-            label: label.to_string(),
-            surface_label: node.surface_label.clone(),
-            id,
-            confidence: conf,
-            tier: tier_num,
-            status: status_str.to_string(),
-            is_seed: node.is_seed,
-            is_locked: node.is_locked,
-            is_stable,
-            compression_state: compression_str.to_string(),
-            layer: node.semantic.layer,
-            atoms: node.atoms.clone(),
-            derived_from_node_ids: node.semantic.derived_from_node_ids.clone(),
-            compression_reason: node.semantic.compression_reason.clone(),
-        })
-    }
-
-    /// Backward compat: alias for node_info
-    fn atom_info(&self, label: &str) -> PyResult<PyNodeInfo> {
-        self.node_info(label)
-    }
-
-    /// Get all senses for a concept (v6.0: includes grounding evidence).
-    fn senses(&self, concept: &str) -> PyResult<Vec<PySenseInfo>> {
-        let &id = self
-            .inner
-            .token_to_id
-            .get(concept)
-            .ok_or_else(|| PyValueError::new_err(format!("Concept '{}' not found", concept)))?;
-
-        let sm = self
-            .inner
-            .senses
-            .get(&id)
-            .ok_or_else(|| PyValueError::new_err(format!("No senses for '{}'", concept)))?;
-
-        let tau = self.inner.config.sense.tau_core;
-
-        Ok(sm
-            .senses
-            .iter()
-            .enumerate()
-            .map(|(i, s)| {
-                let core = s.core(tau);
-                let core_labels: Vec<String> = core
-                    .iter()
-                    .filter_map(|&aid| Some(self.inner.graph.get_node(aid)?.label.clone()))
-                    .collect();
-
-                let comp_labels: Vec<(String, u32)> = s
-                    .compositions
-                    .iter()
-                    .filter_map(|c| {
-                        let label = self.inner.graph.get_node(c.node_id)?.label.clone();
-                        Some((label, c.sense_id))
-                    })
-                    .collect();
-
-                PySenseInfo {
-                    sense_idx: i,
-                    n_contexts: s.context_count(),
-                    coherence: s.coherence,
-                    status: if s.status == crate::sense::SenseStatus::Fragile {
-                        "fragile".into()
-                    } else {
-                        "mature".into()
-                    },
-                    core_atoms: core_labels,
-                    layer: s.layer,
-                    grounding_score: s.grounding.score(),
-                    grounding_evidence: PyGroundingEvidence::from(&s.grounding),
-                    compositions: comp_labels,
-                    condition_label: s.condition_label.clone(),
-                }
-            })
-            .collect())
-    }
-
-    /// List all known nodes.
-    #[pyo3(signature = (include_seeds=false))]
-    fn nodes(&self, include_seeds: bool) -> Vec<String> {
-        self.inner
-            .token_to_id
-            .keys()
-            .filter(|label| {
-                if include_seeds {
-                    return true;
-                }
-                let id = self.inner.token_to_id[*label];
-                let node = self.inner.graph.get_node(id);
-                node.map(|n| !n.is_seed).unwrap_or(true)
-            })
-            .cloned()
+    /// Get all compositions in the v12 graph.
+    fn compositions(&self) -> Vec<PyComposition> {
+        self.engine
+            .graph()
+            .compositions()
+            .map(PyComposition::from)
             .collect()
     }
 
-    /// Create a compositional node from explicit composition references (v6.0).
-    ///
-    /// `compositions` is a list of (node_label, sense_id) pairs.
-    #[pyo3(signature = (label, compositions, lang=None))]
-    fn compose(
-        &mut self,
-        label: &str,
-        compositions: Vec<(String, u32)>,
-        lang: Option<&str>,
-    ) -> PyResult<u32> {
-        let comp_refs: Vec<crate::types::CompositionRef> = compositions
+    /// Detect gaps in the current graph state.
+    fn detect_gaps(&self) -> Vec<PyKnowledgeGap> {
+        let snapshot = self.engine.snapshot();
+        let mut detector = v12::DetectGaps::new();
+        let gaps = detector.detect_all(&snapshot);
+        gaps.iter().map(PyKnowledgeGap::from).collect()
+    }
+
+    /// Get the number of compositions in the graph.
+    fn composition_count(&self) -> usize {
+        self.engine.graph().compositions.len()
+    }
+
+    /// Get the number of nodes in the graph.
+    fn node_count(&self) -> usize {
+        self.engine.graph().nodes.len()
+    }
+
+    /// Get a specific composition by its ID.
+    fn get_composition(&self, id: &str) -> Option<PyComposition> {
+        self.engine
+            .graph()
+            .get_composition(&id.to_string())
+            .map(PyComposition::from)
+    }
+
+    /// Find weak frames — low-confidence Event compositions missing expected roles.
+    fn find_weak_frames(&self) -> Vec<String> {
+        self.engine
+            .find_weak_frames()
             .iter()
-            .filter_map(|(node_label, sense_id)| {
-                let node_id = self.inner.token_to_id.get(node_label.as_str())?;
-                Some(crate::types::CompositionRef::new(*node_id, *sense_id))
-            })
-            .collect();
-
-        if comp_refs.len() != compositions.len() {
-            return Err(PyValueError::new_err(
-                "Some composition target nodes not found",
-            ));
-        }
-
-        let id = self
-            .inner
-            .compose(label, comp_refs, lang)
-            .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        Ok(id)
-    }
-
-    /// Backward compat: compose from atom IDs (creates compositions with sense_id=0).
-    #[pyo3(signature = (label, atom_ids, lang=None))]
-    fn compose_from_ids(
-        &mut self,
-        label: &str,
-        atom_ids: Vec<u32>,
-        lang: Option<&str>,
-    ) -> PyResult<u32> {
-        let id = self
-            .inner
-            .compose_from_ids(label, atom_ids, lang)
-            .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        Ok(id)
-    }
-
-    /// v6.2: Set the condition label for a specific sense.
-    ///
-    /// This is a purely annotation operation — it does not affect any logic.
-    /// Condition labels are used by the frontend for tooltips and by
-    /// Appraise/Relate for more descriptive verdicts.
-    ///
-    /// Example: set_sense_label("kayu", 1, Some("via_api.partial_burn".to_string()))
-    fn set_sense_label(
-        &mut self,
-        node_label: &str,
-        sense_idx: usize,
-        label: Option<String>,
-    ) -> PyResult<()> {
-        let id = self
-            .inner
-            .token_to_id
-            .get(node_label)
-            .copied()
-            .ok_or_else(|| PyValueError::new_err(format!("Node '{}' not found", node_label)))?;
-        if let Some(sm) = self.inner.senses.get_mut(&id) {
-            if let Some(sense) = sm.get_sense_mut(sense_idx) {
-                sense.condition_label = label;
-                return Ok(());
-            }
-        }
-        Err(PyValueError::new_err("Sense not found"))
-    }
-
-    /// v6.2: Get the list of node IDs that require approval before removal.
-    ///
-    /// These nodes have low confidence but high impact (many dependents
-    /// in the graph), so they cannot be automatically removed.
-    fn pending_removals(&self) -> Vec<u32> {
-        self.inner.autonomy.pending_removals()
-    }
-
-    /// v6.3: Return entity candidates based on learned centrality + diversity scoring.
-    ///
-    /// These are tokens that appear structurally significant in the attention graph
-    /// but have not yet been promoted to nodes. Returns a list of (label, entity_score).
-    #[pyo3(signature = (top_k=10))]
-    fn entity_candidates(&self, top_k: usize) -> Vec<(String, f32)> {
-        self.inner.entity_candidates(top_k)
-    }
-
-    /// Backward compat: alias for nodes()
-    #[pyo3(signature = (include_seeds=false))]
-    fn atoms(&self, include_seeds: bool) -> Vec<String> {
-        self.nodes(include_seeds)
-    }
-
-    /// Get confidence scores for all nodes.
-    fn confidence_map(&self) -> HashMap<String, f32> {
-        self.inner
-            .token_to_id
-            .iter()
-            .filter_map(|(label, &id)| {
-                let conf = self.inner.autonomy.confidence(id)?;
-                Some((label.clone(), conf))
-            })
+            .map(|wf| wf.composition_id.clone())
             .collect()
     }
 
-    // -------------------------------------------------------------------
-    // Status
-    // -------------------------------------------------------------------
-
-    /// Return a dict with system status.
-    fn status(&self) -> HashMap<String, f64> {
-        let s = self.inner.status();
-        let mut m = HashMap::new();
-        m.insert("total_nodes".into(), s.total_nodes as f64);
-        m.insert("total_atoms".into(), s.total_atoms as f64);
-        m.insert("total_contexts".into(), s.total_contexts as f64);
-        m.insert("warmed_up".into(), s.warmed_up as i32 as f64);
-        m.insert("watchlist_count".into(), s.watchlist_count as f64);
-        m.insert("changelog_count".into(), s.changelog_count as f64);
-        m.insert("theta_assign".into(), s.theta_assign as f64);
-        m.insert("theta_merge".into(), s.theta_merge as f64);
-        m
+    /// Get a JSON snapshot of the current graph state.
+    fn snapshot_json(&self) -> String {
+        let snapshot = self.engine.snapshot();
+        serde_json::to_string(&snapshot)
+            .unwrap_or_else(|e| format!("{{\"error\": \"{}\"}}", e))
     }
 
-    // -------------------------------------------------------------------
-    // Persistence
-    // -------------------------------------------------------------------
-
-    /// Save the full RSVS state to a JSON file.
-    fn save(&self, path: &str) -> PyResult<()> {
-        use std::path::Path;
-        crate::persist::save(&self.inner, Path::new(path)).map_err(to_py_err)
+    /// Enable or disable gap detection for subsequent ingest calls.
+    fn set_gap_detection(&mut self, enabled: bool) {
+        self.engine.context.gap_detection_enabled = enabled;
     }
 
-    /// Load RSVS state from a JSON file. Returns a new Rsvs instance.
-    #[staticmethod]
-    fn load(path: &str) -> PyResult<PyRsvs> {
-        use std::path::Path;
-        let inner = crate::persist::load(Path::new(path)).map_err(to_py_err)?;
-        Ok(PyRsvs { inner })
-    }
-
-    // -------------------------------------------------------------------
-    // v7.0: MCTS query, Reflection, Consolidation, Thinking Mode
-    // -------------------------------------------------------------------
-
-    /// v7.0: MCTS-style traversal query for complex disambiguation.
-    ///
-    /// Uses Monte Carlo Tree Search with UCB1 selection and structural
-    /// value evaluation (grounding × coherence) for deeper exploration
-    /// of compositional structures. Best for multi-sense, high-layer queries.
-    ///
-    /// # Arguments
-    /// * `concept` - The concept label to query
-    /// * `context_atoms` - Context atom labels to disambiguate the query
-    /// * `max_simulations` - Number of MCTS simulations (default: 10)
-    /// * `max_depth` - Maximum depth per simulation (default: 4)
-    #[pyo3(signature = (concept, context_atoms, max_simulations=None, max_depth=None))]
-    fn mcts_query(
-        &self,
-        concept: &str,
-        context_atoms: Vec<String>,
-        max_simulations: Option<usize>,
-        max_depth: Option<usize>,
-    ) -> Option<PyMCTSResult> {
-        let start_node = *self.inner.token_to_id.get(concept)?;
-
-        let context_ids: crate::types::AtomSet = context_atoms
-            .iter()
-            .filter_map(|label| self.inner.token_to_id.get(label.as_str()).copied())
-            .collect();
-
-        if context_ids.is_empty() {
-            return None;
-        }
-
-        let mcts_config = MCTSConfig {
-            max_simulations: max_simulations.unwrap_or(10),
-            max_depth: max_depth.unwrap_or(4),
-            ..MCTSConfig::default()
-        };
-
-        let mcts = crate::mcts::MCTSTraversal::new(mcts_config);
-        let traversal_config = &self.inner.config.traversal;
-
-        let result = mcts.traverse(
-            &self.inner.graph,
-            &self.inner.senses,
-            start_node,
-            &context_ids,
-            traversal_config,
-        );
-
-        let label_for = |id: u32| -> String {
-            self.inner
-                .graph
-                .get_node(id)
-                .map(|n| n.label.clone())
-                .unwrap_or_else(|| format!("#{}", id))
-        };
-
-        Some(PyMCTSResult {
-            active_sense_idx: result.context_query_result.active_sense_idx,
-            total_senses: result.context_query_result.total_senses,
-            scored_atoms: result.context_query_result.scored_atoms,
-            depth_reached: result.context_query_result.depth_reached,
-            halt_reason: format!("{:?}", result.context_query_result.halt_reason),
-            simulations_run: result.simulations_run,
-            best_path: result.best_path
-                .iter()
-                .map(|(id, sense_idx)| (label_for(*id), *sense_idx))
-                .collect(),
-            layer: result.context_query_result.layer,
-            grounding_score: result.context_query_result.grounding_score,
-        })
-    }
-
-    /// v7.0: Run a sense reflection cycle.
-    ///
-    /// Evaluates each sense and produces actions:
-    /// - CONFIRM: sense is well-grounded, no action needed
-    /// - REVIEW: sense has some contradictions, monitor closely
-    /// - REVISE: sense needs composition pruning
-    /// - RETIRE: sense is fragile + ungrounded + inactive, safe to delete
-    ///
-    /// Returns the total number of actions and how many were applied.
-    fn run_reflection(&mut self) -> PyReflectionResult {
-        let actions = self.inner.reflection.reflect(
-            &self.inner.senses,
-            &self.inner.config.sense,
-        );
-        let actions_total = actions.len();
-        let actions_applied = self.inner.reflection.apply_actions(
-            &mut self.inner.senses,
-            &actions,
-            &self.inner.config.sense,
-        );
-        PyReflectionResult {
-            actions_total,
-            actions_applied,
-        }
-    }
-
-    /// v7.0: Run a consolidation cycle on the knowledge graph.
-    ///
-    /// Consolidation performs thorough cleanup:
-    /// - Remove dead senses (fragile + ungrounded + very inactive)
-    /// - Merge similar senses across nodes (Jaccard >= 0.8)
-    /// - Prune weak edges (weight below threshold after decay)
-    /// - Compact atom records (remove nodes below tau_remove)
-    ///
-    /// # Arguments
-    /// * `force` - Force consolidation regardless of interval
-    #[pyo3(signature = (force=false))]
-    fn consolidate(&mut self, force: bool) -> PyConsolidationResult {
-        if !force && !self.inner.consolidation.should_run(self.inner.batch_counter) {
-            return PyConsolidationResult {
-                senses_merged: 0,
-                senses_removed: 0,
-                edges_pruned: 0,
-                atoms_compacted: 0,
-            };
-        }
-
-        let result = self.inner.consolidation.consolidate(
-            &mut self.inner.graph,
-            &mut self.inner.senses,
-            &mut self.inner.autonomy,
-        );
-
-        PyConsolidationResult {
-            senses_merged: result.senses_merged,
-            senses_removed: result.senses_removed,
-            edges_pruned: result.edges_pruned,
-            atoms_compacted: result.atoms_compacted,
-        }
-    }
-
-    /// v7.0: Set the ThinkingToggle mode.
-    ///
-    /// Controls whether queries use shallow (NON_THINKING) or deep (THINKING)
-    /// traversal. In 'auto' mode (-1), the system classifies each query's
-    /// complexity and selects the appropriate mode automatically.
-    ///
-    /// # Arguments
-    /// * `force_mode` - -1 for auto, 0 for NON_THINKING, 1 for THINKING
-    fn set_thinking_mode(&mut self, force_mode: i8) {
-        self.inner.thinking_toggle.config.force_mode = force_mode;
-    }
-
-    /// v7.0: Neuro-symbolic verification of a node's compositions.
-    ///
-    /// Verifies that a sense's compositions satisfy structural invariants:
-    /// - No self-reference
-    /// - Layer consistency
-    /// - Grounding threshold
-    /// - Frequency threshold
-    /// - No circular chains
-    ///
-    /// Returns the verification status and number of failed rules.
-    ///
-    /// # Arguments
-    /// * `label` - Node label to verify
-    /// * `max_iterations` - Max verification-revision iterations (default: 3)
-    #[pyo3(signature = (label, max_iterations=None))]
-    fn verify(
-        &self,
-        label: &str,
-        max_iterations: Option<usize>,
-    ) -> PyResult<Option<String>> {
-        let &id = self
-            .inner
-            .token_to_id
-            .get(label)
-            .ok_or_else(|| PyValueError::new_err(format!("Node '{}' not found", label)))?;
-
-        let sm = self.inner.senses.get(&id)
-            .ok_or_else(|| PyValueError::new_err(format!("No senses for '{}'", label)))?;
-
-        let mut verifier = crate::neurosym::NeuroSymVerifier::new();
-        if let Some(iters) = max_iterations {
-            verifier.max_iterations = iters;
-        }
-
-        // Verify each sense and collect results
-        let mut results = Vec::new();
-        for (idx, sense) in sm.senses.iter().enumerate() {
-            let (status, rule_results) = verifier.verify(
-                id, sense,
-                &self.inner.graph,
-                &self.inner.senses,
-                &self.inner.config.sense,
-            );
-            let failed = rule_results.iter().filter(|r| !r.passed).count();
-            results.push(serde_json::json!({
-                "sense_idx": idx,
-                "status": format!("{:?}", status),
-                "rules_total": rule_results.len(),
-                "rules_failed": failed,
-                "feedback": rule_results.iter()
-                    .filter_map(|r| r.feedback.clone())
-                    .collect::<Vec<_>>()
-            }));
-        }
-
-        Ok(Some(serde_json::to_string(&results)
-            .map_err(|e| PyValueError::new_err(format!("Serialization failed: {}", e)))?))
-    }
-
-    /// v7.0: Spreading activation query from seed nodes.
-    ///
-    /// Activates related nodes through composition edges with
-    /// energy decay per hop. Returns ranked list of activated nodes.
-    ///
-    /// # Arguments
-    /// * `seed_labels` - Labels of seed nodes to start activation from
-    /// * `initial_energy` - Initial energy for seed nodes (default: 1.0)
-    /// * `max_hops` - Maximum hops from seed (default: 3)
-    #[pyo3(signature = (seed_labels, initial_energy=None, max_hops=None))]
-    fn spreading_activation(
-        &self,
-        seed_labels: Vec<String>,
-        initial_energy: Option<f32>,
-        max_hops: Option<usize>,
-    ) -> Vec<(String, f32)> {
-        let seeds: Vec<u32> = seed_labels
-            .iter()
-            .filter_map(|l| self.inner.token_to_id.get(l.as_str()).copied())
-            .collect();
-
-        if seeds.is_empty() {
-            return Vec::new();
-        }
-
-        let config = crate::spreading::SpreadingActivationConfig {
-            max_hops: max_hops.unwrap_or(3),
-            ..crate::spreading::SpreadingActivationConfig::default()
-        };
-
-        let sa = crate::spreading::SpreadingActivation::new(config);
-        let result = sa.spread(
-            &seeds,
-            initial_energy.unwrap_or(1.0),
-            &self.inner.senses,
-            &self.inner.composition_index,
-        );
-
-        let label_for = |id: u32| -> String {
-            self.inner
-                .graph
-                .get_node(id)
-                .map(|n| n.label.clone())
-                .unwrap_or_else(|| format!("#{}", id))
-        };
-
-        result.activated
-            .iter()
-            .map(|(id, energy)| (label_for(*id), *energy))
-            .collect()
-    }
-
-    fn __repr__(&self) -> String {
-        let s = self.inner.status();
-        format!(
-            "Rsvs(nodes={}, contexts={}, warmed_up={})",
-            s.total_atoms, s.total_contexts, s.warmed_up
-        )
-    }
-
-    // -------------------------------------------------------------------
-    // v8.2: Stub bindings for missing features
-    // -------------------------------------------------------------------
-
-    /// Run self-evaluation reflection on all senses.
-    ///
-    /// Returns a JSON string with the reflection result summary,
-    /// or None if no reflection actions were produced.
-    fn reflect(&mut self) -> Option<String> {
-        let actions = self.inner.reflection.reflect(
-            &self.inner.senses,
-            &self.inner.config.sense,
-        );
-        if actions.is_empty() {
-            return None;
-        }
-        let actions_total = actions.len();
-        let actions_applied = self.inner.reflection.apply_actions(
-            &mut self.inner.senses,
-            &actions,
-            &self.inner.config.sense,
-        );
-        Some(serde_json::json!({
-            "actions_total": actions_total,
-            "actions_applied": actions_applied,
-        }).to_string())
-    }
-
-    /// v8.3: Analyze dependencies for failure recovery using the DEPS planner.
-    ///
-    /// Given a node label and an error type, runs the DEPS (Describe-Explain-Plan-Select)
-    /// planner to generate recovery plans with estimated success rates.
-    ///
-    /// # Arguments
-    /// * `node_label` - The label of the node where the error occurred
-    /// * `error_type` - The error type: "self_reference", "circular_chain",
-    ///   "target_not_found", "sense_limit", "insufficient_divergence",
-    ///   "traversal_leaf", "low_confidence", "grounding_failure", or "general"
-    ///
-    /// Returns a JSON string with the DEPS analysis result, or None if
-    /// the node was not found.
-    fn deps_analyze(&self, node_label: &str, error_type: &str) -> Option<String> {
-        let node_id = *self.inner.token_to_id.get(node_label)?;
-
-        let error = match error_type {
-            "self_reference" => RsvsError::CircularRef { from: node_id, to: node_id },
-            "circular_chain" => RsvsError::CircularRef { from: node_id, to: node_id.wrapping_add(1) },
-            "target_not_found" => RsvsError::NodeNotFound { id: node_id },
-            "composition_rejected" => RsvsError::CompositionRejected {
-                reason: format!("DEPS analysis requested for node {}", node_id),
-            },
-            _ => RsvsError::Pipeline(format!("DEPS analysis: {}", error_type)),
-        };
-
-        let result = self.inner.deps_planner.analyze(&error, node_id);
-
-        let plans_json: Vec<serde_json::Value> = result.plans.iter().map(|p| {
-            serde_json::json!({
-                "description": p.description,
-                "estimated_success_rate": p.estimated_success_rate,
-                "simplicity": p.simplicity,
-                "score": p.score(),
-                "is_destructive": p.is_destructive,
-                "action": format!("{:?}", p.action),
-            })
-        }).collect();
-
-        let recommended = result.recommended.as_ref().map(|p| serde_json::json!({
-            "description": p.description,
-            "estimated_success_rate": p.estimated_success_rate,
-            "simplicity": p.simplicity,
-            "score": p.score(),
-            "is_destructive": p.is_destructive,
-            "action": format!("{:?}", p.action),
-        }));
-
-        Some(serde_json::json!({
-            "failure_type": format!("{:?}", result.failure_type),
-            "explanation": result.explanation,
-            "plans": plans_json,
-            "recommended": recommended,
-        }).to_string())
-    }
-
-    /// Detect convergence in the graph (structural equivalence between nodes).
-    ///
-    /// Returns a JSON string with convergence detection results,
-    /// or None if no convergent pairs were found.
-    fn convergence_detect(&mut self) -> Option<String> {
-        let results = self.inner.convergence.detect(
-            &mut self.inner.graph,
-            &self.inner.senses,
-            &self.inner.stats_db,
-        );
-        if results.is_empty() {
-            return None;
-        }
-        let summary: Vec<serde_json::Value> = results.iter().map(|r| {
-            let label_a = self.inner.graph.get_node(r.node_a).map(|n| n.label.clone()).unwrap_or_default();
-            let label_b = self.inner.graph.get_node(r.node_b).map(|n| n.label.clone()).unwrap_or_default();
-            serde_json::json!({
-                "a": label_a,
-                "b": label_b,
-                "overlap": r.overlap_score,
-                "linked": r.linked,
-            })
-        }).collect();
-        Some(serde_json::json!({ "pairs": summary }).to_string())
+    /// Check whether gap detection is currently enabled.
+    fn gap_detection_enabled(&self) -> bool {
+        self.engine.context.gap_detection_enabled
     }
 }
 
+// ========================================================================
+// Python Module Registration
+// ========================================================================
+
+/// Register all v12 PyO3 classes with the Python module.
 #[pymodule]
-fn _rsvs(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_class::<PyRsvs>()?;
-    m.add_class::<PyIngestStats>()?;
-    m.add_class::<PyIngestMetaV1>()?;
-    m.add_class::<PyQueryResult>()?;
-    m.add_class::<PySimResult>()?;
-    m.add_class::<PyStructuralSimResult>()?;
-    m.add_class::<PySubstitutionResult>()?;
-    m.add_class::<PyNodeInfo>()?;
-    m.add_class::<PyAppraiseResult>()?;
-    m.add_class::<PyRelateResult>()?;
-    m.add_class::<PySenseInfo>()?;
-    m.add_class::<PyGroundingEvidence>()?;
-    m.add_class::<PyTransformerBridgeConfig>()?;
-    m.add_class::<PyContextQueryResult>()?;
-    // v7.0 additions
-    m.add_class::<PyMCTSResult>()?;
-    m.add_class::<PyConsolidationResult>()?;
-    m.add_class::<PyReflectionResult>()?;
-    // v8.3 additions
-    m.add_class::<PyRecoveryPlan>()?;
-    m.add_class::<PyDEPSResult>()?;
-
-    // v12.0 additions (only when v12 feature is enabled)
-    #[cfg(feature = "v12")]
-    {
-        m.add_class::<v12_bindings::PyV12Pipeline>()?;
-        m.add_class::<v12_bindings::PySemanticAtom>()?;
-        m.add_class::<v12_bindings::PyComposition>()?;
-        m.add_class::<v12_bindings::PyCompositionMember>()?;
-        m.add_class::<v12_bindings::PyKnowledgeGap>()?;
-        m.add_class::<v12_bindings::PyAcquisitionDecision>()?;
-        m.add_class::<v12_bindings::PyInquiryQuestion>()?;
-        m.add_class::<v12_bindings::PyV12IngestResult>()?;
-    }
-
+fn rsvs(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_class::<PyV12Pipeline>()?;
+    m.add_class::<PySemanticAtom>()?;
+    m.add_class::<PyComposition>()?;
+    m.add_class::<PyCompositionMember>()?;
+    m.add_class::<PyKnowledgeGap>()?;
+    m.add_class::<PyAcquisitionDecision>()?;
+    m.add_class::<PyInquiryQuestion>()?;
+    m.add_class::<PyV12IngestResult>()?;
     Ok(())
 }
