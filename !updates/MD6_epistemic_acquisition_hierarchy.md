@@ -3,7 +3,9 @@
 > **Prerequisite**: MD-3 defines SemanticAtom, AtomType, Composition, Transform, LifecycleState,
 > EpistemicState, SemanticEdge, EdgeSource. MD-4 defines GovernBeliefs + SeedAnchor.
 > MD-5 defines ExecutiveOrchestrator.
-> This document defines acquisition as **Transforms** that detect gaps and resolve them.
+> MD-3 now also defines EnrichmentRequest, ReExtractionRequest, RecallAction,
+> EnrichComposition Transform, and ReExtractFrame Transform for the feedback loop.
+> This document defines how gap detection PRODUCES those requests.
 
 ---
 
@@ -93,6 +95,9 @@ pub struct KnowledgeGap {
     pub source: GapSource,
     pub confidence: f32,
     pub severity: f32,
+    // trace back to the composition that needs repair
+    pub source_composition_id: Option<CompositionId>,  // NEW: composition that had the gap
+    pub source_atom_id: Option<String>,                // NEW: trace to the original atom
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -102,6 +107,7 @@ pub enum GapSource {
     GroundingWeak,          // composition has low grounding score
     GraphSparse,            // not enough nodes in relevant area
     AmbiguousReference,     // pronoun or unclear reference in atom
+    ExtractionFailure,      // NEW: rule-based extraction produced a weak frame
 }
 ```
 
@@ -123,6 +129,8 @@ impl DetectGaps {
                         source: GapSource::AtomMissingRole,
                         confidence: 0.9,
                         severity: 0.7,
+                        source_composition_id: atom.composition_id.clone(),
+                        source_atom_id: Some(atom.id.clone()),
                     });
                 }
 
@@ -134,6 +142,8 @@ impl DetectGaps {
                         source: GapSource::AtomMissingRole,
                         confidence: 0.85,
                         severity: 0.6,
+                        source_composition_id: atom.composition_id.clone(),
+                        source_atom_id: Some(atom.id.clone()),
                     });
                 }
 
@@ -145,6 +155,8 @@ impl DetectGaps {
                         source: GapSource::CandidateLowConfidence,
                         confidence: 0.8,
                         severity: 0.5,
+                        source_composition_id: atom.composition_id.clone(),
+                        source_atom_id: Some(atom.id.clone()),
                         ..Default::default()
                     });
                 }
@@ -159,6 +171,8 @@ impl DetectGaps {
                         source: GapSource::CandidateLowConfidence,
                         confidence: 0.8,
                         severity: 0.5,
+                        source_composition_id: atom.composition_id.clone(),
+                        source_atom_id: Some(atom.id.clone()),
                         ..Default::default()
                     });
                 }
@@ -168,18 +182,71 @@ impl DetectGaps {
                     if !graph.has_node(label) && *role != SemanticRole::SourceEvent {
                         gaps.push(KnowledgeGap {
                             gap_type: KnowledgeGapType::AmbiguousReferenceGap,
-                            description: format!("Role '{}' references unknown node '{}'", 
+                            description: format!("Role '{}' references unknown node '{}'",
                                 format!("{:?}", role), label),
                             source: GapSource::AmbiguousReference,
                             confidence: 0.7,
                             severity: 0.4,
+                            source_composition_id: atom.composition_id.clone(),
+                            source_atom_id: Some(atom.id.clone()),
                             ..Default::default()
                         });
                     }
                 }
             },
 
-            _ => {} // Token and other atoms: no gap detection needed
+            AtomType::AmbiguousToken => {
+                // Ambiguous tokens (pronouns, deictics) are gap-detection candidates.
+                // If the graph has multiple candidate referents, it's an AmbiguousReferenceGap.
+                // If the graph has NO candidate referents, it's a MissingFieldGap (we need context).
+                let recent_referents = graph.recent_compositions(5)
+                    .flat_map(|c| {
+                        let mut refs = Vec::new();
+                        if let Some(agent) = c.member_with_role(&SemanticRole::Arg0Agent) {
+                            refs.push(agent.node_id);
+                        }
+                        if let Some(patient) = c.member_with_role(&SemanticRole::Arg1Patient) {
+                            refs.push(patient.node_id);
+                        }
+                        refs
+                    })
+                    .collect::<Vec<_>>();
+
+                if recent_referents.len() > 1 {
+                    // Multiple candidates → ambiguous reference
+                    gaps.push(KnowledgeGap {
+                        gap_id: format!("gap_ambig_{}", atom.id),
+                        gap_type: KnowledgeGapType::AmbiguousReferenceGap,
+                        description: format!(
+                            "AmbiguousToken '{}' has {} possible referents in recent context",
+                            atom.label, recent_referents.len()
+                        ),
+                        source: GapSource::AmbiguousReference,
+                        confidence: 0.85,
+                        severity: 0.7,  // pronouns are high-severity — they block understanding
+                        source_composition_id: atom.composition_id.clone(),
+                        source_atom_id: Some(atom.id.clone()),
+                    });
+                } else if recent_referents.is_empty() {
+                    // No candidates at all → missing field (need external context)
+                    gaps.push(KnowledgeGap {
+                        gap_id: format!("gap_ambig_{}", atom.id),
+                        gap_type: KnowledgeGapType::MissingFieldGap,
+                        description: format!(
+                            "AmbiguousToken '{}' has no candidate referent in graph",
+                            atom.label
+                        ),
+                        source: GapSource::AmbiguousReference,
+                        confidence: 0.9,
+                        severity: 0.8,  // completely unresolved — highest severity
+                        source_composition_id: atom.composition_id.clone(),
+                        source_atom_id: Some(atom.id.clone()),
+                    });
+                }
+                // If exactly 1 referent: no gap — the token is resolved by graph context
+            },
+
+            _ => {} // Plain Token, State, etc.: no gap detection
         }
 
         gaps
@@ -193,6 +260,8 @@ impl DetectGaps {
                 source: GapSource::GraphSparse,
                 confidence: 0.9,
                 severity: 0.8,
+                source_composition_id: None,
+                source_atom_id: None,
                 ..Default::default()
             }];
         }
@@ -209,6 +278,8 @@ impl DetectGaps {
                     source: GapSource::GroundingWeak,
                     confidence: 0.7,
                     severity: 0.5,
+                    source_composition_id: Some(comp.id.clone()),
+                    source_atom_id: None,
                     ..Default::default()
                 });
             }
@@ -248,6 +319,20 @@ pub struct AcquisitionDecision {
     pub reason: String,
     pub confidence_before: f32,
     pub expected_gain: f32,
+    pub action: Option<RecallAction>,  // NEW: what to do after acquisition
+}
+
+impl Default for AcquisitionDecision {
+    fn default() -> Self {
+        AcquisitionDecision {
+            gap_id: String::new(),
+            mode: AcquisitionMode::Deferred,
+            reason: String::new(),
+            confidence_before: 0.0,
+            expected_gain: 0.0,
+            action: None,
+        }
+    }
 }
 
 impl Transform for SelectAcquisition {
@@ -274,38 +359,319 @@ impl SelectAcquisition {
                 reason: "No gap detected".into(),
                 confidence_before: 1.0,
                 expected_gain: 0.0,
+                action: None,
             },
 
             KnowledgeGapType::SparseGraphGap => {
                 if graph_has_relevant_context(graph, gap) {
-                    AcquisitionDecision { mode: AcquisitionMode::PassiveRecall, .. }
+                    AcquisitionDecision { mode: AcquisitionMode::PassiveRecall, action: None, ..Default::default() }
                 } else {
                     // Phase 1: Deferred (no SelfStudy yet)
                     // Phase 2: SelfStudy
-                    AcquisitionDecision { mode: AcquisitionMode::Deferred, .. }
+                    AcquisitionDecision { mode: AcquisitionMode::Deferred, action: None, ..Default::default() }
                 }
             },
 
-            KnowledgeGapType::AmbiguousReferenceGap |
-            KnowledgeGapType::PrivateContextGap |
             KnowledgeGapType::MissingFieldGap => {
-                AcquisitionDecision { mode: AcquisitionMode::AskUser, .. }
+                if let Some(comp_id) = &gap.source_composition_id {
+                    // Try to find a candidate in the graph for the missing role
+                    if let Some(candidate) = graph_find_role_candidate(graph, gap) {
+                        AcquisitionDecision {
+                            mode: AcquisitionMode::PassiveRecall,
+                            action: Some(RecallAction::EnrichComposition {
+                                target_composition_id: comp_id.clone(),
+                                role_to_fill: extract_missing_role(gap),
+                                candidate_node_id: candidate.node_id,
+                            }),
+                            reason: format!("Graph node '{}' found as candidate for missing {}",
+                                candidate.label, format!("{:?}", extract_missing_role(gap))),
+                            ..Default::default()
+                        }
+                    } else {
+                        AcquisitionDecision {
+                            mode: AcquisitionMode::AskUser,
+                            action: None,
+                            reason: "Missing role with no graph candidate".into(),
+                            ..Default::default()
+                        }
+                    }
+                } else {
+                    AcquisitionDecision {
+                        mode: AcquisitionMode::AskUser,
+                        action: None,
+                        reason: "Missing role but no source composition traceable".into(),
+                        ..Default::default()
+                    }
+                }
             },
 
             KnowledgeGapType::LowGroundingGap => {
                 if graph_has_grounding_evidence(graph, gap) {
-                    AcquisitionDecision { mode: AcquisitionMode::PassiveRecall, .. }
+                    AcquisitionDecision {
+                        mode: AcquisitionMode::PassiveRecall,
+                        action: Some(RecallAction::ReExtractFrame {
+                            target_composition_id: gap.source_composition_id.clone()
+                                .expect("LowGroundingGap must have source_composition_id"),
+                            enriched_context: gather_graph_context(graph, gap),
+                        }),
+                        reason: "Low grounding — re-extract with graph context".into(),
+                        ..Default::default()
+                    }
                 } else {
-                    AcquisitionDecision { mode: AcquisitionMode::AskUser, .. }
+                    AcquisitionDecision {
+                        mode: AcquisitionMode::AskUser,
+                        action: None,
+                        reason: "Low grounding with no graph evidence available".into(),
+                        ..Default::default()
+                    }
+                }
+            },
+
+            KnowledgeGapType::AmbiguousReferenceGap |
+            KnowledgeGapType::PrivateContextGap => {
+                if graph_has_relevant_context(graph, gap) {
+                    AcquisitionDecision {
+                        mode: AcquisitionMode::PassiveRecall,
+                        action: Some(RecallAction::EnrichComposition {
+                            target_composition_id: gap.source_composition_id.clone().unwrap(),
+                            role_to_fill: extract_missing_role(gap),
+                            candidate_node_id: resolve_from_graph(graph, gap),
+                        }),
+                        reason: "Ambiguous reference resolved from graph context".into(),
+                        ..Default::default()
+                    }
+                } else {
+                    AcquisitionDecision {
+                        mode: AcquisitionMode::AskUser,
+                        action: None,
+                        reason: "Ambiguous reference — no graph context, ask user".into(),
+                        ..Default::default()
+                    }
                 }
             },
 
             KnowledgeGapType::UnresolvableGap => {
-                AcquisitionDecision { mode: AcquisitionMode::Deferred, .. }
+                AcquisitionDecision { mode: AcquisitionMode::Deferred, action: None, ..Default::default() }
             },
         }
     }
 }
+```
+
+---
+
+## Graph Role Candidate Lookup
+
+```rust
+/// Query the RSVS graph for a candidate node to fill a missing role.
+///
+/// Strategy: find nodes that frequently play the requested role in compositions
+/// with the same predicate. For example, if "membuat" is missing Arg0Agent,
+/// find which node most often appears as Arg0Agent in Event compositions
+/// where the Predicate is "membuat".
+fn graph_find_role_candidate(graph: &Graph, gap: &KnowledgeGap) -> Option<RoleCandidate> {
+    // 1. Determine which role is missing
+    let missing_role = extract_missing_role(gap);
+
+    // 2. Find compositions with the same predicate
+    let predicate = extract_predicate_from_gap(gap);
+    let same_predicate_comps: Vec<&Composition> = graph.compositions()
+        .filter(|c| c.composition_type == CompositionType::Event)
+        .filter(|c| c.has_member_with_role(SemanticRole::Predicate, predicate))
+        .collect();
+
+    // 3. Among those, find the most frequent filler for the missing role
+    let mut role_fillers: HashMap<NodeId, usize> = HashMap::new();
+    for comp in &same_predicate_comps {
+        if let Some(member) = comp.member_with_role(&missing_role) {
+            *role_fillers.entry(member.node_id).or_default() += 1;
+        }
+    }
+
+    // 4. Return the most frequent filler as candidate
+    role_fillers.into_iter()
+        .max_by_key(|(_, count)| *count)
+        .map(|(node_id, count)| RoleCandidate {
+            node_id,
+            label: graph.node_label(node_id).unwrap_or_default(),
+            frequency: count,
+        })
+}
+
+struct RoleCandidate {
+    node_id: NodeId,
+    label: String,
+    frequency: usize,
+}
+```
+
+---
+
+## Graph Context Evaluation — Concrete Implementations
+
+```rust
+/// Does the graph have relevant context for resolving this gap?
+///
+/// "Relevant context" means the graph contains nodes that could fill
+/// the missing role or disambiguate the reference in this gap.
+///
+/// This is the concrete implementation that SelectAcquisition relies on
+/// to decide between PassiveRecall (graph has answer) vs AskUser (graph doesn't).
+pub fn graph_has_relevant_context(graph: &Graph, gap: &KnowledgeGap) -> bool {
+    match gap.gap_type {
+        KnowledgeGapType::MissingFieldGap => {
+            // Missing field: check if graph has nodes that frequently play
+            // the missing role for compositions with the same predicate
+            let missing_role = extract_missing_role_from_description(&gap.description);
+            let predicate = extract_predicate_from_gap(gap);
+
+            if let (Some(role), Some(pred)) = (missing_role, predicate) {
+                // Find compositions with the same predicate
+                let same_predicate_comps: Vec<&Composition> = graph.compositions()
+                    .filter(|c| c.composition_type == CompositionType::Event)
+                    .filter(|c| c.has_member_with_role_and_label(SemanticRole::Predicate, &pred))
+                    .collect();
+
+                // Check if any of them have the missing role filled
+                let has_role_filler = same_predicate_comps.iter()
+                    .any(|c| c.member_with_role(&role).is_some());
+
+                // Also check: is there a node with label matching any token in the gap description?
+                let has_label_match = gap.description.split_whitespace()
+                    .filter(|t| t.len() > 3)  // skip short words
+                    .any(|t| graph.find_node_by_label(t).is_some());
+
+                has_role_filler || has_label_match
+            } else {
+                false
+            }
+        },
+
+        KnowledgeGapType::AmbiguousReferenceGap => {
+            // Ambiguous reference: check if graph has nodes that match
+            // possible referents (recent agents/patients in recent compositions)
+            let recent_agents: Vec<NodeId> = graph.recent_compositions(5)
+                .filter_map(|c| c.member_with_role(&SemanticRole::Arg0Agent))
+                .map(|m| m.node_id)
+                .collect();
+
+            // If there are candidate referents in recent context, graph is relevant
+            !recent_agents.is_empty()
+        },
+
+        KnowledgeGapType::PrivateContextGap => {
+            // Private context: graph can NEVER resolve this (it's user-specific)
+            false
+        },
+
+        KnowledgeGapType::SparseGraphGap => {
+            // Sparse graph: check if there are ANY nodes near the gap's domain
+            gap.description.split_whitespace()
+                .filter(|t| t.len() > 3)
+                .any(|t| graph.find_node_by_label(t).is_some())
+        },
+
+        KnowledgeGapType::LowGroundingGap => {
+            // Low grounding: check graph for grounding evidence
+            graph_has_grounding_evidence(graph, gap)
+        },
+
+        KnowledgeGapType::UnresolvableGap => false,
+        KnowledgeGapType::NoGap => false,
+    }
+}
+
+/// Does the graph have grounding evidence for this gap?
+///
+/// "Grounding evidence" means the graph contains independent confirmations
+/// of the composition's knowledge — multiple sources, repeated observations,
+/// or high-confidence compositions that overlap with this one.
+pub fn graph_has_grounding_evidence(graph: &Graph, gap: &KnowledgeGap) -> bool {
+    // Get the composition that has the gap
+    let comp_id = match &gap.source_composition_id {
+        Some(id) => id,
+        None => return false,  // no composition to ground
+    };
+
+    let comp = match graph.get_composition(comp_id) {
+        Some(c) => c,
+        None => return false,  // composition not found
+    };
+
+    // Strategy 1: Check if any member node has high grounding
+    let high_grounding_members = comp.members.iter()
+        .filter(|m| {
+            if let Some(node) = graph.get_node(m.node_id) {
+                // Node is stable with high confidence → grounded
+                node.status == NodeStatus::Stable && node.confidence >= 0.7
+            } else {
+                false
+            }
+        })
+        .count();
+
+    // If at least 2 members are well-grounded, there's grounding evidence
+    if high_grounding_members >= 2 {
+        return true;
+    }
+
+    // Strategy 2: Check for confirming compositions
+    // (other compositions that share predicate + at least one role-filler)
+    let confirming = graph.compositions()
+        .filter(|other| other.id != comp.id)
+        .filter(|other| other.composition_type == comp.composition_type)
+        .filter(|other| {
+            // Same predicate
+            other.member_with_role(&SemanticRole::Predicate)
+                == comp.member_with_role(&SemanticRole::Predicate)
+        })
+        .filter(|other| other.confidence >= 0.5)
+        .count();
+
+    // If there are confirming compositions, there's grounding evidence
+    confirming >= 1
+}
+
+/// Helper: extract the missing role from gap description.
+/// Gap descriptions follow a pattern like "Event 'membuat' missing agent (ARG0)"
+fn extract_missing_role_from_description(desc: &str) -> Option<SemanticRole> {
+    let lower = desc.to_lowercase();
+    if lower.contains("agent") || lower.contains("arg0") {
+        Some(SemanticRole::Arg0Agent)
+    } else if lower.contains("patient") || lower.contains("arg1") {
+        Some(SemanticRole::Arg1Patient)
+    } else if lower.contains("recipient") || lower.contains("arg2") {
+        Some(SemanticRole::Arg2Recipient)
+    } else if lower.contains("cause") {
+        Some(SemanticRole::Cause)
+    } else if lower.contains("purpose") {
+        Some(SemanticRole::Purpose)
+    } else {
+        None
+    }
+}
+
+/// Helper: extract predicate from gap description.
+/// Gap descriptions contain the predicate in single quotes: Event 'membuat' ...
+fn extract_predicate_from_gap(gap: &KnowledgeGap) -> Option<String> {
+    // Parse from description: "Event 'membuat' missing agent (ARG0)"
+    let desc = &gap.description;
+    if let Some(start) = desc.find("'") {
+        if let Some(end) = desc[start+1..].find("'") {
+            return Some(desc[start+1..start+1+end].to_string());
+        }
+    }
+    None
+}
+```
+
+```text
+These implementations make the acquisition hierarchy concrete:
+- graph_has_relevant_context() determines if PassiveRecall can work
+- graph_has_grounding_evidence() determines if re-extraction has a basis
+- Both use graph structure (not LLMs) — deterministic and auditable
+- PrivateContextGap always returns false for graph context (correct: user-specific)
+- AmbiguousReferenceGap checks recent compositions for candidate referents
 ```
 
 ---
@@ -442,6 +808,56 @@ independent verification.
 
 ---
 
+## User Answer Merge — Closing the Feedback Loop
+
+```rust
+/// Process a user answer by merging it into the existing composition
+/// that had the gap, instead of creating a separate SemanticAtom(Acquisition).
+///
+/// This closes the feedback loop: gap → ask user → merge into original composition.
+pub fn process_user_answer_merge(
+    answer: &str,
+    question: &InquiryQuestion,
+    gap: &KnowledgeGap,
+) -> Result<EnrichmentRequest, UserAnswerError> {
+    let comp_id = gap.source_composition_id
+        .ok_or(UserAnswerError::NoSourceComposition)?;
+
+    // Determine which role the question was about
+    let role_to_fill = match question.question_type {
+        InquiryQuestionType::MissingFieldClarification => {
+            if question.question_text.contains("agent") || question.question_text.contains("Who") {
+                SemanticRole::Arg0Agent
+            } else if question.question_text.contains("patient") || question.question_text.contains("What was affected") {
+                SemanticRole::Arg1Patient
+            } else {
+                return Err(UserAnswerError::UnknownRole);
+            }
+        },
+        InquiryQuestionType::ReferenceClarification => SemanticRole::Arg0Agent, // default
+        _ => return Err(UserAnswerError::UnsupportedQuestionType),
+    };
+
+    Ok(EnrichmentRequest {
+        target_composition_id: comp_id,
+        role_to_fill,
+        candidate_node_id: 0, // resolved by EnrichComposition via graph.ensure_node(answer)
+        candidate_label: answer.to_string(),
+        source: EnrichmentSource::UserAnswerMerge,
+        confidence: 0.85,
+    })
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum UserAnswerError {
+    NoSourceComposition,
+    UnknownRole,
+    UnsupportedQuestionType,
+}
+```
+
+---
+
 ## Inquiry Memory — Prevent Repetition
 
 ```rust
@@ -482,26 +898,125 @@ impl InquiryMemory {
 
 ---
 
+## Feedback Loop — Closing the Gap Detection Cycle
+
+The original architecture had a broken feedback loop. DetectGaps detected gaps in
+SemanticAtoms and Compositions. SelectAcquisition decided how to resolve them. But
+PassiveRecall just returned a mode — it didn't specify WHAT to do with the recalled
+information. And UserAnswer created a separate `SemanticAtom(Acquisition)` that never
+merged back into the original Composition. The loop was broken: gap detection →
+acquisition → ??? → nothing feeds back to the original composition.
+
+This is now closed. Every `KnowledgeGap` carries `source_composition_id` so it can
+trace back to the composition that needs repair. `PassiveRecall` produces concrete
+`RecallAction::EnrichComposition` or `RecallAction::ReExtractFrame` actions instead
+of just a mode. User answers merge into existing compositions via `EnrichmentRequest`
+instead of creating orphan atoms. The loop is complete.
+
+```text
+ExtractFrame → SemanticAtom(Event, conf=0.35)
+                        ↓
+              IngestAtoms → Composition(Event, missing Arg0Agent)
+                        ↓
+              GovernBeliefs → (New, Observed)
+                        ↓
+              [graph matures, user provides context]
+                        ↓
+              DetectGaps → KnowledgeGap(MissingFieldGap, source_comp=comp_42)
+                        ↓
+              SelectAcquisition
+               ├── PassiveRecall → RecallAction::EnrichComposition
+               │     ↓
+               │   EnrichComposition → add Arg0Agent to comp_42
+               │     ↓
+               │   GovernBeliefs re-evaluation → (Candidate, Inferred)
+               │     ↓
+               │   confidence rises from 0.35 → 0.55
+               │
+               ├── AskUser → InquiryQuestion("Who performed this action?")
+               │     ↓
+               │   User: "Raymond"
+               │     ↓
+               │   process_user_answer_merge() → EnrichmentRequest
+               │     ↓
+               │   EnrichComposition → add Arg0Agent="Raymond" to comp_42
+               │     ↓
+               │   GovernBeliefs re-evaluation → (Candidate, Observed for new member)
+               │
+               └── Deferred → gap noted, no action (SelfStudy in Phase 2)
+```
+
+The key insight: PassiveRecall now has a concrete action (`EnrichComposition`), not
+just a mode. User answers now merge into existing compositions instead of creating
+orphan atoms. Every `KnowledgeGap` can trace back to its source composition via
+`source_composition_id`. The gap detection cycle is a closed loop: detect → acquire →
+enrich → re-govern → confidence update.
+
+---
+
 ## Integration with Executive (Optional)
 
 When ExecutiveOrchestrator is enabled:
 
 ```rust
 // Inside ExecutiveOrchestrator, after Analytical or Reflective ingest
-fn check_for_gaps(&self, engine: &mut PipelineEngine) -> Option<Vec<InquiryQuestion>> {
+fn check_for_gaps(&self, engine: &mut PipelineEngine) -> Option<GapResolutionResult> {
     let snapshot = engine.snapshot();
     let gaps = engine.run::<DetectGaps>(&snapshot);
     let decisions = engine.run::<SelectAcquisition>(&gaps);
 
-    let questions: Vec<InquiryQuestion> = decisions.iter()
-        .filter(|d| d.mode == AcquisitionMode::AskUser)
-        .filter_map(|d| {
-            let gap = gaps.iter().find(|g| g.gap_id == d.gap_id)?;
-            engine.get::<SelectAcquisition>().generate_question(gap)
-        })
-        .collect();
+    let mut enrichments = Vec::new();
+    let mut questions = Vec::new();
 
-    if questions.is_empty() { None } else { Some(questions) }
+    for decision in &decisions {
+        match &decision.action {
+            Some(RecallAction::EnrichComposition { target_composition_id, role_to_fill, candidate_node_id }) => {
+                // Closed loop: directly enrich the composition
+                let request = EnrichmentRequest {
+                    target_composition_id: target_composition_id.clone(),
+                    role_to_fill: role_to_fill.clone(),
+                    candidate_node_id: *candidate_node_id,
+                    candidate_label: graph.node_label(*candidate_node_id).unwrap_or_default(),
+                    source: EnrichmentSource::PassiveRecall,
+                    confidence: 0.7,
+                };
+                let delta = engine.run::<EnrichComposition>(&request);
+                let governed = engine.run::<GovernBeliefs>(&delta);
+                let anchored = engine.run::<SeedAnchor>(&governed);
+                engine.apply(anchored);
+                enrichments.push(request);
+            },
+            Some(RecallAction::ReExtractFrame { target_composition_id, enriched_context }) => {
+                // Closed loop: re-extract with graph context
+                let request = ReExtractionRequest {
+                    original_text: /* get from composition provenance */,
+                    original_atom_id: /* get from composition */,
+                    target_composition_id: target_composition_id.clone(),
+                    graph_context: enriched_context.clone(),
+                };
+                if let Some(improved_atom) = engine.run::<ReExtractFrame>(&request) {
+                    // Merge improved atom into existing composition
+                }
+                enrichments.push(/* ... */);
+            },
+            _ => {}
+        }
+
+        // Questions for user
+        if decision.mode == AcquisitionMode::AskUser {
+            if let Some(gap) = gaps.iter().find(|g| g.gap_id == decision.gap_id) {
+                if let Some(q) = engine.get::<SelectAcquisition>().generate_question(gap) {
+                    questions.push(q);
+                }
+            }
+        }
+    }
+
+    if enrichments.is_empty() && questions.is_empty() {
+        None
+    } else {
+        Some(GapResolutionResult { enrichments, questions })
+    }
 }
 ```
 
@@ -541,13 +1056,16 @@ layer1/crates/rsvs-core/src/
   acquisition/
     mod.rs              // DetectGaps + SelectAcquisition Transforms + public API
     types.rs            // KnowledgeGap, KnowledgeGapType, AcquisitionMode, AcquisitionDecision,
-                        // InquiryQuestion, InquiryQuestionType, UserAnswerRecord, InquiryMemory
+                        // InquiryQuestion, InquiryQuestionType, UserAnswerRecord, InquiryMemory,
+                        // RecallAction (ref from MD-3), EnrichmentRequest (ref from MD-3),
+                        // UserAnswerError, RoleCandidate
     gap_detect.rs       // gap detection logic
-    strategy.rs         // acquisition strategy selection + question generation
+    strategy.rs         // acquisition strategy selection + question generation + graph role candidate
+    merge.rs            // process_user_answer_merge logic
     tests.rs            // unit tests
 ```
 
-5 files.
+6 files.
 
 ### Python (layer2) — Phase 2
 
@@ -610,6 +1128,56 @@ Expected: `SemanticAtom { atom_type: Acquisition, source: AcquisitionUserAnswer 
 
 Verify: `lifecycle=Candidate, epistemic=Observed` — NOT auto-Grounded
 
+### Test 9 — KnowledgeGap Has source_composition_id
+
+Event "membuat" with missing Arg0Agent → gap detected
+
+Expected: gap.source_composition_id = Some(comp_id of the Event composition)
+
+### Test 10 — PassiveRecall Produces EnrichComposition Action
+
+Gap detected for missing Arg0Agent, graph has node "Raymond" that frequently fills Arg0Agent for "membuat"
+
+Expected: AcquisitionDecision { mode: PassiveRecall, action: Some(RecallAction::EnrichComposition { role_to_fill: Arg0Agent, candidate_node_id: raymond_node_id }) }
+
+### Test 11 — User Answer Merges Into Existing Composition
+
+User answers "Raymond" to "Who performed this action?"
+
+Expected: EnrichmentRequest { source: UserAnswerMerge, target_composition_id = original comp }
+
+NOT: a separate SemanticAtom(Acquisition) that doesn't link back
+
+### Test 12 — Closed Loop: Gap → Recall → Enrich → Re-govern
+
+Full cycle: ExtractFrame produces weak frame → gap detected → PassiveRecall finds candidate → EnrichComposition adds member → GovernBeliefs re-evaluates → confidence increases
+
+Expected: composition transitions from (New, Observed, conf=0.35) to (Candidate, Inferred, conf=0.55)
+
+### Test 13 — Gap Without source_composition_id Falls Back to AskUser
+
+Gap detected but source_composition_id is None (e.g., sparse graph gap)
+
+Expected: AcquisitionMode::AskUser, action: None (cannot enrich unknown composition)
+
+### Test 14 — AmbiguousToken With Multiple Referents → AmbiguousReferenceGap
+
+Input: `SemanticAtom(AmbiguousToken, "dia", composition_id=Some(comp_5))` in graph with 3 recent agent/patient nodes
+
+Expected: `KnowledgeGapType::AmbiguousReferenceGap`, severity=0.7, source_composition_id=Some(comp_5)
+
+### Test 15 — AmbiguousToken With No Referents → MissingFieldGap
+
+Input: `SemanticAtom(AmbiguousToken, "dia", composition_id=Some(comp_6))` in empty graph
+
+Expected: `KnowledgeGapType::MissingFieldGap`, severity=0.8, source_composition_id=Some(comp_6)
+
+### Test 16 — AmbiguousToken With Exactly One Referent → No Gap
+
+Input: `SemanticAtom(AmbiguousToken, "dia", composition_id=Some(comp_7))` in graph with 1 recent agent
+
+Expected: No gap produced (pronoun resolved unambiguously)
+
 ---
 
 ## Acceptance Criteria
@@ -624,6 +1192,12 @@ Verify: `lifecycle=Candidate, epistemic=Observed` — NOT auto-Grounded
 8. Acquisition works WITHOUT ExecutiveOrchestrator
 9. Acquisition CAN be called from Executive when available
 10. All existing tests remain green
+11. Every KnowledgeGap carries source_composition_id for traceability
+12. PassiveRecall produces RecallAction::EnrichComposition when graph has candidates
+13. User answers merge into existing compositions via EnrichmentRequest
+14. Closed feedback loop: gap → recall/enrich → re-govern → confidence update
+15. Gap detection without source_composition_id falls back to AskUser gracefully
+16. AtomType::AmbiguousToken is gap-detected: multiple referents → AmbiguousReferenceGap, no referents → MissingFieldGap, single referent → no gap
 
 ---
 
@@ -631,7 +1205,12 @@ Verify: `lifecycle=Candidate, epistemic=Observed` — NOT auto-Grounded
 
 MD-6 implements acquisition as Transforms that detect knowledge gaps and resolve them
 through the hierarchy: Remember first, Study second, Ask last. Gap detection inspects
-SemanticAtoms and graph state. Resolution produces either PassiveRecall decisions,
-inquiry questions for users, or deferred SelfStudy requests. All acquired knowledge
-enters as SemanticAtom(Acquisition) and passes through the same GovernBeliefs + SeedAnchor
-pipeline — no special treatment, no bypassing epistemic governance.
+SemanticAtoms and graph state. Resolution produces either PassiveRecall decisions with
+concrete RecallAction (EnrichComposition or ReExtractFrame), inquiry questions for users,
+or deferred SelfStudy requests. Every KnowledgeGap traces back to its source composition
+via source_composition_id. PassiveRecall no longer returns just a mode — it produces
+actionable requests that close the feedback loop. User answers merge into existing
+compositions via EnrichmentRequest instead of creating orphan atoms. All acquired
+knowledge passes through the same GovernBeliefs + SeedAnchor pipeline — no special
+treatment, no bypassing epistemic governance. The gap detection cycle is a closed loop:
+detect → acquire → enrich → re-govern → confidence update.

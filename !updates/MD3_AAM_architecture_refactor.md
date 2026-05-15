@@ -72,6 +72,7 @@ pub struct SemanticAtom {
 #[derive(Debug, Clone, PartialEq, Hash, Eq, Serialize, Deserialize)]
 pub enum AtomType {
     Token,          // simple token extraction (sparse: roles = {})
+    AmbiguousToken, // token that requires disambiguation (pronouns, deictics)
     Event,          // semantic frame extraction (rich: roles = {Arg0, Arg1, Cause, ...})
     HiddenMeaning,  // pre-ingest reasoning output (rich: roles = {Problem, Solution, ...})
     Pattern,        // pattern mining output (structured: roles = {Cause, Action, ...})
@@ -198,6 +199,60 @@ Examples:
 ```
 
 All three enter through **one** ingest pipeline. No dual-track.
+
+### Ambiguous Token Detection
+
+Tokens like "dia", "itu", "mereka" are sources of major ambiguity, but the old
+`DetectGaps` ignored them with `_ => {}`. The `AmbiguousToken` variant enables
+gap detection for tokens that require context resolution.
+
+When `is_ambiguous_token()` returns true, the Tokenize transform produces
+`SemanticAtom { atom_type: AmbiguousToken, ... }` instead of `AtomType::Token`.
+This enables DetectGaps in MD-6 to produce `KnowledgeGap(AmbiguousReferenceGap)`
+for ambiguous tokens, which SelectAcquisition can then resolve via
+PassiveRecall (graph disambiguation) or AskUser.
+
+```rust
+/// Heuristic: is this token ambiguous and in need of disambiguation?
+/// Pronouns, deictics, and common ambiguous tokens need context resolution.
+pub fn is_ambiguous_token(label: &str, graph: &Graph) -> bool {
+    // 1. Known pronoun sets (language-agnostic where possible)
+    let pronouns = [
+        // Indonesian
+        "dia", "ia", "mereka", "kita", "kami", "aku", "kamu", "ia", "ini", "itu",
+        // English
+        "he", "she", "it", "they", "we", "us", "them", "this", "that",
+    ];
+    if pronouns.contains(&label.to_lowercase().as_str()) {
+        return true;
+    }
+
+    // 2. Graph-based: token has multiple senses (high ambiguity)
+    if let Some(node) = graph.find_node_by_label(label) {
+        if node.sense_count() >= 3 {
+            return true;  // 3+ senses = ambiguous without context
+        }
+    }
+
+    // 3. Graph-based: token never co-occurs with seeds (no grounding anchor)
+    if let Some(node) = graph.find_node_by_label(label) {
+        if node.confidence < 0.2 && node.status == NodeStatus::New {
+            return true;  // ungrounded new token needs context
+        }
+    }
+
+    false
+}
+```
+
+Ambiguous token example:
+
+```text
+"dia"
+→ SemanticAtom { atom_type: AmbiguousToken, label: "dia", roles: {} }
+→ DetectGaps: AmbiguousReferenceGap ("dia" has 4 senses, needs context)
+→ SelectAcquisition: PassiveRecall (graph resolves from recent context) or AskUser
+```
 
 ---
 
@@ -441,6 +496,10 @@ pub enum EdgeSource {
     AcquisitionSelfStudy,  // from MD-6: self-study
     AcquisitionUserAnswer, // from MD-6: user answer
     HumanAssertion,        // human override
+
+    // v12.0 feedback loop (detection → repair cycle)
+    EnrichmentFeedback,    // from feedback loop: composition enriched after gap detection
+    ExtractionRepair,      // from feedback loop: frame re-extracted with graph context
 }
 ```
 
@@ -462,6 +521,12 @@ Hidden meaning composition member edge:
 
 Pattern composition member edge:
   SemanticEdge { relation: Causal, role: Some(Antecedent), source: PatternMining }
+
+Enrichment feedback edge:
+  SemanticEdge { relation: Categorical, role: Some(Arg0Agent), source: EnrichmentFeedback }
+
+Re-extraction repair edge:
+  SemanticEdge { relation: Categorical, role: Some(Cause), source: ExtractionRepair }
 ```
 
 ---
@@ -504,53 +569,271 @@ DetectGaps          GraphSnapshot      Vec<KnowledgeGap>   MD-6
 SelectAcquisition   Vec<KnowledgeGap>  AcquisitionDecision MD-6
 RunReasoning        ReasoningRequest   ReasoningResult     existing
 Appraise            ReasoningResult    AppraiseVerdict     existing
+EnrichComposition   EnrichmentRequest  GraphDelta          revised
+ReExtractFrame      ReExtractionRequest Option<SemanticAtom> revised
 ```
 
-### Pipeline Engine
+### DAG-Based Pipeline Engine
 
 ```rust
+/// Transform node in the DAG.
+/// Each node knows what it produces, and the engine routes data to it.
+struct TransformNode {
+    transform_id: TypeId,
+    input_type: TypeId,
+    output_type: TypeId,
+    /// Which transforms must complete before this one can run
+    dependencies: Vec<TypeId>,
+    /// Condition: should this transform run given the current context?
+    condition: Option<Box<dyn Fn(&PipelineContext) -> bool + Send + Sync>>,
+}
+
+/// DAG-based pipeline engine.
+/// Transforms register with their types and dependencies.
+/// The engine topologically sorts them and routes data automatically.
 pub struct PipelineEngine {
     transforms: HashMap<TypeId, Box<dyn Transform>>,
+    dag: Vec<TransformNode>,
     context: PipelineContext,
 }
 
 impl PipelineEngine {
-    /// Run the full ingest pipeline
-    pub fn ingest(&mut self, text: &str) -> IngestResult {
-        // 1. Tokenize (always)
-        let mut atoms = self.run::<Tokenize>(text);
+    /// Register a transform with its dependency chain.
+    /// No need to modify ingest() — the DAG routes data automatically.
+    pub fn register<T: Transform>(
+        &mut self,
+        transform: T,
+        dependencies: Vec<TypeId>,
+        condition: Option<Box<dyn Fn(&PipelineContext) -> bool + Send + Sync>>,
+    ) {
+        let node = TransformNode {
+            transform_id: TypeId::of::<T>(),
+            input_type: TypeId::of::<T::Input>(),
+            output_type: TypeId::of::<T::Output>(),
+            dependencies,
+            condition,
+        };
+        self.dag.push(node);
+        self.transforms.insert(TypeId::of::<T>(), Box::new(transform));
+    }
 
-        // 2. Extract frame (if sentence-like)
-        if is_sentence_like(text) {
-            if let Some(frame_atom) = self.run::<ExtractFrame>(text) {
-                atoms.push(frame_atom);
+    /// Execute the DAG: topologically sort, then run each transform
+    /// whose condition is met and whose dependencies have completed.
+    pub fn execute_dag(&mut self, initial_input: &str) -> IngestResult {
+        // 1. Topological sort the DAG (cached after registration)
+        let sorted = self.topological_sort();
+
+        // 2. Run each transform in order
+        for node in &sorted {
+            // Skip if condition not met
+            if let Some(ref cond) = node.condition {
+                if !cond(&self.context) { continue; }
+            }
+
+            // Skip if any dependency hasn't produced output yet
+            if !self.dependencies_met(node) { continue; }
+
+            // Run the transform
+            self.run_node(node);
+        }
+
+        self.collect_result()
+    }
+
+    /// Convenience: full ingest pipeline using the DAG.
+    /// This is the same as calling execute_dag() with the standard
+    /// transform registration (see register_default_pipeline below).
+    pub fn ingest(&mut self, text: &str) -> IngestResult {
+        self.context.set_raw_text(text);
+        self.execute_dag(text)
+    }
+}
+
+/// Default pipeline registration.
+/// This replaces the hardcoded ingest() — transforms declare themselves.
+fn register_default_pipeline(engine: &mut PipelineEngine) {
+    // Layer 0: Always run
+    engine.register::<Tokenize>(Tokenize, vec![], None);
+
+    // MD-1: Extract frame (only if sentence-like)
+    engine.register::<ExtractFrame>(ExtractFrame, vec![TypeId::of::<Tokenize>()],
+        Some(Box::new(|ctx| ctx.is_sentence_like())));
+
+    // MD-2: Reason on frames (only if event atoms exist)
+    engine.register::<ReasonFrame>(ReasonFrame, vec![TypeId::of::<ExtractFrame>()],
+        Some(Box::new(|ctx| ctx.has_event_atoms())));
+
+    // Core: Ingest all atoms
+    engine.register::<IngestAtoms>(IngestAtoms,
+        vec![TypeId::of::<Tokenize>(), TypeId::of::<ReasonFrame>()], None);
+
+    // MD-4: Govern beliefs
+    engine.register::<GovernBeliefs>(GovernBeliefs, vec![TypeId::of::<IngestAtoms>()], None);
+
+    // MD-4: Seed anchor
+    engine.register::<SeedAnchor>(SeedAnchor, vec![TypeId::of::<GovernBeliefs>()], None);
+
+    // MD-6: Detect gaps (optional, controlled by executive)
+    engine.register::<DetectGaps>(DetectGaps, vec![TypeId::of::<SeedAnchor>()],
+        Some(Box::new(|ctx| ctx.gap_detection_enabled())));
+
+    // MD-6: Select acquisition
+    engine.register::<SelectAcquisition>(SelectAcquisition, vec![TypeId::of::<DetectGaps>()],
+        Some(Box::new(|ctx| ctx.has_gaps())));
+
+    // Feedback: EnrichComposition (only if acquisition produced enrichment)
+    engine.register::<EnrichComposition>(EnrichComposition,
+        vec![TypeId::of::<SelectAcquisition>()],
+        Some(Box::new(|ctx| ctx.has_enrichment_requests())));
+
+    // Feedback: ReExtractFrame (only if acquisition produced re-extraction)
+    engine.register::<ReExtractFrame>(ReExtractFrame,
+        vec![TypeId::of::<SelectAcquisition>()],
+        Some(Box::new(|ctx| ctx.has_reextraction_requests())));
+}
+
+/// Adding a new MD = registering a transform.
+/// No ingest() modification needed.
+///
+/// Example: adding MD-7 would be:
+///   engine.register::<MD7Transform>(MD7Transform, vec![TypeId::of::<SeedAnchor>()], None);
+///
+/// The DAG automatically includes it in the execution order.
+```
+
+The old ingest() method (if-else chain) is replaced by the DAG engine. The
+topological sort ensures transforms execute in dependency order. Conditions
+gate whether a transform runs (e.g., ExtractFrame only for sentence-like input).
+Adding a new MD now truly requires only `engine.register()` — no pipeline code changes.
+
+**Old approach (kept for reference — the hardcoded if-else chain that the DAG replaces):**
+
+```rust
+// OLD: Hardcoded procedural ingest — required editing this method for every new MD.
+// This is replaced by the DAG engine above.
+//
+// pub struct PipelineEngine {
+//     transforms: HashMap<TypeId, Box<dyn Transform>>,
+//     context: PipelineContext,
+// }
+//
+// impl PipelineEngine {
+//     pub fn ingest(&mut self, text: &str) -> IngestResult {
+//         // 1. Tokenize (always)
+//         let mut atoms = self.run::<Tokenize>(text);
+//         // 2. Extract frame (if sentence-like)
+//         if is_sentence_like(text) {
+//             if let Some(frame_atom) = self.run::<ExtractFrame>(text) {
+//                 atoms.push(frame_atom);
+//             }
+//         }
+//         // 3. Reason on event atoms (if any)
+//         let event_atoms: Vec<_> = atoms.iter()
+//             .filter(|a| a.atom_type == AtomType::Event)
+//             .cloned()
+//             .collect();
+//         for event in event_atoms {
+//             let hidden = self.run::<ReasonFrame>(&event);
+//             atoms.extend(hidden);
+//         }
+//         // 4. Ingest all atoms into graph
+//         let delta = self.run::<IngestAtoms>(&atoms);
+//         // 5. Govern beliefs
+//         let governed = self.run::<GovernBeliefs>(&delta);
+//         // 6. Seed-anchor confidence
+//         let anchored = self.run::<SeedAnchor>(&governed);
+//         // 7. Apply to graph
+//         self.apply(anchored)
+//     }
+// }
+```
+
+### PipelineContext — Shared State
+
+```rust
+/// Shared state across all transforms in the pipeline.
+/// Each transform reads from and writes to this context.
+pub struct PipelineContext {
+    // Raw input
+    raw_text: Option<String>,
+
+    // Atom accumulation (built up through the pipeline)
+    current_atoms: Vec<SemanticAtom>,
+
+    // Event history for cross-atom reasoning (MD-2 ReasonFrame)
+    recent_events: Vec<SemanticAtom>,
+
+    // Graph reference (for graph-guided operations)
+    graph: Graph,
+
+    // Extraction quality tracker (MD-1 feedback)
+    extraction_quality: ExtractionQualityTracker,
+
+    // Enrichment requests produced by SelectAcquisition (feedback loop)
+    pending_enrichments: Vec<EnrichmentRequest>,
+    pending_reextractions: Vec<ReExtractionRequest>,
+
+    // Gap detection control
+    gap_detection_enabled: bool,
+    pending_gaps: Vec<KnowledgeGap>,
+
+    // Atom ID counter
+    next_atom_id: u64,
+}
+
+impl PipelineContext {
+    /// Maximum recent events to keep in the sliding window.
+    /// Prevents unbounded memory growth while preserving enough context
+    /// for PolarityConflictRule and cross-atom reasoning.
+    const RECENT_EVENTS_WINDOW: usize = 50;
+
+    /// Add an event atom to recent_events with window management.
+    pub fn record_event(&mut self, atom: SemanticAtom) {
+        if atom.atom_type == AtomType::Event {
+            self.recent_events.push(atom);
+            // Sliding window: trim if exceeds limit
+            if self.recent_events.len() > Self::RECENT_EVENTS_WINDOW {
+                self.recent_events.remove(0);
             }
         }
+    }
 
-        // 3. Reason on event atoms (if any)
-        let event_atoms: Vec<_> = atoms.iter()
-            .filter(|a| a.atom_type == AtomType::Event)
-            .cloned()
-            .collect();
-        for event in event_atoms {
-            let hidden = self.run::<ReasonFrame>(&event);
-            atoms.extend(hidden);
-        }
+    /// Get recent events for ReasoningContext (MD-2).
+    pub fn recent_events(&self) -> &Vec<SemanticAtom> {
+        &self.recent_events
+    }
 
-        // 4. Ingest all atoms into graph
-        let delta = self.run::<IngestAtoms>(&atoms);
+    // Condition helpers for DAG gating
+    pub fn is_sentence_like(&self) -> bool {
+        self.raw_text.as_ref().map(|t| is_sentence_like(t)).unwrap_or(false)
+    }
 
-        // 5. Govern beliefs
-        let governed = self.run::<GovernBeliefs>(&delta);
+    pub fn has_event_atoms(&self) -> bool {
+        self.current_atoms.iter().any(|a| a.atom_type == AtomType::Event)
+    }
 
-        // 6. Seed-anchor confidence
-        let anchored = self.run::<SeedAnchor>(&governed);
+    pub fn gap_detection_enabled(&self) -> bool { self.gap_detection_enabled }
+    pub fn has_gaps(&self) -> bool { !self.pending_gaps.is_empty() }
+    pub fn has_enrichment_requests(&self) -> bool { !self.pending_enrichments.is_empty() }
+    pub fn has_reextraction_requests(&self) -> bool { !self.pending_reextractions.is_empty() }
 
-        // 7. Apply to graph
-        self.apply(anchored)
+    pub fn set_raw_text(&mut self, text: &str) {
+        self.raw_text = Some(text.to_string());
+    }
+
+    pub fn next_atom_id(&mut self) -> u64 {
+        let id = self.next_atom_id;
+        self.next_atom_id += 1;
+        id
     }
 }
 ```
+
+RECENT_EVENTS_WINDOW = 50 is chosen because:
+- PolarityConflictRule needs to compare current event against recent events
+- Most contradictions appear within 10-20 events of each other
+- 50 provides ample margin without significant memory overhead
+- Each SemanticAtom is small (~200 bytes), so 50 events ≈ 10 KB
 
 ### Adding a New MD = Adding a Transform
 
@@ -562,6 +845,267 @@ To add MD-6:  implement DetectGaps + SelectAcquisition transforms
 ```
 
 No pipeline modifications needed. New transforms are registered and called.
+
+```text
+Feedback loop:
+  SelectAcquisition → RecallAction::EnrichComposition → EnrichComposition Transform
+  SelectAcquisition → RecallAction::ReExtractFrame    → ReExtractFrame Transform
+  process_user_answer_merge() → EnrichmentRequest     → EnrichComposition Transform
+```
+
+---
+
+## Feedback Loop — Closing the Detection-Repair Cycle
+
+### The Broken Loop Problem
+
+In the original v11.0–v12.0 pipeline, MD-1 (ExtractFrame) produces SemanticAtoms via
+rule-based extraction — it never knows if its understanding is correct. MD-6 (DetectGaps)
+detects weaknesses in those frames (missing roles, low confidence), but the gap is sent to
+AskUser or Deferred — **not** back to fix the original Composition or re-run extraction.
+The loop is broken.
+
+This means: gap detection produces knowledge about what's missing, but that knowledge never
+flows back to repair the compositions that are missing it. The graph accumulates partial
+compositions that never improve, even when the graph itself already contains the missing
+information.
+
+The feedback loop closes this gap by introducing two pathways:
+
+1. **EnrichComposition**: When SelectAcquisition's PassiveRecall finds a candidate node in
+   the graph that could fill a missing role, or when a user answer provides the missing
+   information, an `EnrichmentRequest` is produced. This flows into the `EnrichComposition`
+   transform, which patches the existing composition with the new member — no new atom
+   needed, no re-extraction needed.
+
+2. **ReExtractFrame**: When gap detection reveals systematic extraction failures (e.g.,
+   ExtractFrame consistently misses the Cause role for certain verb patterns), a
+   `ReExtractionRequest` is produced. This flows into the `ReExtractFrame` transform, which
+   re-runs extraction with graph context as hints — the graph already knows likely
+   role-fillers, and those hints improve the blind rule-based extraction.
+
+Both pathways flow back through GovernBeliefs for re-evaluation, ensuring that enriched
+or re-extracted compositions are properly governed before being committed to the RSVS
+Memory Core.
+
+### EnrichmentRequest
+
+```rust
+/// Request to enrich an existing Composition with a missing or inferred role.
+/// Produced by SelectAcquisition when PassiveRecall finds a candidate in the graph,
+/// or by process_user_answer_merge() when a user answer fills a gap.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EnrichmentRequest {
+    pub target_composition_id: CompositionId,
+    pub role_to_fill: SemanticRole,
+    pub candidate_node_id: NodeId,
+    pub candidate_label: String,
+    pub source: EnrichmentSource,
+    pub confidence: f32,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum EnrichmentSource {
+    PassiveRecall,      // graph already knows the answer
+    UserAnswerMerge,    // user provided the answer, merge into existing composition
+    PatternInference,   // pattern mining suggests this role filler (Phase 2)
+}
+```
+
+### ReExtractionRequest
+
+```rust
+/// Request to re-extract a frame with enriched graph context.
+/// Used when gap detection reveals systematic extraction failures.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReExtractionRequest {
+    pub original_text: String,
+    pub original_atom_id: String,
+    pub target_composition_id: CompositionId,
+    pub graph_context: Vec<(SemanticRole, NodeId, f32)>,  // role → node → confidence from graph
+}
+```
+
+### RecallAction
+
+```rust
+/// Action produced by SelectAcquisition when PassiveRecall finds a candidate.
+/// This is the missing bridge from gap detection back to composition repair.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum RecallAction {
+    EnrichComposition {
+        target_composition_id: CompositionId,
+        role_to_fill: SemanticRole,
+        candidate_node_id: NodeId,
+    },
+    ReExtractFrame {
+        target_composition_id: CompositionId,
+        enriched_context: Vec<(SemanticRole, NodeId, f32)>,
+    },
+    NoAction,  // gap noted but no graph context available
+}
+```
+
+### EnrichComposition Transform
+
+```rust
+/// EnrichComposition Transform
+///
+/// Input:  EnrichmentRequest (composition_id + role + candidate node)
+/// Output: GraphDelta (updated composition with new member + edge)
+///
+/// Closes the feedback loop: gap detection → graph recall → composition repair.
+pub struct EnrichComposition;
+
+impl Transform for EnrichComposition {
+    type Input = EnrichmentRequest;
+    type Output = GraphDelta;
+
+    fn id(&self) -> &'static str { "EnrichComposition" }
+
+    fn transform(&self, req: &Self::Input, ctx: &mut PipelineContext) -> Self::Output {
+        // 1. Find the target composition
+        // 2. Add new CompositionMember with role and candidate node
+        // 3. New member has EpistemicState::Inferred (not Observed — it came from graph)
+        // 4. Add SemanticEdge from composition to candidate node
+        // 5. Update composition confidence (blend existing + enrichment confidence)
+        // 6. Trigger GovernBeliefs re-evaluation on this composition
+    }
+}
+```
+
+### ReExtractFrame Transform
+
+```rust
+/// ReExtractFrame Transform
+///
+/// Input:  ReExtractionRequest (original text + graph context)
+/// Output: Option<SemanticAtom> (improved frame, or None if no improvement)
+///
+/// Re-runs ExtractFrame with graph context as hints.
+/// Graph context provides known role-fillers that the blind rule-based
+/// extraction missed.
+pub struct ReExtractFrame {
+    frame_compiler: ExtractFrame,
+}
+
+impl Transform for ReExtractFrame {
+    type Input = ReExtractionRequest;
+    type Output = Option<SemanticAtom>;
+
+    fn id(&self) -> &'static str { "ReExtractFrame" }
+
+    fn transform(&self, req: &Self::Input, ctx: &mut PipelineContext) -> Self::Output {
+        // 1. Run ExtractFrame on original text with graph context as hints
+        // 2. Graph context provides: "for role Arg0Agent, node X is likely (conf 0.7)"
+        // 3. If rule-based extraction finds nothing but graph context suggests a filler,
+        //    use the graph suggestion with EpistemicState::Inferred
+        // 4. If the re-extracted frame has more roles filled than the original,
+        //    return it (it's better). Otherwise return None.
+        // 5. The new atom references the target_composition_id for merge.
+    }
+}
+```
+
+### Closed-Loop Pipeline Diagram
+
+```text
+Raw Text
+  ↓
+┌─────────────────────────────────────────┐
+│ Atomizer                                │
+│   Tokenize      → Vec<SemanticAtom>     │
+│   ExtractFrame  → Option<SemanticAtom>  │
+│   ReasonFrame   → Vec<SemanticAtom>     │
+└────────────┬────────────────────────────┘
+             ↓ Vec<SemanticAtom>
+┌─────────────────────────────────────────┐
+│ IngestAtoms                             │
+│   Create/update nodes for atom labels   │
+│   Create Composition per atom           │
+│   Add SemanticEdge per role             │
+│   Trigger sense induction               │
+└────────────┬────────────────────────────┘
+             ↓ GraphDelta
+┌─────────────────────────────────────────┐
+│ GovernBeliefs                           │
+│   Assign LifecycleState                 │
+│   Assign EpistemicState                 │
+│   Apply quarantine rules                │
+└────────────┬────────────────────────────┘
+             ↓ GovernedDelta
+┌─────────────────────────────────────────┐
+│ SeedAnchor                              │
+│   Compute seed alignment per composition│
+│   Adjust confidence via seed scores     │
+└────────────┬────────────────────────────┘
+             ↓ AnchoredDelta
+┌─────────────────────────────────────────┐
+│ RSVS Memory Core                        │
+│   Nodes + Compositions + SemanticEdges  │
+│   Sense profiles + Grounding evidence   │
+│   Pattern memory + Convergence state    │
+└────────────┬────────────────────────────┘
+             ↓ GraphSnapshot
+┌─────────────────────────────────────────┐
+│ Reasoning Engines                       │
+│   Prediction + Situation + Latent Signal│
+│   Cross-Pathway + Abduction + Pattern   │
+│   Reflection + Convergence              │
+└────────────┬────────────────────────────┘
+             ↓
+┌─────────────────────────────────────────┐
+│ Executive Control (if enabled)          │
+│   Mode selection + Budget + Stop cond.  │
+└────────────┬────────────────────────────┘
+             ↓
+┌─────────────────────────────────────────┐
+│ Acquisition (if gap detected)           │
+│   Passive Recall → Self Study → Ask User│
+└────────────┬────────────────────────────┘
+             ↓  ← FEEDBACK LOOP (NEW)
+┌─────────────────────────────────────────┐
+│ Composition Repair (NEW)                │
+│   EnrichComposition → patch roles       │
+│   ReExtractFrame    → re-extract better │
+│   → GovernBeliefs re-evaluation         │
+│   → Confidence update in existing comp  │
+└────────────┬────────────────────────────┘
+             ↓
+         Back to RSVS Memory Core
+```
+
+### Enrichment Semantics
+
+The feedback loop introduces new members and edges into existing compositions. The
+semantics of these enrichments must be precise to maintain epistemic integrity:
+
+- **Enriched members enter as `EpistemicState::Inferred`** — never auto-promoted to
+  `Observed`. The enrichment came from graph recall, pattern inference, or user answer
+  merge, not from direct extraction. Even when a user explicitly provides an answer,
+  the new member enters the composition as `Inferred` because it was not part of the
+  original extraction. Only the user's raw answer atom (if ingested separately) would
+  be `Observed`.
+
+- **Enrichment triggers GovernBeliefs re-evaluation** on the target composition. When a
+  new member is added, the composition's lifecycle and epistemic state are re-assessed.
+  This ensures that enriched compositions don't bypass governance.
+
+- **If enrichment raises confidence above threshold**, the composition can transition
+  lifecycle state (e.g., from `Candidate` to `Stable`). This is the mechanism by which
+  partial compositions mature into well-grounded ones through the feedback loop.
+
+- **User answer merge** enters as `(Candidate, Observed)` for the new member (the user
+  directly observed/stated this information), but the overall composition's epistemic
+  state is re-evaluated by GovernBeliefs — it may remain `Inferred` if other members
+  are still inferred, or transition to `Grounded` if enough independent evidence
+  converges.
+
+- **Extraction quality tracking**: ExtractFrame tracks how often its extractions produce
+  gaps (e.g., "for verb 'membuat', Cause role is missing 70% of the time"). This
+  extraction quality metric influences future re-extraction decisions — compositions
+  from low-quality extraction patterns are prioritized for ReExtractFrame when graph
+  context becomes available.
 
 ---
 
@@ -722,7 +1266,7 @@ Raw Text
 │   Cross-Pathway + Abduction + Pattern   │
 │   Reflection + Convergence              │
 └────────────┬────────────────────────────┘
-             ↓ ReasoningResult
+             ↓
 ┌─────────────────────────────────────────┐
 │ Executive Control (if enabled)          │
 │   Mode selection + Budget + Stop cond.  │
@@ -731,7 +1275,17 @@ Raw Text
 ┌─────────────────────────────────────────┐
 │ Acquisition (if gap detected)           │
 │   Passive Recall → Self Study → Ask User│
-└─────────────────────────────────────────┘
+└────────────┬────────────────────────────┘
+             ↓  ← FEEDBACK LOOP (NEW)
+┌─────────────────────────────────────────┐
+│ Composition Repair (NEW)                │
+│   EnrichComposition → patch roles       │
+│   ReExtractFrame    → re-extract better │
+│   → GovernBeliefs re-evaluation         │
+│   → Confidence update in existing comp  │
+└────────────┬────────────────────────────┘
+             ↓
+         Back to RSVS Memory Core
 ```
 
 ---
@@ -793,6 +1347,8 @@ All existing code UNCHANGED. All 1,081 tests green.
 4. Implement IngestAtoms transform (wraps existing ingest)
 5. Implement GovernBeliefs transform (MD-4)
 6. Implement SeedAnchor transform (MD-4)
+7. Implement EnrichComposition transform (feedback loop)
+8. Implement ReExtractFrame transform (feedback loop)
 
 All existing code UNCHANGED. New transforms tested independently.
 ```
@@ -847,6 +1403,9 @@ The elegant architecture is accepted if:
 7. **Seed-driven confidence**: no separate source trust weight system
 8. **All 1,081 tests survive migration**: additive changes first, deprecation last
 9. **Feature-flagged at every phase**: can revert to v11.0 behavior at any point
+10. **Feedback loop closed**: gap detection → graph recall → composition repair → re-governance
+11. **Enrichment produces Inferred members**: never auto-promoted to Observed
+12. **User answer merge**: answers flow back into existing compositions, not just new atoms
 
 ---
 
@@ -857,4 +1416,10 @@ Every piece of knowledge is a SemanticAtom entering through one path. Every stru
 is a Composition. Every entity has two status axes. Every edge is a typed triple. Every
 processing step is a Transform. Every confidence score is seed-anchored.
 
-The result: **less code, more reasoning power, zero conceptual overlap**.
+The feedback loop closes the critical gap: gap detection no longer produces orphaned
+knowledge that never repairs the compositions that need it. Passive recall, user answers,
+and pattern inference all flow back through EnrichComposition and ReExtractFrame to
+repair and improve existing compositions, which are then re-governed before being committed
+to the RSVS Memory Core.
+
+The result: **less code, more reasoning power, zero conceptual overlap, closed feedback loops**.
