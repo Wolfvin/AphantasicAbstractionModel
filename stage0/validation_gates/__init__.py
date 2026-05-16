@@ -36,16 +36,16 @@ Philosophy:
   AAM = the quant system of AI.
 """
 
-from .signal_extraction import SignalExtractionGate, SignalResult
+from .signal_extraction import SignalExtractionGate, SignalResult, SignalVerdict
 from .regime_detection import RegimeDetectionGate, RegimeState
 from .uncertainty_calibration import UncertaintyCalibrationGate, CalibrationRecord
-from .statistical_edge import StatisticalEdgeGate, EdgeAssessment
+from .statistical_edge import StatisticalEdgeGate, EdgeAssessment, ReasoningPath
 from .execution_discipline import ExecutionDisciplineGate, DisciplineVerdict
 
 __all__ = [
-    "SignalExtractionGate", "SignalResult",
+    "SignalExtractionGate", "SignalResult", "SignalVerdict",
     "RegimeDetectionGate", "RegimeState",
     "UncertaintyCalibrationGate", "CalibrationRecord",
-    "StatisticalEdgeGate", "EdgeAssessment",
+    "StatisticalEdgeGate", "EdgeAssessment", "ReasoningPath",
     "ExecutionDisciplineGate", "DisciplineVerdict",
 ]

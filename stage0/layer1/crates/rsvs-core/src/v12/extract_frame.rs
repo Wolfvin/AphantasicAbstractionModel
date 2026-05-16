@@ -670,8 +670,8 @@ fn is_verb_like(token: &str) -> bool {
 
     // Check common verb list (very short for Phase 1).
     const COMMON_VERBS: &[&str] = &[
-        "ada", "ialah", "adalah", "ialah", "punya", "mahu", "hendak", "boleh", "perlu", "harus",
-        "boleh", "mesti",
+        "ada", "ialah", "adalah", "punya", "mahu", "hendak", "boleh", "perlu", "harus",
+        "mesti",
     ];
     if COMMON_VERBS.contains(&lower.as_str()) {
         return true;

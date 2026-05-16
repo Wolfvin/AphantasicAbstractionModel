@@ -70,7 +70,7 @@ def test_gate1_signal_extraction():
             source_modality=ModalityType.TEXT,
         ),
         PerceptualTuple(
-            subject="volume", relation_type=RelationType.COMPARATIVE,
+            subject="volume", relation_type=RelationType.DIFFERENTIAL,
             predicate="normal", dimension="magnitude", direction="4x higher",
             confidence=0.9, source_modality=ModalityType.TEXT,
         ),

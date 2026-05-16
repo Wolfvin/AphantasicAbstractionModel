@@ -1,6 +1,6 @@
 //! Integration tests for the v12.0 AAM pipeline.
 //!
-//! Tests the v12 DAG-based pipeline engine with all 10 transforms.
+//! Tests the v12 DAG-based pipeline engine with all 13 transforms.
 
 use rsvs::v12::{register_default_pipeline, DetectGaps, ExecutiveOrchestrator, PipelineEngine};
 

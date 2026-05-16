@@ -183,19 +183,11 @@ impl ConvergenceDetection {
                 let nodes_a: HashSet<NodeId> = comp_a.members.iter().map(|m| m.node_id).collect();
                 let nodes_b: HashSet<NodeId> = comp_b.members.iter().map(|m| m.node_id).collect();
 
-                // Co-occurrence: count how many nodes they share.
+                // Co-occurrence: count how many nodes they share (composition-level).
                 let shared_count = nodes_a.intersection(&nodes_b).count();
 
                 // If they share too many nodes (high co-occurrence),
                 // they're not convergence candidates — they just share context.
-                let cooc = graph.cooccurrence_count(
-                    *nodes_a.iter().next().unwrap_or(&0),
-                    *nodes_b.iter().next().unwrap_or(&0),
-                );
-
-                // Actually, we want to use the intersection size as co-occurrence
-                // for the convergence check. The graph.cooccurrence_count() is for
-                // node-level co-occurrence; we need composition-level.
                 if shared_count > self.config.max_cooc_for_equivalence + 1 {
                     continue;
                 }
@@ -209,7 +201,7 @@ impl ConvergenceDetection {
                         composition_a: comp_a.id.clone(),
                         composition_b: comp_b.id.clone(),
                         overlap: similarity,
-                        cooccurrence: cooc,
+                        cooccurrence: shared_count,
                         confidence,
                     });
 

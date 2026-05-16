@@ -409,16 +409,20 @@ class SignalExtractionGate:
                 predictive_value=0.6,
             ))
 
-        # If no specific signals found, check for general content
-        if not signals and len(text.strip()) > 10:
-            # There's content but no clear signal pattern
-            # This is likely factual/declarative — low predictive value
-            signals.append(ExtractedSignal(
-                content=text[:100],
-                signal_type=SignalType.FACTUAL,
-                confidence=0.3,
-                predictive_value=0.2,
-            ))
+        # If no specific signals found, check for general content.
+        # Only emit a factual signal if the text has meaningful word(s)
+        # — not just short tokens / random letters.
+        if not signals:
+            words = [w for w in text.strip().split() if len(w) > 2]
+            if len(words) >= 1 and len(text.strip()) > 10:
+                # There's content with real words but no clear signal pattern
+                # This is likely factual/declarative — low predictive value
+                signals.append(ExtractedSignal(
+                    content=text[:100],
+                    signal_type=SignalType.FACTUAL,
+                    confidence=0.3,
+                    predictive_value=0.2,
+                ))
 
         return signals
 

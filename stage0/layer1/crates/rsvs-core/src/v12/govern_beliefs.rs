@@ -1003,7 +1003,9 @@ impl GovernBeliefs {
                     && comp.has_member_with_role(SemanticRole::Arg1Patient)
             }
             CompositionType::HiddenMeaning => {
-                comp.has_member_with_role(SemanticRole::PatternType) && comp.members.len() >= 2
+                comp.has_member_with_role(SemanticRole::Problem)
+                    || comp.has_member_with_role(SemanticRole::Solution)
+                    || (comp.has_member_with_role(SemanticRole::PatternType) && comp.members.len() >= 2)
             }
             CompositionType::Pattern => {
                 comp.has_member_with_role(SemanticRole::Antecedent)
