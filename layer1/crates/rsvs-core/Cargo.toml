@@ -1,8 +1,8 @@
 [package]
 name = "rsvs"
-version = "12.0.0"
+version = "1.0.0"
 edition = "2021"
-description = "Aphantasic Abstraction Model — v12.0 unified DAG pipeline with 6 abstractions"
+description = "Aphantasic Abstraction Model — v1.0.0 unified DAG pipeline with 6 abstractions"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/Wolfvin/AphantasicAbstractionModel"
 keywords = ["symbolic", "knowledge-graph", "compositional", "cognitive", "nlp"]

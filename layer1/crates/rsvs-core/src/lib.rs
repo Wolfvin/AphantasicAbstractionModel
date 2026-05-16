@@ -1,8 +1,8 @@
-//! RSVS Core — v12.0 — Unified Abstraction Architecture
+//! RSVS Core — v1.0.0 — Unified Abstraction Architecture
 //!
-//! This is the v12.0 architecture of the AphantasicAbstractionModel (AAM).
+//! This is the v1.0.0 architecture of the AphantasicAbstractionModel (AAM).
 //! The old v8.3 flat pipeline (Rsvs, RsvsGraph, SenseManager, etc.) has been
-//! replaced by the v12.0 DAG-based transform pipeline.
+//! replaced by the unified DAG-based transform pipeline.
 //!
 //! ## The 6 Unified Abstractions (MD-3)
 //!
@@ -18,7 +18,7 @@
 //! ## Pipeline Engine
 //!
 //! The [`v12::PipelineEngine`] executes transforms in topological order based on
-//! their dependency DAG. Use [`v12::register_default_pipeline`] to wire all 10 core
+//! their dependency DAG. Use [`v12::register_default_pipeline`] to wire all 13 core
 //! transforms, then call [`v12::PipelineEngine::ingest`] to process text.
 //!
 //! ## MD-Specific Transforms
@@ -35,7 +35,7 @@
 pub mod error;
 pub mod types;
 
-// v12.0 architecture — the ONLY pipeline engine.
+// v1.0.0 architecture — the ONLY pipeline engine.
 pub mod v12;
 
 // PyO3 bindings — always compiled when `python` feature is enabled.

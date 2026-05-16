@@ -1,6 +1,6 @@
-//! # v12.0 Transform Pipeline Engine
+//! # v1.0.0 Transform Pipeline Engine
 //!
-//! This module implements the DAG-based transform pipeline that drives all v12.0
+//! This module implements the DAG-based transform pipeline that drives all
 //! knowledge ingestion. Transforms are registered with dependency chains and optional
 //! conditions, then executed in topological order.
 //!
@@ -195,7 +195,7 @@ pub trait ErasedTransform: Send + Sync {
 // PipelineEngine — DAG-Based Transform Executor
 // ========================================================================
 
-/// The central pipeline engine for v12.0 (MD-3 §5).
+/// The central pipeline engine for v1.0.0 (MD-3 §5).
 ///
 /// Manages a set of registered transforms, their dependency DAG, and the
 /// shared pipeline context. Executes transforms in topological order with
@@ -602,7 +602,7 @@ fn topological_sort(dag: &[TransformNode]) -> Result<Vec<String>, Vec<String>> {
 // register_default_pipeline — Wire All Core Transforms
 // ========================================================================
 
-/// Register all core v12.0 transforms in dependency order.
+/// Register all core v1.0.0 transforms in dependency order.
 ///
 /// This wires up the complete default pipeline with 13 transforms:
 ///
@@ -726,16 +726,16 @@ pub fn register_default_pipeline(engine: &mut PipelineEngine) {
 
 /// Minimal v12 graph that stores Compositions (not just Nodes).
 ///
-/// Unlike the v8.3 `RsvsGraph` which stores only nodes and edges, the v12
+/// Unlike the v8.3 `RsvsGraph` which stores only nodes and edges, this
 /// graph additionally stores `Composition`s — structured groupings of nodes
 /// with typed roles, lifecycle/epistemic states, and seed alignment scores.
 ///
 /// # Storage Model
 ///
 /// ```text
-/// nodes:         HashMap<NodeId, Node>          — v12.0 nodes (minimal)
-/// compositions:  HashMap<CompositionId, Composition> — v12.0 compositions
-/// edges:         Vec<(CompositionId, NodeId, SemanticEdge)> — v12.0 typed edges
+/// nodes:         HashMap<NodeId, Node>          — v1.0.0 nodes (minimal)
+/// compositions:  HashMap<CompositionId, Composition> — v1.0.0 compositions
+/// edges:         Vec<(CompositionId, NodeId, SemanticEdge)> — v1.0.0 typed edges
 /// label_to_id:   HashMap<String, NodeId>        — label → NodeId index
 /// next_id:       NodeId                         — auto-incrementing ID counter
 /// ```
@@ -748,10 +748,10 @@ pub fn register_default_pipeline(engine: &mut PipelineEngine) {
 /// they coexist.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Graph {
-    /// Nodes — v12.0 minimal nodes.
+    /// Nodes — v1.0.0 minimal nodes.
     pub nodes: HashMap<NodeId, Node>,
 
-    /// Compositions — v12.0 structured groupings.
+    /// Compositions — v1.0.0 structured groupings.
     pub compositions: HashMap<CompositionId, Composition>,
 
     /// Edges — (composition_id, target_node_id, semantic_edge) triples.

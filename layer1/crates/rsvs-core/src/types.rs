@@ -1,18 +1,19 @@
-//! Shared types used by both v8.3 legacy and v12.0.
+//! Shared types used by both v8.3 legacy and the unified architecture.
 //!
-//! This file was trimmed as part of the C4+C5 refactoring (v12.0 Node migration).
-//! It now contains only the types that v12.0 still imports from `crate::types`:
+//! This file was trimmed as part of the C4+C5 refactoring (Node migration).
+//! It now contains only the types that the unified architecture still imports
+//! from `crate::types`:
 //!
 //! - `NodeId` — u32 node identifier
 //! - `SenseId` — u32 sense identifier
-//! - `EdgeSource` — provenance source (extended in v12.0 with new variants)
+//! - `EdgeSource` — provenance source (extended with new variants)
 //! - `RelationType` — semantic relation classification
 //! - `HiddenMeaningType` — hidden meaning classification
 //!
 //! All other v8.3 types (Node, Edge, CompositionRef, GapAnnotation, SenseProfile,
 //! DiscourseMeta, BlendResult, AbductiveHypothesis, NamedPattern, SynthesisResult,
-//! Fingerprint, TraversalConfig, etc.) have been removed. The v12.0 `Node` is
-//! defined in `v12::types::Node` with only the fields actually used by v12.
+//! Fingerprint, TraversalConfig, etc.) have been removed. The unified `Node` is
+//! defined in `v12::types::Node` with only the fields actually used.
 
 use serde::{Deserialize, Serialize};
 
@@ -57,26 +58,26 @@ pub enum EdgeSource {
     /// v10.1: Created by compound discovery — multi-word expression edges.
     CompoundDiscovery,
 
-    // v12.0: New provenance sources (replaces ProvenanceSource from MD-4)
-    /// v12.0: From MD-1: semantic frame extraction.
+    // Provenance sources from MD-1 through MD-6
+    /// From MD-1: semantic frame extraction.
     FrameCompiler,
-    /// v12.0: From MD-2: pre-ingest reasoning.
+    /// From MD-2: pre-ingest reasoning.
     HiddenMeaningRule,
-    /// v12.0: From MD-4: belief state transition.
+    /// From MD-4: belief state transition.
     EpistemicGovernance,
-    /// v12.0: From MD-5: executive routing.
+    /// From MD-5: executive routing.
     ExecutiveControl,
-    /// v12.0: From MD-6: passive recall.
+    /// From MD-6: passive recall.
     AcquisitionRecall,
-    /// v12.0: From MD-6: self-study.
+    /// From MD-6: self-study.
     AcquisitionSelfStudy,
-    /// v12.0: From MD-6: user answer.
+    /// From MD-6: user answer.
     AcquisitionUserAnswer,
-    /// v12.0: Human override.
+    /// Human override.
     HumanAssertion,
-    /// v12.0: Feedback loop — composition enriched after gap detection.
+    /// Feedback loop — composition enriched after gap detection.
     EnrichmentFeedback,
-    /// v12.0: Feedback loop — frame re-extracted with graph context.
+    /// Feedback loop — frame re-extracted with graph context.
     ExtractionRepair,
 }
 

@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0] - 2026-05-16
+
+### Changed — Version Rebrand
+- **v12.0.0 → v1.0.0**: The rule-based architecture is now the first stable release.
+  All version identifiers in Cargo.toml, docstrings, and comments updated to v1.0.0.
+- **10→13 transforms**: Documentation now correctly reflects the 13-transform pipeline
+  (Tokenize, ExtractFrame, ReasonFrame, IngestAtoms, GovernBeliefs, SeedAnchor,
+  DetectGaps, SelectAcquisition, EnrichComposition, ReExtractFrame, TemporalDecay,
+  SpreadingActivation, ConvergenceDetection).
+
+### Added — PyO3 Python Bindings
+- `PyVerbalizationResult`: Python wrapper for CVE query results (text, path,
+  avg_confidence, stable_grounded_count, candidate_inferred_count, total_compositions)
+- `PyConvergencePair`: Python wrapper for detected structural equivalences
+  (composition_a, composition_b, overlap, cooccurrence, confidence)
+- `PyV12Pipeline.explain(query)`: Explain a query via Compositional Verbalization Engine
+- `PyV12Pipeline.verbalize_composition(composition_id)`: Verbalize a single composition
+- `PyV12Pipeline.detect_convergence()`: Detect structural convergence between compositions
+
+### Architecture Summary (v1.0.0 — Rule-Based Release)
+- **6 Unified Abstractions**: SemanticAtom, Composition, LifecycleState+EpistemicState,
+  SemanticEdge, Transform DAG, Seed Anchoring
+- **13-Transform DAG Pipeline**: Topological sort with condition-gated execution
+- **Compositional Verbalization Engine (CVE)**: Zero-hallucination graph-driven explanation
+- **Spreading Activation**: Energy propagation from seed nodes
+- **Convergence Detection**: Role-weighted structural similarity (α=0.6)
+- **Temporal Decay**: Ebbinghaus-style forgetting curve
+- **Persistence**: JSON save/load for graph state
+- **142 tests passing**: Unit + cognitive scenario coverage
+
 ## [12.1.0] - 2026-05-16
 
 ### Fixed

@@ -1,8 +1,8 @@
-//! # v12.0 — Unified Abstraction Types & Pipeline Engine
+//! # v1.0.0 — Unified Abstraction Types & Pipeline Engine
 //!
-//! This module contains the v12.0 type system and pipeline engine for the
+//! This module contains the v1.0.0 type system and pipeline engine for the
 //! AphantasicAbstractionModel (AAM) architecture. It is the FOUNDATION for the
-//! entire v12.0 architecture as defined in the design documents (MD-1 through MD-6).
+//! entire architecture as defined in the design documents (MD-1 through MD-6).
 //!
 //! ## The 6 Unified Abstractions (MD-3)
 //!
@@ -18,7 +18,7 @@
 //! ## Pipeline Engine
 //!
 //! The [`PipelineEngine`] executes transforms in topological order based on
-//! their dependency DAG. Use [`register_default_pipeline`] to wire all 10 core
+//! their dependency DAG. Use [`register_default_pipeline`] to wire all 13 core
 //! transforms, then call [`PipelineEngine::ingest`] to process text.
 //!
 //! ## MD-Specific Transforms
@@ -33,7 +33,7 @@
 //!
 //! ## Design Principles
 //!
-//! - **Unified**: v12.0 types are the ONLY architecture — the old v8.3 types
+//! - **Unified**: v1.0.0 types are the ONLY architecture — the old v8.3 types
 //!   (`Node`, `Edge`, `CompositionRef`) are legacy and only kept where still
 //!   referenced by the v12 graph's `HashMap<NodeId, Node>` storage.
 //! - **Always compiled**: The `v12` feature flag exists but is enabled by default.
@@ -53,6 +53,7 @@ pub mod reason_frame;
 pub mod spreading;
 pub mod temporal;
 pub mod types;
+pub mod verbalize;
 
 #[cfg(test)]
 mod cognitive_tests;
@@ -60,7 +61,7 @@ mod cognitive_tests;
 // Re-export key types for convenience.
 // Users can import from `rsvs::v12::SemanticAtom` instead of `rsvs::v12::types::SemanticAtom`.
 pub use types::{
-    // --- v12.0 Node ---
+    // --- v1.0.0 Node ---
     Node,
     // --- Abstraction 1: SemanticAtom ---
     SemanticAtom, AtomType, Polarity, Voice, AtomVariant, FrameSource, PatternCategory,
@@ -185,4 +186,12 @@ pub use persistence::{
     Persistence,
     PersistenceError,
     GraphStats,
+};
+
+// Re-export Compositional Verbalization Engine types.
+pub use verbalize::{
+    CompositionalVerbalize,
+    CompositionalVerbalizeTransform,
+    VerbalizeConfig,
+    VerbalizationResult,
 };

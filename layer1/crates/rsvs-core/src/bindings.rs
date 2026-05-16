@@ -1,6 +1,6 @@
-//! PyO3 bindings for the v12.0 AAM pipeline engine and types.
+//! PyO3 bindings for the v1.0.0 AAM pipeline engine and types.
 //!
-//! This module exposes the v12.0 unified abstraction types and the DAG-based
+//! This module exposes the unified abstraction types and the DAG-based
 //! pipeline engine to Python. The old v8.3 bindings (PyRsvs) have been removed.
 //!
 //! ## Python Classes
@@ -13,8 +13,10 @@
 //! | `PyKnowledgeGap` | `KnowledgeGap` | A detected knowledge gap |
 //! | `PyAcquisitionDecision` | `AcquisitionDecision` | How to fill a gap |
 //! | `PyInquiryQuestion` | `InquiryQuestion` | A question to ask the user |
-//! | `PyV12Pipeline` | `PipelineEngine` | The main v12 pipeline engine |
-//! | `PyV12IngestResult` | `IngestResult` | Result of v12 ingest |
+//! | `PyVerbalizationResult` | `VerbalizationResult` | CVE query result |
+//! | `PyConvergencePair` | `ConvergencePair` | Detected convergence |
+//! | `PyV12Pipeline` | `PipelineEngine` | The main v1.0.0 pipeline engine |
+//! | `PyV12IngestResult` | `IngestResult` | Result of v1.0.0 ingest |
 
 use pyo3::prelude::*;
 
@@ -406,10 +408,104 @@ impl From<&v12::InquiryQuestion> for PyInquiryQuestion {
 }
 
 // ========================================================================
-// PyV12IngestResult — Result of v12 ingest
+// PyVerbalizationResult — CVE query result
 // ========================================================================
 
-/// Result of ingesting text through the v12 pipeline.
+/// Python wrapper for `v12::VerbalizationResult` — the output of a CVE query.
+///
+/// Contains the generated explanation text, reasoning path, and confidence stats.
+#[pyclass(get_all, skip_from_py_object)]
+#[derive(Clone, Debug)]
+pub struct PyVerbalizationResult {
+    /// The generated explanation text.
+    pub text: String,
+    /// Ordered composition IDs that were traversed (the reasoning path).
+    pub path: Vec<String>,
+    /// Average confidence across all compositions in the path.
+    pub avg_confidence: f32,
+    /// Number of Stable/Grounded compositions used.
+    pub stable_grounded_count: usize,
+    /// Number of Candidate/Inferred compositions used.
+    pub candidate_inferred_count: usize,
+    /// Total number of compositions used.
+    pub total_compositions: usize,
+}
+
+#[pymethods]
+impl PyVerbalizationResult {
+    fn __repr__(&self) -> String {
+        format!(
+            "VerbalizationResult(confidence={:.0}%, compositions={}, path_len={})",
+            self.avg_confidence * 100.0,
+            self.total_compositions,
+            self.path.len()
+        )
+    }
+}
+
+impl From<&v12::VerbalizationResult> for PyVerbalizationResult {
+    fn from(r: &v12::VerbalizationResult) -> Self {
+        PyVerbalizationResult {
+            text: r.text.clone(),
+            path: r.path.clone(),
+            avg_confidence: r.avg_confidence,
+            stable_grounded_count: r.stable_grounded_count,
+            candidate_inferred_count: r.candidate_inferred_count,
+            total_compositions: r.total_compositions,
+        }
+    }
+}
+
+// ========================================================================
+// PyConvergencePair — Detected structural equivalence
+// ========================================================================
+
+/// Python wrapper for `v12::ConvergencePair` — a detected structural equivalence.
+///
+/// When two compositions have high member overlap but low co-occurrence,
+/// they may be different expressions of the same underlying concept.
+#[pyclass(get_all, skip_from_py_object)]
+#[derive(Clone, Debug)]
+pub struct PyConvergencePair {
+    /// First composition ID.
+    pub composition_a: String,
+    /// Second composition ID.
+    pub composition_b: String,
+    /// Jaccard similarity of member node sets.
+    pub overlap: f32,
+    /// Co-occurrence count.
+    pub cooccurrence: usize,
+    /// Confidence that this is a true convergence.
+    pub confidence: f32,
+}
+
+#[pymethods]
+impl PyConvergencePair {
+    fn __repr__(&self) -> String {
+        format!(
+            "ConvergencePair(a='{}', b='{}', overlap={:.2}, confidence={:.2})",
+            self.composition_a, self.composition_b, self.overlap, self.confidence
+        )
+    }
+}
+
+impl From<&v12::ConvergencePair> for PyConvergencePair {
+    fn from(p: &v12::ConvergencePair) -> Self {
+        PyConvergencePair {
+            composition_a: p.composition_a.clone(),
+            composition_b: p.composition_b.clone(),
+            overlap: p.overlap,
+            cooccurrence: p.cooccurrence,
+            confidence: p.confidence,
+        }
+    }
+}
+
+// ========================================================================
+// PyV12IngestResult — Result of v1.0.0 ingest
+// ========================================================================
+
+/// Result of ingesting text through the pipeline.
 #[pyclass(get_all, skip_from_py_object)]
 #[derive(Clone, Debug)]
 pub struct PyV12IngestResult {
@@ -449,7 +545,7 @@ impl PyV12IngestResult {
 // PyV12Pipeline — Main class wrapping v12::PipelineEngine
 // ========================================================================
 
-/// The main v12.0 pipeline engine, exposed to Python.
+/// The main v1.0.0 pipeline engine, exposed to Python.
 ///
 /// Wraps `PipelineEngine` with a DAG-based transform pipeline that
 /// processes text through: Tokenize, ExtractFrame, ReasonFrame,
@@ -655,6 +751,41 @@ impl PyV12Pipeline {
         }
     }
 
+    /// Explain a query using the Compositional Verbalization Engine (CVE).
+    ///
+    /// Traverses the knowledge graph from query-relevant nodes, builds a reasoning
+    /// path, and verbalizes each composition using deterministic templates.
+    /// Zero hallucination by design — cannot produce text about anything not in the graph.
+    ///
+    /// Returns a VerbalizationResult with the explanation text, reasoning path,
+    /// and confidence statistics.
+    fn explain(&self, query: &str) -> PyVerbalizationResult {
+        let cve = v12::CompositionalVerbalize::new();
+        let result = cve.explain(query, self.engine.graph());
+        PyVerbalizationResult::from(&result)
+    }
+
+    /// Verbalize a single composition by its ID.
+    ///
+    /// Useful for explaining specific compositions without a query context.
+    /// Returns the verbalized sentence with epistemic qualifier, or None if
+    /// the composition doesn't exist.
+    fn verbalize_composition(&self, composition_id: &str) -> Option<String> {
+        let comp = self.engine.graph().get_composition(&composition_id.to_string())?;
+        let cve = v12::CompositionalVerbalize::new();
+        Some(cve.verbalize_single(comp))
+    }
+
+    /// Detect structural convergence between compositions.
+    ///
+    /// Finds pairs of compositions with high member overlap but low co-occurrence,
+    /// suggesting they may represent the same concept expressed differently.
+    fn detect_convergence(&self) -> Vec<PyConvergencePair> {
+        let mut detector = v12::ConvergenceDetection::new();
+        let pairs = detector.detect(self.engine.graph());
+        pairs.iter().map(PyConvergencePair::from).collect()
+    }
+
     /// Get a human-readable summary of the current graph state.
     fn graph_summary(&self) -> String {
         let graph = self.engine.graph();
@@ -696,5 +827,7 @@ fn _rsvs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyAcquisitionDecision>()?;
     m.add_class::<PyInquiryQuestion>()?;
     m.add_class::<PyV12IngestResult>()?;
+    m.add_class::<PyVerbalizationResult>()?;
+    m.add_class::<PyConvergencePair>()?;
     Ok(())
 }

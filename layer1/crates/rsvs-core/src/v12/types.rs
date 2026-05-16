@@ -1,9 +1,10 @@
-//! # v12.0 Unified Abstraction Type Definitions
+//! # v1.0.0 Unified Abstraction Type Definitions
 //!
-//! This module contains ALL v12.0 type definitions as specified in the AAM design
-//! documents (MD-1 through MD-6). These types are the FOUNDATION of the v12.0
-//! architecture — they are the ONLY type system. The old v8.3 types (`Node`, `Edge`,
-//! `CompositionRef`) are legacy and only kept where still referenced by shared storage.
+//! This module contains ALL type definitions for the AAM architecture
+//! as specified in the design documents (MD-1 through MD-6). These types are the
+//! FOUNDATION of the architecture — they are the ONLY type system. The old v8.3
+//! types (`Node`, `Edge`, `CompositionRef`) are legacy and only kept where still
+//! referenced by shared storage.
 //!
 //! ## Type Index
 //!
@@ -25,7 +26,7 @@
 //! - `NodeId` — u32 node identifier
 //! - `SenseId` — u32 sense identifier
 //! - `RelationType` — semantic relation classification (Categorical, Causal, etc.)
-//! - `EdgeSource` — provenance source (extended in v12.0 with new variants)
+//! - `EdgeSource` — provenance source (extended with new variants)
 //! - `HiddenMeaningType` — hidden meaning classification
 
 use serde::{Deserialize, Serialize};
@@ -35,14 +36,14 @@ use std::collections::{HashMap, HashSet};
 use crate::types::{EdgeSource, HiddenMeaningType, NodeId, RelationType};
 
 // ========================================================================
-// v12.0 Node — Minimal Graph Node
+// v1.0.0 Node — Minimal Graph Node
 // ========================================================================
 
-/// Minimal node in the v12.0 graph.
+/// Minimal node in the v1.0.0 graph.
 ///
 /// Unlike the v8.3 `crate::types::Node` which carries 25+ fields accumulated
 /// over versions 6–11, this struct contains only the fields actually used by
-/// the v12.0 pipeline. All semantic structure is now expressed through
+/// the pipeline. All semantic structure is now expressed through
 /// `Composition`s and `SemanticEdge`s, not through node fields.
 ///
 /// # Fields actually used by v12
@@ -60,7 +61,7 @@ pub struct Node {
     pub label: String,
     /// Display-only surface form (e.g., "raja", "dog").
     pub surface_label: String,
-    /// Structural lifecycle state (v12.0 replaces NodeStatus + Tier).
+    /// Structural lifecycle state (replaces NodeStatus + Tier).
     pub lifecycle: LifecycleState,
     /// Confidence score (0.0–1.0).
     pub confidence: f32,
@@ -271,7 +272,7 @@ pub enum FrameSource {
     SrlLabel,
     /// Phase 3: AMR graph compilation.
     AmrCompilation,
-    /// v12.0: Frame re-extracted with graph context (feedback loop).
+    /// Frame re-extracted with graph context (feedback loop).
     GraphAssisted,
 }
 
@@ -749,7 +750,7 @@ pub struct SemanticEdge {
     pub role: Option<SemanticRole>,
 
     /// WHERE this edge came from: provenance.
-    /// Uses the extended `EdgeSource` with v12.0 variants.
+    /// Uses the extended `EdgeSource` with new variants.
     pub source: EdgeSource,
 }
 
