@@ -1,0 +1,75 @@
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "rsvs"
+version = "1.0.0"
+description = "Recursive Symbolic Vocabulary System — compositional symbolic engine with structural meaning, sense-level compositions, and autonomous tiered memory lifecycle"
+readme = "README.md"
+license = {text = "MIT OR Apache-2.0"}
+requires-python = ">=3.11"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Rust",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Typing :: Typed",
+]
+keywords = ["knowledge-graph", "symbolic-ai", "attention", "cognitive-architecture"]
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "slowapi>=0.1.9",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "pytest-asyncio>=0.23",
+    "httpx>=0.27",
+    "ruff>=0.4",
+    "mypy>=1.10",
+    "pip-audit>=2.7",
+]
+
+[project.urls]
+Homepage = "https://github.com/Wolfvin/AphantasicAbstractionModel"
+Repository = "https://github.com/Wolfvin/AphantasicAbstractionModel"
+Documentation = "https://github.com/Wolfvin/AphantasicAbstractionModel/blob/main/ARCHITECTURE.md"
+Changelog = "https://github.com/Wolfvin/AphantasicAbstractionModel/releases"
+Issues = "https://github.com/Wolfvin/AphantasicAbstractionModel/issues"
+
+[project.scripts]
+rsvs = "rsvs.cli:main"
+
+[tool.maturin]
+manifest-path = "crates/rsvs-core/Cargo.toml"
+python-source = "python"
+features = ["pyo3/extension-module"]
+module-name = "rsvs._rsvs"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+check_untyped_defs = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+strict_equality = true
+ignore_missing_imports = true

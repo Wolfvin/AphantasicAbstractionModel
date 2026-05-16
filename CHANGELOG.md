@@ -15,6 +15,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   DetectGaps, SelectAcquisition, EnrichComposition, ReExtractFrame, TemporalDecay,
   SpreadingActivation, ConvergenceDetection).
 
+### Changed — Architecture Reorganization
+- **stage0/ folder**: All core logic (Layer 0-3, pipeline, diffusion_llm, Python rsvs,
+  validation_gates) consolidated into a single `stage0/` directory. This is the complete
+  rule-based system from ingest through output and reasoning.
+- **sys.path auto-setup**: `stage0/__init__.py` automatically adds `stage0/` to `sys.path`,
+  so internal imports (`from layer2.bridge import ...`) work from any working directory.
+- Each Python file inside `stage0/` has a `sys.path` walk-up that finds the `stage0/`
+  root, ensuring cross-layer imports work regardless of the file's subdirectory depth.
+- **pyproject.toml version**: Updated from 8.3.0/12.0.0 to 1.0.0 across all files.
+- **maturin manifest-path**: Updated to reflect new `stage0/layer1/` location.
+
 ### Added — PyO3 Python Bindings
 - `PyVerbalizationResult`: Python wrapper for CVE query results (text, path,
   avg_confidence, stable_grounded_count, candidate_inferred_count, total_compositions)

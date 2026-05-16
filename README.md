@@ -418,9 +418,11 @@ For the full theoretical foundation, see **[COGNITIVE_FOUNDATIONS.md](docs/COGNI
 
 RSVS follows a three-tier architecture with strict separation of concerns:
 
-- **Rust Core** (`layer1/crates/rsvs-core/src/`): All computational logic lives here -- graph storage, attention scoring, sense management, autonomy lifecycle, pipeline orchestration, MCTS, consolidation, reflection, and persistence. The core has no HTTP, no file I/O, and no Python dependencies. It compiles independently and exposes a pure Rust API.
+- **stage0/** (`stage0/`): The complete rule-based system — all core logic from ingest (Layer 0) through reasoning (Layer 3), including the Rust core, Python bridge, cognitive runtime, deductive reasoning, and narrative generation. This is the self-contained AAM engine.
 
-- **Python Bridge** (`python/rsvs/`): The Python layer provides the PyO3 bindings (compiled from Rust via maturin), FastAPI server, CLI tool, validation, and artifact persistence. No computation happens in Python -- it delegates everything to the Rust core. The Python package is typed (PEP 561) and ships with `.pyi` stubs for IDE support.
+- **Rust Core** (`stage0/layer1/crates/rsvs-core/src/`): All computational logic lives here -- graph storage, attention scoring, sense management, autonomy lifecycle, pipeline orchestration, MCTS, consolidation, reflection, and persistence. The core has no HTTP, no file I/O, and no Python dependencies. It compiles independently and exposes a pure Rust API.
+
+- **Python Bridge** (`stage0/python/rsvs/`): The Python layer provides the PyO3 bindings (compiled from Rust via maturin), FastAPI server, CLI tool, validation, and artifact persistence. No computation happens in Python -- it delegates everything to the Rust core. The Python package is typed (PEP 561) and ships with `.pyi` stubs for IDE support.
 
 - **Frontend** (`frontend/`): A Next.js 16 application with React Three Fiber for 3D graph visualization, Zustand for state management, and shadcn/ui for UI components. The frontend communicates with the Python bridge via an API proxy that keeps the API key server-side.
 
