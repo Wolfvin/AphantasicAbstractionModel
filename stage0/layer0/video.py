@@ -107,7 +107,7 @@ class VideoAbstractor(BasePerceptualAbstractor):
                     t.source_modality = ModalityType.VIDEO
                     tuples.append(t)
             except Exception:
-                pass
+                pass  # STUB:REQUIRES_EXTERNAL_BRIDGE — audio track extraction needs ASR
 
         # Strategy 4: Fallback — metadata extraction
         if not tuples:
@@ -132,7 +132,12 @@ class VideoAbstractor(BasePerceptualAbstractor):
         )
 
     def _sample_frames(self, video_input, n: int = 3) -> list[str]:
-        """Sample key frames from video and return their descriptions."""
+        """Sample key frames from video and return their descriptions.
+
+        # STUB:REQUIRES_EXTERNAL_BRIDGE — Needs a video frame sampler +
+        # VLM (Vision Language Model) to extract frame descriptions.
+        # Without it, only metadata-level extraction is available.
+        """
         try:
             return self.frame_bridge.sample_frames(video_input, n)
         except Exception:
@@ -176,8 +181,11 @@ class VideoAbstractor(BasePerceptualAbstractor):
         return tuples
 
     def _extract_metadata_fallback(self, raw_input, input_ref: str) -> list[PerceptualTuple]:
-        """
-        Fallback: extract basic tuples from video metadata/filename cues.
+        """Fallback: extract basic tuples from video metadata/filename cues.
+
+        # STUB:REQUIRES_EXTERNAL_BRIDGE — This fallback produces minimal tuples
+        # because no frame bridge / VLM is available. Real video understanding
+        # requires connecting external models (frame sampler + VLM + ASR).
         """
         tuples: list[PerceptualTuple] = []
 

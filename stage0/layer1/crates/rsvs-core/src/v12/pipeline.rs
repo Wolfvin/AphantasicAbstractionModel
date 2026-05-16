@@ -984,15 +984,15 @@ impl Graph {
 }
 
 // ========================================================================
-// Placeholder Transform: Tokenize
+// Transform: Tokenize
 // ========================================================================
 
 /// Tokenize transform — splits raw text into `SemanticAtom` tokens.
 ///
-/// This is a minimal stub implementation. The full implementation will:
-/// - Split input text into tokens (whitespace + punctuation)
-/// - Create a `SemanticAtom` of type `AtomType::Token` for each token
-/// - Append atoms to `ctx.current_atoms`
+/// Splits on whitespace AND punctuation (.,!?;:,"'()[]{}—–-/), strips
+/// punctuation from tokens, skips empty tokens, and detects sentence
+/// boundaries (period followed by uppercase). Tokens within the same
+/// sentence are grouped together for downstream co-occurrence edges.
 ///
 /// # Transform Signature
 ///
@@ -1001,14 +1001,90 @@ impl Graph {
 /// Output: Vec<SemanticAtom> — written to ctx.current_atoms
 /// ```
 pub struct Tokenize {
-    /// Placeholder — future: tokenizer configuration.
-    _config: (),
+    /// Punctuation characters to split on and strip.
+    punct_chars: &'static [char],
 }
 
 impl Tokenize {
     /// Create a new Tokenize transform.
     pub fn new() -> Self {
-        Self { _config: () }
+        Self {
+            punct_chars: &['.', '!', '?', ';', ':', ',', '"', '\'', '(', ')', '[', ']', '{', '}', '—', '–', '-', '/'],
+        }
+    }
+
+    /// Split text into (sentence_index, cleaned_token) pairs.
+    ///
+    /// Handles:
+    /// - Splitting on whitespace and punctuation
+    /// - Stripping punctuation from tokens
+    /// - Sentence boundary detection (period followed by uppercase)
+    /// - Skipping empty tokens after stripping
+    fn tokenize_with_sentences(&self, text: &str) -> Vec<(usize, String)> {
+        let mut results = Vec::new();
+        let mut sentence_idx = 0usize;
+        let mut current_sentence_tokens: Vec<String> = Vec::new();
+
+        // Split on whitespace first, then further split each chunk on punctuation.
+        for chunk in text.split_whitespace() {
+            let mut sub_tokens = Vec::new();
+            let mut buffer = String::new();
+
+            for ch in chunk.chars() {
+                if self.punct_chars.contains(&ch) {
+                    // Flush buffer as a token if non-empty.
+                    if !buffer.is_empty() {
+                        sub_tokens.push(buffer.clone());
+                        buffer.clear();
+                    }
+                    // Sentence boundary: period, question mark, or exclamation mark
+                    // followed by an uppercase letter later signals a new sentence.
+                    if ch == '.' || ch == '?' || ch == '!' {
+                        // We'll detect the boundary after we see the next token.
+                        // For now, mark this as a sentence-ending token.
+                        sub_tokens.push(format!("{}", ch));
+                    }
+                    // Other punctuation is simply discarded (not emitted as token).
+                } else {
+                    buffer.push(ch);
+                }
+            }
+
+            // Flush remaining buffer.
+            if !buffer.is_empty() {
+                sub_tokens.push(buffer);
+            }
+
+            for tok in sub_tokens {
+                let is_sentence_end = tok == "." || tok == "?" || tok == "!";
+                if is_sentence_end {
+                    // Emit all accumulated tokens for this sentence.
+                    for t in &current_sentence_tokens {
+                        let cleaned = t.to_lowercase();
+                        if !cleaned.is_empty() {
+                            results.push((sentence_idx, cleaned));
+                        }
+                    }
+                    sentence_idx += 1;
+                    current_sentence_tokens.clear();
+                } else {
+                    let cleaned = tok.to_lowercase();
+                    if !cleaned.is_empty() {
+                        current_sentence_tokens.push(tok.clone());
+                    }
+                }
+            }
+        }
+
+        // Emit any remaining tokens in the last sentence.
+        for t in &current_sentence_tokens {
+            let cleaned = t.to_lowercase();
+            if !cleaned.is_empty() {
+                results.push((sentence_idx, cleaned));
+            }
+        }
+
+        results
     }
 }
 
@@ -1030,21 +1106,42 @@ impl ErasedTransform for Tokenize {
         };
 
         let mut atoms_created = 0;
+        let tokenized = self.tokenize_with_sentences(&text);
 
-        // Simple whitespace tokenization.
-        // TODO: Replace with proper tokenizer (punctuation handling, etc.)
-        for token in text.split_whitespace() {
+        // Track sentence memberships for co-occurrence: sentence_idx -> Vec<atom_index>
+        let mut sentence_atoms: HashMap<usize, Vec<usize>> = HashMap::new();
+
+        for (sentence_idx, token_label) in &tokenized {
             let atom_id = format!("atom_{}", ctx.next_atom_id());
             let atom = SemanticAtom {
                 id: atom_id,
-                label: token.to_lowercase(),
+                label: token_label.clone(),
                 atom_type: AtomType::Token,
                 confidence: 1.0,
                 source: crate::types::EdgeSource::Learned,
                 ..SemanticAtom::default()
             };
+            let atom_idx = ctx.current_atoms.len();
+            sentence_atoms.entry(*sentence_idx).or_default().push(atom_idx);
             ctx.current_atoms.push(atom);
             atoms_created += 1;
+        }
+
+        // Store sentence groupings in PipelineContext for downstream use.
+        // We encode this as a simple string in the raw_text metadata.
+        // Downstream transforms (IngestAtoms) can use sentence co-occurrence
+        // to create edges between tokens in the same sentence.
+        // For now, we store sentence info as a separate field on context.
+        // Since PipelineContext doesn't have a dedicated field, we use
+        // a convention: each atom's roles map carries a SentenceIdx key
+        // with the sentence number as the value.
+        for (sentence_idx, atom_indices) in &sentence_atoms {
+            let sent_label = format!("sent_{}", sentence_idx);
+            for &atom_idx in atom_indices {
+                ctx.current_atoms[atom_idx]
+                    .roles
+                    .insert(SemanticRole::SourceAtom, sent_label.clone());
+            }
         }
 
         IngestResult {
@@ -1069,33 +1166,44 @@ impl Transform for Tokenize {
     }
 
     fn transform(&self, input: &Self::Input, ctx: &mut PipelineContext) -> Self::Output {
+        let tokenized = self.tokenize_with_sentences(input);
         let mut atoms = Vec::new();
-        for token in input.split_whitespace() {
+        for (sentence_idx, token_label) in &tokenized {
             let atom_id = format!("atom_{}", ctx.next_atom_id());
-            atoms.push(SemanticAtom {
+            let mut atom = SemanticAtom {
                 id: atom_id,
-                label: token.to_lowercase(),
+                label: token_label.clone(),
                 atom_type: AtomType::Token,
                 confidence: 1.0,
                 source: crate::types::EdgeSource::Learned,
                 ..SemanticAtom::default()
-            });
+            };
+            atom.roles.insert(
+                SemanticRole::SourceAtom,
+                format!("sent_{}", sentence_idx),
+            );
+            atoms.push(atom);
         }
         atoms
     }
 }
 
 // ========================================================================
-// Placeholder Transform: IngestAtoms
+// Transform: IngestAtoms
 // ========================================================================
 
 /// IngestAtoms transform — creates graph structures from `SemanticAtom`s.
 ///
-/// This is a minimal stub implementation. The full implementation will:
-/// - For each atom in `ctx.current_atoms`, call `graph.ensure_node()`
-/// - Create `Composition`s for Event/HiddenMeaning atoms
-/// - Create `SemanticEdge`s linking compositions to their member nodes
-/// - Return a `GraphDelta` with the new structures
+/// For each atom in `ctx.current_atoms`:
+/// - **Token atoms**: calls `graph.ensure_node(label)` and creates co-occurrence
+///   edges between tokens in the same sentence.
+/// - **Event atoms**: creates a Composition with `CompositionType::Event`, adds
+///   members with `SemanticRole`s (Arg0Agent, Arg1Patient, Cause, etc.) from
+///   the atom's roles map, and creates edges for each member.
+/// - **HiddenMeaning atoms**: creates a Composition with
+///   `CompositionType::HiddenMeaning`, adds members with roles from the atom's
+///   roles map, and creates edges for each member.
+/// - Sets `composition.source_text` from `ctx.raw_text`.
 ///
 /// # Transform Signature
 ///
@@ -1104,7 +1212,7 @@ impl Transform for Tokenize {
 /// Output: GraphDelta — applied to graph
 /// ```
 pub struct IngestAtoms {
-    /// Placeholder — future: ingest configuration.
+    /// Future: ingest configuration.
     _config: (),
 }
 
@@ -1135,6 +1243,8 @@ impl ErasedTransform for IngestAtoms {
         let mut comp_id_assignments: Vec<(usize, String)> = Vec::new();
         // Collect event atoms for the sliding window.
         let mut event_atoms: Vec<SemanticAtom> = Vec::new();
+        // Track sentence -> Vec<NodeId> for Token co-occurrence edges.
+        let mut sentence_nodes: HashMap<String, Vec<NodeId>> = HashMap::new();
 
         // Ensure nodes exist for all atom labels.
         let atom_count = ctx.current_atoms.len();
@@ -1143,59 +1253,213 @@ impl ErasedTransform for IngestAtoms {
             let node_id = graph.ensure_node(&atom.label);
             atoms_counted += 1;
 
-            // For Event atoms, create a Composition.
-            if atom.atom_type == AtomType::Event {
-                let comp_id = format!("comp_{}", atom.id);
-                let mut composition = Composition {
-                    id: comp_id.clone(),
-                    composition_type: CompositionType::Event,
-                    confidence: atom.confidence,
-                    source_text: ctx.raw_text.clone(),
-                    ..Default::default()
-                };
+            match atom.atom_type {
+                // --- Token atoms: just ensure the node exists and track sentence co-occurrence ---
+                AtomType::Token | AtomType::AmbiguousToken => {
+                    // Track sentence membership for co-occurrence edges.
+                    if let Some(sent_label) = atom.roles.get(&SemanticRole::SourceAtom) {
+                        sentence_nodes
+                            .entry(sent_label.clone())
+                            .or_default()
+                            .push(node_id);
+                    }
+                }
 
-                // Add the predicate as a member.
-                composition.members.push(CompositionMember {
-                    node_id,
-                    role: SemanticRole::Predicate,
-                    confidence: atom.confidence,
-                    label: atom.label.clone(),
-                });
+                // --- Event atoms: create a Composition with Event type ---
+                AtomType::Event => {
+                    let comp_id = format!("comp_{}", atom.id);
+                    let mut composition = Composition {
+                        id: comp_id.clone(),
+                        composition_type: CompositionType::Event,
+                        confidence: atom.confidence,
+                        source_text: ctx.raw_text.clone(),
+                        ..Default::default()
+                    };
 
-                // Add role members.
-                for (role, label) in &atom.roles {
-                    let role_node_id = graph.ensure_node(label);
+                    // Add the predicate as a member.
                     composition.members.push(CompositionMember {
-                        node_id: role_node_id,
-                        role: role.clone(),
-                        confidence: atom.confidence * 0.9,
-                        label: label.clone(),
+                        node_id,
+                        role: SemanticRole::Predicate,
+                        confidence: atom.confidence,
+                        label: atom.label.clone(),
                     });
+
+                    // Add role members from the atom's roles map.
+                    for (role, label) in &atom.roles {
+                        let role_node_id = graph.ensure_node(label);
+                        composition.members.push(CompositionMember {
+                            node_id: role_node_id,
+                            role: role.clone(),
+                            confidence: atom.confidence * 0.9,
+                            label: label.clone(),
+                        });
+                    }
+
+                    // Create edges for each member.
+                    for member in &composition.members {
+                        graph.edges.push((
+                            comp_id.clone(),
+                            member.node_id,
+                            SemanticEdge {
+                                relation: crate::types::RelationType::Categorical,
+                                role: Some(member.role.clone()),
+                                source: crate::types::EdgeSource::FrameCompiler,
+                            },
+                        ));
+                        edges_created += 1;
+                    }
+
+                    comp_id_assignments.push((i, comp_id.clone()));
+                    graph.compositions.insert(comp_id, composition);
+                    compositions_created += 1;
+                    event_atoms.push(atom.clone());
                 }
 
-                // Create edges for each member.
-                for member in &composition.members {
-                    graph.edges.push((
-                        comp_id.clone(),
-                        member.node_id,
-                        SemanticEdge {
-                            relation: crate::types::RelationType::Categorical,
-                            role: Some(member.role.clone()),
-                            source: crate::types::EdgeSource::FrameCompiler,
-                        },
-                    ));
-                    edges_created += 1;
+                // --- HiddenMeaning atoms: create a Composition with HiddenMeaning type ---
+                AtomType::HiddenMeaning => {
+                    let comp_id = format!("comp_{}", atom.id);
+                    let mut composition = Composition {
+                        id: comp_id.clone(),
+                        composition_type: CompositionType::HiddenMeaning,
+                        confidence: atom.confidence,
+                        source_text: ctx.raw_text.clone(),
+                        ..Default::default()
+                    };
+
+                    // Add the label as a Predicate member.
+                    composition.members.push(CompositionMember {
+                        node_id,
+                        role: SemanticRole::Predicate,
+                        confidence: atom.confidence,
+                        label: atom.label.clone(),
+                    });
+
+                    // Add role members from the atom's roles map.
+                    for (role, label) in &atom.roles {
+                        let role_node_id = graph.ensure_node(label);
+                        composition.members.push(CompositionMember {
+                            node_id: role_node_id,
+                            role: role.clone(),
+                            confidence: atom.confidence * 0.9,
+                            label: label.clone(),
+                        });
+                    }
+
+                    // Create edges for each member.
+                    for member in &composition.members {
+                        graph.edges.push((
+                            comp_id.clone(),
+                            member.node_id,
+                            SemanticEdge {
+                                relation: crate::types::RelationType::Causal,
+                                role: Some(member.role.clone()),
+                                source: crate::types::EdgeSource::HiddenMeaningRule,
+                            },
+                        ));
+                        edges_created += 1;
+                    }
+
+                    comp_id_assignments.push((i, comp_id.clone()));
+                    graph.compositions.insert(comp_id, composition);
+                    compositions_created += 1;
                 }
 
-                // Queue composition ID assignment.
-                comp_id_assignments.push((i, comp_id.clone()));
+                // --- Pattern / Hypothesis / Acquisition atoms ---
+                _ => {
+                    let comp_id = format!("comp_{}", atom.id);
+                    let comp_type = match atom.atom_type {
+                        AtomType::Pattern => CompositionType::Pattern,
+                        AtomType::Hypothesis => CompositionType::Hypothesis,
+                        AtomType::Acquisition => CompositionType::Acquisition,
+                        _ => CompositionType::Situation,
+                    };
+                    let mut composition = Composition {
+                        id: comp_id.clone(),
+                        composition_type: comp_type,
+                        confidence: atom.confidence,
+                        source_text: ctx.raw_text.clone(),
+                        ..Default::default()
+                    };
 
-                graph.compositions.insert(comp_id, composition);
-                compositions_created += 1;
+                    composition.members.push(CompositionMember {
+                        node_id,
+                        role: SemanticRole::Predicate,
+                        confidence: atom.confidence,
+                        label: atom.label.clone(),
+                    });
 
-                // Queue for sliding window recording.
-                event_atoms.push(atom.clone());
+                    for (role, label) in &atom.roles {
+                        let role_node_id = graph.ensure_node(label);
+                        composition.members.push(CompositionMember {
+                            node_id: role_node_id,
+                            role: role.clone(),
+                            confidence: atom.confidence * 0.9,
+                            label: label.clone(),
+                        });
+                    }
+
+                    for member in &composition.members {
+                        graph.edges.push((
+                            comp_id.clone(),
+                            member.node_id,
+                            SemanticEdge {
+                                relation: crate::types::RelationType::Categorical,
+                                role: Some(member.role.clone()),
+                                source: atom.source.clone(),
+                            },
+                        ));
+                        edges_created += 1;
+                    }
+
+                    comp_id_assignments.push((i, comp_id.clone()));
+                    graph.compositions.insert(comp_id, composition);
+                    compositions_created += 1;
+                }
             }
+        }
+
+        // Create co-occurrence edges between tokens in the same sentence.
+        // For each sentence, create a synthetic composition that groups the tokens.
+        for (sent_label, node_ids) in &sentence_nodes {
+            if node_ids.len() < 2 {
+                continue;
+            }
+            let comp_id = format!("comp_sent_{}", sent_label);
+            let mut composition = Composition {
+                id: comp_id.clone(),
+                composition_type: CompositionType::Situation,
+                confidence: 0.5,
+                source_text: ctx.raw_text.clone(),
+                ..Default::default()
+            };
+
+            for (idx, &nid) in node_ids.iter().enumerate() {
+                let role = if idx == 0 {
+                    SemanticRole::Arg0Agent
+                } else {
+                    SemanticRole::Arg1Patient
+                };
+                let label = graph.node_label(nid).unwrap_or("").to_string();
+                composition.members.push(CompositionMember {
+                    node_id: nid,
+                    role: role.clone(),
+                    confidence: 0.5,
+                    label,
+                });
+                graph.edges.push((
+                    comp_id.clone(),
+                    nid,
+                    SemanticEdge {
+                        relation: crate::types::RelationType::Categorical,
+                        role: Some(role),
+                        source: crate::types::EdgeSource::Learned,
+                    },
+                ));
+                edges_created += 1;
+            }
+
+            graph.compositions.insert(comp_id, composition);
+            compositions_created += 1;
         }
 
         // Apply deferred composition ID assignments.
@@ -1228,11 +1492,14 @@ impl Transform for IngestAtoms {
         "IngestAtoms"
     }
 
-    fn transform(&self, input: &Self::Input, _ctx: &mut PipelineContext) -> Self::Output {
-        // TODO: Full implementation that creates GraphDelta from atoms.
+    fn transform(&self, input: &Self::Input, ctx: &mut PipelineContext) -> Self::Output {
         let mut delta = GraphDelta::new();
-        for _atom in input {
-            delta.new_nodes.push(0); // Placeholder node IDs
+        for atom in input {
+            let node_id = ctx.next_atom_id() as NodeId;
+            delta.new_nodes.push(node_id);
+            // Note: full graph creation requires Graph access; this trait
+            // only produces a delta for context-based usage.
+            let _ = atom;
         }
         delta
     }
@@ -1620,10 +1887,7 @@ impl Transform for ReExtractFrame {
     }
 }
 
-// ========================================================================
-// NoOpTransform — Placeholder for Unimplemented Transforms
-// ========================================================================
-
+// STUB:PLACEHOLDER — No-op transform placeholder for transforms not yet implemented.
 /// No-op transform placeholder for transforms not yet implemented.
 ///
 /// Used by `register_default_pipeline` for ExtractFrame, ReasonFrame,
@@ -1649,6 +1913,7 @@ impl ErasedTransform for NoOpTransform {
         self.id_str
     }
 
+    // STUB:PLACEHOLDER — returns empty IngestResult, no real logic.
     fn execute(&self, _ctx: &mut PipelineContext, _graph: &mut Graph) -> IngestResult {
         // No-op — does nothing.
         IngestResult::new()

@@ -124,15 +124,23 @@ class ImageAbstractor(BasePerceptualAbstractor):
         )
 
     def _describe(self, image_input) -> str | None:
-        """Generate a description of the image using the vision bridge."""
+        """Generate a description of the image using the vision bridge.
+
+        # STUB:REQUIRES_EXTERNAL_BRIDGE — Needs a VLM (Vision Language Model)
+        # or similar vision bridge to generate image descriptions.
+        # Without it, only metadata-level extraction is available.
+        """
         try:
             return self.vision_bridge.describe(image_input)
         except Exception:
             return None
 
     def _extract_metadata_fallback(self, raw_input, input_ref: str) -> list[PerceptualTuple]:
-        """
-        Fallback: extract basic tuples from image metadata/filename cues.
+        """Fallback: extract basic tuples from image metadata/filename cues.
+
+        # STUB:REQUIRES_EXTERNAL_BRIDGE — This fallback produces minimal tuples
+        # because no VLM/vision bridge is available. Real image understanding
+        # requires connecting an external vision model (CLIP, LLaVA, etc.).
         """
         tuples: list[PerceptualTuple] = []
 

@@ -250,9 +250,9 @@ def test_policy_engine_check_with_rsvs_policy_no_meta():
     # Add a simple rule
     engine.add_rule(PolicyRule(
         rule_id="TEST_001",
-        domain="test",
+        category="test",
         description="Test rule",
-        condition=lambda ctx: ctx.get("value", 0) > 10,
+        condition="value > 10",
         severity="warning",
     ))
 
@@ -300,9 +300,9 @@ def test_policy_engine_check_with_rsvs_policy_with_meta():
 
     engine.add_rule(PolicyRule(
         rule_id="TEST_002",
-        domain="test",
+        category="test",
         description="Value must be positive",
-        condition=lambda ctx: ctx.get("value", 0) > 0,
+        condition="value > 0",
         severity="critical",
     ))
 

@@ -32,6 +32,7 @@ from __future__ import annotations
 import json
 import logging
 import time
+from collections import deque
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
@@ -96,7 +97,13 @@ class _FallbackGraph:
         self._next_comp_id: int = 0
 
     def ingest(self, text: str) -> dict:
-        """Ingest text by extracting keywords as nodes and creating a v12 composition."""
+        """Ingest text by extracting keywords as nodes and creating a v12 composition.
+
+        STUB:IMPROVED — detects basic Subject-Verb-Object patterns,
+        assigns typed roles, and computes seed scores.
+        """
+        import re as _re
+
         words = self._extract_keywords(text)
         atoms_promoted = 0
         edges_created = 0
@@ -123,6 +130,15 @@ class _FallbackGraph:
                         self._edges[word].append(other)
                         edges_created += 1
 
+        # Detect basic Subject-Verb-Object event patterns
+        tokens = _re.sub(r"[^\w\s'-]", " ", text).split()
+        role_map = self._detect_svo_roles(tokens, words)
+
+        # Determine composition type and lifecycle/epistemic from text
+        composition_type = self._infer_composition_type(text)
+        lifecycle = self._infer_lifecycle(text)
+        epistemic = self._infer_epistemic(text)
+
         # Create a v12-compatible Composition only when we have keywords
         compositions_created = 0
         gaps_detected = 0
@@ -131,13 +147,15 @@ class _FallbackGraph:
             comp_id = f"fallback-comp-{self._next_comp_id}"
             self._next_comp_id += 1
 
-            # Confidence heuristic: fewer keywords → lower confidence
-            comp_confidence = min(0.6, 0.1 + len(words) * 0.1)
+            # Confidence heuristic: more structured → higher confidence
+            has_roles = any(r != "keyword" for r in role_map.values())
+            comp_confidence = min(0.8, 0.2 + len(words) * 0.08
+                                  + (0.15 if has_roles else 0.0))
 
             members = [
                 {
                     "node_id": word,
-                    "role": "keyword",
+                    "role": role_map.get(word, "keyword"),
                     "label": word,
                     "confidence": self._nodes[word]["confidence"],
                 }
@@ -146,15 +164,19 @@ class _FallbackGraph:
 
             composition = _FallbackComposition(
                 comp_id=comp_id,
-                composition_type="Event",
+                composition_type=composition_type,
                 confidence=comp_confidence,
                 members=members,
                 source_text=text,
-                lifecycle="New",
-                epistemic="Observed",
+                lifecycle=lifecycle,
+                epistemic=epistemic,
             )
             self._compositions[comp_id] = composition
-            self._comp_seed_scores[comp_id] = {}  # placeholder
+
+            # Compute seed scores based on composition structure
+            self._comp_seed_scores[comp_id] = self._compute_seed_scores(
+                composition
+            )
             compositions_created = 1
 
             # Count how many gaps this composition introduces
@@ -170,6 +192,138 @@ class _FallbackGraph:
             "cognitive_mode": "Reactive",
             "fallback": True,
         }
+
+    # -- Ingest helpers --
+
+    @staticmethod
+    def _detect_svo_roles(tokens: list[str], keywords: list[str]) -> dict[str, str]:
+        """Detect Subject-Verb-Object roles for Indonesian/English patterns.
+
+        STUB:IMPROVED — basic SVO pattern detection.
+        Returns a mapping of keyword → role string.
+        """
+        role_map: dict[str, str] = {}
+        keyword_set = set(keywords)
+
+        # Common verb patterns (Indonesian + English)
+        verb_markers = {
+            # Indonesian
+            "membuat", "mengambil", "memberi", "pergi", "datang", "melihat",
+            "mendengar", "menulis", "membaca", "berbicara", "mengerjakan",
+            "menyelesaikan", "mencari", "menemukan", "menggunakan", "mengirim",
+            "menerima", "menjual", "membeli", "memasak", "berlari",
+            "bermain", "belajar", "mengajar", "bekerja", "tinggal",
+            # English
+            "make", "take", "give", "go", "come", "see", "hear",
+            "write", "read", "speak", "work", "find", "use", "send",
+            "receive", "sell", "buy", "cook", "run", "play", "study",
+            "teach", "live", "build", "destroy", "create", "destroy",
+            "eat", "drink", "sleep", "walk", "drive", "fly",
+        }
+
+        # Simple scan: look for keyword tokens and assign roles
+        prev_role = None
+        for tok in tokens:
+            lower = tok.lower()
+            if lower not in keyword_set:
+                continue
+            if lower in verb_markers:
+                role_map[lower] = "Action"
+                prev_role = "Action"
+            elif prev_role is None or prev_role == "Action":
+                # First keyword or after a verb → Subject or Object
+                if prev_role is None:
+                    role_map[lower] = "Agent"
+                    prev_role = "Agent"
+                else:
+                    role_map[lower] = "Patient"
+                    prev_role = "Patient"
+            else:
+                role_map[lower] = "Context"
+                prev_role = "Context"
+
+        return role_map
+
+    @staticmethod
+    def _infer_composition_type(text: str) -> str:
+        """Infer composition type from text content."""
+        lower = text.lower()
+        # Hypothesis markers
+        if any(m in lower for m in ["mungkin", "barangkali", "perhaps", "maybe",
+                                     "possibly", "probably", "kemungkinan"]):
+            return "Hypothesis"
+        # Question markers
+        if any(m in lower for m in ["?", "apakah", "bagaimana", "why", "how",
+                                     "what", "who", "where", "when"]):
+            return "Question"
+        # Rule / generalization markers
+        if any(m in lower for m in ["selalu", "tidak pernah", "always", "never",
+                                     "setiap", "every", "all", "semua"]):
+            return "Rule"
+        return "Event"
+
+    @staticmethod
+    def _infer_lifecycle(text: str) -> str:
+        """Infer lifecycle state from text."""
+        lower = text.lower()
+        if any(m in lower for m in ["mungkin", "perhaps", "maybe", "possibly"]):
+            return "Candidate"
+        if any(m in lower for m in ["seharusnya", "should", "must", "harus"]):
+            return "Proposed"
+        return "New"
+
+    @staticmethod
+    def _infer_epistemic(text: str) -> str:
+        """Infer epistemic state from text."""
+        lower = text.lower()
+        if any(m in lower for m in ["katanya", "dikatakan", "rumor", "reportedly",
+                                     "allegedly", "konon"]):
+            return "Hearsay"
+        if any(m in lower for m in ["saya lihat", "saya dengar", "i saw",
+                                     "i heard", "terlihat", "visible"]):
+            return "Observed"
+        if any(m in lower for m in ["seharusnya", "should be", "supposed to"]):
+            return "Inferred"
+        return "Observed"
+
+    @staticmethod
+    def _compute_seed_scores(composition: _FallbackComposition) -> dict:
+        """Compute epistemological seed scores based on composition structure.
+
+        STUB:IMPROVED — derives seed scores from member roles and confidence.
+        """
+        scores: dict[str, float] = {}
+        member_roles = [m.get("role", "keyword") for m in composition.members]
+        has_agent = "Agent" in member_roles
+        has_action = "Action" in member_roles
+        has_patient = "Patient" in member_roles
+
+        # Trust: higher when we have Agent+Action (someone did something)
+        scores["Trust"] = min(1.0, 0.3 + (0.3 if has_agent else 0.0)
+                             + (0.2 if has_action else 0.0)
+                             + (0.1 if composition.epistemic == "Observed" else 0.0))
+
+        # Risk: higher for hypotheses and hearsay
+        scores["Risk"] = min(1.0, 0.2 + (0.3 if composition.composition_type == "Hypothesis" else 0.0)
+                            + (0.3 if composition.epistemic == "Hearsay" else 0.0)
+                            + (0.2 if composition.confidence < 0.4 else 0.0))
+
+        # Value: higher for well-structured events
+        scores["Value"] = min(1.0, 0.2 + (0.2 if has_agent else 0.0)
+                             + (0.2 if has_action else 0.0)
+                             + (0.2 if has_patient else 0.0)
+                             + (0.2 if composition.confidence > 0.6 else 0.0))
+
+        # Goal: higher for questions and proposed compositions
+        scores["Goal"] = min(1.0, 0.2 + (0.4 if composition.composition_type == "Question" else 0.0)
+                            + (0.2 if composition.lifecycle == "Proposed" else 0.0)
+                            + (0.2 if composition.composition_type == "Hypothesis" else 0.0))
+
+        # Identity: higher for named entities and repeated observations
+        obs_count = sum(1 for m in composition.members if m.get("role") in ("Agent", "Patient"))
+        scores["Identity"] = min(1.0, 0.2 + 0.2 * obs_count)
+
+        return scores
 
     def compositions(self) -> list[_FallbackComposition]:
         """Return all compositions."""
@@ -195,7 +349,8 @@ class _FallbackGraph:
         return gaps
 
     def comp_seed_scores(self, comp_id: str) -> dict:
-        """Return seed_scores dict for a composition (empty dict placeholder)."""
+        """Return seed_scores dict for a composition."""
+        # STUB:IMPROVED — now returns real seed scores computed during ingest
         return self._comp_seed_scores.get(comp_id, {})
 
     def composition_count(self) -> int:
@@ -211,21 +366,79 @@ class _FallbackGraph:
         })
 
     def find_weak_frames(self) -> list[str]:
+        # STUB:MINIMAL — placeholder, no weak frame detection in fallback
         return []
 
     @staticmethod
     def _extract_keywords(text: str) -> list[str]:
+        """Extract keywords with improved stop-word handling and noun-phrase detection."""
+        # STUB:IMPROVED — real keyword extraction with noun phrases
         stop_words = {
+            # English
             "that", "this", "with", "from", "have", "been", "they",
             "their", "which", "would", "there", "could", "about",
             "other", "into", "more", "than", "then", "some", "very",
             "also", "just", "like", "only", "over", "such", "after",
+            "before", "because", "between", "through", "during", "without",
+            "these", "those", "each", "where", "when", "what", "how",
+            "was", "were", "been", "being", "had", "has", "did", "does",
+            "shall", "should", "may", "might", "must", "need",
+            # Indonesian
             "yang", "dan", "dari", "untuk", "dengan", "adalah", "itu",
             "ini", "ke", "di", "pada", "tidak", "akan", "telah", "oleh",
+            "sebuah", "seorang", "secara", "karena", "jika", "atau",
+            "tetapi", "namun", "sementara", "sedangkan", "melalui",
+            "lagi", "sudah", "belum", "masih", "hanya", "bahwa",
+            "dia", "mereka", "kita", "kami", "saya", "anda",
+            # Common articles / short words
             "the", "and", "but", "for", "not", "you", "all", "can",
+            "her", "him", "his", "our", "its", "she",
         }
-        words = text.lower().replace(",", " ").replace(".", " ").split()
-        return [w for w in words if len(w) > 2 and w not in stop_words][:30]
+
+        # Strip punctuation properly (preserve internal hyphens/apostrophes)
+        import re as _re
+        cleaned = _re.sub(r"[^\w\s'-]", " ", text)
+        tokens = cleaned.split()
+
+        # Detect multi-word noun phrases: capitalized words not at start of sentence
+        # A word at position 0 after punctuation or start is likely sentence-initial
+        phrases: list[str] = []
+        current_phrase: list[str] = []
+
+        for i, tok in enumerate(tokens):
+            lower = tok.lower()
+            # Check if capitalized and not at sentence start
+            is_capitalized = tok[0].isupper() if tok else False
+            prev_is_boundary = (i == 0
+                                or tokens[i - 1].endswith((".", "!", "?"))
+                                or tokens[i - 1].lower() in stop_words)
+
+            if is_capitalized and not prev_is_boundary and len(lower) > 2 and lower not in stop_words:
+                current_phrase.append(lower)
+            else:
+                if len(current_phrase) >= 2:
+                    phrases.append(" ".join(current_phrase))
+                current_phrase = []
+
+        if len(current_phrase) >= 2:
+            phrases.append(" ".join(current_phrase))
+
+        # Single-word keywords
+        single_words = [w.lower() for w in tokens if len(w) > 2 and w.lower() not in stop_words]
+
+        # Combine: phrases first, then single words (dedup)
+        seen = set()
+        result: list[str] = []
+        for p in phrases:
+            if p not in seen:
+                seen.add(p)
+                result.append(p)
+        for w in single_words:
+            if w not in seen:
+                seen.add(w)
+                result.append(w)
+
+        return result[:30]
 
 
 # ---------------------------------------------------------------------------
@@ -332,6 +545,7 @@ class V12PipelineBridge:
 
         Returns one of: "Reactive", "Analytical", "Reflective".
         """
+        # STUB:MINIMAL — fallback always returns Reactive; Rust core selects properly
         if self._pipeline is not None:
             try:
                 return self._pipeline.select_cognitive_mode(text)
@@ -482,6 +696,7 @@ class V12PipelineBridge:
 
     def gap_detection_enabled(self) -> bool:
         """Check whether gap detection is currently enabled."""
+        # STUB:PLACEHOLDER — fallback always returns False
         if self._pipeline is not None:
             try:
                 return self._pipeline.gap_detection_enabled()
@@ -513,6 +728,7 @@ class V12PipelineBridge:
 
         Returns None if no composition with the given ID exists.
         """
+        # STUB:MINIMAL — only works with Rust core; fallback has no lookup by ID
         if self._pipeline is not None:
             try:
                 comp = self._pipeline.get_composition(comp_id)
@@ -555,6 +771,8 @@ class V12PipelineBridge:
         In v12, "senses" are replaced by compositions that reference
         the concept node. This method returns composition members as
         sense-like dicts for backward compatibility.
+
+        STUB:MINIMAL — works but simplified (one sense per composition)
         """
         comps = self.compositions()
         related = []
@@ -574,45 +792,201 @@ class V12PipelineBridge:
         return related if related else None
 
     def compose(self, label: str, compositions: list[tuple[str, str]], lang: Optional[str] = None) -> Optional[int]:
-        """Compose — in v12, this is handled by the DAG pipeline.
+        """Compose — create a real composition from member tuples.
 
-        This is a no-op that returns a placeholder ID for backward
-        compatibility. Actual composition happens during ingest.
+        STUB:IMPROVED — creates a _FallbackComposition in fallback mode
+        with proper members, typed roles, and composition_type inference.
+        In Rust-core mode, delegates to the pipeline.
+
+        Args:
+            label: Composition label (prefix like deduction_ → Hypothesis).
+            compositions: List of (node_id, sense_id) tuples for members.
+            lang: Optional language hint.
+
+        Returns:
+            The composition ID as an int (hash of comp_id), or None.
         """
-        # In v12, compositions are created automatically by the pipeline
-        # during ingest. This method exists for backward compatibility.
-        logger.debug("compose() called in v12 mode — compositions are pipeline-driven")
-        return hash(label) % (2**31)
+        if self._pipeline is not None:
+            try:
+                # Delegate to Rust core if available
+                result = self._pipeline.compose(label, compositions, lang)
+                if result is not None:
+                    return result
+            except Exception as exc:
+                logger.debug("Rust compose() failed, using fallback: %s", exc)
+
+        # Fallback: create a real _FallbackComposition
+        if self._fallback is not None:
+            fg = self._fallback
+            comp_id = f"compose-{fg._next_comp_id}"
+            fg._next_comp_id += 1
+
+            # Infer composition_type from label prefix
+            composition_type = "Event"
+            label_lower = label.lower()
+            if label_lower.startswith("deduction_"):
+                composition_type = "Hypothesis"
+            elif label_lower.startswith("induction_"):
+                composition_type = "Rule"
+            elif label_lower.startswith("abduction_"):
+                composition_type = "Hypothesis"
+            elif label_lower.startswith("analogy_"):
+                composition_type = "Hypothesis"
+            elif label_lower.startswith("composition_"):
+                composition_type = "Event"
+            elif label_lower.startswith("question_"):
+                composition_type = "Question"
+
+            # Build members from tuples
+            members = []
+            for node_id, sense_id in compositions:
+                # Ensure the node exists in the graph
+                if node_id not in fg._nodes:
+                    fg._nodes[node_id] = {
+                        "label": node_id,
+                        "confidence": 0.5,
+                        "observation_count": 1,
+                    }
+                members.append({
+                    "node_id": node_id,
+                    "role": "evidence",
+                    "label": node_id,
+                    "confidence": fg._nodes[node_id]["confidence"],
+                })
+
+            # Confidence based on member count and type
+            conf = min(0.8, 0.3 + len(members) * 0.1)
+            if composition_type == "Hypothesis":
+                conf = min(0.7, conf)  # Hypotheses are less confident
+
+            comp = _FallbackComposition(
+                comp_id=comp_id,
+                composition_type=composition_type,
+                confidence=conf,
+                members=members,
+                source_text=label,
+                lifecycle="Candidate" if composition_type == "Hypothesis" else "New",
+                epistemic="Inferred",
+            )
+            fg._compositions[comp_id] = comp
+            fg._comp_seed_scores[comp_id] = fg._compute_seed_scores(comp)
+
+            # Create edges between all member nodes
+            for i, m1 in enumerate(members):
+                for j, m2 in enumerate(members):
+                    if i != j:
+                        n1, n2 = m1["node_id"], m2["node_id"]
+                        if n1 not in fg._edges:
+                            fg._edges[n1] = []
+                        if n2 not in fg._edges[n1]:
+                            fg._edges[n1].append(n2)
+
+            logger.debug(
+                "compose() created fallback composition '%s' type=%s with %d members",
+                comp_id, composition_type, len(members)
+            )
+            # Return a stable int ID derived from the comp_id
+            return hash(comp_id) % (2**31)
+
+        return None
 
     def mcts_query(self, node_label: str, max_depth: int = 3, simulations: int = 50) -> Optional[dict]:
-        """MCTS query — in v12, replaced by cognitive mode exploration.
+        """MCTS query — BFS graph traversal from the given node_label.
 
-        Returns a dict compatible with the old MCTSResult format,
-        using composition-based expansion instead of MCTS.
+        STUB:IMPROVED — replaced fake MCTS with real BFS traversal using
+        _FallbackGraph._edges. Builds scored paths by following edges
+        up to max_depth.
+
+        Args:
+            node_label: Starting node for traversal.
+            max_depth: Maximum BFS depth.
+            simulations: Ignored in fallback mode (kept for API compat).
+
+        Returns:
+            Dict compatible with the old MCTSResult format.
         """
-        comps = self.compositions()
+        if self._pipeline is not None:
+            try:
+                result = self._pipeline.mcts_query(node_label, max_depth, simulations)
+                if result is not None:
+                    return result
+            except Exception as exc:
+                logger.debug("Rust mcts_query() failed, using fallback: %s", exc)
+
+        # BFS traversal over the fallback graph
         scored_atoms: list[tuple[str, float]] = []
-        for comp in comps:
-            conf = comp.get("confidence", 0.5)
-            comp_type = comp.get("composition_type", "Unknown")
-            scored_atoms.append((f"{comp_type}:{comp['id'][:20]}", conf))
+        visited: set[str] = set()
+        best_path: list[tuple[str, int]] = [(node_label, 0)]
+        depth_reached = 0
+
+        if self._fallback is not None:
+            edges = self._fallback._edges
+            nodes = self._fallback._nodes
+
+            # BFS queue: (node_label, depth)
+            queue: deque[tuple[str, int]] = deque()
+
+            # Start from the exact label or try lowercase match
+            start = node_label
+            if start not in edges and start.lower() in {k.lower(): k for k in edges}:
+                start = {k.lower(): k for k in edges}[start.lower()]
+
+            queue.append((start, 0))
+            visited.add(start.lower())
+
+            while queue:
+                current, depth = queue.popleft()
+                if depth >= max_depth:
+                    continue
+
+                # Score current node by its confidence in the graph
+                conf = nodes.get(current, {}).get("confidence", 0.3)
+                scored_atoms.append((current, conf))
+
+                # Explore neighbors
+                for neighbor in edges.get(current, []):
+                    if neighbor.lower() not in visited:
+                        visited.add(neighbor.lower())
+                        queue.append((neighbor, depth + 1))
+                        if depth + 1 > depth_reached:
+                            depth_reached = depth + 1
+
+            # Build best_path from highest-scored atoms
+            sorted_atoms = sorted(scored_atoms, key=lambda x: -x[1])
+            best_path = [(node_label, 0)] + [(s, d) for s, d in
+                       [(a[0], 0) for a in sorted_atoms[:max_depth * 3]]]
+
+        # If fallback not available or no results, use composition-based fallback
+        if not scored_atoms:
+            comps = self.compositions()
+            for comp in comps:
+                conf = comp.get("confidence", 0.5)
+                comp_type = comp.get("composition_type", "Unknown")
+                scored_atoms.append((f"{comp_type}:{comp['id'][:20]}", conf))
+
+        # Compute grounding score from scored atoms
+        grounding_score = 0.5
+        if scored_atoms:
+            grounding_score = sum(s for _, s in scored_atoms) / len(scored_atoms)
 
         return {
             "active_sense_idx": 0,
-            "total_senses": 1,
+            "total_senses": max(1, len(scored_atoms)),
             "scored_atoms": scored_atoms[:20],
-            "depth_reached": 1,
-            "halt_reason": "v12_cognitive_mode",
-            "simulations_run": 0,
-            "best_path": [(node_label, 0)] + [(s, 0) for s, _ in scored_atoms[:5]],
+            "depth_reached": depth_reached,
+            "halt_reason": "bfs_complete" if depth_reached > 0 else "no_edges",
+            "simulations_run": len(visited),
+            "best_path": best_path[:10],
             "layer": 0,
-            "grounding_score": 0.5,
+            "grounding_score": grounding_score,
         }
 
     def query(self, concept: str, context: str = "") -> Optional[dict]:
         """Query a concept — in v12, use compositions() instead.
 
         Returns a v12-compatible query result for backward compatibility.
+
+        STUB:MINIMAL — works but simplified
         """
         comps = self.compositions()
         atoms = []
@@ -635,6 +1009,7 @@ class V12PipelineBridge:
 
     def nodes(self, include_seeds: bool = False) -> list[str]:
         """List all node labels in the graph."""
+        # STUB:MINIMAL — ignores include_seeds
         comps = self.compositions()
         labels = set()
         for comp in comps:
@@ -645,6 +1020,7 @@ class V12PipelineBridge:
 
     def confidence_map(self) -> dict[str, float]:
         """Return confidence scores for all compositions."""
+        # STUB:MINIMAL — works but simplified
         comps = self.compositions()
         return {c["id"]: c.get("confidence", 0.5) for c in comps}
 
@@ -657,6 +1033,8 @@ class V12PipelineBridge:
 
         In v12, this delegates to ingest() and returns a quality
         assessment of the result. Used by context.py and predictive.py.
+
+        STUB:MINIMAL — works but simplified
         """
         result = self.ingest(text)
         comps_count = self.composition_count()
@@ -678,6 +1056,8 @@ class V12PipelineBridge:
 
         In v12, this uses composition membership and edge traversal
         to find related nodes. Returns a list of related node labels.
+
+        STUB:MINIMAL — works but simplified
         """
         related = set()
         comps = self.compositions()
@@ -704,6 +1084,8 @@ class V12PipelineBridge:
 
         In v12, this uses Jaccard similarity on the neighborhoods
         of nodes a and b. Returns a float in [0, 1].
+
+        STUB:MINIMAL — works but simplified
         """
         neighbors_a = set(self.relate(a))
         neighbors_b = set(self.relate(b))
@@ -721,6 +1103,8 @@ class V12PipelineBridge:
 
         Combines relate() and query() for a richer result.
         Used by predictive.py.
+
+        STUB:MINIMAL — works but simplified
         """
         base = self.query(concept, context)
         if base is None:
@@ -736,6 +1120,8 @@ class V12PipelineBridge:
 
         In v12, this uses structural similarity and shared composition
         membership to determine substitutability.
+
+        STUB:MINIMAL — works but simplified
         """
         sim = self.structural_similarity(a, b)
         related_a = set(self.relate(a))
@@ -754,6 +1140,8 @@ class V12PipelineBridge:
         """Get information about a specific node.
 
         Returns a dict with node details, or None if not found.
+
+        STUB:MINIMAL — works but simplified
         """
         comps = self.compositions()
         appearances = []
@@ -784,6 +1172,8 @@ class V12PipelineBridge:
 
         In v12, this returns the composition count as a proxy
         for sequence tracking. Used by situation.py.
+
+        STUB:PLACEHOLDER — uses composition_count as proxy
         """
         return self.composition_count()
 
@@ -792,6 +1182,8 @@ class V12PipelineBridge:
 
         In v12, this returns compositions created after the given
         sequence. Used by situation.py and predictive.py.
+
+        STUB:MINIMAL — works but simplified (index-based slicing)
         """
         all_comps = self.compositions()
         # In fallback mode, return all compositions after the given index
@@ -824,6 +1216,8 @@ class V12PipelineBridge:
 
         Only available when the Rust core is active. In fallback mode,
         this is a no-op that returns empty stats.
+
+        STUB:PLACEHOLDER — returns empty stats in fallback mode
 
         Returns a dict with enrichment statistics.
         """
@@ -887,6 +1281,8 @@ class V12PipelineBridge:
 
         Returns True if the answer was applied, False if gap not found
         or Rust core is unavailable.
+
+        STUB:PLACEHOLDER — always returns False in fallback mode
         """
         if self._pipeline is not None:
             try:
@@ -927,6 +1323,8 @@ class V12PipelineBridge:
             path: File path to save to.
 
         Returns True on success, False on failure or fallback mode.
+
+        STUB:PLACEHOLDER — not implemented in fallback mode
         """
         if self._pipeline is not None:
             try:
@@ -944,6 +1342,8 @@ class V12PipelineBridge:
             path: File path to load from.
 
         Returns True on success, False on failure or fallback mode.
+
+        STUB:PLACEHOLDER — not implemented in fallback mode
         """
         if self._pipeline is not None:
             try:

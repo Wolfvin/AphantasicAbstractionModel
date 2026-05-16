@@ -137,7 +137,7 @@ pub use pipeline::{
     // --- Core pipeline types ---
     PipelineEngine,
     ReExtractFrame,
-    // --- Placeholder transforms ---
+    // --- Placeholder transforms (STUB:PLACEHOLDER) ---
     Tokenize,
 };
 

@@ -635,8 +635,8 @@ class ReasoningEngine:
                         sense_idx = str(sense.get("sense_idx", 0))
                         gs = sense.get("grounding_score", 0.5)
                         return (label, sense_idx, gs)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Sense lookup failed for '%s': %s", label, exc)
 
         return (label, "0", 0.3)
 
@@ -699,21 +699,145 @@ class V12ReasoningBridge:
     In v12.0, reasoning is handled by the ExecutiveOrchestrator which selects
     cognitive mode (Reactive/Analytical/Reflective) and runs the appropriate
     transforms. This bridge exposes v12 reasoning to layer3.
+    
+    STUB:IMPROVED — now performs real analysis using bridge compositions,
+    gap detection, and cognitive mode selection.
     """
     
     def __init__(self, v12_bridge=None):
         self._bridge = v12_bridge
     
     def analyze(self, text: str) -> dict:
-        """Analyze text using v12 cognitive mode selection."""
-        if self._bridge is None or not self._bridge.available:
-            return {"mode": "unavailable", "analysis": None}
+        """Analyze text using v12 cognitive mode selection and graph state.
         
+        STUB:IMPROVED — performs meaningful analysis:
+        1. Ingests text to update graph
+        2. Selects cognitive mode
+        3. Extracts key concepts from compositions
+        4. Identifies related knowledge via compositions()
+        5. Detects gaps via detect_gaps()
+        
+        Returns a dict with: mode, related_concepts, gaps, confidence,
+        ingest_summary, and analysis description.
+        """
+        if self._bridge is None or not self._bridge.available:
+            return {
+                "mode": "unavailable",
+                "analysis": None,
+                "related_concepts": [],
+                "gaps": [],
+                "confidence": 0.0,
+            }
+        
+        # Step 1: Select cognitive mode
         mode = self._bridge.cognitive_mode(text)
-        result = self._bridge.ingest(text)
+        
+        # Step 2: Ingest text to update graph
+        ingest_result = self._bridge.ingest(text)
+        
+        # Step 3: Extract key concepts from the text
+        # Use the bridge's query/relate to find concepts that are in the graph
+        raw_words = text.replace(",", " ").replace(".", " ").split()
+        candidate_concepts = [w for w in raw_words if len(w) > 3]
+        
+        # Step 4: Find related knowledge through compositions
+        related_concepts: list[dict] = []
+        seen_concept_labels: set[str] = set()
+        
+        for concept in candidate_concepts[:10]:
+            try:
+                # Find compositions containing this concept
+                senses = self._bridge.senses(concept)
+                if senses and isinstance(senses, list):
+                    for sense in senses:
+                        if isinstance(sense, dict):
+                            core_atoms = sense.get("core_atoms", [])
+                            coherence = sense.get("coherence", 0.5)
+                            for atom in core_atoms:
+                                if atom.lower() not in seen_concept_labels:
+                                    seen_concept_labels.add(atom.lower())
+                                    related_concepts.append({
+                                        "concept": atom,
+                                        "coherence": coherence,
+                                        "source": "composition",
+                                    })
+                
+                # Also check direct relations
+                related = self._bridge.relate(concept)
+                for rel in related[:5]:
+                    if rel.lower() not in seen_concept_labels:
+                        seen_concept_labels.add(rel.lower())
+                        related_concepts.append({
+                            "concept": rel,
+                            "coherence": 0.4,
+                            "source": "edge",
+                        })
+            except Exception:
+                continue
+        
+        # Step 5: Detect knowledge gaps
+        gaps: list[dict] = []
+        try:
+            raw_gaps = self._bridge.detect_gaps()
+            for gap in raw_gaps[:10]:
+                gaps.append({
+                    "gap_id": gap.get("gap_id", "unknown"),
+                    "gap_type": gap.get("gap_type", "Unknown"),
+                    "description": gap.get("description", ""),
+                    "severity": gap.get("severity", "low"),
+                    "missing_role": gap.get("missing_role", "unknown"),
+                })
+        except Exception:
+            pass
+        
+        # Step 6: Compute overall confidence
+        composition_count = self._bridge.composition_count()
+        node_count = self._bridge.node_count()
+        
+        # Confidence based on graph richness and ingest success
+        confidence = 0.3
+        if ingest_result.get("compositions_created", 0) > 0:
+            confidence += 0.2
+        if ingest_result.get("atoms_created", 0) > 0:
+            confidence += 0.1
+        if related_concepts:
+            confidence += min(0.2, len(related_concepts) * 0.02)
+        if gaps:
+            confidence -= min(0.15, len(gaps) * 0.03)
+        confidence = max(0.0, min(1.0, confidence))
+        
+        # Mode-specific adjustments
+        if mode == "Analytical":
+            confidence = min(1.0, confidence + 0.05)
+        elif mode == "Reflective":
+            confidence = min(1.0, confidence + 0.03)
+        
+        # Build analysis description
+        analysis_parts = []
+        if related_concepts:
+            analysis_parts.append(
+                f"Found {len(related_concepts)} related concepts"
+            )
+        if gaps:
+            analysis_parts.append(f"Identified {len(gaps)} knowledge gaps")
+        analysis_parts.append(f"Graph has {node_count} nodes, {composition_count} compositions")
+        analysis_desc = "; ".join(analysis_parts) if analysis_parts else "Minimal analysis available"
+        
         return {
             "mode": mode,
-            "atoms_created": result.get("atoms_created", 0),
-            "compositions_created": result.get("compositions_created", 0),
-            "gaps_detected": result.get("gaps_detected", 0),
+            "analysis": analysis_desc,
+            "related_concepts": related_concepts[:20],
+            "gaps": gaps,
+            "confidence": round(confidence, 3),
+            "ingest_summary": {
+                "atoms_created": ingest_result.get("atoms_created", 0),
+                "compositions_created": ingest_result.get("compositions_created", 0),
+                "gaps_detected": ingest_result.get("gaps_detected", 0),
+                "edges_created": ingest_result.get("edges_created", 0),
+            },
+            "graph_state": {
+                "nodes": node_count,
+                "compositions": composition_count,
+                "total_gaps": len(gaps),
+            },
         }

@@ -198,16 +198,20 @@ impl Persistence {
     /// Migrate a v8.3 snapshot JSON to a v12 Graph.
     ///
     /// v8.3 snapshots have a different structure:
-    /// - `nodes` as a list with `senses` sub-arrays
-    /// - `edges` with `source` (Bootstrap/Learned/Composition)
+    /// - `nodes` as a flat array of objects with `id`, `label`, `status`,
+    ///   `observation_count`, and optionally `surface_label`, `is_seed`,
+    ///   `senses`, `confidence`
+    /// - `edges` as an array of objects with `from`, `to`, `weight`,
+    ///   `source` fields, or as tuples `(from, to, weight)`
     /// - No compositions (senses become compositions in v12)
     ///
     /// This function performs a best-effort migration:
-    /// 1. Each v8.3 node becomes a v12 SemanticAtom
-    /// 2. Each v8.3 sense becomes a v12 Composition
-    /// 3. v8.3 edges become v12 SemanticEdges
-    /// 4. Seed atoms get Tier1 lifecycle and EpistemicState::Grounded
-    /// 5. Non-seed atoms get Tier2/Tier3 lifecycle based on confidence
+    /// 1. Each v8.3 node becomes a v12 Node (label, surface_label, lifecycle
+    ///    from old NodeStatus, confidence from old observation_count normalized)
+    /// 2. Co-occurring nodes (connected by edges) become v12 Event compositions
+    /// 3. Each v8.3 sense becomes a v12 Composition
+    /// 4. v8.3 edges become v12 SemanticEdges
+    /// 5. Seed atoms get Stable lifecycle and EpistemicState::Grounded
     ///
     /// If the input is already a v12 graph, it is loaded directly.
     pub fn migrate_v83(path: &Path) -> Result<(Graph, MigrationResult), PersistenceError> {
@@ -237,101 +241,211 @@ impl Persistence {
             warnings: Vec::new(),
         };
 
-        // Migrate nodes from v8.3 format
-        if let Some(nodes) = value.get("nodes").and_then(|v| v.as_array()) {
-            for node_val in nodes {
-                if let Some(node_obj) = node_val.as_object() {
-                    let label = node_obj.get("label")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("")
-                        .to_string();
+        // Migrate nodes from v8.3 format.
+        // Support both: nodes as array of objects OR nodes as object with NodeId keys.
+        if let Some(nodes_val) = value.get("nodes") {
+            // Try as object (flat map with NodeId keys) first.
+            if let Some(nodes_obj) = nodes_val.as_object() {
+                for (node_id_str, node_val) in nodes_obj {
+                    if let Some(node_obj) = node_val.as_object() {
+                        let label = node_obj.get("label")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or(node_id_str)
+                            .to_string();
 
-                    if label.is_empty() {
-                        result.nodes_skipped += 1;
-                        continue;
-                    }
-
-                    let node_id = graph.ensure_node(&label);
-                    if let Some(atom) = graph.nodes.get_mut(&node_id) {
-                        // Migrate confidence
-                        if let Some(conf) = node_obj.get("confidence").and_then(|v| v.as_f64()) {
-                            atom.confidence = conf as f32;
+                        if label.is_empty() {
+                            result.nodes_skipped += 1;
+                            continue;
                         }
 
-                        // Migrate seed status
-                        let is_seed = node_obj.get("is_seed")
-                            .and_then(|v| v.as_bool())
-                            .unwrap_or(false);
+                        let node_id = graph.ensure_node(&label);
+                        if let Some(atom) = graph.nodes.get_mut(&node_id) {
+                            // Migrate confidence from observation_count (normalized to 0-1).
+                            if let Some(obs_count) = node_obj.get("observation_count").and_then(|v| v.as_u64()) {
+                                atom.confidence = (obs_count as f32 / 10.0).min(1.0);
+                            } else if let Some(conf) = node_obj.get("confidence").and_then(|v| v.as_f64()) {
+                                atom.confidence = conf as f32;
+                            }
 
-                        if is_seed {
-                            atom.lifecycle = super::types::LifecycleState::Stable;
-                        } else {
-                            let conf = atom.confidence;
-                            atom.lifecycle = if conf >= 0.7 {
-                                super::types::LifecycleState::Candidate
-                            } else {
-                                super::types::LifecycleState::New
+                            // Migrate lifecycle from NodeStatus / status field.
+                            let status_str = node_obj.get("status")
+                                .or_else(|| node_obj.get("node_status"))
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("New");
+                            atom.lifecycle = match status_str {
+                                "Stable" | "Grounded" | "Tier1" => super::types::LifecycleState::Stable,
+                                "Candidate" | "Tier2" => super::types::LifecycleState::Candidate,
+                                "Deprecated" | "Refuted" => super::types::LifecycleState::Deprecated,
+                                "Quarantine" => super::types::LifecycleState::Quarantine,
+                                _ => super::types::LifecycleState::New,
                             };
+
+                            // Override for seed nodes.
+                            let is_seed = node_obj.get("is_seed")
+                                .and_then(|v| v.as_bool())
+                                .unwrap_or(false);
+                            if is_seed {
+                                atom.lifecycle = super::types::LifecycleState::Stable;
+                                atom.confidence = atom.confidence.max(0.8);
+                            }
+
+                            // Migrate surface_label.
+                            if let Some(surface) = node_obj.get("surface_label").and_then(|v| v.as_str()) {
+                                atom.surface_label = surface.to_string();
+                            }
                         }
 
-                        // Migrate surface_label
-                        if let Some(surface) = node_obj.get("surface_label").and_then(|v| v.as_str()) {
-                            atom.surface_label = surface.to_string();
-                        }
-                    }
+                        result.nodes_migrated += 1;
 
-                    result.nodes_migrated += 1;
+                        // Migrate senses as compositions.
+                        if let Some(senses) = node_obj.get("senses").and_then(|v| v.as_array()) {
+                            for (sense_idx, sense_val) in senses.iter().enumerate() {
+                                if let Some(sense_obj) = sense_val.as_object() {
+                                    let comp_id = format!("{}_sense_{}", label, sense_idx);
+                                    let mut comp = super::types::Composition::default();
+                                    comp.id = comp_id.clone();
+                                    comp.composition_type = super::types::CompositionType::Hypothesis;
+                                    comp.lifecycle = super::types::LifecycleState::Candidate;
+                                    comp.epistemic = super::types::EpistemicState::Inferred;
+                                    comp.provenance = super::types::ProvenanceChain::default();
+                                    comp.provenance.origin_id = format!("v83_sense_{}_{}", sense_idx, label);
 
-                    // Migrate senses as compositions
-                    if let Some(senses) = node_obj.get("senses").and_then(|v| v.as_array()) {
-                        for (sense_idx, sense_val) in senses.iter().enumerate() {
-                            if let Some(sense_obj) = sense_val.as_object() {
-                                let comp_id = format!("{}_sense_{}", label, sense_idx);
-                                let mut comp = super::types::Composition::default();
-                                comp.id = comp_id.clone();
-                                comp.composition_type = super::types::CompositionType::Hypothesis;
-                                comp.lifecycle = super::types::LifecycleState::Candidate;
-                                comp.epistemic = super::types::EpistemicState::Inferred;
-                                comp.provenance = super::types::ProvenanceChain::default();
-                                comp.provenance.origin_id = format!("v83_sense_{}_{}", sense_idx, label);
+                                    if let Some(coherence) = sense_obj.get("coherence").and_then(|v| v.as_f64()) {
+                                        comp.confidence = coherence as f32;
+                                    }
 
-                                if let Some(coherence) = sense_obj.get("coherence").and_then(|v| v.as_f64()) {
-                                    comp.confidence = coherence as f32;
-                                }
+                                    // Migrate compositions as members.
+                                    if let Some(comps) = sense_obj.get("compositions").and_then(|v| v.as_array()) {
+                                        for comp_ref in comps {
+                                            if let Some(ref_obj) = comp_ref.as_object() {
+                                                let target_label = ref_obj.get("node_id")
+                                                    .or_else(|| ref_obj.get("label"))
+                                                    .and_then(|v| v.as_str())
+                                                    .unwrap_or("")
+                                                    .to_string();
 
-                                // Migrate compositions as members
-                                if let Some(comps) = sense_obj.get("compositions").and_then(|v| v.as_array()) {
-                                    for comp_ref in comps {
-                                        if let Some(ref_obj) = comp_ref.as_object() {
-                                            let target_label = ref_obj.get("node_id")
-                                                .or_else(|| ref_obj.get("label"))
-                                                .and_then(|v| v.as_str())
-                                                .unwrap_or("")
-                                                .to_string();
-
-                                            if !target_label.is_empty() {
-                                                let target_id = graph.ensure_node(&target_label);
-                                                comp.members.push(super::types::CompositionMember {
-                                                    node_id: target_id,
-                                                    role: super::types::SemanticRole::Arg1Patient,
-                                                    confidence: 0.7,
-                                                    label: target_label,
-                                                });
+                                                if !target_label.is_empty() {
+                                                    let target_id = graph.ensure_node(&target_label);
+                                                    comp.members.push(super::types::CompositionMember {
+                                                        node_id: target_id,
+                                                        role: super::types::SemanticRole::Arg1Patient,
+                                                        confidence: 0.7,
+                                                        label: target_label,
+                                                    });
+                                                }
                                             }
                                         }
                                     }
+
+                                    // Add node itself as a member.
+                                    comp.members.push(super::types::CompositionMember {
+                                        node_id,
+                                        role: super::types::SemanticRole::Arg0Agent,
+                                        confidence: 1.0,
+                                        label: label.clone(),
+                                    });
+
+                                    graph.compositions.insert(comp_id, comp);
+                                    result.senses_converted += 1;
                                 }
+                            }
+                        }
+                    }
+                }
+            }
+            // Fallback: try as array of node objects.
+            else if let Some(nodes_arr) = nodes_val.as_array() {
+                for node_val in nodes_arr {
+                    if let Some(node_obj) = node_val.as_object() {
+                        let label = node_obj.get("label")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string();
 
-                                // Add node itself as a member
-                                comp.members.push(super::types::CompositionMember {
-                                    node_id,
-                                    role: super::types::SemanticRole::Arg0Agent,
-                                    confidence: 1.0,
-                                    label: label.clone(),
-                                });
+                        if label.is_empty() {
+                            result.nodes_skipped += 1;
+                            continue;
+                        }
 
-                                graph.compositions.insert(comp_id, comp);
-                                result.senses_converted += 1;
+                        let node_id = graph.ensure_node(&label);
+                        if let Some(atom) = graph.nodes.get_mut(&node_id) {
+                            if let Some(obs_count) = node_obj.get("observation_count").and_then(|v| v.as_u64()) {
+                                atom.confidence = (obs_count as f32 / 10.0).min(1.0);
+                            } else if let Some(conf) = node_obj.get("confidence").and_then(|v| v.as_f64()) {
+                                atom.confidence = conf as f32;
+                            }
+
+                            let is_seed = node_obj.get("is_seed")
+                                .and_then(|v| v.as_bool())
+                                .unwrap_or(false);
+
+                            if is_seed {
+                                atom.lifecycle = super::types::LifecycleState::Stable;
+                            } else {
+                                let conf = atom.confidence;
+                                atom.lifecycle = if conf >= 0.7 {
+                                    super::types::LifecycleState::Candidate
+                                } else {
+                                    super::types::LifecycleState::New
+                                };
+                            }
+
+                            if let Some(surface) = node_obj.get("surface_label").and_then(|v| v.as_str()) {
+                                atom.surface_label = surface.to_string();
+                            }
+                        }
+
+                        result.nodes_migrated += 1;
+
+                        // Migrate senses as compositions (same as above).
+                        if let Some(senses) = node_obj.get("senses").and_then(|v| v.as_array()) {
+                            for (sense_idx, sense_val) in senses.iter().enumerate() {
+                                if let Some(sense_obj) = sense_val.as_object() {
+                                    let comp_id = format!("{}_sense_{}", label, sense_idx);
+                                    let mut comp = super::types::Composition::default();
+                                    comp.id = comp_id.clone();
+                                    comp.composition_type = super::types::CompositionType::Hypothesis;
+                                    comp.lifecycle = super::types::LifecycleState::Candidate;
+                                    comp.epistemic = super::types::EpistemicState::Inferred;
+                                    comp.provenance = super::types::ProvenanceChain::default();
+                                    comp.provenance.origin_id = format!("v83_sense_{}_{}", sense_idx, label);
+
+                                    if let Some(coherence) = sense_obj.get("coherence").and_then(|v| v.as_f64()) {
+                                        comp.confidence = coherence as f32;
+                                    }
+
+                                    if let Some(comps) = sense_obj.get("compositions").and_then(|v| v.as_array()) {
+                                        for comp_ref in comps {
+                                            if let Some(ref_obj) = comp_ref.as_object() {
+                                                let target_label = ref_obj.get("node_id")
+                                                    .or_else(|| ref_obj.get("label"))
+                                                    .and_then(|v| v.as_str())
+                                                    .unwrap_or("")
+                                                    .to_string();
+
+                                                if !target_label.is_empty() {
+                                                    let target_id = graph.ensure_node(&target_label);
+                                                    comp.members.push(super::types::CompositionMember {
+                                                        node_id: target_id,
+                                                        role: super::types::SemanticRole::Arg1Patient,
+                                                        confidence: 0.7,
+                                                        label: target_label,
+                                                    });
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    comp.members.push(super::types::CompositionMember {
+                                        node_id,
+                                        role: super::types::SemanticRole::Arg0Agent,
+                                        confidence: 1.0,
+                                        label: label.clone(),
+                                    });
+
+                                    graph.compositions.insert(comp_id, comp);
+                                    result.senses_converted += 1;
+                                }
                             }
                         }
                     }
@@ -339,9 +453,13 @@ impl Persistence {
             }
         }
 
-        // Migrate edges from v8.3 format
+        // Migrate edges from v8.3 format and create Event compositions for co-occurring nodes.
+        // Track which node pairs have edges to create Event compositions.
+        let mut edge_pairs: std::collections::HashMap<(crate::types::NodeId, crate::types::NodeId), Vec<f32>> = std::collections::HashMap::new();
+
         if let Some(edges) = value.get("edges").and_then(|v| v.as_array()) {
             for edge_val in edges {
+                // Try as object first.
                 if let Some(edge_obj) = edge_val.as_object() {
                     let from_label = edge_obj.get("from_label")
                         .or_else(|| edge_obj.get("from"))
@@ -366,6 +484,10 @@ impl Persistence {
                     let from_id = graph.ensure_node(&from_label);
                     let to_id = graph.ensure_node(&to_label);
 
+                    let weight = edge_obj.get("weight")
+                        .and_then(|v| v.as_f64())
+                        .unwrap_or(1.0) as f32;
+
                     let source_str = edge_obj.get("source")
                         .and_then(|v| v.as_str())
                         .unwrap_or("Learned");
@@ -376,19 +498,29 @@ impl Persistence {
                         _ => crate::types::EdgeSource::Learned,
                     };
 
+                    // Track edge pair for Event composition creation.
+                    let pair_key = if from_id < to_id { (from_id, to_id) } else { (to_id, from_id) };
+                    edge_pairs.entry(pair_key).or_default().push(weight);
+
                     // v8.3 edges are node-to-node; v12 edges are composition-to-node.
-                    // We create a synthetic composition for the source node and link
-                    // it to the target node.
+                    // Create a synthetic composition for co-occurring nodes.
                     let comp_id = format!("migrated_edge_{}", result.edges_migrated);
                     let mut comp = super::types::Composition::default();
                     comp.id = comp_id.clone();
-                    comp.composition_type = super::types::CompositionType::Hypothesis;
+                    comp.composition_type = super::types::CompositionType::Event;
+                    comp.confidence = weight;
                     comp.provenance.origin_id = format!("migrated_{}", from_label);
                     comp.members.push(super::types::CompositionMember {
                         node_id: from_id,
                         role: super::types::SemanticRole::Arg0Agent,
                         confidence: 1.0,
                         label: from_label.clone(),
+                    });
+                    comp.members.push(super::types::CompositionMember {
+                        node_id: to_id,
+                        role: super::types::SemanticRole::Arg1Patient,
+                        confidence: weight,
+                        label: to_label,
                     });
                     comp.provenance = super::types::ProvenanceChain::default();
                     graph.compositions.insert(comp_id.clone(), comp);
@@ -398,10 +530,107 @@ impl Persistence {
                         role: None,
                         source: edge_source,
                     };
-                    graph.edges.push((comp_id, to_id, edge));
+                    graph.edges.push((comp_id.clone(), to_id, edge));
                     result.edges_migrated += 1;
                 }
+                // Try as tuple (from, to, weight).
+                else if let Some(edge_arr) = edge_val.as_array() {
+                    if edge_arr.len() >= 2 {
+                        let from_str = edge_arr[0].as_str().unwrap_or("");
+                        let to_str = edge_arr[1].as_str().unwrap_or("");
+                        let weight = edge_arr.get(2).and_then(|v| v.as_f64()).unwrap_or(1.0) as f32;
+
+                        if from_str.is_empty() || to_str.is_empty() {
+                            continue;
+                        }
+
+                        let from_id = graph.ensure_node(from_str);
+                        let to_id = graph.ensure_node(to_str);
+
+                        let pair_key = if from_id < to_id { (from_id, to_id) } else { (to_id, from_id) };
+                        edge_pairs.entry(pair_key).or_default().push(weight);
+
+                        let comp_id = format!("migrated_edge_{}", result.edges_migrated);
+                        let mut comp = super::types::Composition::default();
+                        comp.id = comp_id.clone();
+                        comp.composition_type = super::types::CompositionType::Event;
+                        comp.confidence = weight;
+                        comp.members.push(super::types::CompositionMember {
+                            node_id: from_id,
+                            role: super::types::SemanticRole::Arg0Agent,
+                            confidence: 1.0,
+                            label: from_str.to_string(),
+                        });
+                        comp.members.push(super::types::CompositionMember {
+                            node_id: to_id,
+                            role: super::types::SemanticRole::Arg1Patient,
+                            confidence: weight,
+                            label: to_str.to_string(),
+                        });
+                        graph.compositions.insert(comp_id.clone(), comp);
+
+                        let edge = super::types::SemanticEdge {
+                            relation: crate::types::RelationType::Categorical,
+                            role: None,
+                            source: crate::types::EdgeSource::Learned,
+                        };
+                        graph.edges.push((comp_id, to_id, edge));
+                        result.edges_migrated += 1;
+                    }
+                }
             }
+        }
+
+        // Create Event compositions for co-occurring node pairs with multiple edges.
+        // Nodes that appear together in multiple edges get a shared Event composition.
+        for ((node_a, node_b), weights) in &edge_pairs {
+            if weights.len() < 2 {
+                continue; // Only create shared compositions for multi-edge pairs.
+            }
+            let avg_weight: f32 = weights.iter().sum::<f32>() / weights.len() as f32;
+            let comp_id = format!("migrated_cooc_{}_{}", node_a, node_b);
+            let mut comp = super::types::Composition::default();
+            comp.id = comp_id.clone();
+            comp.composition_type = super::types::CompositionType::Event;
+            comp.confidence = avg_weight;
+
+            let label_a = graph.node_label(*node_a).unwrap_or("").to_string();
+            let label_b = graph.node_label(*node_b).unwrap_or("").to_string();
+
+            comp.members.push(super::types::CompositionMember {
+                node_id: *node_a,
+                role: super::types::SemanticRole::Arg0Agent,
+                confidence: 1.0,
+                label: label_a,
+            });
+            comp.members.push(super::types::CompositionMember {
+                node_id: *node_b,
+                role: super::types::SemanticRole::Arg1Patient,
+                confidence: avg_weight,
+                label: label_b,
+            });
+
+            // Add edges for this composition.
+            graph.edges.push((
+                comp_id.clone(),
+                *node_a,
+                super::types::SemanticEdge {
+                    relation: crate::types::RelationType::Categorical,
+                    role: Some(super::types::SemanticRole::Arg0Agent),
+                    source: crate::types::EdgeSource::Learned,
+                },
+            ));
+            graph.edges.push((
+                comp_id.clone(),
+                *node_b,
+                super::types::SemanticEdge {
+                    relation: crate::types::RelationType::Categorical,
+                    role: Some(super::types::SemanticRole::Arg1Patient),
+                    source: crate::types::EdgeSource::Learned,
+                },
+            ));
+
+            graph.compositions.insert(comp_id, comp);
         }
 
         Ok((graph, result))

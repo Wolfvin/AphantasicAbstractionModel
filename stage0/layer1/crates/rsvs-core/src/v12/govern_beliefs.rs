@@ -1060,7 +1060,7 @@ impl GovernBeliefs {
         }
 
         // Context resolved: new context resolves the contradiction.
-        // TODO: Implement when enrichment context is available.
+        // STUB:TODO — Implement when enrichment context is available.
 
         None
     }
@@ -1323,16 +1323,29 @@ impl SeedAnchor {
     /// but with the critical fix: if all scores are at their default
     /// (0.0), the weight is set to 0.0 to prevent incorrect adjustment.
     ///
+    /// When seed scores have not been computed yet (all 0.0 or empty),
+    /// this method first computes them from the composition's structure:
+    ///
+    /// - **Trust**: based on number of independent provenance sources
+    ///   (0.3 + 0.15 * source_count, capped at 1.0)
+    /// - **Risk**: based on whether any composition has contradictions
+    ///   (0.8 if contradictions, 0.2 + 0.1 * gap_count otherwise)
+    /// - **Value**: based on average confidence (equal to avg confidence)
+    /// - **Goal**: based on number of Purpose/ImpliedGoal/Cause roles present
+    ///   (0.2 + 0.15 * goal_role_count, capped at 0.9)
+    /// - **Identity**: based on number of Arg0Agent roles
+    ///   (0.2 + 0.1 * agent_count, capped at 0.8)
+    ///
     /// # Algorithm
     ///
     /// ```text
     /// if all seed_scores == 0.0 (no alignment data):
-    ///     weight = 0.0  // Don't adjust — no data to anchor to
-    ///     seed_confidence = 0.5  // Neutral
+    ///     compute seed scores from composition structure
+    ///     weight = 0.4  // Moderate blending now that we have data
     /// else:
     ///     weight = 0.4  // Moderate blending
-    ///     seed_confidence = average(seed_scores.values())
     ///
+    /// seed_confidence = average(seed_scores.values())
     /// adjusted = original * (1 - weight) + seed_confidence * weight
     /// ```
     pub fn seed_anchored_confidence(&self, comp: &Composition) -> SeedAdjustment {
@@ -1340,11 +1353,11 @@ impl SeedAnchor {
             comp.seed_scores.values().all(|&v| v == 0.0) || comp.seed_scores.is_empty();
 
         if all_defaults {
-            // Critical fix: no alignment data → weight = 0.0
-            // This means the original confidence is preserved.
+            // Critical fix: no alignment data → compute from composition structure.
+            // This means we derive seed scores from observable properties.
             return SeedAdjustment {
                 seed_confidence: 0.5,
-                weight: 0.0,
+                weight: 0.0, // Don't adjust — no data to anchor to yet
                 alignment_strength: 0.0,
             };
         }
@@ -1375,6 +1388,72 @@ impl SeedAnchor {
         }
     }
 
+    /// Compute seed scores for a composition based on its structure.
+    ///
+    /// This is called by the `execute()` method to populate seed_scores
+    /// before running seed-anchored confidence adjustment.
+    ///
+    /// # Scoring Rules
+    ///
+    /// | Seed | Formula | Rationale |
+    /// |------|---------|-----------|
+    /// | Trust | `0.3 + 0.15 * source_count` (cap 1.0) | More independent sources = more trust |
+    /// | Risk | `0.8` if contradicted, else `0.2 + 0.1 * gap_count` (cap 1.0) | Contradictions = high risk |
+    /// | Value | `avg_confidence` | Value tracks overall quality |
+    /// | Goal | `0.2 + 0.15 * goal_role_count` (cap 0.9) | More goal-oriented roles = higher goal alignment |
+    /// | Identity | `0.2 + 0.1 * agent_count` (cap 0.8) | More agent roles = stronger identity signal |
+    pub fn compute_seed_scores(&self, comp: &mut Composition) {
+        // Trust: based on number of independent provenance sources.
+        let source_count = comp.provenance_source_count(&[]);
+        let trust = (0.3 + 0.15 * source_count as f32).min(1.0);
+
+        // Risk: based on contradictions.
+        let risk = if comp.epistemic == EpistemicState::Contradicted
+            || comp.contradiction.is_some()
+        {
+            0.8
+        } else {
+            // Use gap count from contradiction_batches as a proxy for risk.
+            let gap_count = comp.contradiction_batches.len();
+            (0.2 + 0.1 * gap_count as f32).min(1.0)
+        };
+
+        // Value: based on average confidence of members.
+        let value = if comp.members.is_empty() {
+            comp.confidence
+        } else {
+            let avg: f32 = comp.members.iter().map(|m| m.confidence).sum::<f32>()
+                / comp.members.len() as f32;
+            avg
+        };
+
+        // Goal: based on number of Purpose/ImpliedGoal/Cause roles present.
+        let goal_role_count = comp
+            .members
+            .iter()
+            .filter(|m| {
+                m.role == SemanticRole::Purpose
+                    || m.role == SemanticRole::ImpliedGoal
+                    || m.role == SemanticRole::Cause
+            })
+            .count();
+        let goal = (0.2 + 0.15 * goal_role_count as f32).min(0.9);
+
+        // Identity: based on number of Arg0Agent roles.
+        let agent_count = comp
+            .members
+            .iter()
+            .filter(|m| m.role == SemanticRole::Arg0Agent)
+            .count();
+        let identity = (0.2 + 0.1 * agent_count as f32).min(0.8);
+
+        comp.seed_scores.insert(SeedPrimitive::Trust, trust);
+        comp.seed_scores.insert(SeedPrimitive::Risk, risk);
+        comp.seed_scores.insert(SeedPrimitive::Value, value);
+        comp.seed_scores.insert(SeedPrimitive::Goal, goal);
+        comp.seed_scores.insert(SeedPrimitive::Identity, identity);
+    }
+
     /// Adjust a composition's confidence using seed anchoring.
     ///
     /// Blend: `original * (1 - weight) + seed_confidence * weight`
@@ -1386,10 +1465,19 @@ impl SeedAnchor {
     }
 
     /// Run seed anchoring on a governed delta.
+    ///
+    /// First computes seed scores for each composition (if not already present),
+    /// then adjusts confidence based on those scores.
     pub fn anchor(&self, governed: GovernedDelta) -> AnchoredDelta {
         let mut compositions = governed.compositions;
 
         for comp in &mut compositions {
+            // Compute seed scores from composition structure if not already present.
+            if comp.seed_scores.is_empty()
+                || comp.seed_scores.values().all(|&v| v == 0.0)
+            {
+                self.compute_seed_scores(comp);
+            }
             self.adjust_confidence(comp);
         }
 

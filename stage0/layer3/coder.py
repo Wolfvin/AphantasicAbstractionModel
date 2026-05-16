@@ -164,8 +164,8 @@ class DeductiveCoderLayer(CoderLayer):
                 ingest_text = element.to_ingest_text()
                 try:
                     b.ingest(ingest_text)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("ingest() failed for '%s': %s", element_key, exc)
 
                 # Then create a compositional node
                 try:
@@ -191,8 +191,8 @@ class DeductiveCoderLayer(CoderLayer):
                                 gs = sense.get("grounding_score", 0.0)
                                 if gs > 0.5:
                                     confidence = max(confidence, 0.6)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("senses() failed for '%s': %s", element.name, exc)
 
         # Record elements found
         for element in elements:

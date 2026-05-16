@@ -12,7 +12,7 @@ Layout:
     ├── layer2/          Cognitive Runtime (reasoning)
     ├── layer3/          Deductive Reasoning & Output
     ├── pipeline.py      AamPipeline (wires all layers)
-    ├── diffusion_llm/   Narrative generation ("Body")
+    ├── config.py        Pipeline configuration management
     └── python/          Python rsvs package (API, CLI, server)
 
 Usage:

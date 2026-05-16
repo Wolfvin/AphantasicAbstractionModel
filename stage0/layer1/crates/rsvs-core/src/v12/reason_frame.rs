@@ -75,7 +75,7 @@ pub struct ReasoningContext<'a> {
     /// Recent events from the sliding window.
     pub recent_events: &'a [SemanticAtom],
     /// Optional graph reference for confidence lookup.
-    /// TODO: Replace with actual Graph reference when available.
+    /// // STUB:TODO — Replace with actual Graph reference when available.
     pub graph_ref: Option<GraphContextRef>,
 }
 
@@ -715,7 +715,7 @@ impl ReasonFrame {
             if rule.applies(&context) {
                 let mut rule_results = rule.generate(&context);
 
-                // Graph-guided confidence adjustment stub.
+                // STUB:MINIMAL — Graph-guided confidence adjustment.
                 // If the graph has many compositions with the same predicate,
                 // boost confidence slightly. If there's a contradiction,
                 // reduce confidence.

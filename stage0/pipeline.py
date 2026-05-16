@@ -53,7 +53,7 @@ from layer2.situation import SituationLayer
 from layer2.predictive import PredictiveEngine, Prediction, Anomaly, BeliefUpdate
 from layer2.pattern import PatternOutput, ReasoningStep, PatternResult
 from layer2.temporal import TemporalTracker, TemporalRecord
-# Diffusion LLM removed — narrative generation uses layer2.llm directly
+# Narrative generation uses layer2.llm directly
 
 # Layer 0: Perceptual Front-End
 from layer0 import TextAbstractor, ImageAbstractor, AudioAbstractor, VideoAbstractor
@@ -465,8 +465,7 @@ class AamPipeline:
         self.temporal = TemporalTracker()
         self.pattern = PatternOutput(bridge=self._bridge, temporal_tracker=self.temporal)
 
-        # Narrative generation now uses layer2.llm directly
-        # (Diffusion LLM concept archived — not yet trainable)
+        # Narrative generation uses layer2.llm directly
 
         # Layer 3: Deductive Reasoning (optional — activated when needed)
         # Analogi: Jin Soun tidak hanya menarik kesimpulan dari pola,
@@ -561,7 +560,7 @@ class AamPipeline:
                     "reason": signal_result.reason,
                 })
         except Exception as exc:
-            logger.debug("Gate 1 (Signal) failed: %s", exc)
+            logger.warning("Gate 1 (Signal) failed unexpectedly: %s", exc)
 
         # G2-6: Systematic chat ingest — every conversation enriches the graph
         # Analogi: Setiap percakapan yang Jin Soun dengar dicatat di Simhyeon Pavilion
@@ -570,7 +569,7 @@ class AamPipeline:
             # Also ingest into context layer for provenance tracking
             self.context.ingest_text(question, source=source)
         except Exception as exc:
-            logger.debug("Systematic chat ingest failed: %s", exc)
+            logger.warning("Systematic chat ingest failed: %s", exc)
 
         # ---- Step 1: Context Layer (P-01: produce Layer0Output) ----
         try:
@@ -628,7 +627,7 @@ class AamPipeline:
             regime_state = self.situation.current_regime
             gate_results["gate_2_regime"] = regime_state.to_dict()
         except Exception as exc:
-            logger.debug("Gate 2 (Regime) failed: %s", exc)
+            logger.warning("Gate 2 (Regime) failed unexpectedly: %s", exc)
 
         # ---- Step 3: RSVS Core + Predictive Engine ----
         # Make predictions based on context
@@ -736,7 +735,7 @@ class AamPipeline:
             )
             gate_results["gate_3_calibration"] = cal_result.to_dict()
         except Exception as exc:
-            logger.debug("Gate 3 (Calibration) failed: %s", exc)
+            logger.warning("Gate 3 (Calibration) failed unexpectedly: %s", exc)
 
         # Analogi: Setelah Jin Soun menarik pola, dia menelusuri
         # rantai deduksi — apakah ada bukti yang lebih kuat? Apakah
@@ -784,7 +783,7 @@ class AamPipeline:
             )
             gate_results["gate_4_edge"] = edge_assessment.to_dict()
         except Exception as exc:
-            logger.debug("Gate 4 (Edge) failed: %s", exc)
+            logger.warning("Gate 4 (Edge) failed unexpectedly: %s", exc)
 
         if prediction:
             try:
@@ -908,7 +907,7 @@ class AamPipeline:
                         answer = "Structural analysis (narrative deemed unreliable):\n" + "\n".join(structural_parts)
                         confidence *= 0.7  # Reduce confidence for structural-only response
         except Exception as exc:
-            logger.debug("Narrative reliability check failed: %s", exc)
+            logger.warning("Narrative reliability check failed: %s", exc)
 
         # ---- Step 6: Appraise Self-Check (P-02) ----
         try:
@@ -1146,6 +1145,16 @@ class AamPipeline:
         as each layer completes, allowing callers to show progress,
         partial results, or cancel long-running operations.
 
+        The streaming pipeline mirrors the full ask() flow:
+        1. Context Layer (ingest + search)
+        2. Situation Layer (chat context + active senses)
+        3. Predictive Engine (predictions + anomalies)
+        4. Pattern Output (pattern completion)
+        5. Deductive Reasoning (Layer 3 — if applicable)
+        6. Belief Update (observe & update)
+        7. Appraise Self-Check (verify output consistency)
+        8. Final (assembled answer)
+
         Args:
             question: The question or trigger text.
             context: Optional context atoms to guide the query.
@@ -1160,6 +1169,13 @@ class AamPipeline:
         def _check_cancel():
             if cancel_callback and cancel_callback():
                 raise asyncio.CancelledError("Pipeline cancelled by callback")
+
+        # G2-6: Systematic chat ingest — every conversation enriches the graph
+        try:
+            self.situation.add_message("user", question)
+            self.context.ingest_text(question, source=source)
+        except Exception:
+            pass
 
         # ---- Layer 0: Context Layer ----
         _check_cancel()
@@ -1250,10 +1266,67 @@ class AamPipeline:
                 error=str(exc),
             )
 
-        # ---- Layer 4: Appraise Self-Check ----
+        # ---- Layer 4: Deductive Reasoning (if applicable) ----
+        _check_cancel()
+        deductive_chain = None
+        query_mode = self._detect_query_mode(question)
+        if query_mode != "general" and pattern_result:
+            try:
+                deductive_chain = await asyncio.to_thread(
+                    self.reasoning.build_chain, pattern_result,
+                )
+                yield PipelineEvent(
+                    layer="reasoning",
+                    status="complete",
+                    partial_result={
+                        "steps": len(deductive_chain.steps),
+                        "aggregate_confidence": deductive_chain.aggregate_confidence,
+                        "conclusion": deductive_chain.conclusion[:200] if deductive_chain.conclusion else "",
+                        "mode": query_mode,
+                    },
+                )
+            except Exception as exc:
+                yield PipelineEvent(
+                    layer="reasoning",
+                    status="error",
+                    error=str(exc),
+                )
+
+        # ---- Layer 5: Belief Update ----
+        _check_cancel()
+        belief_updates_data: list[dict] = []
+        if prediction:
+            try:
+                belief_updates = await asyncio.to_thread(
+                    self.predictive.observe_and_update, question, source=source,
+                )
+                for bu in belief_updates:
+                    belief_updates_data.append({
+                        "concept": bu.concept,
+                        "old_confidence": round(bu.old_confidence, 3),
+                        "new_confidence": round(bu.new_confidence, 3),
+                        "direction": bu.direction,
+                    })
+                yield PipelineEvent(
+                    layer="belief_update",
+                    status="complete",
+                    partial_result={
+                        "updates": len(belief_updates_data),
+                        "concepts": [b["concept"] for b in belief_updates_data[:5]],
+                    },
+                )
+            except Exception as exc:
+                yield PipelineEvent(
+                    layer="belief_update",
+                    status="error",
+                    error=str(exc),
+                )
+
+        # ---- Layer 6: Narrative Generation + Appraise Self-Check ----
         _check_cancel()
         if pattern_result and pattern_result.steps:
-            answer = generate_narrative(
+            answer = await asyncio.to_thread(
+                generate_narrative,
                 trigger=question,
                 reasoning_chain=[s.to_dict() for s in pattern_result.steps],
                 pattern=pattern_result.pattern,
@@ -1266,10 +1339,16 @@ class AamPipeline:
                 use_llm=self._use_llm,
             )
         else:
-            answer = await asyncio.to_thread(
-                self._generate_fallback_answer, question,
-                layer1_output.relevant_context, layer1_output.active_senses,
+            answer = self._generate_fallback_answer(
+                question,
+                layer1_output.relevant_context,
+                layer1_output.active_senses,
             )
+
+        # Determine final confidence
+        confidence = pattern_result.confidence if pattern_result else 0.0
+        if deductive_chain and deductive_chain.aggregate_confidence > confidence:
+            confidence = deductive_chain.aggregate_confidence
 
         try:
             appraise_result = await asyncio.to_thread(
@@ -1291,11 +1370,24 @@ class AamPipeline:
                 error=str(exc),
             )
 
+        # Record assistant response in conversation
+        self.situation.add_message("assistant", answer)
+        self._conversation_history.append({
+            "role": "assistant",
+            "content": answer,
+            "timestamp": time.time(),
+        })
+
         # ---- Final ----
         yield PipelineEvent(
             layer="final",
             status="complete",
-            partial_result={"answer": answer[:200]},
+            partial_result={
+                "answer": answer[:500],
+                "confidence": round(confidence, 3),
+                "query_mode": query_mode,
+                "rsvs_available": self._is_rsvs_available(),
+            },
         )
 
     # -------------------------------------------------------------------
@@ -1387,8 +1479,8 @@ class AamPipeline:
         if self._maintenance_interval > 0 and self._ingest_count % self._maintenance_interval == 0:
             try:
                 self.maintenance()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Auto-maintenance during ingest failed: %s", exc)
 
         return {
             "context": context_stats,
@@ -1437,7 +1529,7 @@ class AamPipeline:
             "layer3_available": True,  # Layer 3 is always available (works in fallback too)
             "layer0_available": True,
             "layer0_modalities": layer0_modalities,
-            "diffusion_llm": self.diffusion_llm.get_status(),
+            "narrative_engine": "layer2.llm",
             "temporal_tracker": self.temporal.get_stats(),
         }
 
@@ -1633,8 +1725,8 @@ class AamPipeline:
                             "condition": rule.condition,
                             "passed": True,
                         })
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("Policy rule evaluation failed: %s", exc)
 
         # 5. Detect gaps and contradictions from the RSVS pipeline
         gaps = []
@@ -1648,8 +1740,8 @@ class AamPipeline:
                     "gap_type": gap_dict.get("gap_type", "unknown"),
                     "description": gap_dict.get("description", ""),
                 })
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Gap detection failed: %s", exc)
 
         # Check for contradicted compositions
         try:
@@ -1659,8 +1751,8 @@ class AamPipeline:
                         "composition_id": comp.get("id", "unknown"),
                         "type": comp.get("composition_type", "unknown"),
                     })
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Contradiction detection failed: %s", exc)
 
         # 6. Compute final confidence
         adjusted_confidence = rsvs_result.get("adjusted_confidence", 0.5)
@@ -1870,8 +1962,8 @@ class AamPipeline:
                     r.get("label") == label for r in relevant
                 ):
                     confidence_updates[label] = conf
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Confidence update extraction failed: %s", exc)
 
         return Layer1Output(
             new_nodes=new_nodes,

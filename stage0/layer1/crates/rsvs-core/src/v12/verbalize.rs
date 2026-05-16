@@ -315,7 +315,9 @@ impl CompositionalVerbalize {
         }
     }
 
-    /// Event template: "[Agent] [Predicate] [Patient], karena [Cause], untuk [Purpose]"
+    /// Event template: "AGENT did ACTION to PATIENT because CAUSE"
+    ///
+    /// Falls back to Bahasa Indonesia: "[Agent] [Predicate] [Patient], karena [Cause]"
     fn verbalize_event(&self, comp: &Composition) -> String {
         let agent = comp
             .member_with_role(&SemanticRole::Arg0Agent)
@@ -356,7 +358,9 @@ impl CompositionalVerbalize {
         )
     }
 
-    /// HiddenMeaning template: "[Solution] digunakan sebagai solusi untuk [Problem]"
+    /// HiddenMeaning template: "PROBLEM led to SOLUTION by AGENT"
+    ///
+    /// Falls back to Bahasa: "[Solution] digunakan sebagai solusi untuk [Problem]"
     fn verbalize_hidden_meaning(&self, comp: &Composition) -> String {
         let problem = comp
             .member_with_role(&SemanticRole::Problem)
@@ -366,6 +370,10 @@ impl CompositionalVerbalize {
             .member_with_role(&SemanticRole::Solution)
             .map(|m| m.label.as_str())
             .unwrap_or("solusi");
+        let agent = comp
+            .member_with_role(&SemanticRole::Arg0Agent)
+            .map(|m| format!(" oleh {}", m.label))
+            .unwrap_or_default();
         let beneficiary = comp
             .member_with_role(&SemanticRole::Beneficiary)
             .map(|m| format!(", yang menguntungkan {}", m.label))
@@ -376,12 +384,12 @@ impl CompositionalVerbalize {
             .unwrap_or_default();
 
         format!(
-            "{} digunakan sebagai solusi untuk {}{}{}.",
-            solution, problem, motivation, beneficiary
+            "{} digunakan sebagai solusi untuk {}{}{}{}.",
+            problem, solution, agent, motivation, beneficiary
         )
     }
 
-    /// Pattern template: "Ketika [Antecedent], maka [Consequent]"
+    /// Pattern template: "When ANTECEDENT then CONSEQUENT"
     fn verbalize_pattern(&self, comp: &Composition) -> String {
         let ante = comp
             .member_with_role(&SemanticRole::Antecedent)
@@ -397,13 +405,10 @@ impl CompositionalVerbalize {
             .unwrap_or_default();
 
         format!(
-            "Ketika {}, maka{} {}.{}",
+            "Ketika {}, maka{} {}.",
             ante,
             pattern_type,
-            cons,
-            // No extra dot needed — pattern_type is optional
-            // pattern_type segment intentionally empty — kept for future template expansion
-            ""
+            cons
         )
     }
 

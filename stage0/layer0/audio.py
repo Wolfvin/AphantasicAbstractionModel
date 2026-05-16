@@ -130,16 +130,23 @@ class AudioAbstractor(BasePerceptualAbstractor):
         )
 
     def _transcribe(self, audio_input) -> str | None:
-        """Transcribe audio using the STT bridge."""
+        """Transcribe audio using the STT bridge.
+
+        # STUB:REQUIRES_EXTERNAL_BRIDGE — Needs an ASR (Automatic Speech
+        # Recognition) engine like Whisper to transcribe audio input.
+        # Without it, only metadata-level extraction is available.
+        """
         try:
             return self.stt_bridge.transcribe(audio_input)
         except Exception:
             return None
 
     def _extract_metadata_fallback(self, raw_input, input_ref: str) -> list[PerceptualTuple]:
-        """
-        Fallback: extract basic tuples from audio metadata/filename cues.
-        This produces minimal tuples when no STT or LLM is available.
+        """Fallback: extract basic tuples from audio metadata/filename cues.
+
+        # STUB:REQUIRES_EXTERNAL_BRIDGE — This fallback produces minimal tuples
+        # because no ASR/STT bridge is available. Real audio understanding
+        # requires connecting an external speech-to-text model (Whisper, etc.).
         """
         tuples: list[PerceptualTuple] = []
 

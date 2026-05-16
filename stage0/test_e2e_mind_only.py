@@ -3,8 +3,8 @@
 AAM End-to-End Test — Buktikan Pikiran Dulu, Baru Latih Tubuh
 
 This test proves that the "mind" (RSVS graph + cognitive layers) works
-end-to-end WITHOUT the diffusion model. The diffusion model is the "body"
-and is not needed for the core reasoning pipeline.
+end-to-end using the v12 pipeline. Narrative generation uses layer2.llm
+directly — no separate diffusion model is needed for the core pipeline.
 
 Flow tested:
     Text Input
@@ -16,8 +16,8 @@ Flow tested:
       → Output: AamResponse with evidence, confidence, reasoning chain
 
 This is the "proof of mind" — if this works, the graph can produce
-traceable, evidence-backed conclusions. Only then does it make sense
-to train a "body" (diffusion LLM) to narrate those conclusions fluently.
+traceable, evidence-backed conclusions with narrative generation
+handled by the v12 pipeline's layer2.llm module.
 
 Analogi: Ini adalah Jin Soun yang SUDAH BISA menarik kesimpulan
 dari ingatannya — bahkan sebelum tubuhnya bisa berbicara fasih.
@@ -301,7 +301,7 @@ def test_layer3_deductive_policy():
 
 
 def test_full_pipeline():
-    """Test 9: Full AamPipeline — End-to-end without diffusion model."""
+    """Test 9: Full AamPipeline — End-to-end v12 pipeline."""
     from pipeline import AamPipeline
 
     pipeline = AamPipeline(use_llm=False, language="en")
@@ -407,7 +407,7 @@ def main():
 
     if failed == 0:
         print("🎉 ALL TESTS PASSED — Pikiran terbukti bekerja end-to-end!")
-        print("   Sekarang latih tubuh (Diffusion LLM) ada fondasi yang solid.")
+        print("   V12 pipeline ready — narrative generation via layer2.llm.")
     else:
         print(f"⚠️  {failed} test(s) failed — ada gap yang perlu diperbaiki.")
 
