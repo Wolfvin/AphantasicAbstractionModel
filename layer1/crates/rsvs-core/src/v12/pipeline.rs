@@ -49,6 +49,9 @@ use super::extract_frame::ExtractFrame;
 use super::reason_frame::ReasonFrame;
 use super::govern_beliefs::{GovernBeliefs, SeedAnchor};
 use super::acquisition::{DetectGaps, SelectAcquisition};
+use super::convergence::ConvergenceDetectionTransform;
+use super::spreading::SpreadingActivationTransform;
+use super::temporal::TemporalDecayTransform;
 // NodeId is imported from crate::types — not re-exported by super::types.
 use crate::types::NodeId;
 
@@ -578,10 +581,10 @@ fn topological_sort(dag: &[TransformNode]) -> Result<Vec<String>, Vec<String>> {
 
 /// Register all core v12.0 transforms in dependency order.
 ///
-/// This wires up the complete default pipeline with 10 transforms:
+/// This wires up the complete default pipeline with 13 transforms:
 ///
 /// | # | Transform | Dependencies | Condition |
-/// |---|-----------|-------------|-----------|
+/// |---|-----------|-------------|------------|
 /// | 1 | Tokenize | (none) | always |
 /// | 2 | ExtractFrame | Tokenize | is_sentence_like |
 /// | 3 | ReasonFrame | ExtractFrame | has_event_atoms |
@@ -592,11 +595,9 @@ fn topological_sort(dag: &[TransformNode]) -> Result<Vec<String>, Vec<String>> {
 /// | 8 | SelectAcquisition | DetectGaps | has_gaps |
 /// | 9 | EnrichComposition | SelectAcquisition | has_enrichment_requests |
 /// | 10 | ReExtractFrame | SelectAcquisition | has_reextraction_requests |
-///
-/// Note: ExtractFrame, ReasonFrame, GovernBeliefs, SeedAnchor, DetectGaps,
-/// and SelectAcquisition are registered as no-op stubs. They will be
-/// implemented in separate modules and registered here via their
-/// `ErasedTransform` implementations when available.
+/// | 11 | TemporalDecay | EnrichComposition | always |
+/// | 12 | SpreadingActivation | GovernBeliefs | has_event_atoms |
+/// | 13 | ConvergenceDetection | EnrichComposition, TemporalDecay | always |
 pub fn register_default_pipeline(engine: &mut PipelineEngine) {
     // 1. Tokenize — no dependencies, always runs.
     engine.register(
@@ -666,6 +667,33 @@ pub fn register_default_pipeline(engine: &mut PipelineEngine) {
         ReExtractFrame::new(),
         vec!["SelectAcquisition".to_string()],
         Some(Box::new(|ctx: &PipelineContext| ctx.has_reextraction_requests())),
+    );
+
+    // 11. TemporalDecay — runs after enrichment, applies Ebbinghaus decay.
+    //     No dependencies on other transforms (reads graph directly).
+    //     Condition: always (decay is continuous).
+    engine.register(
+        TemporalDecayTransform { engine: super::temporal::TemporalDecay::new() },
+        vec!["EnrichComposition".to_string()],
+        None,
+    );
+
+    // 12. SpreadingActivation — propagates energy from seed-anchored nodes.
+    //     Depends on GovernBeliefs (seeds must be computed first).
+    //     Condition: has event atoms (only when pipeline produced events).
+    engine.register(
+        SpreadingActivationTransform::new(),
+        vec!["GovernBeliefs".to_string()],
+        Some(Box::new(|ctx: &PipelineContext| ctx.has_event_atoms())),
+    );
+
+    // 13. ConvergenceDetection — detects structurally equivalent compositions.
+    //     Runs last, after all enrichment and decay.
+    //     Condition: always (checks internally if ≥2 compositions exist).
+    engine.register(
+        ConvergenceDetectionTransform { engine: super::convergence::ConvergenceDetection::new() },
+        vec!["EnrichComposition".to_string(), "TemporalDecay".to_string()],
+        None,
     );
 }
 
@@ -1636,8 +1664,8 @@ mod tests {
     fn test_register_default_pipeline() {
         let mut engine = PipelineEngine::new();
         register_default_pipeline(&mut engine);
-        assert_eq!(engine.transforms.len(), 10);
-        assert_eq!(engine.dag.len(), 10);
+        assert_eq!(engine.transforms.len(), 13);
+        assert_eq!(engine.dag.len(), 13);
     }
 
     #[test]

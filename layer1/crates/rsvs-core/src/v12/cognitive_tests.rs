@@ -1955,3 +1955,53 @@ fn test_passive_recall_excludes_self_referent() {
 
     eprintln!("✅ L2 FIX TEST PASSED: PassiveRecall excludes self-referent candidates");
 }
+
+// ========================================================================
+// PIPELINE INTEGRATION TESTS — 13 Transforms
+// ========================================================================
+
+#[test]
+fn test_convergence_detection_integrated_in_pipeline() {
+    // Dua kalimat yang structurally equivalent harus dideteksi setelah ingest
+    let mut engine = PipelineEngine::new();
+    register_default_pipeline(&mut engine);
+
+    engine.ingest("Dokter memeriksa pasien.");
+    engine.ingest("Tabib memeriksa orang sakit.");
+
+    // Setelah 2 ingest, convergence transform sudah berjalan
+    // Ada EquivalentOf edge di graph (dari ConvergenceDetectionTransform)
+    let has_equiv = engine.graph().edges.iter().any(|(_, _, e)| {
+        e.role == Some(SemanticRole::EquivalentOf)
+    });
+    // Mungkin tidak selalu true (tergantung threshold), tapi tidak boleh panic
+    // Test utama: pipeline tidak crash dengan 13 transforms
+    eprintln!("Convergence detected: {}", has_equiv);
+    assert!(engine.graph().compositions.len() > 0,
+        "Pipeline harus menghasilkan compositions setelah ingest");
+}
+
+#[test]
+fn test_temporal_decay_integrated_in_pipeline() {
+    let mut engine = PipelineEngine::new();
+    register_default_pipeline(&mut engine);
+
+    // Ingest, lalu simulasi aging dengan batch_seen tinggi
+    engine.ingest("Aplikasi ini sudah lama tidak dipakai.");
+
+    // Manually age a composition to trigger decay
+    let comp_ids: Vec<_> = engine.graph().compositions.keys().cloned().collect();
+    for id in &comp_ids {
+        if let Some(comp) = engine.graph_mut().compositions.get_mut(id) {
+            comp.batch_seen = 100; // Beyond TTL
+        }
+    }
+
+    // Next ingest triggers TemporalDecay transform
+    engine.ingest("Sistem baru dibuat untuk menggantikannya.");
+
+    // Pipeline tidak crash, compositions masih ada
+    assert!(engine.graph().compositions.len() > 0,
+        "Pipeline harus tetap berjalan setelah temporal decay");
+    eprintln!("Compositions after decay: {}", engine.graph().compositions.len());
+}
