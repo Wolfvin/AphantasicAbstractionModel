@@ -913,7 +913,9 @@ impl SelectAcquisition {
     /// Find a candidate node to fill a role, using frequency-based lookup.
     ///
     /// Scans all compositions in the graph for the same role and returns
-    /// the most frequently used node as a candidate.
+    /// the most frequently used node as a candidate. Excludes candidates
+    /// that are already members of the target composition (self-referent
+    /// prevention — L2 fix).
     pub fn graph_find_role_candidate(
         &self,
         graph: &Graph,
@@ -921,6 +923,15 @@ impl SelectAcquisition {
         gap: &KnowledgeGap,
     ) -> Option<(NodeId, String, f32)> {
         let mut candidate_counts: HashMap<NodeId, (usize, String, f32)> = HashMap::new();
+
+        // Collect existing member node_ids from the target composition
+        // to prevent self-referent candidates (L2 fix).
+        let existing_node_ids: std::collections::HashSet<NodeId> =
+            gap.source_composition_id
+                .as_ref()
+                .and_then(|comp_id| graph.get_composition(comp_id))
+                .map(|comp| comp.members.iter().map(|m| m.node_id).collect())
+                .unwrap_or_default();
 
         for comp in graph.compositions() {
             // Skip the source composition.
@@ -931,6 +942,11 @@ impl SelectAcquisition {
             }
 
             if let Some(member) = comp.member_with_role(role) {
+                // Skip candidates that are already members of the target composition.
+                if existing_node_ids.contains(&member.node_id) {
+                    continue;
+                }
+
                 let entry = candidate_counts.entry(member.node_id).or_insert((
                     0,
                     String::new(),

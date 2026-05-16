@@ -1875,3 +1875,83 @@ fn test_enrichment_loop_stops_at_budget() {
         eprintln!("✅ ENRICHMENT LOOP TEST 2 PASSED: Budget enforcement verified");
     }
 }
+
+// ========================================================================
+// L2 FIX: PassiveRecall Self-Referent Prevention
+// ========================================================================
+
+#[test]
+fn test_passive_recall_excludes_self_referent() {
+    // When the graph is sparse, graph_find_role_candidate might propose
+    // a node that is already a member of the target composition as a
+    // candidate for a different role. This creates a self-referent where
+    // the same node fills multiple roles in the same composition.
+    //
+    // Fix: graph_find_role_candidate now skips candidates whose node_id
+    // is already a member of the target composition.
+
+    let mut graph = Graph::new();
+
+    // Create a composition with Predicate="membuat" and Patient="aplikasi"
+    // It's missing Agent.
+    let mut roles = HashMap::new();
+    roles.insert(SemanticRole::Arg1Patient, "aplikasi".to_string());
+    let atom = make_event_atom(
+        "atom_buat",
+        "membuat",
+        roles,
+        Some(Polarity::Positive),
+    );
+    let mut comp = make_event_composition("comp_buat", &atom, &mut graph);
+    comp.confidence = 0.4;
+    graph.compositions.insert(comp.id.clone(), comp.clone());
+
+    // Create another composition where "aplikasi" (already the Patient in comp_buat)
+    // also appears as Agent. In a sparse graph, this could cause graph_find_role_candidate
+    // to propose "aplikasi" as the Agent for comp_buat — creating a self-referent.
+    let mut roles2 = HashMap::new();
+    roles2.insert(SemanticRole::Arg0Agent, "aplikasi".to_string());
+    roles2.insert(SemanticRole::Arg1Patient, "kebutuhan".to_string());
+    let atom2 = make_event_atom(
+        "atom_app_agent",
+        "memenuhi",
+        roles2,
+        Some(Polarity::Positive),
+    );
+    let comp2 = make_event_composition("comp_memenuhi", &atom2, &mut graph);
+    graph.compositions.insert(comp2.id.clone(), comp2.clone());
+
+    // Create a gap: comp_buat is missing Agent.
+    let gap = KnowledgeGap {
+        gap_id: "gap_agent".to_string(),
+        gap_type: KnowledgeGapType::MissingRole,
+        description: "Missing Agent role".to_string(),
+        source_composition_id: Some("comp_buat".to_string()),
+        source_atom_id: None,
+        missing_role: Some(SemanticRole::Arg0Agent),
+        confidence: 0.7,
+    };
+
+    let sa = SelectAcquisition::new();
+    let candidate = sa.graph_find_role_candidate(&graph, &SemanticRole::Arg0Agent, &gap);
+
+    // "aplikasi" is node_id from comp_memenuhi's Agent role, but it's already
+    // a member (Patient) of comp_buat. The L2 fix should exclude it.
+    // So the candidate should be None (no valid candidates remain).
+    if let Some((node_id, label, _conf)) = &candidate {
+        // If a candidate IS returned, it must NOT be a node already in comp_buat.
+        let comp_buat = graph.compositions.get("comp_buat").unwrap();
+        let existing_ids: Vec<_> = comp_buat.members.iter().map(|m| m.node_id).collect();
+        assert!(
+            !existing_ids.contains(node_id),
+            "Self-referent detected: candidate node '{}' (id={}) is already a member of comp_buat! \
+             Existing members: {:?}",
+            label, node_id, existing_ids
+        );
+        eprintln!("  ✓ Candidate '{}' (id={}) is NOT a self-referent", label, node_id);
+    } else {
+        eprintln!("  ✓ No candidate returned — self-referent 'aplikasi' was correctly excluded");
+    }
+
+    eprintln!("✅ L2 FIX TEST PASSED: PassiveRecall excludes self-referent candidates");
+}
