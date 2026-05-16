@@ -580,8 +580,12 @@ impl ErasedTransform for DetectGaps {
         ctx.gap_detection_enabled = true;
 
         IngestResult {
+            atoms_created: 0,
+            compositions_created: 0,
+            edges_created: 0,
             gaps_detected,
-            ..IngestResult::default()
+            enrichments_applied: 0,
+            governance_transitions: 0,
         }
     }
 }
@@ -1257,15 +1261,19 @@ impl ErasedTransform for SelectAcquisition {
         let (enrichments, reextractions) = sa.decisions_to_actions(&decisions, graph);
 
         let enrichments_count = enrichments.len();
-        let _reextractions_count = reextractions.len();
+        let reextractions_count = reextractions.len();
 
         // Write to pipeline context.
         ctx.pending_enrichments.extend(enrichments);
         ctx.pending_reextractions.extend(reextractions);
 
         IngestResult {
-            enrichments_applied: enrichments_count,
-            ..IngestResult::default()
+            atoms_created: 0,
+            compositions_created: 0,
+            edges_created: 0,
+            gaps_detected: 0,
+            enrichments_applied: enrichments_count + reextractions_count,
+            governance_transitions: 0,
         }
     }
 }

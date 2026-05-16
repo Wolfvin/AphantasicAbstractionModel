@@ -14,6 +14,7 @@ Modules:
   temporal      : Temporal tracking layer — when did things happen and what's still relevant?
   possibility_generator: Enumerate all possible interpretations from RSVS graph
   hypothesis_combinator: Combine complementary hypotheses into hybrids (A × B)
+  coder_layer   : Code understanding as structured knowledge
 
 Bridge:
   bridge    : Unified adapter for PyO3 Rust core (V12PipelineBridge)
@@ -45,7 +46,6 @@ from .predictive import PredictiveEngine, Prediction, Anomaly, BeliefUpdate
 from .prediction_loop import PredictionLoop, CycleResult, CycleTracker
 from .pattern import PatternOutput, ReasoningStep, PatternResult
 from .temporal import TemporalTracker, TemporalRecord
-from .diffusion_llm import AamDiffusionLLM, GraphConditioning, DiffusionOutput
 from .scope_control import ScopeControl, ScopeConfig, ScopeAuditEntry
 from .chat_index import SemanticChatIndex, ChatNode, ChatEdge, ConversationGraph
 from .web_search import WebSearchEngine

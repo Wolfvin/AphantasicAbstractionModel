@@ -264,8 +264,12 @@ impl ErasedTransform for TemporalDecayTransform {
         let governance_transitions = results.iter().filter(|r| r.demoted || r.deprecated).count();
 
         IngestResult {
+            atoms_created: 0,
+            compositions_created: 0,
+            edges_created: 0,
+            gaps_detected: 0,
+            enrichments_applied: 0,
             governance_transitions,
-            ..IngestResult::default()
         }
     }
 }

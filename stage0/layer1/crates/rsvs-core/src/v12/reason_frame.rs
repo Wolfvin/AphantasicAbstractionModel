@@ -787,7 +787,11 @@ impl ErasedTransform for ReasonFrame {
 
         IngestResult {
             atoms_created,
-            ..IngestResult::default()
+            compositions_created: 0,
+            edges_created: 0,
+            gaps_detected: 0,
+            enrichments_applied: 0,
+            governance_transitions: 0,
         }
     }
 }

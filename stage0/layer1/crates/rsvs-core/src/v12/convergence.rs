@@ -408,8 +408,12 @@ impl ErasedTransform for ConvergenceDetectionTransform {
         }
 
         IngestResult {
+            atoms_created: 0,
+            compositions_created: 0,
             edges_created,
-            ..IngestResult::default()
+            gaps_detected: 0,
+            enrichments_applied: 0,
+            governance_transitions: 0,
         }
     }
 }

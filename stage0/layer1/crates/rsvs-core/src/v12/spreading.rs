@@ -426,7 +426,11 @@ impl ErasedTransform for SpreadingActivationTransform {
 
         IngestResult {
             atoms_created: seeds.len(),
-            ..IngestResult::default()
+            compositions_created: 0,
+            edges_created: 0,
+            gaps_detected: 0,
+            enrichments_applied: 0,
+            governance_transitions: 0,
         }
     }
 }

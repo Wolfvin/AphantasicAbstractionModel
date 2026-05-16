@@ -1049,7 +1049,11 @@ impl ErasedTransform for Tokenize {
 
         IngestResult {
             atoms_created,
-            ..IngestResult::default()
+            compositions_created: 0,
+            edges_created: 0,
+            gaps_detected: 0,
+            enrichments_applied: 0,
+            governance_transitions: 0,
         }
     }
 }
@@ -1208,7 +1212,9 @@ impl ErasedTransform for IngestAtoms {
             atoms_created: atoms_counted,
             compositions_created,
             edges_created,
-            ..IngestResult::default()
+            gaps_detected: 0,
+            enrichments_applied: 0,
+            governance_transitions: 0,
         }
     }
 }
@@ -1351,10 +1357,12 @@ impl ErasedTransform for EnrichComposition {
         }
 
         IngestResult {
-            enrichments_applied,
+            atoms_created: 0,
+            compositions_created: 0,
             edges_created,
+            gaps_detected: 0,
+            enrichments_applied,
             governance_transitions,
-            ..IngestResult::default()
         }
     }
 }
@@ -1586,9 +1594,12 @@ impl ErasedTransform for ReExtractFrame {
         }
 
         IngestResult {
-            enrichments_applied,
+            atoms_created: 0,
+            compositions_created: 0,
             edges_created,
-            ..IngestResult::default()
+            gaps_detected: 0,
+            enrichments_applied,
+            governance_transitions: 0,
         }
     }
 }

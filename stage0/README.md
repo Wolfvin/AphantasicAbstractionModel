@@ -53,18 +53,30 @@ stage0/
 │   ├── statistical_edge.py       Gate 4: L4 positive EV check
 │   └── execution_discipline.py   Gate 5: L5 bounded execution
 │
-├── diffusion_llm/       The "Body" (narrative generation FROM graph)
-│   ├── model/           Diffusion transformer, graph encoder, noise scheduler
-│   ├── tokenizer/       AAM tokenizer
-│   ├── inference/       Generator (denoise → narrative)
-│   ├── training/        Trainer, dataset, losses
-│   └── experimental/    Evoformer, MCTS, flow matching, quantization, etc.
-│
 ├── python/              Python rsvs package (API, CLI, server)
 │   └── rsvs/            Installable package (pip install rsvs)
 │
 └── __init__.py          Package init (auto-adds stage0/ to sys.path)
 ```
+
+## Data Model
+
+AAM uses **v12 as the sole data model**. The v12 architecture replaces all prior models (v8.x, v11.x) with 6 unified abstractions:
+
+1. **SemanticAtom** — Universal ingest primitive
+2. **Composition** — Universal structured grouping
+3. **LifecycleState** + **EpistemicState** — Two orthogonal status axes
+4. **SemanticEdge** — Single typed triple
+5. **Transform** — Declarative transform graph
+6. **SeedPrimitive** + seed scores — Seed-driven epistemic confidence
+
+### v8.3 Backward Compatibility
+
+v8.3 snapshots can be migrated to v12 using `Persistence::migrate_v83()`:
+- v8.3 nodes → v12 SemanticAtoms with appropriate lifecycle states
+- v8.3 senses → v12 Compositions (type: Hypothesis)
+- v8.3 edges → v12 SemanticEdges (with synthetic compositions for node-to-node links)
+- Seed atoms get `LifecycleState::Stable` automatically
 
 ## How Imports Work
 

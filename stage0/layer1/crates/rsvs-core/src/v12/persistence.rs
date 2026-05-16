@@ -176,6 +176,239 @@ pub struct GraphStats {
 }
 
 // ========================================================================
+// v8.3 → v12 Migration
+// ========================================================================
+
+/// Result of a v8.3 → v12 migration.
+#[derive(Debug, Clone)]
+pub struct MigrationResult {
+    /// Number of v8.3 nodes migrated.
+    pub nodes_migrated: usize,
+    /// Number of v8.3 edges migrated.
+    pub edges_migrated: usize,
+    /// Number of v8.3 senses converted to compositions.
+    pub senses_converted: usize,
+    /// Number of nodes that could not be migrated.
+    pub nodes_skipped: usize,
+    /// Warnings encountered during migration.
+    pub warnings: Vec<String>,
+}
+
+impl Persistence {
+    /// Migrate a v8.3 snapshot JSON to a v12 Graph.
+    ///
+    /// v8.3 snapshots have a different structure:
+    /// - `nodes` as a list with `senses` sub-arrays
+    /// - `edges` with `source` (Bootstrap/Learned/Composition)
+    /// - No compositions (senses become compositions in v12)
+    ///
+    /// This function performs a best-effort migration:
+    /// 1. Each v8.3 node becomes a v12 SemanticAtom
+    /// 2. Each v8.3 sense becomes a v12 Composition
+    /// 3. v8.3 edges become v12 SemanticEdges
+    /// 4. Seed atoms get Tier1 lifecycle and EpistemicState::Grounded
+    /// 5. Non-seed atoms get Tier2/Tier3 lifecycle based on confidence
+    ///
+    /// If the input is already a v12 graph, it is loaded directly.
+    pub fn migrate_v83(path: &Path) -> Result<(Graph, MigrationResult), PersistenceError> {
+        let json = fs::read_to_string(path)?;
+        let value: serde_json::Value = serde_json::from_str(&json)
+            .map_err(|e| PersistenceError::Deserialization(e.to_string()))?;
+
+        // Check if already v12 format
+        if value.get("schema_version").and_then(|v| v.as_str()) == Some("v12") {
+            let graph: Graph = serde_json::from_value(value)
+                .map_err(|e| PersistenceError::Deserialization(e.to_string()))?;
+            return Ok((graph, MigrationResult {
+                nodes_migrated: 0,
+                edges_migrated: 0,
+                senses_converted: 0,
+                nodes_skipped: 0,
+                warnings: vec!["Input is already v12 format — no migration needed".to_string()],
+            }));
+        }
+
+        let mut graph = Graph::new();
+        let mut result = MigrationResult {
+            nodes_migrated: 0,
+            edges_migrated: 0,
+            senses_converted: 0,
+            nodes_skipped: 0,
+            warnings: Vec::new(),
+        };
+
+        // Migrate nodes from v8.3 format
+        if let Some(nodes) = value.get("nodes").and_then(|v| v.as_array()) {
+            for node_val in nodes {
+                if let Some(node_obj) = node_val.as_object() {
+                    let label = node_obj.get("label")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string();
+
+                    if label.is_empty() {
+                        result.nodes_skipped += 1;
+                        continue;
+                    }
+
+                    let node_id = graph.ensure_node(&label);
+                    if let Some(atom) = graph.nodes.get_mut(&node_id) {
+                        // Migrate confidence
+                        if let Some(conf) = node_obj.get("confidence").and_then(|v| v.as_f64()) {
+                            atom.confidence = conf as f32;
+                        }
+
+                        // Migrate seed status
+                        let is_seed = node_obj.get("is_seed")
+                            .and_then(|v| v.as_bool())
+                            .unwrap_or(false);
+
+                        if is_seed {
+                            atom.lifecycle = super::types::LifecycleState::Stable;
+                        } else {
+                            let conf = atom.confidence;
+                            atom.lifecycle = if conf >= 0.7 {
+                                super::types::LifecycleState::Candidate
+                            } else {
+                                super::types::LifecycleState::New
+                            };
+                        }
+
+                        // Migrate surface_label
+                        if let Some(surface) = node_obj.get("surface_label").and_then(|v| v.as_str()) {
+                            atom.surface_label = surface.to_string();
+                        }
+                    }
+
+                    result.nodes_migrated += 1;
+
+                    // Migrate senses as compositions
+                    if let Some(senses) = node_obj.get("senses").and_then(|v| v.as_array()) {
+                        for (sense_idx, sense_val) in senses.iter().enumerate() {
+                            if let Some(sense_obj) = sense_val.as_object() {
+                                let comp_id = format!("{}_sense_{}", label, sense_idx);
+                                let mut comp = super::types::Composition::default();
+                                comp.id = comp_id.clone();
+                                comp.composition_type = super::types::CompositionType::Hypothesis;
+                                comp.lifecycle = super::types::LifecycleState::Candidate;
+                                comp.epistemic = super::types::EpistemicState::Inferred;
+                                comp.provenance = super::types::ProvenanceChain::default();
+                                comp.provenance.origin_id = format!("v83_sense_{}_{}", sense_idx, label);
+
+                                if let Some(coherence) = sense_obj.get("coherence").and_then(|v| v.as_f64()) {
+                                    comp.confidence = coherence as f32;
+                                }
+
+                                // Migrate compositions as members
+                                if let Some(comps) = sense_obj.get("compositions").and_then(|v| v.as_array()) {
+                                    for comp_ref in comps {
+                                        if let Some(ref_obj) = comp_ref.as_object() {
+                                            let target_label = ref_obj.get("node_id")
+                                                .or_else(|| ref_obj.get("label"))
+                                                .and_then(|v| v.as_str())
+                                                .unwrap_or("")
+                                                .to_string();
+
+                                            if !target_label.is_empty() {
+                                                let target_id = graph.ensure_node(&target_label);
+                                                comp.members.push(super::types::CompositionMember {
+                                                    node_id: target_id,
+                                                    role: super::types::SemanticRole::Arg1Patient,
+                                                    confidence: 0.7,
+                                                    label: target_label,
+                                                });
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // Add node itself as a member
+                                comp.members.push(super::types::CompositionMember {
+                                    node_id,
+                                    role: super::types::SemanticRole::Arg0Agent,
+                                    confidence: 1.0,
+                                    label: label.clone(),
+                                });
+
+                                graph.compositions.insert(comp_id, comp);
+                                result.senses_converted += 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Migrate edges from v8.3 format
+        if let Some(edges) = value.get("edges").and_then(|v| v.as_array()) {
+            for edge_val in edges {
+                if let Some(edge_obj) = edge_val.as_object() {
+                    let from_label = edge_obj.get("from_label")
+                        .or_else(|| edge_obj.get("from"))
+                        .and_then(|v| {
+                            if v.is_number() { None } else { v.as_str() }
+                        })
+                        .unwrap_or("")
+                        .to_string();
+
+                    let to_label = edge_obj.get("to_label")
+                        .or_else(|| edge_obj.get("to"))
+                        .and_then(|v| {
+                            if v.is_number() { None } else { v.as_str() }
+                        })
+                        .unwrap_or("")
+                        .to_string();
+
+                    if from_label.is_empty() || to_label.is_empty() {
+                        continue;
+                    }
+
+                    let from_id = graph.ensure_node(&from_label);
+                    let to_id = graph.ensure_node(&to_label);
+
+                    let source_str = edge_obj.get("source")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("Learned");
+
+                    let edge_source = match source_str {
+                        "Bootstrap" => crate::types::EdgeSource::Bootstrap,
+                        "Composition" => crate::types::EdgeSource::FrameCompiler,
+                        _ => crate::types::EdgeSource::Learned,
+                    };
+
+                    // v8.3 edges are node-to-node; v12 edges are composition-to-node.
+                    // We create a synthetic composition for the source node and link
+                    // it to the target node.
+                    let comp_id = format!("migrated_edge_{}", result.edges_migrated);
+                    let mut comp = super::types::Composition::default();
+                    comp.id = comp_id.clone();
+                    comp.composition_type = super::types::CompositionType::Hypothesis;
+                    comp.provenance.origin_id = format!("migrated_{}", from_label);
+                    comp.members.push(super::types::CompositionMember {
+                        node_id: from_id,
+                        role: super::types::SemanticRole::Arg0Agent,
+                        confidence: 1.0,
+                        label: from_label.clone(),
+                    });
+                    comp.provenance = super::types::ProvenanceChain::default();
+                    graph.compositions.insert(comp_id.clone(), comp);
+
+                    let edge = super::types::SemanticEdge {
+                        relation: crate::types::RelationType::Categorical,
+                        role: None,
+                        source: edge_source,
+                    };
+                    graph.edges.push((comp_id, to_id, edge));
+                    result.edges_migrated += 1;
+                }
+            }
+        }
+
+        Ok((graph, result))
+    }
+}
+
+// ========================================================================
 // Unit Tests
 // ========================================================================
 

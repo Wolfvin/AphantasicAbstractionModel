@@ -1278,8 +1278,12 @@ impl ErasedTransform for GovernBeliefs {
         }
 
         IngestResult {
+            atoms_created: 0,
+            compositions_created: 0,
+            edges_created: 0,
+            gaps_detected: 0,
+            enrichments_applied: 0,
             governance_transitions: transitions,
-            ..IngestResult::default()
         }
     }
 }

@@ -53,7 +53,7 @@ from layer2.situation import SituationLayer
 from layer2.predictive import PredictiveEngine, Prediction, Anomaly, BeliefUpdate
 from layer2.pattern import PatternOutput, ReasoningStep, PatternResult
 from layer2.temporal import TemporalTracker, TemporalRecord
-from layer2.diffusion_llm import AamDiffusionLLM, GraphConditioning
+# Diffusion LLM removed — narrative generation uses layer2.llm directly
 
 # Layer 0: Perceptual Front-End
 from layer0 import TextAbstractor, ImageAbstractor, AudioAbstractor, VideoAbstractor
@@ -465,10 +465,8 @@ class AamPipeline:
         self.temporal = TemporalTracker()
         self.pattern = PatternOutput(bridge=self._bridge, temporal_tracker=self.temporal)
 
-        # AAM Diffusion LLM — the "body" of AAM (1 pikiran + 1 tubuh)
-        # Analogi: Tubuh Jin Soun — bukan LLM umum, tapi model yang
-        # KHUSUS dilatih untuk menarasikan dari graph-nya sendiri.
-        self.diffusion_llm = AamDiffusionLLM()
+        # Narrative generation now uses layer2.llm directly
+        # (Diffusion LLM concept archived — not yet trainable)
 
         # Layer 3: Deductive Reasoning (optional — activated when needed)
         # Analogi: Jin Soun tidak hanya menarik kesimpulan dari pola,
@@ -816,38 +814,17 @@ class AamPipeline:
                 n for s in pattern_result.steps for n in s.evidence_nodes
             ))
 
-            # Use AAM's own Diffusion LLM (the "body") for narrative generation
-            # Analogi: Jin Soun mengungkapkan kesimpulan melalui tubuhnya sendiri,
-            # bukan tubuh sewaan. 1 pikiran + 1 tubuh.
-            graph_conditioning = GraphConditioning(
+            # Generate narrative from reasoning chain
+            answer = generate_narrative(
                 trigger=question,
+                reasoning_chain=reasoning_chain_dicts,
+                pattern=pattern_result.pattern,
                 evidence_nodes=evidence_labels,
-                confidence_map=dict(self._bridge.confidence_map()) if self._bridge.is_available else {},
-                anomalies=pattern_result.anomalies if pattern_result else [],
-                reasoning_chain=[s.to_dict() for s in pattern_result.steps] if pattern_result else [],
-                source_trust=self.context.trust_score(source),
-                scope_active=bool(self.context.get_scope()),
-            )
-            diffusion_output = self.diffusion_llm.generate(
-                conditioning=graph_conditioning,
+                confidence=pattern_result.confidence,
+                anomalies=pattern_result.anomalies,
                 language=self._language,
+                use_llm=self._use_llm,
             )
-
-            # If diffusion fallback produced something, use it; otherwise fall back to external LLM
-            if diffusion_output.narrative and len(diffusion_output.narrative) > 50:
-                answer = diffusion_output.narrative
-            else:
-                # External LLM as last resort
-                answer = generate_narrative(
-                    trigger=question,
-                    reasoning_chain=reasoning_chain_dicts,
-                    pattern=pattern_result.pattern,
-                    evidence_nodes=evidence_labels,
-                    confidence=pattern_result.confidence,
-                    anomalies=pattern_result.anomalies,
-                    language=self._language,
-                    use_llm=self._use_llm,
-                )
 
             confidence = pattern_result.confidence
             reasoning_chain = pattern_result.steps
