@@ -478,6 +478,29 @@ impl PipelineEngine {
         (&mut self.context, &mut self.graph)
     }
 
+    /// Save the current graph state to a JSON file.
+    ///
+    /// Returns an error string if saving fails.
+    pub fn save(&self, path: &std::path::Path) -> Result<(), String> {
+        let persistence = super::persistence::Persistence::new();
+        persistence.save(&self.graph, path)
+            .map_err(|e| e.to_string())
+    }
+
+    /// Load graph state from a JSON file, replacing the current graph.
+    ///
+    /// Returns an error string if loading fails.
+    pub fn load(&mut self, path: &std::path::Path) -> Result<(), String> {
+        let persistence = super::persistence::Persistence::new();
+        match persistence.load(path) {
+            Ok(graph) => {
+                self.graph = graph;
+                Ok(())
+            }
+            Err(e) => Err(e.to_string()),
+        }
+    }
+
     /// Convenience method for running a specific transform by type.
     ///
     /// Creates a new instance of `T`, reads its input from the context,

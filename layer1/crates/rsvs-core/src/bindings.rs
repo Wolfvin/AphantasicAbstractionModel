@@ -578,6 +578,104 @@ impl PyV12Pipeline {
     fn gap_detection_enabled(&self) -> bool {
         self.engine.context.gap_detection_enabled
     }
+
+    /// Save the current graph to a file path.
+    fn save(&self, path: &str) -> PyResult<()> {
+        self.engine
+            .save(std::path::Path::new(path))
+            .map_err(|e| pyo3::exceptions::PyIOError::new_err(e))
+    }
+
+    /// Load graph from a file path (replaces current graph).
+    fn load(&mut self, path: &str) -> PyResult<()> {
+        self.engine
+            .load(std::path::Path::new(path))
+            .map_err(|e| pyo3::exceptions::PyIOError::new_err(e))
+    }
+
+    /// Run the active enrichment loop for the current graph state.
+    ///
+    /// This is the core feedback loop: DetectGaps → SelectAcquisition →
+    /// EnrichComposition → GovernBeliefs (re-evaluate). Runs for max rounds
+    /// determined by the current cognitive mode.
+    fn run_enrichment_loop(&mut self) -> PyResult<PyV12IngestResult> {
+        let result = self.orchestrator.run_enrichment_loop(&mut self.engine);
+        Ok(PyV12IngestResult {
+            atoms_created: 0,
+            compositions_created: 0,
+            gaps_detected: 0,
+            edges_created: 0,
+            enrichments_applied: result.evidence_count,
+            governance_transitions: result.modified_compositions.len(),
+            cognitive_mode: "enrichment_loop".to_string(),
+        })
+    }
+
+    /// Get all pending knowledge gaps as structured objects.
+    ///
+    /// Returns gaps with their type, source composition, and suggested strategy.
+    fn pending_gaps(&self) -> Vec<PyKnowledgeGap> {
+        let snapshot = self.engine.snapshot();
+        let mut detector = v12::DetectGaps::new();
+        detector.detect_all(&snapshot)
+            .iter()
+            .map(PyKnowledgeGap::from)
+            .collect()
+    }
+
+    /// Submit a user answer to fill a knowledge gap.
+    ///
+    /// gap_id: the gap ID from PyKnowledgeGap.gap_id
+    /// answer: the user's answer text (e.g., "Raymond")
+    ///
+    /// Returns True if the answer was applied to a composition, False if gap not found.
+    fn submit_answer(&mut self, gap_id: &str, answer: &str) -> bool {
+        // Find the gap
+        let snapshot = self.engine.snapshot();
+        let mut detector = v12::DetectGaps::new();
+        let gaps = detector.detect_all(&snapshot);
+
+        let gap = match gaps.iter().find(|g| g.gap_id == gap_id) {
+            Some(g) => g.clone(),
+            None => return false,
+        };
+
+        // Generate a question for this gap and apply the answer
+        let mut sa = v12::SelectAcquisition::new();
+        let question = sa.generate_question(&gap);
+
+        // Apply the answer
+        let (ctx, graph) = self.engine.context_and_graph_mut();
+        match sa.process_user_answer_merge(&question, answer, graph) {
+            Some(request) => {
+                ctx.pending_enrichments.push(request);
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Get a human-readable summary of the current graph state.
+    fn graph_summary(&self) -> String {
+        let graph = self.engine.graph();
+        let stable = graph.compositions.values()
+            .filter(|c| c.lifecycle == v12::LifecycleState::Stable)
+            .count();
+        let candidate = graph.compositions.values()
+            .filter(|c| c.lifecycle == v12::LifecycleState::Candidate)
+            .count();
+        let contradicted = graph.compositions.values()
+            .filter(|c| c.epistemic == v12::EpistemicState::Contradicted)
+            .count();
+        format!(
+            "Graph: {} nodes, {} compositions ({} stable, {} candidate, {} contradicted)",
+            graph.nodes.len(),
+            graph.compositions.len(),
+            stable,
+            candidate,
+            contradicted,
+        )
+    }
 }
 
 // ========================================================================

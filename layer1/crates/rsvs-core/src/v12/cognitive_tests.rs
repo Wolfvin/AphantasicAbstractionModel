@@ -2005,3 +2005,47 @@ fn test_temporal_decay_integrated_in_pipeline() {
         "Pipeline harus tetap berjalan setelah temporal decay");
     eprintln!("Compositions after decay: {}", engine.graph().compositions.len());
 }
+
+// ========================================================================
+// PERSISTENCE ROUNDTRIP TEST
+// ========================================================================
+
+#[test]
+fn test_persistence_roundtrip_via_pipeline() {
+    let mut engine = PipelineEngine::new();
+    register_default_pipeline(&mut engine);
+
+    engine.ingest("Raymond membuat aplikasi untuk klien.");
+    engine.ingest("Aplikasi selesai dalam dua minggu.");
+
+    let original_comp_count = engine.graph().compositions.len();
+    let original_node_count = engine.graph().nodes.len();
+
+    // Save to temp file
+    let tmp_dir = std::env::temp_dir();
+    let tmp_path = tmp_dir.join("aam_test_roundtrip.json");
+
+    engine.save(&tmp_path).expect("save harus berhasil");
+
+    // Load ke engine baru
+    let mut engine2 = PipelineEngine::new();
+    register_default_pipeline(&mut engine2);
+    engine2.load(&tmp_path).expect("load harus berhasil");
+
+    // Verifikasi roundtrip
+    assert_eq!(
+        engine2.graph().compositions.len(),
+        original_comp_count,
+        "Composition count harus sama setelah roundtrip"
+    );
+    assert_eq!(
+        engine2.graph().nodes.len(),
+        original_node_count,
+        "Node count harus sama setelah roundtrip"
+    );
+    eprintln!("Roundtrip OK: {} compositions, {} nodes",
+        original_comp_count, original_node_count);
+
+    // Cleanup
+    let _ = std::fs::remove_file(&tmp_path);
+}
