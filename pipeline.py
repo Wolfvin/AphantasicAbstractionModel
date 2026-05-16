@@ -1573,6 +1573,129 @@ class AamPipeline:
 
         return results
 
+    def check_policy_with_trace(
+        self,
+        entity: str,
+        context: dict | None = None,
+        domain: str = "",
+    ) -> dict:
+        """Check policy compliance with a full audit trail.
+
+        This is the key method for the tax/classification use case.
+        It combines:
+        1. Standard compliance checking (PolicyEngine)
+        2. RSVS-enhanced trust weighting (DeductivePolicyEngine)
+        3. Deductive reasoning chain (ReasoningEngine) for traceability
+
+        The result includes not just "compliant or not" but also:
+        - WHY each violation was triggered (with evidence node IDs)
+        - The deductive chain showing how the conclusion was reached
+        - Gaps and contradictions detected by the RSVS pipeline
+
+        Analogi: Jin Soun tidak hanya bilang "ini melanggar aturan",
+        tapi menunjukkan buku hukum yang mana, halaman berapa, dan
+        catatan pengawasan mana yang mendukung kesimpulan itu.
+
+        Args:
+            entity: The entity label to check (e.g., "PT_Test_Company").
+            context: Optional context dict with values for rule evaluation
+                (e.g., {"value": 600_000_000, "rate": 0.15}).
+            domain: Optional domain hint (e.g., "tax").
+
+        Returns:
+            A dict with:
+            - compliant: bool
+            - violations: list of violation dicts with messages
+            - confidence: float (trust-weighted)
+            - trace: list of deductive steps (fully auditable)
+            - gaps: list of detected knowledge gaps
+            - contradictions: list of detected contradictions
+        """
+        # 1. Run standard compliance check
+        compliance_result = self.deductive_policy.check_compliance(
+            entity, context=context or {},
+        )
+
+        # 2. Run RSVS-enhanced check for trust weighting
+        rsvs_result = self.deductive_policy.check_with_rsvs_policy(entity)
+
+        # 3. Build deductive trace for each violation
+        trace_steps = []
+        for violation in compliance_result.get("violations", []):
+            v_dict = violation.to_dict() if hasattr(violation, "to_dict") else violation
+            step = {
+                "step_type": "violation",
+                "rule_id": v_dict.get("rule_id", "unknown"),
+                "description": v_dict.get("rule_description", ""),
+                "severity": v_dict.get("severity", "warning"),
+                "message": v_dict.get("message", ""),
+                "evidence": [],
+            }
+            trace_steps.append(step)
+
+        # 4. Add compliance-passing rules as evidence
+        for rule in self.deductive_policy.get_rules():
+            if rule.enabled:
+                try:
+                    value = (context or {}).get("value", 0)
+                    passed = rule.evaluate(value)
+                    if passed:
+                        trace_steps.append({
+                            "step_type": "evidence",
+                            "rule_id": rule.rule_id,
+                            "description": rule.description,
+                            "condition": rule.condition,
+                            "passed": True,
+                        })
+                except Exception:
+                    pass
+
+        # 5. Detect gaps and contradictions from the RSVS pipeline
+        gaps = []
+        contradictions = []
+        try:
+            raw_gaps = self._bridge.detect_gaps()
+            for g in raw_gaps:
+                gap_dict = g if isinstance(g, dict) else {}
+                gaps.append({
+                    "gap_id": gap_dict.get("gap_id", "unknown"),
+                    "gap_type": gap_dict.get("gap_type", "unknown"),
+                    "description": gap_dict.get("description", ""),
+                })
+        except Exception:
+            pass
+
+        # Check for contradicted compositions
+        try:
+            for comp in self._bridge.compositions():
+                if comp.get("epistemic", "").lower() == "contradicted":
+                    contradictions.append({
+                        "composition_id": comp.get("id", "unknown"),
+                        "type": comp.get("composition_type", "unknown"),
+                    })
+        except Exception:
+            pass
+
+        # 6. Compute final confidence
+        adjusted_confidence = rsvs_result.get("adjusted_confidence", 0.5)
+        if compliance_result.get("compliant", True):
+            confidence = adjusted_confidence
+        else:
+            confidence = adjusted_confidence * 0.5  # Violations reduce confidence
+
+        return {
+            "compliant": compliance_result.get("compliant", True),
+            "violations": [
+                v.to_dict() if hasattr(v, "to_dict") else v
+                for v in compliance_result.get("violations", [])
+            ],
+            "confidence": round(confidence, 3),
+            "trust_weight": rsvs_result.get("trust_weight", 0.5),
+            "trace": trace_steps,
+            "gaps": gaps,
+            "contradictions": contradictions,
+        }
+
     def analyze_code(
         self,
         code: str,

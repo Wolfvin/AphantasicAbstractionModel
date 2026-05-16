@@ -12,6 +12,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   when HiddenMeaning has no SourceEvent link (commit a9d40ab)
 - PassiveRecall self-referent: candidates already in target composition are now
   excluded, preventing same node filling multiple roles (commit ee371b9)
+- Remaining SymbolicPuzzle3D references: fixed in .pre-commit-config.yaml,
+  frontend/package.json, koyeb.yaml
+- pyproject.toml TOML ordering: dependencies moved before [project.urls]
+  to fix maturin build failure
+- PyO3 module name: changed from `rsvs` to `_rsvs` to match
+  `module-name = "rsvs._rsvs"` in pyproject.toml
+- Rust unused_mut warning: removed unnecessary `mut` from
+  SelectAcquisition in submit_answer binding
 
 ### Added
 - 6 blind spot tests + 1 critical learning test (commits 1d17515, a85f903)
@@ -26,21 +34,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   role_jaccard weighted 60%, node_jaccard weighted 40%
 - PyV12Pipeline: run_enrichment_loop(), submit_answer(), graph_summary(),
   save(), load(), pending_gaps() exposed to Python
+- **PyO3 wheel builds successfully** — `maturin develop --features python`
+  produces working wheel; `from rsvs import PyV12Pipeline` works in Python
+- **V12PipelineBridge connected to Rust core** — bridge.is_rust_core == True
+  when wheel is installed; all layer2/3 modules now use real Rust graph
+- **Conditional marker extraction** — ExtractFrame now detects Indonesian
+  conditionals (jika, apabila, kalau, bila, jikalau, bilamana) and extracts
+  Antecedent/Consequent semantic roles
+- **ConditionConsequenceRule** — ReasonFrame Rule #4: derives if_then hidden
+  meaning from Antecedent + Consequent roles; foundation for tax rule compiler
+- **PolicyRuleCompiler** (layer2/policy_rule_compiler.py) — compiles conditional
+  patterns from RSVS graph into executable PolicyRules with eval-able conditions;
+  handles Indonesian inverted conditionals; extracts thresholds and rates from
+  regulation text automatically
+- **check_policy_with_trace()** in AamPipeline — combines compliance checking
+  with deductive audit trail; returns violations, confidence, trace, gaps,
+  and contradictions for full traceability
+- **Bridge methods for enrichment APIs** — V12PipelineBridge now exposes
+  run_enrichment_loop(), pending_gaps(), submit_answer(), graph_summary(),
+  save(), load() to layer2/3 modules
+- **layer1/python/rsvs/__init__.py** — minimal Python package for maturin
+  mixed build; re-exports all PyO3 classes from rsvs._rsvs
+- 2 cognitive tests for ConditionConsequenceRule:
+  test_condition_consequence_from_indonesian_if_then,
+  test_condition_consequence_rule_direct
 
 ### Changed
 - AGENT_PROMPT_* files moved to docs/internal/ (not public-facing)
 - Workspace version: 8.3.0 → 12.0.0
+- pyproject.toml version: 8.3.0 → 12.0.0
+- frontend/package.json version: 8.3.0 → 12.0.0
 - Repository URLs: SymbolicPuzzle3D → AphantasicAbstractionModel everywhere
 - README badges, mkdocs.yml, CONTRIBUTING.md, pyproject.toml URLs updated
 - ConvergenceDetection.detect() now uses role_weighted_similarity instead of
   plain Jaccard node-overlap
 - PipelineEngine.context_and_graph_mut() for split mutable borrow access
 - test_register_default_pipeline count: 10 → 13
+- ExtractFrame.extract_roles() now detects conditional markers and adds
+  Antecedent/Consequent roles; is_marker() includes condition markers
+- ExtractFrame.compute_frame_confidence() adds +0.10 for Antecedent and
+  +0.10 for Consequent roles
+- ReasonFrame now has 4 rules (was 3): ConditionConsequenceRule added
 
 ### Known Limitations (remaining)
 - L3: ExecutiveOrchestrator cognitive mode selection not covered by cognitive tests
 - L4: TemporalDecay test coverage minimal (integration only)
 - L6: Commutativity is structurally guaranteed but confidence may differ ≤0.15
+- L7: PolicyRuleCompiler only handles Indonesian number patterns (juta/miliar/persen)
+- L8: check_policy_with_trace() does not yet produce evidence_node_ids from graph
 
 ## [12.0.0] - 2026-05-15
 

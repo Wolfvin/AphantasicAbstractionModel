@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "rsvs"
-version = "8.3.0"
+version = "12.0.0"
 description = "Recursive Symbolic Vocabulary System — compositional symbolic engine with structural meaning, sense-level compositions, and autonomous tiered memory lifecycle"
 readme = "README.md"
 license = {text = "MIT OR Apache-2.0"}
@@ -21,14 +21,6 @@ classifiers = [
     "Typing :: Typed",
 ]
 keywords = ["knowledge-graph", "symbolic-ai", "attention", "cognitive-architecture"]
-
-[project.urls]
-Homepage = "https://github.com/Wolfvin/AphantasicAbstractionModel"
-Repository = "https://github.com/Wolfvin/AphantasicAbstractionModel"
-Documentation = "https://github.com/Wolfvin/AphantasicAbstractionModel/blob/main/ARCHITECTURE.md"
-Changelog = "https://github.com/Wolfvin/AphantasicAbstractionModel/releases"
-Issues = "https://github.com/Wolfvin/AphantasicAbstractionModel/issues"
-
 dependencies = [
     "fastapi>=0.110",
     "uvicorn[standard]>=0.29",
@@ -45,6 +37,13 @@ dev = [
     "mypy>=1.10",
     "pip-audit>=2.7",
 ]
+
+[project.urls]
+Homepage = "https://github.com/Wolfvin/AphantasicAbstractionModel"
+Repository = "https://github.com/Wolfvin/AphantasicAbstractionModel"
+Documentation = "https://github.com/Wolfvin/AphantasicAbstractionModel/blob/main/ARCHITECTURE.md"
+Changelog = "https://github.com/Wolfvin/AphantasicAbstractionModel/releases"
+Issues = "https://github.com/Wolfvin/AphantasicAbstractionModel/issues"
 
 [project.scripts]
 rsvs = "rsvs.cli:main"

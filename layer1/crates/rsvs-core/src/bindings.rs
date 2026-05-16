@@ -641,7 +641,7 @@ impl PyV12Pipeline {
         };
 
         // Generate a question for this gap and apply the answer
-        let mut sa = v12::SelectAcquisition::new();
+        let sa = v12::SelectAcquisition::new();
         let question = sa.generate_question(&gap);
 
         // Apply the answer
@@ -683,8 +683,11 @@ impl PyV12Pipeline {
 // ========================================================================
 
 /// Register all v12 PyO3 classes with the Python module.
+///
+/// The module name `_rsvs` matches `module-name = "rsvs._rsvs"` in pyproject.toml,
+/// so Python imports it as `from rsvs._rsvs import PyV12Pipeline`.
 #[pymodule]
-fn rsvs(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn _rsvs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyV12Pipeline>()?;
     m.add_class::<PySemanticAtom>()?;
     m.add_class::<PyComposition>()?;

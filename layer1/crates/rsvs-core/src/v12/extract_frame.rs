@@ -75,6 +75,19 @@ const NEGATION_MARKERS: &[&str] = &[
 const CAUSE_MARKERS: &[&str] = &["karena", "sebab"];
 const PURPOSE_MARKERS: &[&str] = &["untuk", "supaya", "agar"];
 
+/// Conditional markers in Indonesian — trigger ConditionConsequence extraction.
+///
+/// When one of these markers appears, the text before it is the Antecedent
+/// (condition) and the text after it is the Consequent (consequence).
+///
+/// - "jika" → if
+/// - "apabila" → if/when (formal)
+/// - "kalau" → if (informal)
+/// - "bila" → if/when
+/// - "jikalau" → if (archaic/formal)
+/// - "bilamana" → whenever (formal)
+const CONDITION_MARKERS: &[&str] = &["jika", "apabila", "kalau", "bila", "jikalau", "bilamana"];
+
 /// Known verb prefixes in Malay/Indonesian for predicate detection.
 const VERB_PREFIXES: &[&str] = &["me", "ber", "di", "ter", "ke", "pe"];
 
@@ -392,6 +405,28 @@ impl ExtractFrame {
                     break;
                 }
             }
+
+            // Condition/Consequence: detect conditional patterns.
+            // When a condition marker is found, split into Antecedent/Consequent.
+            for (i, token) in tokens.iter().enumerate() {
+                if is_condition_marker(token) {
+                    // Antecedent: tokens before the condition marker.
+                    if i > 0 {
+                        let ante_tokens: Vec<&str> = tokens[..i].to_vec();
+                        if !ante_tokens.is_empty() {
+                            roles.insert(SemanticRole::Antecedent, ante_tokens.join(" ").to_lowercase());
+                        }
+                    }
+                    // Consequent: tokens after the condition marker.
+                    if i + 1 < tokens.len() {
+                        let cons_tokens: Vec<&str> = tokens[i + 1..].to_vec();
+                        if !cons_tokens.is_empty() {
+                            roles.insert(SemanticRole::Consequent, cons_tokens.join(" ").to_lowercase());
+                        }
+                    }
+                    break;
+                }
+            }
         }
 
         roles
@@ -405,6 +440,8 @@ impl ExtractFrame {
     /// + 0.15 if Patient present
     /// + 0.10 if Cause present
     /// + 0.10 if Purpose present
+    /// + 0.10 if Antecedent present (conditional pattern)
+    /// + 0.10 if Consequent present (conditional pattern)
     /// - 0.05 if Negative polarity
     /// ```
     ///
@@ -422,6 +459,12 @@ impl ExtractFrame {
             confidence += 0.10;
         }
         if roles.contains_key(&SemanticRole::Purpose) {
+            confidence += 0.10;
+        }
+        if roles.contains_key(&SemanticRole::Antecedent) {
+            confidence += 0.10;
+        }
+        if roles.contains_key(&SemanticRole::Consequent) {
             confidence += 0.10;
         }
         if *polarity == Polarity::Negative {
@@ -607,9 +650,9 @@ fn is_verb_like(token: &str) -> bool {
     false
 }
 
-/// Is a token a marker (negation, cause, purpose)?
+/// Is a token a marker (negation, cause, purpose, condition)?
 fn is_marker(token: &str) -> bool {
-    is_negation_marker(token) || is_cause_marker(token) || is_purpose_marker(token)
+    is_negation_marker(token) || is_cause_marker(token) || is_purpose_marker(token) || is_condition_marker(token)
 }
 
 /// Is a token a negation marker?
@@ -625,6 +668,11 @@ fn is_cause_marker(token: &str) -> bool {
 /// Is a token a purpose marker?
 fn is_purpose_marker(token: &str) -> bool {
     PURPOSE_MARKERS.contains(&token.to_lowercase().as_str())
+}
+
+/// Is a token a conditional marker (jika, apabila, kalau, etc.)?
+fn is_condition_marker(token: &str) -> bool {
+    CONDITION_MARKERS.contains(&token.to_lowercase().as_str())
 }
 
 // ========================================================================

@@ -1,6 +1,6 @@
 {
   "name": "@rsvs/frontend",
-  "version": "8.3.0",
+  "version": "12.0.0",
   "private": true,
   "description": "RSVS 3D Knowledge Graph Visualization",
   "keywords": [
@@ -11,13 +11,13 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/Wolfvin/SymbolicPuzzle3D.git",
+    "url": "https://github.com/Wolfvin/AphantasicAbstractionModel.git",
     "directory": "frontend"
   },
   "bugs": {
-    "url": "https://github.com/Wolfvin/SymbolicPuzzle3D/issues"
+    "url": "https://github.com/Wolfvin/AphantasicAbstractionModel/issues"
   },
-  "homepage": "https://github.com/Wolfvin/SymbolicPuzzle3D#readme",
+  "homepage": "https://github.com/Wolfvin/AphantasicAbstractionModel#readme",
   "engines": {
     "node": ">=20.0.0"
   },

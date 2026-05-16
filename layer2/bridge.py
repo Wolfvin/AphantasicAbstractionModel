@@ -815,6 +815,145 @@ class V12PipelineBridge:
             "mode": "rust_v12" if self.is_rust_core else "fallback",
         }
 
+    # ------------------------------------------------------------------
+    # Enrichment loop
+    # ------------------------------------------------------------------
+
+    def run_enrichment_loop(self) -> dict:
+        """Run the active enrichment loop: DetectGaps → SelectAcquisition → EnrichComposition.
+
+        Only available when the Rust core is active. In fallback mode,
+        this is a no-op that returns empty stats.
+
+        Returns a dict with enrichment statistics.
+        """
+        if self._pipeline is not None:
+            try:
+                result = self._pipeline.run_enrichment_loop()
+                return {
+                    "enrichments_applied": result.enrichments_applied,
+                    "governance_transitions": result.governance_transitions,
+                    "cognitive_mode": result.cognitive_mode,
+                }
+            except Exception as exc:
+                logger.warning("run_enrichment_loop() failed: %s", exc)
+
+        return {
+            "enrichments_applied": 0,
+            "governance_transitions": 0,
+            "cognitive_mode": "fallback",
+        }
+
+    # ------------------------------------------------------------------
+    # Pending gaps (structured)
+    # ------------------------------------------------------------------
+
+    def pending_gaps(self) -> list[dict]:
+        """Get all pending knowledge gaps with full structure.
+
+        Returns a list of dicts with: gap_id, gap_type, description,
+        confidence, severity, missing_role, source_composition_id.
+        """
+        if self._pipeline is not None:
+            try:
+                result = []
+                for gap in self._pipeline.pending_gaps():
+                    result.append({
+                        "gap_id": gap.gap_id,
+                        "gap_type": gap.gap_type,
+                        "description": gap.description,
+                        "confidence": gap.confidence,
+                        "severity": gap.severity,
+                        "missing_role": gap.missing_role,
+                        "source_composition_id": gap.source_composition_id,
+                    })
+                return result
+            except Exception as exc:
+                logger.warning("pending_gaps() failed: %s", exc)
+
+        # Fallback to detect_gaps in fallback mode
+        return self.detect_gaps()
+
+    # ------------------------------------------------------------------
+    # Submit user answer
+    # ------------------------------------------------------------------
+
+    def submit_answer(self, gap_id: str, answer: str) -> bool:
+        """Submit a user answer to fill a knowledge gap.
+
+        Args:
+            gap_id: The gap ID from a pending_gaps() call.
+            answer: The user's answer text.
+
+        Returns True if the answer was applied, False if gap not found
+        or Rust core is unavailable.
+        """
+        if self._pipeline is not None:
+            try:
+                return self._pipeline.submit_answer(gap_id, answer)
+            except Exception as exc:
+                logger.warning("submit_answer() failed: %s", exc)
+
+        return False
+
+    # ------------------------------------------------------------------
+    # Graph summary
+    # ------------------------------------------------------------------
+
+    def graph_summary(self) -> str:
+        """Get a human-readable summary of the current graph state.
+
+        Returns a string like: "Graph: 6 nodes, 2 compositions (1 stable, 0 candidate, 0 contradicted)"
+        """
+        if self._pipeline is not None:
+            try:
+                return self._pipeline.graph_summary()
+            except Exception as exc:
+                logger.warning("graph_summary() failed: %s", exc)
+
+        # Fallback summary
+        return (
+            f"Graph: {self.node_count()} nodes, {self.composition_count()} compositions (fallback)"
+        )
+
+    # ------------------------------------------------------------------
+    # Persistence (save/load)
+    # ------------------------------------------------------------------
+
+    def save(self, path: str) -> bool:
+        """Save the current graph state to a JSON file.
+
+        Args:
+            path: File path to save to.
+
+        Returns True on success, False on failure or fallback mode.
+        """
+        if self._pipeline is not None:
+            try:
+                self._pipeline.save(path)
+                return True
+            except Exception as exc:
+                logger.warning("save() failed: %s", exc)
+
+        return False
+
+    def load(self, path: str) -> bool:
+        """Load graph state from a JSON file, replacing current graph.
+
+        Args:
+            path: File path to load from.
+
+        Returns True on success, False on failure or fallback mode.
+        """
+        if self._pipeline is not None:
+            try:
+                self._pipeline.load(path)
+                return True
+            except Exception as exc:
+                logger.warning("load() failed: %s", exc)
+
+        return False
+
 
 # ---------------------------------------------------------------------------
 # Backward-compatible aliases

@@ -1,9 +1,9 @@
-name: symbolicpuzzle3d-backend
+name: aphantasic-abstraction-model-backend
 services:
   - name: backend
     type: web
     git:
-      repository: github.com/Wolfvin/SymbolicPuzzle3D
+      repository: github.com/Wolfvin/AphantasicAbstractionModel
       branch: main
     dockerfile:
       dockerfile: Dockerfile.backend

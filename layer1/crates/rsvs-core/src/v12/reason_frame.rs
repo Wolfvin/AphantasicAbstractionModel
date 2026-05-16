@@ -12,6 +12,7 @@
 //! | 1 | ProblemSolutionRule | Cause + Action + Patient | ProblemSolutionPattern |
 //! | 2 | GoalInferenceRule | Purpose marker | GoalInference |
 //! | 3 | PolarityConflictRule | Same event + opposite polarity | PolarityConflict |
+//! | 4 | ConditionConsequenceRule | Antecedent + Consequent | condition_consequence |
 //!
 //! ## Architecture
 //!
@@ -481,6 +482,111 @@ impl ReasoningRule for PolarityConflictRule {
 }
 
 // ========================================================================
+// Rule 4: ConditionConsequenceRule
+// ========================================================================
+
+/// ConditionConsequenceRule — derives if-then patterns from Antecedent/Consequent roles.
+///
+/// When an event has both Antecedent and Consequent roles (extracted by
+/// `ExtractFrame` from conditional markers like "jika", "apabila"),
+/// this rule produces a HiddenMeaning atom representing the conditional
+/// relationship as a structured rule.
+///
+/// This is the foundation for the tax rule compiler: regulations like
+/// "Wajib Pajak dengan PKP di atas Rp500 juta dikenakan tarif 30%"
+/// are extracted as Antecedent + Consequent and then compiled into PolicyRules.
+///
+/// # Trigger
+///
+/// Event must have:
+/// - `Antecedent` role present (the "if" part)
+/// - `Consequent` role present (the "then" part)
+///
+/// # Output
+///
+/// ```text
+/// SemanticAtom {
+///     atom_type: HiddenMeaning,
+///     label: "condition_consequence",
+///     variant: MeaningVariant(Emergent),
+///     roles: {
+///         Antecedent: <condition text>,
+///         Consequent: <consequence text>,
+///         PatternType: "if_then",
+///     }
+/// }
+/// ```
+#[derive(Debug, Clone, Default)]
+pub struct ConditionConsequenceRule;
+
+impl ConditionConsequenceRule {
+    /// Create a new ConditionConsequenceRule.
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl ReasoningRule for ConditionConsequenceRule {
+    fn name(&self) -> &'static str {
+        "ConditionConsequenceRule"
+    }
+
+    fn applies(&self, context: &ReasoningContext) -> bool {
+        let event = context.event;
+        event.atom_type == AtomType::Event
+            && event.roles.contains_key(&SemanticRole::Antecedent)
+            && event.roles.contains_key(&SemanticRole::Consequent)
+    }
+
+    fn generate(&self, context: &ReasoningContext) -> Vec<ReasoningResult> {
+        let event = context.event;
+
+        let antecedent = match event.roles.get(&SemanticRole::Antecedent) {
+            Some(a) => a.clone(),
+            None => return Vec::new(),
+        };
+        let consequent = match event.roles.get(&SemanticRole::Consequent) {
+            Some(c) => c.clone(),
+            None => return Vec::new(),
+        };
+
+        let mut roles = HashMap::new();
+        roles.insert(SemanticRole::Antecedent, antecedent);
+        roles.insert(SemanticRole::Consequent, consequent);
+        roles.insert(SemanticRole::PatternType, "if_then".to_string());
+        roles.insert(SemanticRole::SourceEvent, event.id.clone());
+
+        // Copy agent/patient if present for richer context.
+        if let Some(agent) = event.roles.get(&SemanticRole::Arg0Agent) {
+            roles.insert(SemanticRole::Arg0Agent, agent.clone());
+        }
+        if let Some(patient) = event.roles.get(&SemanticRole::Arg1Patient) {
+            roles.insert(SemanticRole::Arg1Patient, patient.clone());
+        }
+
+        // Derivation confidence: conditional patterns are high-signal.
+        let derivation_confidence = event.confidence * 0.90;
+
+        let atom = SemanticAtom {
+            id: String::new(), // Will be assigned by pipeline
+            label: "condition_consequence".to_string(),
+            atom_type: AtomType::HiddenMeaning,
+            roles,
+            polarity: event.polarity.clone(),
+            voice: None,
+            variant: Some(AtomVariant::MeaningVariant(
+                crate::types::HiddenMeaningType::Emergent,
+            )),
+            confidence: derivation_confidence,
+            source: EdgeSource::HiddenMeaningRule,
+            composition_id: None,
+        };
+
+        vec![ReasoningResult::new(self.name(), atom, derivation_confidence)]
+    }
+}
+
+// ========================================================================
 // ReasonFrame — The Transform
 // ========================================================================
 
@@ -492,6 +598,7 @@ impl ReasoningRule for PolarityConflictRule {
 /// 1. `ProblemSolutionRule` — Cause + Action + Patient → ProblemSolutionPattern
 /// 2. `GoalInferenceRule` — Purpose marker → GoalInference
 /// 3. `PolarityConflictRule` — same event + opposite polarity → PolarityConflict
+/// 4. `ConditionConsequenceRule` — Antecedent + Consequent → if_then pattern
 ///
 /// # Transform Signature
 ///
@@ -533,6 +640,7 @@ impl ReasonFrame {
                 Box::new(ProblemSolutionRule::new()),
                 Box::new(GoalInferenceRule::new()),
                 Box::new(PolarityConflictRule::new()),
+                Box::new(ConditionConsequenceRule::new()),
             ],
         }
     }
