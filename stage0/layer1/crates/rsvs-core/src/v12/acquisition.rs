@@ -60,10 +60,11 @@ use crate::types::{EdgeSource, NodeId};
 /// Each gap type corresponds to a specific kind of missing information
 /// and determines which acquisition strategy to use.
 #[non_exhaustive]
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 pub enum KnowledgeGapType {
     /// An Event composition is missing an expected role.
     /// E.g., an Event with no Arg0Agent or no Arg1Patient.
+    #[default]
     MissingRole,
     /// A token needs disambiguation (pronouns, deictics).
     /// E.g., "dia" could refer to any person.
@@ -81,12 +82,6 @@ pub enum KnowledgeGapType {
     MissingCause,
     /// No purpose has been identified for an action.
     MissingPurpose,
-}
-
-impl Default for KnowledgeGapType {
-    fn default() -> Self {
-        KnowledgeGapType::MissingRole
-    }
 }
 
 // ========================================================================
@@ -163,7 +158,7 @@ impl KnowledgeGap {
 /// 3. `AskUser` — ask the user for clarification
 /// 4. `Defer` — gap noted but not actionable now
 #[non_exhaustive]
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub enum AcquisitionStrategy {
     /// The graph already has a candidate node to fill the gap.
     PassiveRecall {
@@ -187,17 +182,12 @@ pub enum AcquisitionStrategy {
         question: InquiryQuestion,
     },
     /// Gap noted but deferred — not actionable now.
+    #[default]
     Defer,
 }
 
-impl Default for AcquisitionStrategy {
-    fn default() -> Self {
-        AcquisitionStrategy::Defer
-    }
-}
-
 /// A question to ask the user (MD-6).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct InquiryQuestion {
     /// Unique question identifier.
     pub question_id: String,
@@ -211,18 +201,6 @@ pub struct InquiryQuestion {
     /// The composition the answer should enrich.
     #[serde(default)]
     pub target_composition_id: Option<CompositionId>,
-}
-
-impl Default for InquiryQuestion {
-    fn default() -> Self {
-        Self {
-            question_id: String::new(),
-            question_text: String::new(),
-            gap_id: String::new(),
-            target_role: None,
-            target_composition_id: None,
-        }
-    }
 }
 
 /// A decision about how to fill a knowledge gap (MD-6).
@@ -282,7 +260,8 @@ impl InquiryMemory {
 
     /// Record that a gap has been addressed.
     pub fn mark_gap_addressed(&mut self, gap_id: &str, strategy: &str) {
-        self.addressed_gaps.insert(gap_id.to_string(), strategy.to_string());
+        self.addressed_gaps
+            .insert(gap_id.to_string(), strategy.to_string());
     }
 
     /// Has this question been asked before?
@@ -297,7 +276,8 @@ impl InquiryMemory {
 
     /// Record a user's answer to a question.
     pub fn record_answer(&mut self, question_id: &str, answer: &str) {
-        self.asked_questions.insert(question_id.to_string(), Some(answer.to_string()));
+        self.asked_questions
+            .insert(question_id.to_string(), Some(answer.to_string()));
     }
 
     /// How many times has this gap type been deferred?
@@ -429,10 +409,7 @@ impl DetectGaps {
                 gaps.push(KnowledgeGap {
                     gap_id: self.next_gap_id(),
                     gap_type: KnowledgeGapType::AmbiguousToken,
-                    description: format!(
-                        "Ambiguous token '{}' needs disambiguation",
-                        atom.label
-                    ),
+                    description: format!("Ambiguous token '{}' needs disambiguation", atom.label),
                     source_composition_id: atom.composition_id.clone(),
                     source_atom_id: Some(atom.id.clone()),
                     missing_role: None,
@@ -672,7 +649,9 @@ impl SelectAcquisition {
         }
 
         let strategy = match gap.gap_type {
-            KnowledgeGapType::MissingRole | KnowledgeGapType::MissingCause | KnowledgeGapType::MissingPurpose => {
+            KnowledgeGapType::MissingRole
+            | KnowledgeGapType::MissingCause
+            | KnowledgeGapType::MissingPurpose => {
                 let role = gap.missing_role.clone().unwrap_or(SemanticRole::Arg0Agent);
 
                 // Strategy 1: PassiveRecall — find a candidate in the graph.
@@ -836,7 +815,9 @@ impl SelectAcquisition {
     /// - LowGrounding: check if there are other compositions with shared nodes
     pub fn graph_has_relevant_context(&self, graph: &Graph, gap: &KnowledgeGap) -> bool {
         match gap.gap_type {
-            KnowledgeGapType::MissingRole | KnowledgeGapType::MissingCause | KnowledgeGapType::MissingPurpose => {
+            KnowledgeGapType::MissingRole
+            | KnowledgeGapType::MissingCause
+            | KnowledgeGapType::MissingPurpose => {
                 if let Some(comp_id) = &gap.source_composition_id {
                     if let Some(source_comp) = graph.get_composition(comp_id) {
                         // Check if any other composition has the same predicate
@@ -847,7 +828,8 @@ impl SelectAcquisition {
                                 if comp.id == *comp_id {
                                     continue;
                                 }
-                                if comp.has_member_with_role_and_label(SemanticRole::Predicate, "") {
+                                if comp.has_member_with_role_and_label(SemanticRole::Predicate, "")
+                                {
                                     if let Some(role) = &gap.missing_role {
                                         if comp.has_member_with_role(role.clone()) {
                                             return true;
@@ -863,12 +845,10 @@ impl SelectAcquisition {
 
             KnowledgeGapType::AmbiguousToken => {
                 // Check if recent events have a potential referent.
-                graph.compositions.len() > 0
+                !graph.compositions.is_empty()
             }
 
-            KnowledgeGapType::LowGrounding => {
-                self.graph_has_grounding_evidence(graph, gap)
-            }
+            KnowledgeGapType::LowGrounding => self.graph_has_grounding_evidence(graph, gap),
 
             _ => false,
         }
@@ -926,12 +906,12 @@ impl SelectAcquisition {
 
         // Collect existing member node_ids from the target composition
         // to prevent self-referent candidates (L2 fix).
-        let existing_node_ids: std::collections::HashSet<NodeId> =
-            gap.source_composition_id
-                .as_ref()
-                .and_then(|comp_id| graph.get_composition(comp_id))
-                .map(|comp| comp.members.iter().map(|m| m.node_id).collect())
-                .unwrap_or_default();
+        let existing_node_ids: std::collections::HashSet<NodeId> = gap
+            .source_composition_id
+            .as_ref()
+            .and_then(|comp_id| graph.get_composition(comp_id))
+            .map(|comp| comp.members.iter().map(|m| m.node_id).collect())
+            .unwrap_or_default();
 
         for comp in graph.compositions() {
             // Skip the source composition.
@@ -967,7 +947,11 @@ impl SelectAcquisition {
             .into_iter()
             .max_by_key(|(_, (count, _, _))| *count)
             .map(|(node_id, (count, label, confidence))| {
-                (node_id, label, confidence * count as f32 / 3.0_f32.max(count as f32))
+                (
+                    node_id,
+                    label,
+                    confidence * count as f32 / 3.0_f32.max(count as f32),
+                )
             })
     }
 
@@ -1034,7 +1018,11 @@ impl SelectAcquisition {
             if !source_nodes.is_disjoint(&other_nodes) {
                 for member in &other.members {
                     if !source_nodes.contains(&member.node_id) {
-                        context.push((member.role.clone(), member.node_id, member.confidence * 0.7));
+                        context.push((
+                            member.role.clone(),
+                            member.node_id,
+                            member.confidence * 0.7,
+                        ));
                     }
                 }
             }
@@ -1050,31 +1038,27 @@ impl SelectAcquisition {
                 let role_name = gap
                     .missing_role
                     .as_ref()
-                    .map(|r| format!("{:?}", r).trim_start_matches("SemanticRole::").to_lowercase())
+                    .map(|r| {
+                        format!("{:?}", r)
+                            .trim_start_matches("SemanticRole::")
+                            .to_lowercase()
+                    })
                     .unwrap_or_else(|| "unknown role".to_string());
                 format!("Who or what is the {} in this event?", role_name)
             }
             KnowledgeGapType::AmbiguousToken => {
                 format!("What does '{}' refer to?", gap.description)
             }
-            KnowledgeGapType::SparseGraph => {
-                "Can you tell me more about this topic?".to_string()
-            }
-            KnowledgeGapType::LowGrounding => {
-                "Can you confirm this information?".to_string()
-            }
+            KnowledgeGapType::SparseGraph => "Can you tell me more about this topic?".to_string(),
+            KnowledgeGapType::LowGrounding => "Can you confirm this information?".to_string(),
             KnowledgeGapType::UnresolvedContradiction => {
                 "There seems to be conflicting information. Which is correct?".to_string()
             }
             KnowledgeGapType::IncompleteHiddenMeaning => {
                 "What problem does this solve?".to_string()
             }
-            KnowledgeGapType::MissingCause => {
-                "Why did this happen?".to_string()
-            }
-            KnowledgeGapType::MissingPurpose => {
-                "What was the purpose of this action?".to_string()
-            }
+            KnowledgeGapType::MissingCause => "Why did this happen?".to_string(),
+            KnowledgeGapType::MissingPurpose => "What was the purpose of this action?".to_string(),
         };
 
         InquiryQuestion {
@@ -1135,7 +1119,9 @@ impl SelectAcquisition {
             roles,
             polarity: None,
             voice: None,
-            variant: Some(AtomVariant::AcquisitionVariant(AcquisitionSource::UserAnswer)),
+            variant: Some(AtomVariant::AcquisitionVariant(
+                AcquisitionSource::UserAnswer,
+            )),
             confidence,
             source: EdgeSource::AcquisitionUserAnswer,
             composition_id: None,
@@ -1321,8 +1307,13 @@ mod tests {
         };
 
         let gaps = dg.detect_atom_gaps(&snapshot);
-        assert!(gaps.iter().any(|g| g.gap_type == KnowledgeGapType::MissingRole && g.missing_role == Some(SemanticRole::Arg0Agent)));
-        assert!(gaps.iter().any(|g| g.gap_type == KnowledgeGapType::MissingCause));
+        assert!(gaps
+            .iter()
+            .any(|g| g.gap_type == KnowledgeGapType::MissingRole
+                && g.missing_role == Some(SemanticRole::Arg0Agent)));
+        assert!(gaps
+            .iter()
+            .any(|g| g.gap_type == KnowledgeGapType::MissingCause));
     }
 
     #[test]
@@ -1342,7 +1333,9 @@ mod tests {
         };
 
         let gaps = dg.detect_atom_gaps(&snapshot);
-        assert!(gaps.iter().any(|g| g.gap_type == KnowledgeGapType::AmbiguousToken));
+        assert!(gaps
+            .iter()
+            .any(|g| g.gap_type == KnowledgeGapType::AmbiguousToken));
     }
 
     #[test]
@@ -1362,7 +1355,9 @@ mod tests {
         };
 
         let gaps = dg.detect_grounding_gaps(&snapshot);
-        assert!(gaps.iter().any(|g| g.gap_type == KnowledgeGapType::LowGrounding));
+        assert!(gaps
+            .iter()
+            .any(|g| g.gap_type == KnowledgeGapType::LowGrounding));
     }
 
     #[test]
@@ -1396,7 +1391,10 @@ mod tests {
         };
 
         let decision = sa.select_strategy(&gap, &graph);
-        assert!(matches!(decision.strategy, AcquisitionStrategy::PassiveRecall { .. }));
+        assert!(matches!(
+            decision.strategy,
+            AcquisitionStrategy::PassiveRecall { .. }
+        ));
     }
 
     #[test]

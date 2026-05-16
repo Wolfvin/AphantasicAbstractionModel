@@ -4,6 +4,8 @@
 //! actually works as claimed — that it can detect contradictions, reason about hidden
 //! meaning, accumulate confidence over time, ask the right questions, and discover
 //! structural equivalence without co-occurrence.
+
+#![allow(clippy::field_reassign_with_default)]
 //!
 //! ## Test Priority (as specified by user)
 //!
@@ -16,18 +18,18 @@
 
 use std::collections::HashMap;
 
-use super::pipeline::{Graph, PipelineEngine, register_default_pipeline};
-use super::types::*;
-use super::govern_beliefs::GovernBeliefs;
 use super::acquisition::{
-    DetectGaps, SelectAcquisition, KnowledgeGap, KnowledgeGapType, AcquisitionStrategy,
-};
-use super::executive::{ExecutiveOrchestrator, CognitiveMode};
-use super::reason_frame::{
-    ReasonFrame, ReasoningRule, ProblemSolutionRule, PolarityConflictRule, ReasoningContext,
+    AcquisitionStrategy, DetectGaps, KnowledgeGap, KnowledgeGapType, SelectAcquisition,
 };
 use super::convergence::ConvergenceDetection;
+use super::executive::{CognitiveMode, ExecutiveOrchestrator};
+use super::govern_beliefs::GovernBeliefs;
+use super::pipeline::{register_default_pipeline, Graph, PipelineEngine};
+use super::reason_frame::{
+    PolarityConflictRule, ProblemSolutionRule, ReasonFrame, ReasoningContext, ReasoningRule,
+};
 use super::spreading::SpreadingActivation;
+use super::types::*;
 
 use crate::types::EdgeSource;
 
@@ -264,7 +266,10 @@ fn test_5_tanya_yang_tepat() {
                 !question.gap_id.is_empty(),
                 "AskUser strategy should have a meaningful question."
             );
-            eprintln!("  → System chose AskUser (ideal): question about '{}'", question.gap_id);
+            eprintln!(
+                "  → System chose AskUser (ideal): question about '{}'",
+                question.gap_id
+            );
         }
         AcquisitionStrategy::ReExtraction { .. } => {
             eprintln!("  → System chose ReExtraction (acceptable fallback)");
@@ -345,18 +350,30 @@ fn test_1_siapa_yang_tidak_disebut() {
     let mut roles_hit = HashMap::new();
     roles_hit.insert(SemanticRole::Arg0Agent, "dia".to_string());
     roles_hit.insert(SemanticRole::Arg1Patient, "dia".to_string());
-    let event_hit = make_event_atom("atom_memukul", "memukul", roles_hit, Some(Polarity::Positive));
+    let event_hit = make_event_atom(
+        "atom_memukul",
+        "memukul",
+        roles_hit,
+        Some(Polarity::Positive),
+    );
 
     let mut roles_police = HashMap::new();
     roles_police.insert(SemanticRole::Arg0Agent, "polisi".to_string());
     roles_police.insert(SemanticRole::Cause, "ribut".to_string());
-    let event_police = make_event_atom("atom_datang", "datang", roles_police, Some(Polarity::Positive));
+    let event_police = make_event_atom(
+        "atom_datang",
+        "datang",
+        roles_police,
+        Some(Polarity::Positive),
+    );
 
     let mut graph = Graph::new();
     let comp_hit = make_event_composition("comp_memukul", &event_hit, &mut graph);
     let comp_police = make_event_composition("comp_datang", &event_police, &mut graph);
     graph.compositions.insert(comp_hit.id.clone(), comp_hit);
-    graph.compositions.insert(comp_police.id.clone(), comp_police);
+    graph
+        .compositions
+        .insert(comp_police.id.clone(), comp_police);
 
     let mut dg = DetectGaps::new();
     let snapshot = GraphSnapshot {
@@ -417,7 +434,12 @@ fn test_3_hubungan_tersembunyi() {
     roles.insert(SemanticRole::Arg1Patient, "cache".to_string());
     roles.insert(SemanticRole::Cause, "database tidak dioptimasi".to_string());
 
-    let event = make_event_atom("atom_membuat_cache", "membuat", roles, Some(Polarity::Positive));
+    let event = make_event_atom(
+        "atom_membuat_cache",
+        "membuat",
+        roles,
+        Some(Polarity::Positive),
+    );
 
     let rule = ProblemSolutionRule::new();
     let context = ReasoningContext::new(&event, &[]);
@@ -458,8 +480,13 @@ fn test_3_hubungan_tersembunyi() {
     // Full ReasonFrame pipeline
     let rf = ReasonFrame::new();
     let all_results = rf.reason(&event, &[]);
-    let has_problem_solution = all_results.iter().any(|r| r.atom.label == "problem_solution");
-    assert!(has_problem_solution, "ReasonFrame should produce 'problem_solution'");
+    let has_problem_solution = all_results
+        .iter()
+        .any(|r| r.atom.label == "problem_solution");
+    assert!(
+        has_problem_solution,
+        "ReasonFrame should produce 'problem_solution'"
+    );
 
     eprintln!("✅ TEST 3 PASSED: ProblemSolutionRule derives HiddenMeaning — 'cache' is solution for 'database tidak dioptimasi'");
 }
@@ -483,7 +510,11 @@ fn test_4_graph_tumbuh_confidence_naik() {
     comp1.confidence = 0.5;
     gb.initial_states(&mut comp1);
 
-    assert_eq!(comp1.lifecycle, LifecycleState::New, "After batch 1, should be New");
+    assert_eq!(
+        comp1.lifecycle,
+        LifecycleState::New,
+        "After batch 1, should be New"
+    );
 
     comp1.batch_seen = 1;
     graph.compositions.insert(comp1.id.clone(), comp1.clone());
@@ -496,7 +527,9 @@ fn test_4_graph_tumbuh_confidence_naik() {
         LifecycleState::Candidate,
         "After 1 batch, should promote New → Candidate"
     );
-    graph.compositions.insert(comp1.id.clone(), compositions_b1[0].clone());
+    graph
+        .compositions
+        .insert(comp1.id.clone(), compositions_b1[0].clone());
 
     // Batch 2: confidence increase
     {
@@ -550,7 +583,12 @@ fn test_6_structural_similarity_tanpa_cooccurrence() {
     roles_a.insert(SemanticRole::Arg1Patient, "pasien".to_string());
     roles_a.insert(SemanticRole::Location, "rumah sakit".to_string());
 
-    let atom_a = make_event_atom("atom_dokter_periksa", "memeriksa", roles_a, Some(Polarity::Positive));
+    let atom_a = make_event_atom(
+        "atom_dokter_periksa",
+        "memeriksa",
+        roles_a,
+        Some(Polarity::Positive),
+    );
     let comp_a = make_event_composition("comp_dokter_periksa", &atom_a, &mut graph);
     graph.compositions.insert(comp_a.id.clone(), comp_a);
 
@@ -560,7 +598,12 @@ fn test_6_structural_similarity_tanpa_cooccurrence() {
     roles_b.insert(SemanticRole::Arg1Patient, "orang sakit".to_string());
     roles_b.insert(SemanticRole::Location, "balai pengobatan".to_string());
 
-    let atom_b = make_event_atom("atom_tabib_periksa", "memeriksa", roles_b, Some(Polarity::Positive));
+    let atom_b = make_event_atom(
+        "atom_tabib_periksa",
+        "memeriksa",
+        roles_b,
+        Some(Polarity::Positive),
+    );
     let comp_b = make_event_composition("comp_tabib_periksa", &atom_b, &mut graph);
     graph.compositions.insert(comp_b.id.clone(), comp_b);
 
@@ -568,7 +611,10 @@ fn test_6_structural_similarity_tanpa_cooccurrence() {
     let dokter_id = graph.find_node_by_label("dokter").unwrap();
     let tabib_id = graph.find_node_by_label("tabib").unwrap();
     let cooccurrence = graph.cooccurrence_count(dokter_id, tabib_id);
-    assert_eq!(cooccurrence, 0, "dokter and tabib should have ZERO co-occurrence");
+    assert_eq!(
+        cooccurrence, 0,
+        "dokter and tabib should have ZERO co-occurrence"
+    );
 
     // Compute structural similarity
     let comp_a_id: String = "comp_dokter_periksa".to_string();
@@ -579,8 +625,10 @@ fn test_6_structural_similarity_tanpa_cooccurrence() {
     eprintln!("  → Jaccard structural similarity: {:.3}", similarity);
 
     // Role structures should be identical (mirror)
-    let roles_a: std::collections::HashSet<_> = comp_a.members.iter().map(|m| m.role.clone()).collect();
-    let roles_b: std::collections::HashSet<_> = comp_b.members.iter().map(|m| m.role.clone()).collect();
+    let roles_a: std::collections::HashSet<_> =
+        comp_a.members.iter().map(|m| m.role.clone()).collect();
+    let roles_b: std::collections::HashSet<_> =
+        comp_b.members.iter().map(|m| m.role.clone()).collect();
     assert_eq!(roles_a, roles_b, "Role structures should be identical");
     eprintln!("  → Role structures ARE identical: {:?}", roles_a);
 
@@ -629,17 +677,30 @@ fn test_bonus_reason_frame_polarity_conflict() {
     roles1.insert(SemanticRole::Arg0Agent, "obat".to_string());
     roles1.insert(SemanticRole::Arg1Patient, "penyakit".to_string());
 
-    let event_positive = make_event_atom("atom_pos", "menyembuhkan", roles1.clone(), Some(Polarity::Positive));
-    let event_negative = make_event_atom("atom_neg", "menyembuhkan", roles1, Some(Polarity::Negative));
+    let event_positive = make_event_atom(
+        "atom_pos",
+        "menyembuhkan",
+        roles1.clone(),
+        Some(Polarity::Positive),
+    );
+    let event_negative =
+        make_event_atom("atom_neg", "menyembuhkan", roles1, Some(Polarity::Negative));
 
     let recent = vec![event_negative];
     let context = ReasoningContext::new(&event_positive, &recent);
 
     let rule = PolarityConflictRule::new();
-    assert!(rule.applies(&context), "PolarityConflictRule should fire for same predicate + opposite polarity");
+    assert!(
+        rule.applies(&context),
+        "PolarityConflictRule should fire for same predicate + opposite polarity"
+    );
 
     let results = rule.generate(&context);
-    assert_eq!(results.len(), 1, "Should produce exactly 1 polarity_conflict atom");
+    assert_eq!(
+        results.len(),
+        1,
+        "Should produce exactly 1 polarity_conflict atom"
+    );
     assert_eq!(results[0].atom.label, "polarity_conflict");
     assert_eq!(results[0].atom.atom_type, AtomType::HiddenMeaning);
     assert!(results[0].atom.roles.contains_key(&SemanticRole::Problem));
@@ -663,11 +724,17 @@ fn test_bonus_full_pipeline_e2e() {
 
     eprintln!(
         "  → Pipeline result: atoms={}, compositions={}, edges={}, gaps={}",
-        result.atoms_created, result.compositions_created, result.edges_created, result.gaps_detected
+        result.atoms_created,
+        result.compositions_created,
+        result.edges_created,
+        result.gaps_detected
     );
 
     let result2 = engine.ingest("Aplikasi mempercepat pekerjaan tim");
-    assert!(result2.atoms_created > 0, "Second ingest should also create atoms");
+    assert!(
+        result2.atoms_created > 0,
+        "Second ingest should also create atoms"
+    );
     assert!(engine.graph().node_count() > 1, "Graph should grow");
 
     eprintln!(
@@ -722,8 +789,7 @@ fn test_blind_spot_1_bahasa_natural_messy() {
     );
     eprintln!(
         "  → Typo/informal: atoms={}, nodes={}",
-        result2.atoms_created,
-        nodes_after_2
+        result2.atoms_created, nodes_after_2
     );
 
     // Case 3: Subjectless — "bikin dulu, deploy nanti"
@@ -743,8 +809,7 @@ fn test_blind_spot_1_bahasa_natural_messy() {
     );
     eprintln!(
         "  → Subjectless: atoms={}, nodes={}",
-        result3.atoms_created,
-        nodes_after_3
+        result3.atoms_created, nodes_after_3
     );
 
     // Verify that the pipeline is still functional after messy inputs
@@ -790,7 +855,7 @@ fn test_blind_spot_2_inquiry_memory_lintas_ingest() {
     );
 
     // When SelectAcquisition encounters an already-addressed gap, it should Defer
-    let mut graph = Graph::new();
+    let graph = Graph::new();
     let mut sa = SelectAcquisition::new();
     // Manually set the memory (simulating prior ingest)
     sa.memory = memory;
@@ -858,7 +923,10 @@ fn test_blind_spot_3_semua_tipe_kontradiksi() {
         roles_a.insert(SemanticRole::Arg1Patient, "pekerja".to_string());
         roles_a.insert(SemanticRole::Purpose, "mengurangi biaya".to_string());
         let atom_a = make_event_atom(
-            "atom_purpose_a", "mempekerjakan", roles_a, Some(Polarity::Positive),
+            "atom_purpose_a",
+            "mempekerjakan",
+            roles_a,
+            Some(Polarity::Positive),
         );
         let mut comp_a = make_event_composition("comp_purpose_a", &atom_a, &mut graph);
 
@@ -867,7 +935,10 @@ fn test_blind_spot_3_semua_tipe_kontradiksi() {
         roles_b.insert(SemanticRole::Arg1Patient, "pekerja".to_string());
         roles_b.insert(SemanticRole::Purpose, "meningkatkan kualitas".to_string());
         let atom_b = make_event_atom(
-            "atom_purpose_b", "mempekerjakan", roles_b, Some(Polarity::Positive),
+            "atom_purpose_b",
+            "mempekerjakan",
+            roles_b,
+            Some(Polarity::Positive),
         );
         let mut comp_b = make_event_composition("comp_purpose_b", &atom_b, &mut graph);
 
@@ -887,7 +958,8 @@ fn test_blind_spot_3_semua_tipe_kontradiksi() {
         assert!(
             has_purpose_conflict,
             "Expected PurposeConflict for same agent + different purpose. Got: {:?}",
-            updates.iter()
+            updates
+                .iter()
                 .filter_map(|u| u.contradiction.as_ref().map(|c| &c.conflict_type))
                 .collect::<Vec<_>>()
         );
@@ -903,7 +975,10 @@ fn test_blind_spot_3_semua_tipe_kontradiksi() {
         roles_a.insert(SemanticRole::Arg0Agent, "anjing".to_string());
         roles_a.insert(SemanticRole::Arg1Patient, "orang".to_string());
         let atom_a = make_event_atom(
-            "atom_reversal_a", "menggigit", roles_a, Some(Polarity::Positive),
+            "atom_reversal_a",
+            "menggigit",
+            roles_a,
+            Some(Polarity::Positive),
         );
         let mut comp_a = make_event_composition("comp_reversal_a", &atom_a, &mut graph);
 
@@ -911,7 +986,10 @@ fn test_blind_spot_3_semua_tipe_kontradiksi() {
         roles_b.insert(SemanticRole::Arg0Agent, "orang".to_string());
         roles_b.insert(SemanticRole::Arg1Patient, "anjing".to_string());
         let atom_b = make_event_atom(
-            "atom_reversal_b", "menggigit", roles_b, Some(Polarity::Positive),
+            "atom_reversal_b",
+            "menggigit",
+            roles_b,
+            Some(Polarity::Positive),
         );
         let mut comp_b = make_event_composition("comp_reversal_b", &atom_b, &mut graph);
 
@@ -931,7 +1009,8 @@ fn test_blind_spot_3_semua_tipe_kontradiksi() {
         assert!(
             has_role_reversal,
             "Expected RoleReversal for swapped Agent/Patient. Got: {:?}",
-            updates.iter()
+            updates
+                .iter()
                 .filter_map(|u| u.contradiction.as_ref().map(|c| &c.conflict_type))
                 .collect::<Vec<_>>()
         );
@@ -949,7 +1028,10 @@ fn test_blind_spot_3_semua_tipe_kontradiksi() {
         event_roles.insert(SemanticRole::Arg0Agent, "obat".to_string());
         event_roles.insert(SemanticRole::Arg1Patient, "penyakit".to_string());
         let event_atom = make_event_atom(
-            "atom_event_obat", "menyembuhkan", event_roles, Some(Polarity::Positive),
+            "atom_event_obat",
+            "menyembuhkan",
+            event_roles,
+            Some(Polarity::Positive),
         );
         let mut event_comp = make_event_composition("comp_event_obat", &event_atom, &mut graph);
         let gb = GovernBeliefs::new();
@@ -992,7 +1074,12 @@ fn test_blind_spot_3_semua_tipe_kontradiksi() {
         let has_crosstype_conflict = updates.iter().any(|u| {
             u.contradiction
                 .as_ref()
-                .map(|c| matches!(c.conflict_type, EpistemicConflictType::SemanticContradiction))
+                .map(|c| {
+                    matches!(
+                        c.conflict_type,
+                        EpistemicConflictType::SemanticContradiction
+                    )
+                })
                 .unwrap_or(false)
         });
         assert!(
@@ -1076,7 +1163,8 @@ fn test_blind_spot_3_semua_tipe_kontradiksi() {
         assert!(
             has_equiv_mismatch,
             "Expected EquivalenceMismatch for same Problem + different Solution. Got: {:?}",
-            updates.iter()
+            updates
+                .iter()
                 .filter_map(|u| u.contradiction.as_ref().map(|c| &c.conflict_type))
                 .collect::<Vec<_>>()
         );
@@ -1104,7 +1192,10 @@ fn test_blind_spot_4_rapid_contradiction_strong() {
     roles_pos.insert(SemanticRole::Arg0Agent, "obat".to_string());
     roles_pos.insert(SemanticRole::Arg1Patient, "penyakit".to_string());
     let atom_pos = make_event_atom(
-        "atom_obat_pos", "menyembuhkan", roles_pos, Some(Polarity::Positive),
+        "atom_obat_pos",
+        "menyembuhkan",
+        roles_pos,
+        Some(Polarity::Positive),
     );
     let mut comp_pos = make_event_composition("comp_obat_pos", &atom_pos, &mut graph);
     comp_pos.confidence = 0.7;
@@ -1119,11 +1210,13 @@ fn test_blind_spot_4_rapid_contradiction_strong() {
         roles_neg.insert(SemanticRole::Arg1Patient, "penyakit".to_string());
         roles_neg.insert(SemanticRole::Cause, "tidak menyembuhkan".to_string());
         let atom_neg = make_event_atom(
-            &format!("atom_obat_neg_{}", i), "menyembuhkan", roles_neg, Some(Polarity::Negative),
+            &format!("atom_obat_neg_{}", i),
+            "menyembuhkan",
+            roles_neg,
+            Some(Polarity::Negative),
         );
-        let mut comp_neg = make_event_composition(
-            &format!("comp_obat_neg_{}", i), &atom_neg, &mut graph,
-        );
+        let mut comp_neg =
+            make_event_composition(&format!("comp_obat_neg_{}", i), &atom_neg, &mut graph);
         comp_neg.confidence = 0.6;
         comp_neg.batch_seen = i + 1;
         gb.initial_states(&mut comp_neg);
@@ -1136,7 +1229,8 @@ fn test_blind_spot_4_rapid_contradiction_strong() {
     let _updates = gb2.detect_contradiction(&mut all_comps);
 
     // Strong assertion 1: All compositions involved in the contradiction should be Contradicted
-    let contradicted_count = all_comps.iter()
+    let contradicted_count = all_comps
+        .iter()
         .filter(|c| c.epistemic == EpistemicState::Contradicted)
         .count();
     assert!(
@@ -1159,7 +1253,10 @@ fn test_blind_spot_4_rapid_contradiction_strong() {
         }
     }
     assert!(
-        promotions.is_empty() || promotions.iter().all(|p| p.new_lifecycle != Some(LifecycleState::Stable)),
+        promotions.is_empty()
+            || promotions
+                .iter()
+                .all(|p| p.new_lifecycle != Some(LifecycleState::Stable)),
         "No contradicted composition should be promoted to Stable. Promotions: {:?}",
         promotions
     );
@@ -1173,7 +1270,8 @@ fn test_blind_spot_4_rapid_contradiction_strong() {
     );
 
     // Strong assertion 4: Contradicted compositions should have contradiction_batches recorded
-    let comps_with_contradiction_history = all_comps.iter()
+    let comps_with_contradiction_history = all_comps
+        .iter()
         .filter(|c| !c.contradiction_batches.is_empty())
         .count();
     assert!(
@@ -1264,14 +1362,32 @@ fn test_blind_spot_5_commutativity() {
     );
 
     // Also verify that all 3 orders produce the same set of node labels
-    let labels_abc: std::collections::HashSet<String> = engine1.graph().nodes.values()
-        .map(|n| n.label.clone()).collect();
-    let labels_cab: std::collections::HashSet<String> = engine2.graph().nodes.values()
-        .map(|n| n.label.clone()).collect();
-    let labels_bca: std::collections::HashSet<String> = engine3.graph().nodes.values()
-        .map(|n| n.label.clone()).collect();
-    assert_eq!(labels_abc, labels_cab, "Node label sets should match between ABC and CAB");
-    assert_eq!(labels_abc, labels_bca, "Node label sets should match between ABC and BCA");
+    let labels_abc: std::collections::HashSet<String> = engine1
+        .graph()
+        .nodes
+        .values()
+        .map(|n| n.label.clone())
+        .collect();
+    let labels_cab: std::collections::HashSet<String> = engine2
+        .graph()
+        .nodes
+        .values()
+        .map(|n| n.label.clone())
+        .collect();
+    let labels_bca: std::collections::HashSet<String> = engine3
+        .graph()
+        .nodes
+        .values()
+        .map(|n| n.label.clone())
+        .collect();
+    assert_eq!(
+        labels_abc, labels_cab,
+        "Node label sets should match between ABC and CAB"
+    );
+    assert_eq!(
+        labels_abc, labels_bca,
+        "Node label sets should match between ABC and BCA"
+    );
 
     eprintln!("✅ BLIND SPOT 5 PASSED: Pipeline is commutative — node count, composition count, and label sets match across all ingest orders");
 }
@@ -1324,13 +1440,29 @@ fn test_commutativity_with_feedback_loop_active() {
     );
 
     // Confidence BOLEH berbeda (acknowledged non-commutativity)
-    let comps_abc: Vec<f32> = engine_abc.graph().compositions.values()
-        .map(|c| c.confidence).collect();
-    let comps_cba: Vec<f32> = engine_cba.graph().compositions.values()
-        .map(|c| c.confidence).collect();
+    let comps_abc: Vec<f32> = engine_abc
+        .graph()
+        .compositions
+        .values()
+        .map(|c| c.confidence)
+        .collect();
+    let comps_cba: Vec<f32> = engine_cba
+        .graph()
+        .compositions
+        .values()
+        .map(|c| c.confidence)
+        .collect();
 
-    let avg_abc: f32 = if comps_abc.is_empty() { 0.0 } else { comps_abc.iter().sum::<f32>() / comps_abc.len() as f32 };
-    let avg_cba: f32 = if comps_cba.is_empty() { 0.0 } else { comps_cba.iter().sum::<f32>() / comps_cba.len() as f32 };
+    let avg_abc: f32 = if comps_abc.is_empty() {
+        0.0
+    } else {
+        comps_abc.iter().sum::<f32>() / comps_abc.len() as f32
+    };
+    let avg_cba: f32 = if comps_cba.is_empty() {
+        0.0
+    } else {
+        comps_cba.iter().sum::<f32>() / comps_cba.len() as f32
+    };
 
     let delta = (avg_abc - avg_cba).abs();
     // Dokumentasi: confidence non-commutativity diizinkan sampai 0.15
@@ -1348,9 +1480,13 @@ fn test_commutativity_with_feedback_loop_active() {
          avg_confidence ABC={:.3} vs CBA={:.3}, delta={:.3} (tolerance=0.15)",
         engine_abc.graph().node_count(),
         engine_abc.graph().composition_count(),
-        avg_abc, avg_cba, delta
+        avg_abc,
+        avg_cba,
+        delta
     );
-    eprintln!("✅ BLIND SPOT 5B PASSED: Pipeline is structurally commutative with confidence delta ≤0.15");
+    eprintln!(
+        "✅ BLIND SPOT 5B PASSED: Pipeline is structurally commutative with confidence delta ≤0.15"
+    );
 }
 
 // ========================================================================
@@ -1366,18 +1502,11 @@ fn test_commutativity_with_feedback_loop_active() {
 
 #[test]
 fn test_critical_ask_user_answer_no_reask() {
-    use super::acquisition::InquiryMemory;
-
     // Step 1: First ingest — "membuat aplikasi" → gap: missing Agent → AskUser
     let mut graph = Graph::new();
     let mut roles = HashMap::new();
     roles.insert(SemanticRole::Arg1Patient, "aplikasi".to_string());
-    let atom = make_event_atom(
-        "atom_buat_app",
-        "membuat",
-        roles,
-        Some(Polarity::Positive),
-    );
+    let atom = make_event_atom("atom_buat_app", "membuat", roles, Some(Polarity::Positive));
     let mut comp = make_event_composition("comp_buat_app", &atom, &mut graph);
     comp.source_text = Some("membuat aplikasi".to_string());
     let gb = GovernBeliefs::new();
@@ -1392,17 +1521,22 @@ fn test_critical_ask_user_answer_no_reask() {
     };
     let gaps = dg.detect_all(&snapshot);
 
-    let agent_gap = gaps.iter().find(|g|
+    let agent_gap = gaps.iter().find(|g| {
         g.gap_type == KnowledgeGapType::MissingRole
-        && g.missing_role == Some(SemanticRole::Arg0Agent)
-    );
+            && g.missing_role == Some(SemanticRole::Arg0Agent)
+    });
     assert!(
         agent_gap.is_some(),
         "First ingest should detect MissingRole(Arg0Agent) gap. Got: {:?}",
-        gaps.iter().map(|g| format!("{:?}: {}", g.gap_type, g.description)).collect::<Vec<_>>()
+        gaps.iter()
+            .map(|g| format!("{:?}: {}", g.gap_type, g.description))
+            .collect::<Vec<_>>()
     );
     let gap_id = agent_gap.unwrap().gap_id.clone();
-    eprintln!("  → First ingest: detected gap '{}' (MissingRole:Arg0Agent)", gap_id);
+    eprintln!(
+        "  → First ingest: detected gap '{}' (MissingRole:Arg0Agent)",
+        gap_id
+    );
 
     // SelectAcquisition chooses AskUser for this gap
     let mut sa = SelectAcquisition::new();
@@ -1421,7 +1555,7 @@ fn test_critical_ask_user_answer_no_reask() {
         match &decision1.strategy {
             AcquisitionStrategy::AskUser { .. } => "AskUser",
             AcquisitionStrategy::ReExtraction { .. } => "ReExtraction",
-            _ => "other"
+            _ => "other",
         }
     );
 
@@ -1491,16 +1625,12 @@ fn test_critical_ask_user_answer_no_reask() {
 
 #[test]
 fn test_p0_process_user_answer_semantic() {
-    use super::acquisition::InquiryMemory;
-
     let mut graph = Graph::new();
 
     // ── Setup: composition without Agent (triggers MissingRole gap) ──
     let mut roles = HashMap::new();
     roles.insert(SemanticRole::Arg1Patient, "aplikasi".to_string());
-    let atom = make_event_atom(
-        "atom_buat_app", "membuat", roles, Some(Polarity::Positive),
-    );
+    let atom = make_event_atom("atom_buat_app", "membuat", roles, Some(Polarity::Positive));
     let mut comp = make_event_composition("comp_target", &atom, &mut graph);
     comp.source_text = Some("membuat aplikasi".to_string());
     let gb = GovernBeliefs::new();
@@ -1514,7 +1644,8 @@ fn test_p0_process_user_answer_semantic() {
         compositions: graph.compositions.values().cloned().collect(),
     };
     let gaps = dg.detect_all(&snapshot);
-    let gap = gaps.iter()
+    let gap = gaps
+        .iter()
         .find(|g| g.missing_role == Some(SemanticRole::Arg0Agent))
         .expect("Harus ada gap MissingRole:Arg0Agent");
 
@@ -1533,23 +1664,21 @@ fn test_p0_process_user_answer_semantic() {
     let mut ctx = PipelineContext::default();
     let mut answer_roles = HashMap::new();
     answer_roles.insert(SemanticRole::Arg0Agent, "Raymond".to_string());
-    let acq_atom = SelectAcquisition::process_user_answer(
-        "Raymond",
-        answer_roles,
-        0.85,
-        &mut ctx,
-    );
+    let acq_atom = SelectAcquisition::process_user_answer("Raymond", answer_roles, 0.85, &mut ctx);
     assert_eq!(
-        acq_atom.atom_type, AtomType::Acquisition,
+        acq_atom.atom_type,
+        AtomType::Acquisition,
         "process_user_answer harus menghasilkan AtomType::Acquisition"
     );
     assert_eq!(
-        acq_atom.source, EdgeSource::AcquisitionUserAnswer,
+        acq_atom.source,
+        EdgeSource::AcquisitionUserAnswer,
         "Source harus AcquisitionUserAnswer"
     );
     assert!(
         (acq_atom.confidence - 0.85).abs() < 0.01,
-        "Confidence harus 0.85 (fixed per MD-6 spec), got {}", acq_atom.confidence
+        "Confidence harus 0.85 (fixed per MD-6 spec), got {}",
+        acq_atom.confidence
     );
     assert_eq!(
         acq_atom.label, "Raymond",
@@ -1558,7 +1687,9 @@ fn test_p0_process_user_answer_semantic() {
     assert!(
         matches!(
             acq_atom.variant,
-            Some(AtomVariant::AcquisitionVariant(AcquisitionSource::UserAnswer))
+            Some(AtomVariant::AcquisitionVariant(
+                AcquisitionSource::UserAnswer
+            ))
         ),
         "Variant harus AcquisitionVariant(UserAnswer)"
     );
@@ -1577,7 +1708,8 @@ fn test_p0_process_user_answer_semantic() {
     );
     let req = enrichment.unwrap();
     assert_eq!(
-        req.role_to_fill, SemanticRole::Arg0Agent,
+        req.role_to_fill,
+        SemanticRole::Arg0Agent,
         "role_to_fill harus Arg0Agent (dari gap)"
     );
     assert_eq!(
@@ -1603,10 +1735,14 @@ fn test_p0_process_user_answer_semantic() {
     }
     let final_comp = graph.compositions.get("comp_target").unwrap();
     assert!(
-        final_comp.member_with_role(&SemanticRole::Arg0Agent).is_some(),
+        final_comp
+            .member_with_role(&SemanticRole::Arg0Agent)
+            .is_some(),
         "Setelah enrichment, composition harus punya Arg0Agent role"
     );
-    let agent_member = final_comp.member_with_role(&SemanticRole::Arg0Agent).unwrap();
+    let agent_member = final_comp
+        .member_with_role(&SemanticRole::Arg0Agent)
+        .unwrap();
     assert_eq!(
         agent_member.label, "Raymond",
         "Agent member label harus 'Raymond'"
@@ -1661,7 +1797,9 @@ fn test_enrichment_loop_fills_missing_agent() {
     comp_buat.confidence = 0.4;
     comp_buat.lifecycle = LifecycleState::New;
     comp_buat.batch_seen = 1;
-    graph.compositions.insert(comp_buat.id.clone(), comp_buat.clone());
+    graph
+        .compositions
+        .insert(comp_buat.id.clone(), comp_buat.clone());
 
     // ── Step 2: Create composition "adalah" with Agent=Raymond ──
     let mut roles_dev = HashMap::new();
@@ -1677,7 +1815,9 @@ fn test_enrichment_loop_fills_missing_agent() {
     comp_dev.confidence = 0.7;
     comp_dev.lifecycle = LifecycleState::Candidate;
     comp_dev.batch_seen = 2;
-    graph.compositions.insert(comp_dev.id.clone(), comp_dev.clone());
+    graph
+        .compositions
+        .insert(comp_dev.id.clone(), comp_dev.clone());
 
     // Record confidence before enrichment.
     let confidence_before = graph.compositions.get("comp_buat").unwrap().confidence;
@@ -1685,10 +1825,15 @@ fn test_enrichment_loop_fills_missing_agent() {
     // Verify comp_buat does NOT have Agent before enrichment.
     let comp_before = graph.compositions.get("comp_buat").unwrap();
     assert!(
-        comp_before.member_with_role(&SemanticRole::Arg0Agent).is_none(),
+        comp_before
+            .member_with_role(&SemanticRole::Arg0Agent)
+            .is_none(),
         "Before enrichment, comp_buat should NOT have Agent role"
     );
-    eprintln!("  ✓ Before: comp_buat missing Agent, confidence={:.3}", confidence_before);
+    eprintln!(
+        "  ✓ Before: comp_buat missing Agent, confidence={:.3}",
+        confidence_before
+    );
 
     // ── Step 3: Run enrichment loop with Analytical mode (max_enrichment_rounds=1) ──
     let mut engine = PipelineEngine::new();
@@ -1741,7 +1886,8 @@ fn test_enrichment_loop_fills_missing_agent() {
     assert!(
         confidence_after >= confidence_before - 0.01,
         "Confidence after enrichment ({:.3}) should not decrease significantly from before ({:.3})",
-        confidence_after, confidence_before
+        confidence_after,
+        confidence_before
     );
 
     // Loop should have run at least 1 round (or 0 if no gaps found — which shouldn't happen).
@@ -1752,7 +1898,9 @@ fn test_enrichment_loop_fills_missing_agent() {
         result.current_confidence
     );
 
-    eprintln!("✅ ENRICHMENT LOOP TEST 1 PASSED: Active enrichment fills missing Agent via PassiveRecall");
+    eprintln!(
+        "✅ ENRICHMENT LOOP TEST 1 PASSED: Active enrichment fills missing Agent via PassiveRecall"
+    );
 }
 
 #[test]
@@ -1766,12 +1914,7 @@ fn test_enrichment_loop_stops_at_budget() {
         let mut graph = Graph::new();
         let mut roles = HashMap::new();
         roles.insert(SemanticRole::Arg1Patient, "aplikasi".to_string());
-        let atom = make_event_atom(
-            "atom_sparse",
-            "membuat",
-            roles,
-            Some(Polarity::Positive),
-        );
+        let atom = make_event_atom("atom_sparse", "membuat", roles, Some(Polarity::Positive));
         let mut comp = make_event_composition("comp_sparse", &atom, &mut graph);
         comp.confidence = 0.3;
         comp.lifecycle = LifecycleState::New;
@@ -1811,12 +1954,7 @@ fn test_enrichment_loop_stops_at_budget() {
         // Create a sparse composition with missing Agent and Cause.
         let mut roles = HashMap::new();
         roles.insert(SemanticRole::Arg1Patient, "aplikasi".to_string());
-        let atom = make_event_atom(
-            "atom_sparse2",
-            "membuat",
-            roles,
-            Some(Polarity::Positive),
-        );
+        let atom = make_event_atom("atom_sparse2", "membuat", roles, Some(Polarity::Positive));
         let mut comp = make_event_composition("comp_sparse2", &atom, &mut graph);
         comp.confidence = 0.3;
         comp.lifecycle = LifecycleState::New;
@@ -1896,12 +2034,7 @@ fn test_passive_recall_excludes_self_referent() {
     // It's missing Agent.
     let mut roles = HashMap::new();
     roles.insert(SemanticRole::Arg1Patient, "aplikasi".to_string());
-    let atom = make_event_atom(
-        "atom_buat",
-        "membuat",
-        roles,
-        Some(Polarity::Positive),
-    );
+    let atom = make_event_atom("atom_buat", "membuat", roles, Some(Polarity::Positive));
     let mut comp = make_event_composition("comp_buat", &atom, &mut graph);
     comp.confidence = 0.4;
     graph.compositions.insert(comp.id.clone(), comp.clone());
@@ -1948,7 +2081,10 @@ fn test_passive_recall_excludes_self_referent() {
              Existing members: {:?}",
             label, node_id, existing_ids
         );
-        eprintln!("  ✓ Candidate '{}' (id={}) is NOT a self-referent", label, node_id);
+        eprintln!(
+            "  ✓ Candidate '{}' (id={}) is NOT a self-referent",
+            label, node_id
+        );
     } else {
         eprintln!("  ✓ No candidate returned — self-referent 'aplikasi' was correctly excluded");
     }
@@ -1971,14 +2107,18 @@ fn test_convergence_detection_integrated_in_pipeline() {
 
     // Setelah 2 ingest, convergence transform sudah berjalan
     // Ada EquivalentOf edge di graph (dari ConvergenceDetectionTransform)
-    let has_equiv = engine.graph().edges.iter().any(|(_, _, e)| {
-        e.role == Some(SemanticRole::EquivalentOf)
-    });
+    let has_equiv = engine
+        .graph()
+        .edges
+        .iter()
+        .any(|(_, _, e)| e.role == Some(SemanticRole::EquivalentOf));
     // Mungkin tidak selalu true (tergantung threshold), tapi tidak boleh panic
     // Test utama: pipeline tidak crash dengan 13 transforms
     eprintln!("Convergence detected: {}", has_equiv);
-    assert!(engine.graph().compositions.len() > 0,
-        "Pipeline harus menghasilkan compositions setelah ingest");
+    assert!(
+        !engine.graph().compositions.is_empty(),
+        "Pipeline harus menghasilkan compositions setelah ingest"
+    );
 }
 
 #[test]
@@ -2001,9 +2141,14 @@ fn test_temporal_decay_integrated_in_pipeline() {
     engine.ingest("Sistem baru dibuat untuk menggantikannya.");
 
     // Pipeline tidak crash, compositions masih ada
-    assert!(engine.graph().compositions.len() > 0,
-        "Pipeline harus tetap berjalan setelah temporal decay");
-    eprintln!("Compositions after decay: {}", engine.graph().compositions.len());
+    assert!(
+        !engine.graph().compositions.is_empty(),
+        "Pipeline harus tetap berjalan setelah temporal decay"
+    );
+    eprintln!(
+        "Compositions after decay: {}",
+        engine.graph().compositions.len()
+    );
 }
 
 // ========================================================================
@@ -2043,8 +2188,10 @@ fn test_persistence_roundtrip_via_pipeline() {
         original_node_count,
         "Node count harus sama setelah roundtrip"
     );
-    eprintln!("Roundtrip OK: {} compositions, {} nodes",
-        original_comp_count, original_node_count);
+    eprintln!(
+        "Roundtrip OK: {} compositions, {} nodes",
+        original_comp_count, original_node_count
+    );
 
     // Cleanup
     let _ = std::fs::remove_file(&tmp_path);
@@ -2071,9 +2218,24 @@ fn test_role_weighted_similarity_captures_structural_equivalence() {
     let pred_node = graph.ensure_node("memeriksa");
     let agent_node = graph.ensure_node("dokter");
     let patient_node = graph.ensure_node("pasien");
-    comp_a.members.push(CompositionMember { node_id: pred_node, role: SemanticRole::Predicate, confidence: 0.9, label: "memeriksa".to_string() });
-    comp_a.members.push(CompositionMember { node_id: agent_node, role: SemanticRole::Arg0Agent, confidence: 0.8, label: "dokter".to_string() });
-    comp_a.members.push(CompositionMember { node_id: patient_node, role: SemanticRole::Arg1Patient, confidence: 0.8, label: "pasien".to_string() });
+    comp_a.members.push(CompositionMember {
+        node_id: pred_node,
+        role: SemanticRole::Predicate,
+        confidence: 0.9,
+        label: "memeriksa".to_string(),
+    });
+    comp_a.members.push(CompositionMember {
+        node_id: agent_node,
+        role: SemanticRole::Arg0Agent,
+        confidence: 0.8,
+        label: "dokter".to_string(),
+    });
+    comp_a.members.push(CompositionMember {
+        node_id: patient_node,
+        role: SemanticRole::Arg1Patient,
+        confidence: 0.8,
+        label: "pasien".to_string(),
+    });
 
     let mut comp_b = Composition::default();
     comp_b.id = "comp_b".to_string();
@@ -2083,9 +2245,24 @@ fn test_role_weighted_similarity_captures_structural_equivalence() {
     let pred_node2 = graph.ensure_node("memeriksa"); // same predicate
     let agent_node2 = graph.ensure_node("tabib");
     let patient_node2 = graph.ensure_node("orang_sakit");
-    comp_b.members.push(CompositionMember { node_id: pred_node2, role: SemanticRole::Predicate, confidence: 0.9, label: "memeriksa".to_string() });
-    comp_b.members.push(CompositionMember { node_id: agent_node2, role: SemanticRole::Arg0Agent, confidence: 0.8, label: "tabib".to_string() });
-    comp_b.members.push(CompositionMember { node_id: patient_node2, role: SemanticRole::Arg1Patient, confidence: 0.8, label: "orang_sakit".to_string() });
+    comp_b.members.push(CompositionMember {
+        node_id: pred_node2,
+        role: SemanticRole::Predicate,
+        confidence: 0.9,
+        label: "memeriksa".to_string(),
+    });
+    comp_b.members.push(CompositionMember {
+        node_id: agent_node2,
+        role: SemanticRole::Arg0Agent,
+        confidence: 0.8,
+        label: "tabib".to_string(),
+    });
+    comp_b.members.push(CompositionMember {
+        node_id: patient_node2,
+        role: SemanticRole::Arg1Patient,
+        confidence: 0.8,
+        label: "orang_sakit".to_string(),
+    });
 
     let role_sim = cd.role_weighted_similarity(&comp_a, &comp_b);
     let node_sim = cd.node_jaccard(&comp_a, &comp_b);
@@ -2098,10 +2275,15 @@ fn test_role_weighted_similarity_captures_structural_equivalence() {
         role_sim > node_sim,
         "Role-weighted similarity ({:.3}) harus lebih tinggi dari node jaccard ({:.3}) \
          untuk komposisi yang structurally equivalent",
-        role_sim, node_sim
+        role_sim,
+        node_sim
     );
-    eprintln!("role_sim={:.3}, node_sim={:.3} (improvement: +{:.3})",
-        role_sim, node_sim, role_sim - node_sim);
+    eprintln!(
+        "role_sim={:.3}, node_sim={:.3} (improvement: +{:.3})",
+        role_sim,
+        node_sim,
+        role_sim - node_sim
+    );
 }
 
 // ========================================================================
@@ -2119,18 +2301,25 @@ fn test_condition_consequence_from_indonesian_if_then() {
     register_default_pipeline(&mut engine);
 
     // Ingest a conditional sentence in Indonesian
-    let result = engine.ingest("wajib pajak jika penghasilan di atas 500 juta dikenakan tarif 30 persen");
+    let result =
+        engine.ingest("wajib pajak jika penghasilan di atas 500 juta dikenakan tarif 30 persen");
 
     // Should create atoms and compositions
-    assert!(result.atoms_created > 0, "Should create atoms from conditional text");
-    assert!(result.compositions_created > 0, "Should create compositions from conditional text");
+    assert!(
+        result.atoms_created > 0,
+        "Should create atoms from conditional text"
+    );
+    assert!(
+        result.compositions_created > 0,
+        "Should create compositions from conditional text"
+    );
 
     // Check that at least one composition has Antecedent or Consequent roles
     let graph = engine.graph();
     let has_conditional = graph.compositions.values().any(|c| {
-        c.members.iter().any(|m| {
-            m.role == SemanticRole::Antecedent || m.role == SemanticRole::Consequent
-        })
+        c.members
+            .iter()
+            .any(|m| m.role == SemanticRole::Antecedent || m.role == SemanticRole::Consequent)
     });
 
     // Even if the composition doesn't directly have these roles,
@@ -2147,24 +2336,30 @@ fn test_condition_consequence_from_indonesian_if_then() {
         "Pipeline should handle conditional Indonesian text — \
          either extract Antecedent/Consequent roles or create sufficient atoms. \
          atoms={}, comps={}",
-        result.atoms_created, result.compositions_created
+        result.atoms_created,
+        result.compositions_created
     );
 
-    eprintln!("Conditional ingest: atoms={}, comps={}",
-        result.atoms_created, result.compositions_created);
+    eprintln!(
+        "Conditional ingest: atoms={}, comps={}",
+        result.atoms_created, result.compositions_created
+    );
 }
 
 /// Test: Direct ConditionConsequenceRule — verify it triggers on Antecedent+Consequent.
 #[test]
 fn test_condition_consequence_rule_direct() {
-    use super::reason_frame::{ConditionConsequenceRule, ReasoningRule, ReasoningContext};
+    use super::reason_frame::{ConditionConsequenceRule, ReasoningContext, ReasoningRule};
 
     let rule = ConditionConsequenceRule::new();
 
     // Build an event atom with Antecedent and Consequent
     let mut roles = HashMap::new();
     roles.insert(SemanticRole::Predicate, "dikenakan".to_string());
-    roles.insert(SemanticRole::Antecedent, "penghasilan di atas 500 juta".to_string());
+    roles.insert(
+        SemanticRole::Antecedent,
+        "penghasilan di atas 500 juta".to_string(),
+    );
     roles.insert(SemanticRole::Consequent, "tarif 30 persen".to_string());
 
     let event = SemanticAtom {
@@ -2183,11 +2378,18 @@ fn test_condition_consequence_rule_direct() {
     let ctx = ReasoningContext::new(&event, &[]);
 
     // Rule should apply
-    assert!(rule.applies(&ctx), "ConditionConsequenceRule should apply to event with Antecedent+Consequent");
+    assert!(
+        rule.applies(&ctx),
+        "ConditionConsequenceRule should apply to event with Antecedent+Consequent"
+    );
 
     // Generate result
     let results = rule.generate(&ctx);
-    assert_eq!(results.len(), 1, "Should produce exactly one reasoning result");
+    assert_eq!(
+        results.len(),
+        1,
+        "Should produce exactly one reasoning result"
+    );
     assert_eq!(results[0].atom.label, "condition_consequence");
     assert_eq!(results[0].atom.atom_type, AtomType::HiddenMeaning);
     assert_eq!(
@@ -2202,7 +2404,10 @@ fn test_condition_consequence_rule_direct() {
         results[0].atom.roles.get(&SemanticRole::PatternType),
         Some(&"if_then".to_string())
     );
-    assert!(results[0].derivation_confidence > 0.7, "Confidence should be high for clear conditional");
+    assert!(
+        results[0].derivation_confidence > 0.7,
+        "Confidence should be high for clear conditional"
+    );
 }
 
 // ========================================================================
@@ -2238,10 +2443,30 @@ fn test_cve_verbalize_graph_driven_explanation() {
         timestamp: String::new(),
     };
     comp_event.members = vec![
-        CompositionMember { node_id: node_raymond, role: SemanticRole::Arg0Agent, confidence: 0.9, label: "Raymond".to_string() },
-        CompositionMember { node_id: node_membuat, role: SemanticRole::Predicate, confidence: 0.9, label: "membuat".to_string() },
-        CompositionMember { node_id: node_aplikasi, role: SemanticRole::Arg1Patient, confidence: 0.8, label: "aplikasi".to_string() },
-        CompositionMember { node_id: node_lambat, role: SemanticRole::Cause, confidence: 0.7, label: "lambat".to_string() },
+        CompositionMember {
+            node_id: node_raymond,
+            role: SemanticRole::Arg0Agent,
+            confidence: 0.9,
+            label: "Raymond".to_string(),
+        },
+        CompositionMember {
+            node_id: node_membuat,
+            role: SemanticRole::Predicate,
+            confidence: 0.9,
+            label: "membuat".to_string(),
+        },
+        CompositionMember {
+            node_id: node_aplikasi,
+            role: SemanticRole::Arg1Patient,
+            confidence: 0.8,
+            label: "aplikasi".to_string(),
+        },
+        CompositionMember {
+            node_id: node_lambat,
+            role: SemanticRole::Cause,
+            confidence: 0.7,
+            label: "lambat".to_string(),
+        },
     ];
     graph.compositions.insert(comp_event.id.clone(), comp_event);
 
@@ -2260,10 +2485,22 @@ fn test_cve_verbalize_graph_driven_explanation() {
         timestamp: String::new(),
     };
     comp_pattern.members = vec![
-        CompositionMember { node_id: node_db_full, role: SemanticRole::Antecedent, confidence: 0.9, label: "database_penuh".to_string() },
-        CompositionMember { node_id: node_lambat, role: SemanticRole::Consequent, confidence: 0.85, label: "lambat".to_string() },
+        CompositionMember {
+            node_id: node_db_full,
+            role: SemanticRole::Antecedent,
+            confidence: 0.9,
+            label: "database_penuh".to_string(),
+        },
+        CompositionMember {
+            node_id: node_lambat,
+            role: SemanticRole::Consequent,
+            confidence: 0.85,
+            label: "lambat".to_string(),
+        },
     ];
-    graph.compositions.insert(comp_pattern.id.clone(), comp_pattern);
+    graph
+        .compositions
+        .insert(comp_pattern.id.clone(), comp_pattern);
 
     // HiddenMeaning: "cache digunakan sebagai solusi untuk lambat"
     let node_cache = graph.ensure_node("cache");
@@ -2280,8 +2517,18 @@ fn test_cve_verbalize_graph_driven_explanation() {
         timestamp: String::new(),
     };
     comp_hm.members = vec![
-        CompositionMember { node_id: node_cache, role: SemanticRole::Solution, confidence: 0.8, label: "cache".to_string() },
-        CompositionMember { node_id: node_lambat, role: SemanticRole::Problem, confidence: 0.7, label: "lambat".to_string() },
+        CompositionMember {
+            node_id: node_cache,
+            role: SemanticRole::Solution,
+            confidence: 0.8,
+            label: "cache".to_string(),
+        },
+        CompositionMember {
+            node_id: node_lambat,
+            role: SemanticRole::Problem,
+            confidence: 0.7,
+            label: "lambat".to_string(),
+        },
     ];
     graph.compositions.insert(comp_hm.id.clone(), comp_hm);
 
@@ -2343,7 +2590,10 @@ fn test_cve_verbalize_graph_driven_explanation() {
         "CVE should include audit footer with traceable path"
     );
 
-    eprintln!("CVE explanation for 'Kenapa aplikasi lambat?':\n{}", result.text);
+    eprintln!(
+        "CVE explanation for 'Kenapa aplikasi lambat?':\n{}",
+        result.text
+    );
     eprintln!("✅ CVE TEST PASSED: Graph-driven self-explanation works — zero hallucination, fully replayable");
 }
 
@@ -2370,7 +2620,9 @@ fn test_cve_zero_hallucination_empty_graph() {
         "CVE on empty graph should have 0 total compositions"
     );
 
-    eprintln!("✅ CVE ZERO HALLUCINATION TEST PASSED: Empty graph → 'Tidak ada informasi yang cukup'");
+    eprintln!(
+        "✅ CVE ZERO HALLUCINATION TEST PASSED: Empty graph → 'Tidak ada informasi yang cukup'"
+    );
 }
 
 #[test]

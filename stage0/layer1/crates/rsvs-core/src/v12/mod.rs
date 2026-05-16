@@ -61,137 +61,129 @@ mod cognitive_tests;
 // Re-export key types for convenience.
 // Users can import from `rsvs::v12::SemanticAtom` instead of `rsvs::v12::types::SemanticAtom`.
 pub use types::{
-    // --- v1.0.0 Node ---
-    Node,
-    // --- Abstraction 1: SemanticAtom ---
-    SemanticAtom, AtomType, Polarity, Voice, AtomVariant, FrameSource, PatternCategory,
-    AcquisitionSource,
-    // --- Abstraction 1b: SemanticRole ---
-    SemanticRole,
-    // --- Abstraction 2: Composition ---
-    Composition, CompositionId, CompositionType, CompositionMember,
-    // --- Abstraction 3: Two Orthogonal Status Axes ---
-    LifecycleState, EpistemicState,
-    // --- Abstraction 4: SemanticEdge ---
-    SemanticEdge,
-    // --- Abstraction 5: Transform ---
-    Transform, PipelineContext,
-    // --- Abstraction 6: Seed Anchoring ---
-    SeedPrimitive,
-    // --- Supporting types ---
-    ProvenanceChain, Contradiction, EpistemicConflictType,
-    // --- Delta types ---
-    GraphDelta, GovernedDelta, AnchoredDelta,
-    // --- Feedback loop types (MD-3, MD-6) ---
-    EnrichmentRequest, EnrichmentSource, ReExtractionRequest, RecallAction,
-    ExtractionQualityTracker,
-    // --- Graph inspection types ---
-    GraphNeighborhood, GraphSnapshot, WeakFrame,
-    // --- Quality tracking (MD-1) ---
-    ExtractionQuality as ExtractionQualityStats,
-    KnowledgeGapPlaceholder,
-    // --- Executive types (MD-5) ---
-    ReflectionLoopResult, ReasoningState, ReasoningGoal,
-    // --- Governance types (MD-4) ---
-    GovernanceUpdate, PromotionVerdict, SeedAdjustment, ContradictionResolution, ResolutionType,
     // --- Utility functions ---
     extract_keywords,
+    AcquisitionSource,
+    AnchoredDelta,
+    AtomType,
+    AtomVariant,
+    // --- Abstraction 2: Composition ---
+    Composition,
+    CompositionId,
+    CompositionMember,
+    CompositionType,
+    Contradiction,
+    ContradictionResolution,
+    // --- Feedback loop types (MD-3, MD-6) ---
+    EnrichmentRequest,
+    EnrichmentSource,
+    EpistemicConflictType,
+    EpistemicState,
+    // --- Quality tracking (MD-1) ---
+    ExtractionQuality as ExtractionQualityStats,
+    ExtractionQualityTracker,
+    FrameSource,
+    // --- Governance types (MD-4) ---
+    GovernanceUpdate,
+    GovernedDelta,
+    // --- Delta types ---
+    GraphDelta,
+    // --- Graph inspection types ---
+    GraphNeighborhood,
+    GraphSnapshot,
+    KnowledgeGapPlaceholder,
+    // --- Abstraction 3: Two Orthogonal Status Axes ---
+    LifecycleState,
+    // --- v1.0.0 Node ---
+    Node,
+    PatternCategory,
+    PipelineContext,
+    Polarity,
+    PromotionVerdict,
+    // --- Supporting types ---
+    ProvenanceChain,
+    ReExtractionRequest,
+    ReasoningGoal,
+    ReasoningState,
+    RecallAction,
+    // --- Executive types (MD-5) ---
+    ReflectionLoopResult,
+    ResolutionType,
+    SeedAdjustment,
+    // --- Abstraction 6: Seed Anchoring ---
+    SeedPrimitive,
+    // --- Abstraction 1: SemanticAtom ---
+    SemanticAtom,
+    // --- Abstraction 4: SemanticEdge ---
+    SemanticEdge,
+    // --- Abstraction 1b: SemanticRole ---
+    SemanticRole,
+    // --- Abstraction 5: Transform ---
+    Transform,
+    Voice,
+    WeakFrame,
 };
 
 // Re-export pipeline types for convenience.
 pub use pipeline::{
-    // --- Core pipeline types ---
-    PipelineEngine, ErasedTransform, IngestResult, register_default_pipeline,
+    register_default_pipeline,
+    EnrichComposition,
+    ErasedTransform,
     // --- v12 Graph ---
     Graph,
+    IngestAtoms,
+    IngestResult,
+    NoOpTransform,
+    // --- Core pipeline types ---
+    PipelineEngine,
+    ReExtractFrame,
     // --- Placeholder transforms ---
-    Tokenize, IngestAtoms, EnrichComposition, ReExtractFrame, NoOpTransform,
+    Tokenize,
 };
 
 // Re-export MD-1: ExtractFrame types.
 pub use extract_frame::{
-    ExtractFrame,
-    ExtractionQuality as ExtractionQualityLevel,
-    ExtractionQualityTrackerExt,
+    ExtractFrame, ExtractionQuality as ExtractionQualityLevel, ExtractionQualityTrackerExt,
 };
 
 // Re-export MD-2: ReasonFrame types.
 pub use reason_frame::{
-    ReasonFrame,
-    ReasoningRule,
-    ReasoningContext,
-    ReasoningResult,
-    GraphContextRef,
-    ProblemSolutionRule,
-    GoalInferenceRule,
-    PolarityConflictRule,
+    GoalInferenceRule, GraphContextRef, PolarityConflictRule, ProblemSolutionRule, ReasonFrame,
+    ReasoningContext, ReasoningResult, ReasoningRule,
 };
 
 // Re-export MD-4: GovernBeliefs & SeedAnchor types.
-pub use govern_beliefs::{
-    GovernBeliefs,
-    SeedAnchor,
-};
+pub use govern_beliefs::{GovernBeliefs, SeedAnchor};
 
 // Re-export MD-5: Executive types.
 pub use executive::{
-    CognitiveMode,
-    ComputeBudget,
-    StopCondition,
-    ExecutiveOrchestrator,
-    Reflect,
-    ReflectionFinding,
-    ReflectionFindingType,
-    ReflectionAction,
+    CognitiveMode, ComputeBudget, ExecutiveOrchestrator, Reflect, ReflectionAction,
+    ReflectionFinding, ReflectionFindingType, StopCondition,
 };
 
 // Re-export MD-6: Acquisition types.
 pub use acquisition::{
-    DetectGaps,
-    SelectAcquisition,
-    KnowledgeGap,
-    KnowledgeGapType,
-    AcquisitionDecision,
-    AcquisitionStrategy,
-    InquiryQuestion,
-    InquiryMemory,
+    AcquisitionDecision, AcquisitionStrategy, DetectGaps, InquiryMemory, InquiryQuestion,
+    KnowledgeGap, KnowledgeGapType, SelectAcquisition,
 };
 
 // Re-export Spreading Activation types.
 pub use spreading::{
-    SpreadingActivation,
-    SpreadingActivationTransform,
-    SpreadingConfig,
-    ActivationMap,
+    ActivationMap, SpreadingActivation, SpreadingActivationTransform, SpreadingConfig,
 };
 
 // Re-export Convergence Detection types.
 pub use convergence::{
-    ConvergenceDetection,
-    ConvergenceDetectionTransform,
-    ConvergenceConfig,
-    ConvergencePair,
+    ConvergenceConfig, ConvergenceDetection, ConvergenceDetectionTransform, ConvergencePair,
 };
 
 // Re-export Temporal Decay types.
-pub use temporal::{
-    TemporalDecay,
-    TemporalDecayTransform,
-    DecayConfig,
-    DecayResult,
-};
+pub use temporal::{DecayConfig, DecayResult, TemporalDecay, TemporalDecayTransform};
 
 // Re-export Persistence types.
-pub use persistence::{
-    Persistence,
-    PersistenceError,
-    GraphStats,
-};
+pub use persistence::{GraphStats, Persistence, PersistenceError};
 
 // Re-export Compositional Verbalization Engine types.
 pub use verbalize::{
-    CompositionalVerbalize,
-    CompositionalVerbalizeTransform,
-    VerbalizeConfig,
-    VerbalizationResult,
+    CompositionalVerbalize, CompositionalVerbalizeTransform, VerbalizationResult, VerbalizeConfig,
 };

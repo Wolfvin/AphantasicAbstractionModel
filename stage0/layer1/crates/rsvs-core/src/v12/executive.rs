@@ -34,12 +34,12 @@
 //!
 //! This module is only compiled when the `v12` feature is enabled.
 
-use serde::{Deserialize, Serialize};
+use super::acquisition::{AcquisitionStrategy, DetectGaps, SelectAcquisition};
+use super::govern_beliefs::GovernBeliefs;
 use super::pipeline::{EnrichComposition, ErasedTransform, Graph, IngestResult, PipelineEngine};
 use super::types::*;
-use super::acquisition::{DetectGaps, SelectAcquisition, AcquisitionStrategy};
-use super::govern_beliefs::GovernBeliefs;
 use crate::types::NodeId;
+use serde::{Deserialize, Serialize};
 
 // ========================================================================
 // CognitiveMode — How the Pipeline Processes Input
@@ -56,20 +56,15 @@ use crate::types::NodeId;
 /// - **Reflective**: Extended reflection — run 3–5 enrichment passes with
 ///   deeper analysis. Used for deep contradictions or when the analytical
 ///   mode couldn't resolve issues in its budget.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 pub enum CognitiveMode {
     /// Fast path — no enrichment or reflection.
+    #[default]
     Reactive,
     /// Enrichment loop — 1–3 passes.
     Analytical,
     /// Extended reflection — 3–5 passes.
     Reflective,
-}
-
-impl Default for CognitiveMode {
-    fn default() -> Self {
-        CognitiveMode::Reactive
-    }
 }
 
 impl CognitiveMode {
@@ -254,7 +249,7 @@ pub enum ReflectionFindingType {
 }
 
 /// Actions proposed by reflection findings (MD-5 spec).
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 pub enum ReflectionAction {
     /// Propose promoting a composition to a higher lifecycle/epistemic state.
     ProposePromotion(CompositionId),
@@ -265,13 +260,8 @@ pub enum ReflectionAction {
     /// Propose merging two overlapping compositions.
     ProposeMerge(CompositionId, CompositionId),
     /// No action needed.
+    #[default]
     NoAction,
-}
-
-impl Default for ReflectionAction {
-    fn default() -> Self {
-        ReflectionAction::NoAction
-    }
 }
 
 /// A finding from the reflection loop (MD-5).
@@ -403,7 +393,7 @@ impl Reflect {
                     let b_nodes: std::collections::HashSet<NodeId> =
                         b.members.iter().map(|m| m.node_id).collect();
                     let overlap = a_nodes.intersection(&b_nodes).count();
-                    if overlap > 0 && overlap >= a_nodes.len().min(b_nodes.len()) / 2 + 1 {
+                    if overlap > 0 && overlap > a_nodes.len().min(b_nodes.len()) / 2 {
                         findings.push(ReflectionFinding {
                             finding_type: ReflectionFindingType::OverlapDetected,
                             description: format!(
@@ -537,10 +527,7 @@ impl ExecutiveOrchestrator {
     /// 7. Check stop conditions and repeat if budget allows
     ///
     /// Returns a `ReflectionLoopResult` summarizing what was accomplished.
-    pub fn run_enrichment_loop(
-        &self,
-        engine: &mut PipelineEngine,
-    ) -> ReflectionLoopResult {
+    pub fn run_enrichment_loop(&self, engine: &mut PipelineEngine) -> ReflectionLoopResult {
         let stop_condition = StopCondition::from_budget(&self.budget);
         let mut state = ReasoningState {
             confidence: 0.0,
@@ -563,7 +550,11 @@ impl ExecutiveOrchestrator {
         state.confidence = if snapshot.compositions.is_empty() {
             0.0
         } else {
-            snapshot.compositions.iter().map(|c| c.confidence).sum::<f32>()
+            snapshot
+                .compositions
+                .iter()
+                .map(|c| c.confidence)
+                .sum::<f32>()
                 / snapshot.compositions.len() as f32
         };
 
@@ -602,7 +593,9 @@ impl ExecutiveOrchestrator {
                         if let Some(comp_id) = &gap.source_composition_id {
                             engine.context.pending_enrichments.push(EnrichmentRequest {
                                 target_composition_id: comp_id.clone(),
-                                role_to_fill: gap.missing_role.clone()
+                                role_to_fill: gap
+                                    .missing_role
+                                    .clone()
                                     .unwrap_or(SemanticRole::Arg0Agent),
                                 candidate_node_id: *candidate_node_id,
                                 candidate_label: candidate_label.clone(),
@@ -628,7 +621,9 @@ impl ExecutiveOrchestrator {
 
             // ── Step 3: Apply enrichments via EnrichComposition ──
             // Track enrichment targets before they are drained.
-            let enrichment_targets: Vec<_> = engine.context.pending_enrichments
+            let enrichment_targets: Vec<_> = engine
+                .context
+                .pending_enrichments
                 .iter()
                 .map(|r| r.target_composition_id.clone())
                 .collect();
@@ -657,13 +652,17 @@ impl ExecutiveOrchestrator {
                 // Collect IDs of compositions that were modified.
                 let affected_ids: Vec<_> = modified_compositions.clone();
                 // Gather all affected compositions into a mutable vec for batch check.
-                let mut affected_comps: Vec<Composition> = affected_ids.iter()
+                let mut affected_comps: Vec<Composition> = affected_ids
+                    .iter()
                     .filter_map(|id| engine.graph().compositions.get(id).cloned())
                     .collect();
                 gb.check_promotions(&mut affected_comps);
                 // Write back any promoted compositions.
                 for comp in affected_comps {
-                    engine.graph_mut().compositions.insert(comp.id.clone(), comp);
+                    engine
+                        .graph_mut()
+                        .compositions
+                        .insert(comp.id.clone(), comp);
                 }
             }
 
@@ -676,7 +675,11 @@ impl ExecutiveOrchestrator {
             let new_confidence = if snapshot2.compositions.is_empty() {
                 0.0
             } else {
-                snapshot2.compositions.iter().map(|c| c.confidence).sum::<f32>()
+                snapshot2
+                    .compositions
+                    .iter()
+                    .map(|c| c.confidence)
+                    .sum::<f32>()
                     / snapshot2.compositions.len() as f32
             };
             state.confidence = new_confidence;
@@ -892,7 +895,11 @@ mod tests {
         let graph = Graph::new();
         let findings = reflect.reflect(&result, &graph);
 
-        assert!(findings.iter().any(|f| f.finding_type == ReflectionFindingType::ContradictionResolvable));
-        assert!(findings.iter().any(|f| f.finding_type == ReflectionFindingType::PromotionCandidate));
+        assert!(findings
+            .iter()
+            .any(|f| f.finding_type == ReflectionFindingType::ContradictionResolvable));
+        assert!(findings
+            .iter()
+            .any(|f| f.finding_type == ReflectionFindingType::PromotionCandidate));
     }
 }

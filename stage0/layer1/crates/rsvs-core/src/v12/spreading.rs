@@ -320,7 +320,11 @@ impl SpreadingActivation {
 
         // NPMI component (α = 0.4) — simplified as activation overlap.
         let target_energy = context_map.energy(target);
-        let npm_i = if target_energy > 0.0 { target_energy } else { 0.0 };
+        let npm_i = if target_energy > 0.0 {
+            target_energy
+        } else {
+            0.0
+        };
         let alpha = 0.4;
 
         alpha * npm_i + beta * jaccard + gamma * cooc
@@ -433,6 +437,7 @@ impl ErasedTransform for SpreadingActivationTransform {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::field_reassign_with_default)]
     use super::*;
 
     #[test]
@@ -468,9 +473,24 @@ mod tests {
         comp.id = "comp_test".to_string();
         comp.composition_type = CompositionType::Event;
         comp.members = vec![
-            CompositionMember { node_id: node_a, role: SemanticRole::Arg0Agent, confidence: 0.9, label: "alpha".to_string() },
-            CompositionMember { node_id: node_b, role: SemanticRole::Arg1Patient, confidence: 0.8, label: "beta".to_string() },
-            CompositionMember { node_id: node_c, role: SemanticRole::Cause, confidence: 0.7, label: "gamma".to_string() },
+            CompositionMember {
+                node_id: node_a,
+                role: SemanticRole::Arg0Agent,
+                confidence: 0.9,
+                label: "alpha".to_string(),
+            },
+            CompositionMember {
+                node_id: node_b,
+                role: SemanticRole::Arg1Patient,
+                confidence: 0.8,
+                label: "beta".to_string(),
+            },
+            CompositionMember {
+                node_id: node_c,
+                role: SemanticRole::Cause,
+                confidence: 0.7,
+                label: "gamma".to_string(),
+            },
         ];
         graph.compositions.insert("comp_test".to_string(), comp);
 
@@ -478,8 +498,14 @@ mod tests {
         let result = engine.spread(&[(node_a, 1.0)], &graph);
 
         // node_b and node_c should be activated.
-        assert!(result.energy(node_b) > 0.0, "node_b should be activated through composition");
-        assert!(result.energy(node_c) > 0.0, "node_c should be activated through composition");
+        assert!(
+            result.energy(node_b) > 0.0,
+            "node_b should be activated through composition"
+        );
+        assert!(
+            result.energy(node_c) > 0.0,
+            "node_c should be activated through composition"
+        );
         // node_a itself should have the highest energy.
         assert!(result.energy(node_a) >= result.energy(node_b));
     }
@@ -531,8 +557,18 @@ mod tests {
         let mut comp = Composition::default();
         comp.id = "comp_ab".to_string();
         comp.members = vec![
-            CompositionMember { node_id: node_a, role: SemanticRole::Predicate, confidence: 1.0, label: "a".to_string() },
-            CompositionMember { node_id: node_b, role: SemanticRole::Arg0Agent, confidence: 1.0, label: "b".to_string() },
+            CompositionMember {
+                node_id: node_a,
+                role: SemanticRole::Predicate,
+                confidence: 1.0,
+                label: "a".to_string(),
+            },
+            CompositionMember {
+                node_id: node_b,
+                role: SemanticRole::Arg0Agent,
+                confidence: 1.0,
+                label: "b".to_string(),
+            },
         ];
         graph.compositions.insert("comp_ab".to_string(), comp);
 

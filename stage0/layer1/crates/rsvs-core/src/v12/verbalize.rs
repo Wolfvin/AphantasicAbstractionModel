@@ -139,8 +139,6 @@ impl Default for VerbalizeConfig {
 #[derive(Debug, Clone)]
 struct CompositionActivation {
     comp_id: CompositionId,
-    /// Activation energy from spreading activation (query relevance).
-    activation: f32,
     /// Composite score: activation + lifecycle/epistemic bonus.
     score: f32,
 }
@@ -281,13 +279,16 @@ impl CompositionalVerbalize {
 
             scored.push(CompositionActivation {
                 comp_id: composition.id.clone(),
-                activation: max_activation,
                 score,
             });
         }
 
         // Sort by score descending (most relevant first).
-        scored.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        scored.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         // Truncate to max path length.
         scored.truncate(self.config.max_path_length);
@@ -395,10 +396,14 @@ impl CompositionalVerbalize {
             .map(|m| format!(" [{}]", m.label))
             .unwrap_or_default();
 
-        format!("Ketika {}, maka{} {}.{}",
-            ante, pattern_type, cons,
+        format!(
+            "Ketika {}, maka{} {}.{}",
+            ante,
+            pattern_type,
+            cons,
             // No extra dot needed — pattern_type is optional
-            if pattern_type.is_empty() { "" } else { "" }
+            // pattern_type segment intentionally empty — kept for future template expansion
+            ""
         )
     }
 
@@ -509,11 +514,7 @@ impl CompositionalVerbalize {
     /// The output includes:
     /// - Each composition verbalized and qualified
     /// - An optional audit footer with confidence, source counts, and path
-    fn compose_output(
-        &self,
-        path: &[CompositionActivation],
-        graph: &Graph,
-    ) -> VerbalizationResult {
+    fn compose_output(&self, path: &[CompositionActivation], graph: &Graph) -> VerbalizationResult {
         if path.is_empty() {
             return VerbalizationResult::insufficient();
         }
@@ -712,6 +713,7 @@ impl ErasedTransform for CompositionalVerbalizeTransform {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::field_reassign_with_default)]
     use super::*;
 
     /// Helper: create a graph with a few compositions for testing.
@@ -731,10 +733,30 @@ mod tests {
         comp_event.epistemic = EpistemicState::Grounded;
         comp_event.confidence = 0.85;
         comp_event.members = vec![
-            CompositionMember { node_id: node_raymond, role: SemanticRole::Arg0Agent, confidence: 0.9, label: "Raymond".to_string() },
-            CompositionMember { node_id: node_membuat, role: SemanticRole::Predicate, confidence: 0.9, label: "membuat".to_string() },
-            CompositionMember { node_id: node_aplikasi, role: SemanticRole::Arg1Patient, confidence: 0.8, label: "aplikasi".to_string() },
-            CompositionMember { node_id: node_lambat, role: SemanticRole::Cause, confidence: 0.7, label: "lambat".to_string() },
+            CompositionMember {
+                node_id: node_raymond,
+                role: SemanticRole::Arg0Agent,
+                confidence: 0.9,
+                label: "Raymond".to_string(),
+            },
+            CompositionMember {
+                node_id: node_membuat,
+                role: SemanticRole::Predicate,
+                confidence: 0.9,
+                label: "membuat".to_string(),
+            },
+            CompositionMember {
+                node_id: node_aplikasi,
+                role: SemanticRole::Arg1Patient,
+                confidence: 0.8,
+                label: "aplikasi".to_string(),
+            },
+            CompositionMember {
+                node_id: node_lambat,
+                role: SemanticRole::Cause,
+                confidence: 0.7,
+                label: "lambat".to_string(),
+            },
         ];
         graph.compositions.insert(comp_event.id.clone(), comp_event);
 
@@ -747,8 +769,18 @@ mod tests {
         comp_hm.epistemic = EpistemicState::Inferred;
         comp_hm.confidence = 0.72;
         comp_hm.members = vec![
-            CompositionMember { node_id: node_cache, role: SemanticRole::Solution, confidence: 0.8, label: "cache".to_string() },
-            CompositionMember { node_id: node_lambat, role: SemanticRole::Problem, confidence: 0.7, label: "lambat".to_string() },
+            CompositionMember {
+                node_id: node_cache,
+                role: SemanticRole::Solution,
+                confidence: 0.8,
+                label: "cache".to_string(),
+            },
+            CompositionMember {
+                node_id: node_lambat,
+                role: SemanticRole::Problem,
+                confidence: 0.7,
+                label: "lambat".to_string(),
+            },
         ];
         graph.compositions.insert(comp_hm.id.clone(), comp_hm);
 
@@ -761,10 +793,22 @@ mod tests {
         comp_pattern.epistemic = EpistemicState::Grounded;
         comp_pattern.confidence = 0.9;
         comp_pattern.members = vec![
-            CompositionMember { node_id: node_db_full, role: SemanticRole::Antecedent, confidence: 0.9, label: "database_penuh".to_string() },
-            CompositionMember { node_id: node_lambat, role: SemanticRole::Consequent, confidence: 0.85, label: "lambat".to_string() },
+            CompositionMember {
+                node_id: node_db_full,
+                role: SemanticRole::Antecedent,
+                confidence: 0.9,
+                label: "database_penuh".to_string(),
+            },
+            CompositionMember {
+                node_id: node_lambat,
+                role: SemanticRole::Consequent,
+                confidence: 0.85,
+                label: "lambat".to_string(),
+            },
         ];
-        graph.compositions.insert(comp_pattern.id.clone(), comp_pattern);
+        graph
+            .compositions
+            .insert(comp_pattern.id.clone(), comp_pattern);
 
         graph
     }
@@ -826,7 +870,9 @@ mod tests {
     fn test_verbalize_pattern_composition() {
         let graph = make_test_graph();
         let cve = CompositionalVerbalize::new();
-        let comp = graph.get_composition(&"comp_pattern_1".to_string()).unwrap();
+        let comp = graph
+            .get_composition(&"comp_pattern_1".to_string())
+            .unwrap();
         let sentence = cve.verbalize_composition(comp);
         assert!(
             sentence.contains("Ketika"),
@@ -899,10 +945,7 @@ mod tests {
             !result.path.is_empty(),
             "Query 'lambat' should find relevant compositions"
         );
-        assert!(
-            !result.text.is_empty(),
-            "Explanation should not be empty"
-        );
+        assert!(!result.text.is_empty(), "Explanation should not be empty");
         assert!(
             result.text.contains("lambat"),
             "Explanation should contain 'lambat': got '{}'",
@@ -976,8 +1019,18 @@ mod tests {
         comp.epistemic = EpistemicState::Hypothesis;
         comp.confidence = 0.4;
         comp.members = vec![
-            CompositionMember { node_id: node_patient, role: SemanticRole::Arg1Patient, confidence: 0.5, label: "server".to_string() },
-            CompositionMember { node_id: node_pred, role: SemanticRole::Predicate, confidence: 0.4, label: "mengalami_kegagalan".to_string() },
+            CompositionMember {
+                node_id: node_patient,
+                role: SemanticRole::Arg1Patient,
+                confidence: 0.5,
+                label: "server".to_string(),
+            },
+            CompositionMember {
+                node_id: node_pred,
+                role: SemanticRole::Predicate,
+                confidence: 0.4,
+                label: "mengalami_kegagalan".to_string(),
+            },
         ];
 
         let cve = CompositionalVerbalize::new();
@@ -1012,9 +1065,24 @@ mod tests {
         comp.epistemic = EpistemicState::Observed;
         comp.confidence = 0.6;
         comp.members = vec![
-            CompositionMember { node_id: node_agent, role: SemanticRole::Arg0Agent, confidence: 0.7, label: "tim_develop".to_string() },
-            CompositionMember { node_id: node_pred, role: SemanticRole::Predicate, confidence: 0.6, label: "mengembangkan".to_string() },
-            CompositionMember { node_id: node_patient, role: SemanticRole::Arg1Patient, confidence: 0.5, label: "fitur_baru".to_string() },
+            CompositionMember {
+                node_id: node_agent,
+                role: SemanticRole::Arg0Agent,
+                confidence: 0.7,
+                label: "tim_develop".to_string(),
+            },
+            CompositionMember {
+                node_id: node_pred,
+                role: SemanticRole::Predicate,
+                confidence: 0.6,
+                label: "mengembangkan".to_string(),
+            },
+            CompositionMember {
+                node_id: node_patient,
+                role: SemanticRole::Arg1Patient,
+                confidence: 0.5,
+                label: "fitur_baru".to_string(),
+            },
         ];
 
         let cve = CompositionalVerbalize::new();
@@ -1045,9 +1113,24 @@ mod tests {
         comp.epistemic = EpistemicState::Observed;
         comp.confidence = 0.7;
         comp.members = vec![
-            CompositionMember { node_id: node_agent, role: SemanticRole::Arg0Agent, confidence: 0.8, label: "auditor".to_string() },
-            CompositionMember { node_id: node_pred, role: SemanticRole::Predicate, confidence: 0.7, label: "menemukan".to_string() },
-            CompositionMember { node_id: node_patient, role: SemanticRole::Arg1Patient, confidence: 0.7, label: "pelanggaran".to_string() },
+            CompositionMember {
+                node_id: node_agent,
+                role: SemanticRole::Arg0Agent,
+                confidence: 0.8,
+                label: "auditor".to_string(),
+            },
+            CompositionMember {
+                node_id: node_pred,
+                role: SemanticRole::Predicate,
+                confidence: 0.7,
+                label: "menemukan".to_string(),
+            },
+            CompositionMember {
+                node_id: node_patient,
+                role: SemanticRole::Arg1Patient,
+                confidence: 0.7,
+                label: "pelanggaran".to_string(),
+            },
         ];
 
         let cve = CompositionalVerbalize::new();
@@ -1117,27 +1200,79 @@ mod tests {
         comp.epistemic = EpistemicState::Grounded;
         comp.confidence = 0.95;
         comp.members = vec![
-            CompositionMember { node_id: node_agent, role: SemanticRole::Arg0Agent, confidence: 0.9, label: "tim".to_string() },
-            CompositionMember { node_id: node_pred, role: SemanticRole::Predicate, confidence: 0.9, label: "mengoptimasi".to_string() },
-            CompositionMember { node_id: node_patient, role: SemanticRole::Arg1Patient, confidence: 0.8, label: "database".to_string() },
-            CompositionMember { node_id: node_cause, role: SemanticRole::Cause, confidence: 0.7, label: "keluhan".to_string() },
-            CompositionMember { node_id: node_purpose, role: SemanticRole::Purpose, confidence: 0.7, label: "performa".to_string() },
-            CompositionMember { node_id: node_location, role: SemanticRole::Location, confidence: 0.6, label: "server_room".to_string() },
-            CompositionMember { node_id: node_time, role: SemanticRole::Time, confidence: 0.6, label: "malam".to_string() },
-            CompositionMember { node_id: node_instrument, role: SemanticRole::Instrument, confidence: 0.5, label: "tool_monitoring".to_string() },
+            CompositionMember {
+                node_id: node_agent,
+                role: SemanticRole::Arg0Agent,
+                confidence: 0.9,
+                label: "tim".to_string(),
+            },
+            CompositionMember {
+                node_id: node_pred,
+                role: SemanticRole::Predicate,
+                confidence: 0.9,
+                label: "mengoptimasi".to_string(),
+            },
+            CompositionMember {
+                node_id: node_patient,
+                role: SemanticRole::Arg1Patient,
+                confidence: 0.8,
+                label: "database".to_string(),
+            },
+            CompositionMember {
+                node_id: node_cause,
+                role: SemanticRole::Cause,
+                confidence: 0.7,
+                label: "keluhan".to_string(),
+            },
+            CompositionMember {
+                node_id: node_purpose,
+                role: SemanticRole::Purpose,
+                confidence: 0.7,
+                label: "performa".to_string(),
+            },
+            CompositionMember {
+                node_id: node_location,
+                role: SemanticRole::Location,
+                confidence: 0.6,
+                label: "server_room".to_string(),
+            },
+            CompositionMember {
+                node_id: node_time,
+                role: SemanticRole::Time,
+                confidence: 0.6,
+                label: "malam".to_string(),
+            },
+            CompositionMember {
+                node_id: node_instrument,
+                role: SemanticRole::Instrument,
+                confidence: 0.5,
+                label: "tool_monitoring".to_string(),
+            },
         ];
 
         let cve = CompositionalVerbalize::new();
         let sentence = cve.verbalize_single(&comp);
 
         assert!(sentence.contains("tim"), "Should contain agent");
-        assert!(sentence.contains("mengoptimasi"), "Should contain predicate");
+        assert!(
+            sentence.contains("mengoptimasi"),
+            "Should contain predicate"
+        );
         assert!(sentence.contains("database"), "Should contain patient");
         assert!(sentence.contains("karena keluhan"), "Should contain cause");
-        assert!(sentence.contains("untuk performa"), "Should contain purpose");
-        assert!(sentence.contains("di server_room"), "Should contain location");
+        assert!(
+            sentence.contains("untuk performa"),
+            "Should contain purpose"
+        );
+        assert!(
+            sentence.contains("di server_room"),
+            "Should contain location"
+        );
         assert!(sentence.contains("saat malam"), "Should contain time");
-        assert!(sentence.contains("dengan tool_monitoring"), "Should contain instrument");
+        assert!(
+            sentence.contains("dengan tool_monitoring"),
+            "Should contain instrument"
+        );
 
         eprintln!("Full event verbalization: {}", sentence);
     }

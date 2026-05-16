@@ -179,9 +179,10 @@ impl Default for SemanticAtom {
 /// Determines how many roles and how much structural metadata an atom carries.
 /// Token is sparse (roles = {}), Event is rich (roles = {Arg0, Arg1, Cause, ...}).
 #[non_exhaustive]
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 pub enum AtomType {
     /// Simple token extraction (sparse: roles = {}).
+    #[default]
     Token,
     /// Token that requires disambiguation (pronouns, deictics).
     /// Enables gap detection for tokens that need context resolution.
@@ -198,45 +199,29 @@ pub enum AtomType {
     Acquisition,
 }
 
-impl Default for AtomType {
-    fn default() -> Self {
-        AtomType::Token
-    }
-}
-
 /// Positive or negative polarity (MD-3 §1).
 ///
 /// Used for event-level polarity detection (e.g., "X did NOT cause Y").
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 pub enum Polarity {
     /// Affirmative / positive.
+    #[default]
     Positive,
     /// Negative / negated.
     Negative,
-}
-
-impl Default for Polarity {
-    fn default() -> Self {
-        Polarity::Positive
-    }
 }
 
 /// Active or passive voice (MD-3 §1).
 ///
 /// Used for voice detection in event frames. Important for contradiction resolution:
 /// active "X membuat Y" vs passive "Y dibuat oleh X" are the same event.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 pub enum Voice {
     /// Subject performs the action.
+    #[default]
     Active,
     /// Subject receives the action.
     Passive,
-}
-
-impl Default for Voice {
-    fn default() -> Self {
-        Voice::Active
-    }
 }
 
 /// Type-specific classification variant (MD-3 §1).
@@ -262,9 +247,10 @@ pub enum AtomVariant {
 ///
 /// Phase 1: RuleBased. Phase 2: UdParse/SrlLabel. Phase 3: AmrCompilation.
 #[non_exhaustive]
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 pub enum FrameSource {
     /// Phase 1: deterministic rules.
+    #[default]
     RuleBased,
     /// Phase 2: dependency parsing.
     UdParse,
@@ -276,17 +262,12 @@ pub enum FrameSource {
     GraphAssisted,
 }
 
-impl Default for FrameSource {
-    fn default() -> Self {
-        FrameSource::RuleBased
-    }
-}
-
 /// Pattern category classification (MD-3 §1).
 #[non_exhaustive]
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 pub enum PatternCategory {
     /// Recurring event structure.
+    #[default]
     EventPattern,
     /// Causal chain (A → B → C).
     CausalChain,
@@ -298,17 +279,12 @@ pub enum PatternCategory {
     TemporalSequence,
 }
 
-impl Default for PatternCategory {
-    fn default() -> Self {
-        PatternCategory::EventPattern
-    }
-}
-
 /// Acquisition source classification (MD-6, MD-3 §1).
 #[non_exhaustive]
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 pub enum AcquisitionSource {
     /// Knowledge recalled from existing graph.
+    #[default]
     PassiveRecall,
     /// Self-directed study (Phase 2).
     SelfStudy,
@@ -316,12 +292,6 @@ pub enum AcquisitionSource {
     UserAnswer,
     /// External source (Phase 2).
     ExternalSource,
-}
-
-impl Default for AcquisitionSource {
-    fn default() -> Self {
-        AcquisitionSource::PassiveRecall
-    }
 }
 
 // ========================================================================
@@ -339,10 +309,11 @@ impl Default for AcquisitionSource {
 /// - Pattern roles
 /// - Structural roles
 #[non_exhaustive]
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 pub enum SemanticRole {
     // === Event frame roles (from MD-1) ===
     /// The predicate/verb of an event frame.
+    #[default]
     Predicate,
     /// ARG0: The agent/actor performing the action.
     Arg0Agent,
@@ -392,12 +363,6 @@ pub enum SemanticRole {
     SourceEvent,
     /// Semantic equivalence link.
     EquivalentOf,
-}
-
-impl Default for SemanticRole {
-    fn default() -> Self {
-        SemanticRole::Predicate
-    }
 }
 
 // ========================================================================
@@ -604,9 +569,10 @@ pub type CompositionId = String;
 /// Replaces the separate EventFrame, HiddenMeaningCandidate, Pattern,
 /// AbductiveHypothesis, and SituationState types.
 #[non_exhaustive]
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 pub enum CompositionType {
     /// Was `EventFrame` — semantic event with agent, patient, cause, etc.
+    #[default]
     Event,
     /// Was `HiddenMeaningCandidate` — pre-ingest reasoning output.
     HiddenMeaning,
@@ -618,12 +584,6 @@ pub enum CompositionType {
     Hypothesis,
     /// Externally acquired knowledge.
     Acquisition,
-}
-
-impl Default for CompositionType {
-    fn default() -> Self {
-        CompositionType::Event
-    }
 }
 
 // ========================================================================
@@ -643,9 +603,10 @@ impl Default for CompositionType {
 ///          Quarantine → Candidate (recovered)
 /// ```
 #[non_exhaustive]
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 pub enum LifecycleState {
     /// Just created — no evaluation yet.
+    #[default]
     New,
     /// Under consideration — not yet promoted.
     Candidate,
@@ -655,12 +616,6 @@ pub enum LifecycleState {
     Deprecated,
     /// Isolated for review — unresolved conflict or hypothesis.
     Quarantine,
-}
-
-impl Default for LifecycleState {
-    fn default() -> Self {
-        LifecycleState::New
-    }
 }
 
 /// Axis 2: Epistemic confidence — how confident are we in this knowledge? (MD-3 §3)
@@ -687,9 +642,10 @@ impl Default for LifecycleState {
 /// (Stable, Contradicted)  = was established, now contradicted
 /// ```
 #[non_exhaustive]
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 pub enum EpistemicState {
     /// Directly extracted from input.
+    #[default]
     Observed,
     /// Derived by deterministic rule.
     Inferred,
@@ -699,12 +655,6 @@ pub enum EpistemicState {
     Grounded,
     /// Opposed by evidence.
     Contradicted,
-}
-
-impl Default for EpistemicState {
-    fn default() -> Self {
-        EpistemicState::Observed
-    }
 }
 
 // ========================================================================
@@ -808,7 +758,7 @@ pub trait Transform: Send + Sync {
 /// - Extraction quality tracker
 /// - Pending enrichment/reextraction requests
 /// - Gap detection control
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct PipelineContext {
     /// Raw input text for the current ingest cycle.
     #[serde(default)]
@@ -918,22 +868,6 @@ impl PipelineContext {
     }
 }
 
-impl Default for PipelineContext {
-    fn default() -> Self {
-        Self {
-            raw_text: None,
-            current_atoms: Vec::new(),
-            recent_events: Vec::new(),
-            extraction_quality: ExtractionQualityTracker::default(),
-            pending_enrichments: Vec::new(),
-            pending_reextractions: Vec::new(),
-            gap_detection_enabled: false,
-            pending_gaps: Vec::new(),
-            next_atom_id: 0,
-        }
-    }
-}
-
 /// Tracks extraction quality per rule/pattern (MD-1 feedback loop).
 ///
 /// Updated by the feedback loop when gap detection reveals extraction failures.
@@ -959,13 +893,17 @@ pub struct ExtractionQuality {
 impl ExtractionQuality {
     /// Gap rate: how often does this rule's extraction produce gaps?
     pub fn gap_rate(&self) -> f32 {
-        if self.total_extractions == 0 { return 0.0; }
+        if self.total_extractions == 0 {
+            return 0.0;
+        }
         self.gaps_detected as f32 / self.total_extractions as f32
     }
 
     /// Repair rate: how often are the gaps successfully repaired?
     pub fn repair_rate(&self) -> f32 {
-        if self.gaps_detected == 0 { return 1.0; }
+        if self.gaps_detected == 0 {
+            return 1.0;
+        }
         self.gaps_repaired as f32 / self.gaps_detected as f32
     }
 
@@ -1020,16 +958,20 @@ impl ExtractionQualityTracker {
         }
         // Running average
         self.average_confidence = (self.average_confidence * (self.frames_extracted - 1) as f32
-            + confidence) / self.frames_extracted as f32;
+            + confidence)
+            / self.frames_extracted as f32;
 
-        let entry = self.quality_by_rule.entry(rule_id.to_string())
+        let entry = self
+            .quality_by_rule
+            .entry(rule_id.to_string())
             .or_insert_with(|| ExtractionQuality {
                 rule_id: rule_id.to_string(),
                 ..Default::default()
             });
         entry.total_extractions += 1;
         entry.avg_confidence = (entry.avg_confidence * (entry.total_extractions - 1) as f32
-            + confidence) / entry.total_extractions as f32;
+            + confidence)
+            / entry.total_extractions as f32;
     }
 
     /// Record that a gap was detected for a rule's extraction.
@@ -1049,7 +991,8 @@ impl ExtractionQualityTracker {
 
     /// Get weak rules — candidates for graph-assisted re-extraction.
     pub fn weak_rules(&self) -> Vec<&ExtractionQuality> {
-        self.quality_by_rule.values()
+        self.quality_by_rule
+            .values()
             .filter(|q| q.is_weak())
             .collect()
     }
@@ -1095,9 +1038,10 @@ impl Default for KnowledgeGapPlaceholder {
 /// - Promotion criteria (seed alignment must be positive)
 /// - Meaning similarity (compositions with similar seed profiles are related)
 #[non_exhaustive]
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 pub enum SeedPrimitive {
     /// Trust seed — how much social trust does this align with?
+    #[default]
     Trust,
     /// Risk seed — how much danger/threat does this relate to?
     Risk,
@@ -1107,12 +1051,6 @@ pub enum SeedPrimitive {
     Goal,
     /// Identity seed — how much does this relate to self/identity?
     Identity,
-}
-
-impl Default for SeedPrimitive {
-    fn default() -> Self {
-        SeedPrimitive::Trust
-    }
 }
 
 // ========================================================================
@@ -1172,7 +1110,7 @@ pub struct Contradiction {
 /// These conflicts are detected by `GovernBeliefs.detect_contradiction()`
 /// by comparing role fillers across compositions with the same predicate.
 #[non_exhaustive]
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 pub enum EpistemicConflictType {
     /// Same predicate, opposite polarity (e.g., "X did" vs "X did NOT").
     PolarityConflict,
@@ -1189,17 +1127,12 @@ pub enum EpistemicConflictType {
     /// Spatial incompatibility between compositions.
     LocationConflict,
     /// General semantic contradiction (cross-type).
+    #[default]
     SemanticContradiction,
     /// Agent ↔ Patient swapped across two compositions.
     RoleReversal,
     /// Same structure but different role fillers (e.g., different solutions).
     EquivalenceMismatch,
-}
-
-impl Default for EpistemicConflictType {
-    fn default() -> Self {
-        EpistemicConflictType::SemanticContradiction
-    }
 }
 
 // ========================================================================
@@ -1295,9 +1228,10 @@ impl Default for EnrichmentRequest {
 
 /// Source of enrichment (MD-3, MD-6).
 #[non_exhaustive]
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 pub enum EnrichmentSource {
     /// Enrichment from passive recall (graph-based).
+    #[default]
     PassiveRecall,
     /// Enrichment from user answer merge.
     UserAnswerMerge,
@@ -1307,18 +1241,12 @@ pub enum EnrichmentSource {
     HumanAssertion,
 }
 
-impl Default for EnrichmentSource {
-    fn default() -> Self {
-        EnrichmentSource::PassiveRecall
-    }
-}
-
 /// Request to re-extract a frame with graph context (MD-3, MD-6).
 ///
 /// Produced by `SelectAcquisition` when `LowGroundingGap` is detected and
 /// the graph has grounding evidence. The `ReExtractFrame` transform processes
 /// this by re-running extraction with known role-fillers as hints.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ReExtractionRequest {
     /// The original text to re-extract from.
     pub original_text: String,
@@ -1332,24 +1260,13 @@ pub struct ReExtractionRequest {
     pub graph_context: Vec<(SemanticRole, NodeId, f32)>,
 }
 
-impl Default for ReExtractionRequest {
-    fn default() -> Self {
-        Self {
-            original_text: String::new(),
-            original_atom_id: String::new(),
-            target_composition_id: String::new(),
-            graph_context: Vec::new(),
-        }
-    }
-}
-
 /// Concrete action to take after gap detection (MD-3, MD-6).
 ///
 /// This replaces the old `PassiveRecall` mode which just returned a mode
 /// without specifying WHAT to do. Now, `SelectAcquisition` produces concrete
 /// actions that the pipeline can execute.
 #[non_exhaustive]
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub enum RecallAction {
     /// Enrich an existing composition with a candidate from the graph.
     EnrichComposition {
@@ -1373,13 +1290,8 @@ pub enum RecallAction {
         question: String,
     },
     /// No action — gap noted but deferred.
+    #[default]
     NoAction,
-}
-
-impl Default for RecallAction {
-    fn default() -> Self {
-        RecallAction::NoAction
-    }
 }
 
 // ========================================================================
@@ -1390,7 +1302,7 @@ impl Default for RecallAction {
 ///
 /// Instead of scanning the entire graph for contradictions or low confidence,
 /// mode selection evaluates only the neighborhood relevant to current input.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct GraphNeighborhood {
     /// Compositions in this neighborhood.
     #[serde(default)]
@@ -1419,30 +1331,27 @@ impl GraphNeighborhood {
     /// mode selection evaluates only the neighborhood relevant to current input.
     /// This finds compositions whose members' labels match any of the keywords.
     pub fn neighborhood_for(keywords: &[String], compositions: &[Composition]) -> Self {
-        let relevant: Vec<Composition> = compositions.iter()
+        let relevant: Vec<Composition> = compositions
+            .iter()
             .filter(|c| {
                 // A composition is relevant if any member's label matches a keyword
                 c.members.iter().any(|m| {
                     let label_lower = m.label.to_lowercase();
-                    keywords.iter().any(|kw| label_lower.contains(&kw.to_lowercase()))
+                    keywords
+                        .iter()
+                        .any(|kw| label_lower.contains(&kw.to_lowercase()))
                 })
             })
             .cloned()
             .collect();
-        Self { compositions: relevant }
-    }
-}
-
-impl Default for GraphNeighborhood {
-    fn default() -> Self {
         Self {
-            compositions: Vec::new(),
+            compositions: relevant,
         }
     }
 }
 
 /// Graph snapshot for passing to `DetectGaps` (MD-3 §5).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct GraphSnapshot {
     /// Recent atoms from the current ingest.
     #[serde(default)]
@@ -1452,50 +1361,45 @@ pub struct GraphSnapshot {
     pub compositions: Vec<Composition>,
 }
 
-impl Default for GraphSnapshot {
-    fn default() -> Self {
-        Self {
-            recent_atoms: Vec::new(),
-            compositions: Vec::new(),
-        }
-    }
-}
-
 impl GraphSnapshot {
     /// Build graph context for re-extracting a weak frame.
     /// Returns `(SemanticRole, NodeId, f32)` triples from compositions
     /// that share the same predicate, providing known role-fillers
     /// as hints for the rule-based re-extraction.
     pub fn context_for(&self, weak_frame: &WeakFrame) -> Vec<(SemanticRole, NodeId, f32)> {
-        let target_comp = self.compositions.iter()
+        let target_comp = self
+            .compositions
+            .iter()
             .find(|c| c.id == weak_frame.composition_id);
 
         match target_comp {
             Some(comp) => {
-                let predicate = comp.member_with_role(&SemanticRole::Predicate)
+                let predicate = comp
+                    .member_with_role(&SemanticRole::Predicate)
                     .map(|m| m.node_id);
 
                 match predicate {
-                    Some(pred_id) => {
-                        self.compositions.iter()
-                            .filter(|c| c.id != comp.id)
-                            .filter(|c| c.composition_type == CompositionType::Event)
-                            .filter(|c| {
-                                c.member_with_role(&SemanticRole::Predicate)
-                                    .map(|m| m.node_id == pred_id)
-                                    .unwrap_or(false)
-                            })
-                            .flat_map(|c| {
-                                c.members.iter()
-                                    .filter(|m| m.role != SemanticRole::Predicate)
-                                    .map(|m| (m.role.clone(), m.node_id, m.confidence))
-                                    .collect::<Vec<_>>()
-                            })
-                            .collect()
-                    },
+                    Some(pred_id) => self
+                        .compositions
+                        .iter()
+                        .filter(|c| c.id != comp.id)
+                        .filter(|c| c.composition_type == CompositionType::Event)
+                        .filter(|c| {
+                            c.member_with_role(&SemanticRole::Predicate)
+                                .map(|m| m.node_id == pred_id)
+                                .unwrap_or(false)
+                        })
+                        .flat_map(|c| {
+                            c.members
+                                .iter()
+                                .filter(|m| m.role != SemanticRole::Predicate)
+                                .map(|m| (m.role.clone(), m.node_id, m.confidence))
+                                .collect::<Vec<_>>()
+                        })
+                        .collect(),
                     None => vec![],
                 }
-            },
+            }
             None => vec![],
         }
     }
@@ -1634,7 +1538,9 @@ impl ReasoningState {
         self.elapsed_ms += loop_result.elapsed_ms;
 
         // Track whether new evidence was found in this loop.
-        let new_evidence = loop_result.evidence_count.saturating_sub(self.evidence_at_loop_start);
+        let new_evidence = loop_result
+            .evidence_count
+            .saturating_sub(self.evidence_at_loop_start);
         if new_evidence > 0 {
             self.loops_without_new_evidence = 0;
             self.evidence_count = loop_result.evidence_count;
@@ -1654,27 +1560,22 @@ impl ReasoningState {
     /// Determine if the reasoning goal has been satisfied.
     fn check_goal_met(&self, result: &ReflectionLoopResult) -> bool {
         match &self.goal {
-            ReasoningGoal::UnderstandInput => {
-                self.confidence >= 0.8 && !result.has_gaps
-            }
+            ReasoningGoal::UnderstandInput => self.confidence >= 0.8 && !result.has_gaps,
             ReasoningGoal::ResolveContradiction { composition_id } => {
                 result.resolved_contradictions.contains(composition_id)
             }
-            ReasoningGoal::FillGap { gap_id } => {
-                result.filled_gaps.contains(gap_id)
-            }
-            ReasoningGoal::AnswerQuestion { .. } => {
-                self.confidence >= 0.85
-            }
+            ReasoningGoal::FillGap { gap_id } => result.filled_gaps.contains(gap_id),
+            ReasoningGoal::AnswerQuestion { .. } => self.confidence >= 0.85,
         }
     }
 }
 
 /// What the reasoning session is trying to accomplish (MD-5).
 #[non_exhaustive]
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub enum ReasoningGoal {
     /// Understand the meaning of input text.
+    #[default]
     UnderstandInput,
     /// Resolve a specific contradiction.
     ResolveContradiction {
@@ -1691,12 +1592,6 @@ pub enum ReasoningGoal {
         /// The question to answer.
         question: String,
     },
-}
-
-impl Default for ReasoningGoal {
-    fn default() -> Self {
-        ReasoningGoal::UnderstandInput
-    }
 }
 
 // ========================================================================
@@ -1805,7 +1700,7 @@ pub struct ContradictionResolution {
 
 /// How a contradiction was resolved (MD-4).
 #[non_exhaustive]
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub enum ResolutionType {
     /// One side was superseded by newer, stronger evidence.
     Superseded,
@@ -1816,13 +1711,8 @@ pub enum ResolutionType {
     /// One side was a misinterpretation (e.g., passive vs active voice).
     Misinterpretation,
     /// Resolution not yet possible.
+    #[default]
     Unresolved,
-}
-
-impl Default for ResolutionType {
-    fn default() -> Self {
-        ResolutionType::Unresolved
-    }
 }
 
 // ========================================================================
@@ -1838,18 +1728,15 @@ impl Default for ResolutionType {
 pub fn extract_keywords(input: &str) -> Vec<String> {
     let stop_words = [
         // Indonesian
-        "yang", "dan", "di", "ke", "dari", "ini", "itu", "dengan", "untuk",
-        "pada", "adalah", "akan", "telah", "sebuah", "seorang", "tidak", "bukan",
-        "juga", "sudah", "oleh", "karena", "supaya", "agar", "sebab",
-        // English
-        "the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
-        "have", "has", "had", "do", "does", "did", "will", "would", "could",
-        "should", "may", "might", "shall", "can", "to", "of", "in", "for",
-        "on", "with", "at", "by", "from", "as", "into", "through", "during",
-        "before", "after", "above", "below", "between", "out", "off", "over",
-        "under", "again", "further", "then", "once", "and", "but", "or",
-        "nor", "not", "so", "yet", "both", "either", "neither", "each",
-        "every", "all", "any", "few", "more", "most", "other", "some",
+        "yang", "dan", "di", "ke", "dari", "ini", "itu", "dengan", "untuk", "pada", "adalah",
+        "akan", "telah", "sebuah", "seorang", "tidak", "bukan", "juga", "sudah", "oleh", "karena",
+        "supaya", "agar", "sebab", // English
+        "the", "a", "an", "is", "are", "was", "were", "be", "been", "being", "have", "has", "had",
+        "do", "does", "did", "will", "would", "could", "should", "may", "might", "shall", "can",
+        "to", "of", "in", "for", "on", "with", "at", "by", "from", "as", "into", "through",
+        "during", "before", "after", "above", "below", "between", "out", "off", "over", "under",
+        "again", "further", "then", "once", "and", "but", "or", "nor", "not", "so", "yet", "both",
+        "either", "neither", "each", "every", "all", "any", "few", "more", "most", "other", "some",
         "such", "no", "only", "own", "same", "than", "too", "very",
     ];
 

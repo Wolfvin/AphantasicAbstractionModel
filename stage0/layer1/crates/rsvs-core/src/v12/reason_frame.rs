@@ -81,10 +81,7 @@ pub struct ReasoningContext<'a> {
 
 impl<'a> ReasoningContext<'a> {
     /// Create a new reasoning context.
-    pub fn new(
-        event: &'a SemanticAtom,
-        recent_events: &'a [SemanticAtom],
-    ) -> Self {
+    pub fn new(event: &'a SemanticAtom, recent_events: &'a [SemanticAtom]) -> Self {
         Self {
             event,
             recent_events,
@@ -93,7 +90,11 @@ impl<'a> ReasoningContext<'a> {
     }
 
     /// Create with graph context.
-    pub fn with_graph(event: &'a SemanticAtom, recent_events: &'a [SemanticAtom], graph: GraphContextRef) -> Self {
+    pub fn with_graph(
+        event: &'a SemanticAtom,
+        recent_events: &'a [SemanticAtom],
+        graph: GraphContextRef,
+    ) -> Self {
         Self {
             event,
             recent_events,
@@ -257,7 +258,11 @@ impl ReasoningRule for ProblemSolutionRule {
             Some(s) => s.clone(),
             None => return Vec::new(),
         };
-        let agent = event.roles.get(&SemanticRole::Arg0Agent).cloned().unwrap_or_default();
+        let agent = event
+            .roles
+            .get(&SemanticRole::Arg0Agent)
+            .cloned()
+            .unwrap_or_default();
 
         let mut roles = HashMap::new();
         roles.insert(SemanticRole::Problem, problem);
@@ -285,7 +290,11 @@ impl ReasoningRule for ProblemSolutionRule {
             composition_id: None,
         };
 
-        vec![ReasoningResult::new(self.name(), atom, derivation_confidence)]
+        vec![ReasoningResult::new(
+            self.name(),
+            atom,
+            derivation_confidence,
+        )]
     }
 }
 
@@ -333,8 +342,7 @@ impl ReasoningRule for GoalInferenceRule {
 
     fn applies(&self, context: &ReasoningContext) -> bool {
         let event = context.event;
-        event.atom_type == AtomType::Event
-            && event.roles.contains_key(&SemanticRole::Purpose)
+        event.atom_type == AtomType::Event && event.roles.contains_key(&SemanticRole::Purpose)
     }
 
     fn generate(&self, context: &ReasoningContext) -> Vec<ReasoningResult> {
@@ -372,7 +380,11 @@ impl ReasoningRule for GoalInferenceRule {
             composition_id: None,
         };
 
-        vec![ReasoningResult::new(self.name(), atom, derivation_confidence)]
+        vec![ReasoningResult::new(
+            self.name(),
+            atom,
+            derivation_confidence,
+        )]
     }
 }
 
@@ -438,46 +450,49 @@ impl ReasoningRule for PolarityConflictRule {
         let event = context.event;
         let opposite_events = context.find_opposite_polarity();
 
-        opposite_events.into_iter().map(|opposite| {
-            let conflict_desc = format!(
-                "{}: {} vs {}",
-                event.label,
-                match event.polarity {
-                    Some(Polarity::Positive) => "positive",
-                    Some(Polarity::Negative) => "negative",
-                    None => "neutral",
-                },
-                match opposite.polarity {
-                    Some(Polarity::Positive) => "positive",
-                    Some(Polarity::Negative) => "negative",
-                    None => "neutral",
-                }
-            );
+        opposite_events
+            .into_iter()
+            .map(|opposite| {
+                let conflict_desc = format!(
+                    "{}: {} vs {}",
+                    event.label,
+                    match event.polarity {
+                        Some(Polarity::Positive) => "positive",
+                        Some(Polarity::Negative) => "negative",
+                        None => "neutral",
+                    },
+                    match opposite.polarity {
+                        Some(Polarity::Positive) => "positive",
+                        Some(Polarity::Negative) => "negative",
+                        None => "neutral",
+                    }
+                );
 
-            let mut roles = HashMap::new();
-            roles.insert(SemanticRole::SourceEvent, event.id.clone());
-            roles.insert(SemanticRole::Problem, conflict_desc);
+                let mut roles = HashMap::new();
+                roles.insert(SemanticRole::SourceEvent, event.id.clone());
+                roles.insert(SemanticRole::Problem, conflict_desc);
 
-            // Derivation confidence: conflicts are high-signal.
-            let derivation_confidence = (event.confidence + opposite.confidence) / 2.0 * 0.90;
+                // Derivation confidence: conflicts are high-signal.
+                let derivation_confidence = (event.confidence + opposite.confidence) / 2.0 * 0.90;
 
-            let atom = SemanticAtom {
-                id: String::new(),
-                label: "polarity_conflict".to_string(),
-                atom_type: AtomType::HiddenMeaning,
-                roles,
-                polarity: None,
-                voice: None,
-                variant: Some(AtomVariant::MeaningVariant(
-                    crate::types::HiddenMeaningType::Emergent,
-                )),
-                confidence: derivation_confidence,
-                source: EdgeSource::HiddenMeaningRule,
-                composition_id: None,
-            };
+                let atom = SemanticAtom {
+                    id: String::new(),
+                    label: "polarity_conflict".to_string(),
+                    atom_type: AtomType::HiddenMeaning,
+                    roles,
+                    polarity: None,
+                    voice: None,
+                    variant: Some(AtomVariant::MeaningVariant(
+                        crate::types::HiddenMeaningType::Emergent,
+                    )),
+                    confidence: derivation_confidence,
+                    source: EdgeSource::HiddenMeaningRule,
+                    composition_id: None,
+                };
 
-            ReasoningResult::new(self.name(), atom, derivation_confidence)
-        }).collect()
+                ReasoningResult::new(self.name(), atom, derivation_confidence)
+            })
+            .collect()
     }
 }
 
@@ -582,7 +597,11 @@ impl ReasoningRule for ConditionConsequenceRule {
             composition_id: None,
         };
 
-        vec![ReasoningResult::new(self.name(), atom, derivation_confidence)]
+        vec![ReasoningResult::new(
+            self.name(),
+            atom,
+            derivation_confidence,
+        )]
     }
 }
 
@@ -653,7 +672,11 @@ impl ReasonFrame {
     /// Apply all rules to an event atom.
     ///
     /// Returns a vector of reasoning results (may be empty if no rules apply).
-    pub fn reason(&self, event: &SemanticAtom, recent_events: &[SemanticAtom]) -> Vec<ReasoningResult> {
+    pub fn reason(
+        &self,
+        event: &SemanticAtom,
+        recent_events: &[SemanticAtom],
+    ) -> Vec<ReasoningResult> {
         if event.atom_type != AtomType::Event {
             return Vec::new();
         }
@@ -699,7 +722,8 @@ impl ReasonFrame {
                 for result in &mut rule_results {
                     if graph_ref.same_predicate_count > 0 {
                         let boost = (graph_ref.same_predicate_count as f32 * 0.02).min(0.10);
-                        result.derivation_confidence = (result.derivation_confidence + boost).min(1.0);
+                        result.derivation_confidence =
+                            (result.derivation_confidence + boost).min(1.0);
                         result.atom.confidence = result.derivation_confidence;
                     }
                     if graph_ref.has_contradiction {
@@ -776,7 +800,11 @@ impl ErasedTransform for ReasonFrame {
 mod tests {
     use super::*;
 
-    fn make_event(label: &str, roles: HashMap<SemanticRole, String>, polarity: Option<Polarity>) -> SemanticAtom {
+    fn make_event(
+        label: &str,
+        roles: HashMap<SemanticRole, String>,
+        polarity: Option<Polarity>,
+    ) -> SemanticAtom {
         SemanticAtom {
             id: "atom_test".to_string(),
             label: label.to_string(),
@@ -808,8 +836,14 @@ mod tests {
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].atom.atom_type, AtomType::HiddenMeaning);
         assert_eq!(results[0].atom.label, "problem_solution");
-        assert_eq!(results[0].atom.roles.get(&SemanticRole::Problem), Some(&"lambat".to_string()));
-        assert_eq!(results[0].atom.roles.get(&SemanticRole::Solution), Some(&"aplikasi".to_string()));
+        assert_eq!(
+            results[0].atom.roles.get(&SemanticRole::Problem),
+            Some(&"lambat".to_string())
+        );
+        assert_eq!(
+            results[0].atom.roles.get(&SemanticRole::Solution),
+            Some(&"aplikasi".to_string())
+        );
     }
 
     #[test]

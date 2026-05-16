@@ -53,15 +53,15 @@ use crate::types::{EdgeSource, NodeId};
 /// These are Malay/Indonesian negation words that flip the polarity
 /// of an event from Positive to Negative.
 const NEGATION_MARKERS: &[&str] = &[
-    "tidak",   // not (general negation)
-    "bukan",   // not (identity negation)
-    "belum",   // not yet
-    "jangan",  // don't (prohibitive)
-    "tak",     // not (short form)
-    "nggak",   // not (colloquial)
-    "enggak",  // not (colloquial variant)
-    "ga",      // not (very colloquial)
-    "gak",     // not (very colloquial variant)
+    "tidak",  // not (general negation)
+    "bukan",  // not (identity negation)
+    "belum",  // not yet
+    "jangan", // don't (prohibitive)
+    "tak",    // not (short form)
+    "nggak",  // not (colloquial)
+    "enggak", // not (colloquial variant)
+    "ga",     // not (very colloquial)
+    "gak",    // not (very colloquial variant)
 ];
 
 /// Known causal/purpose markers for role extraction.
@@ -99,7 +99,7 @@ const VERB_PREFIXES: &[&str] = &["me", "ber", "di", "ter", "ke", "pe"];
 ///
 /// Categorizes the output of `ExtractFrame` to support quality tracking
 /// and feedback loop decisions.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub enum ExtractionQuality {
     /// High-confidence extraction with all key roles filled.
     HighQuality,
@@ -108,13 +108,8 @@ pub enum ExtractionQuality {
     /// Low confidence — only predicate extracted, few or no roles.
     LowQuality,
     /// Failed extraction — input did not yield a frame.
+    #[default]
     Failed,
-}
-
-impl Default for ExtractionQuality {
-    fn default() -> Self {
-        ExtractionQuality::Failed
-    }
 }
 
 /// Tracker for extraction quality across a pipeline run (MD-1).
@@ -210,18 +205,10 @@ impl ExtractionQualityTrackerExt {
 /// 5. Extract roles (Agent, Patient, Cause, Purpose)
 /// 6. Compute frame confidence
 /// 7. Build and return `SemanticAtom`
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ExtractFrame {
     /// Whether to use graph-assisted re-extraction when available.
     pub graph_assisted: bool,
-}
-
-impl Default for ExtractFrame {
-    fn default() -> Self {
-        Self {
-            graph_assisted: false,
-        }
-    }
 }
 
 impl ExtractFrame {
@@ -232,7 +219,9 @@ impl ExtractFrame {
 
     /// Create with graph-assisted mode enabled.
     pub fn with_graph_assist() -> Self {
-        Self { graph_assisted: true }
+        Self {
+            graph_assisted: true,
+        }
     }
 
     /// Heuristic: is the input text sentence-like?
@@ -274,8 +263,12 @@ impl ExtractFrame {
     pub fn detect_voice(tokens: &[&str]) -> Voice {
         let has_passive = tokens.iter().any(|t| {
             let lower = t.to_lowercase();
-            lower.starts_with("di") && lower.len() > 2
-                && lower.chars().nth(2).map_or(false, |c| c.is_ascii_alphabetic())
+            lower.starts_with("di")
+                && lower.len() > 2
+                && lower
+                    .chars()
+                    .nth(2)
+                    .is_some_and(|c| c.is_ascii_alphabetic())
         });
 
         if has_passive {
@@ -311,10 +304,13 @@ impl ExtractFrame {
         match voice {
             Voice::Passive => {
                 // In passive, prefer "di-" prefixed token.
-                tokens.iter().find(|t| {
-                    let lower = t.to_lowercase();
-                    lower.starts_with("di") && lower.len() > 2
-                }).copied()
+                tokens
+                    .iter()
+                    .find(|t| {
+                        let lower = t.to_lowercase();
+                        lower.starts_with("di") && lower.len() > 2
+                    })
+                    .copied()
             }
             Voice::Active => {
                 // In active, prefer "me-" prefixed token.
@@ -340,7 +336,11 @@ impl ExtractFrame {
     ///   In passive voice, the first non-predicate token before "oleh".
     /// - **Cause**: The token(s) after a cause marker ("karena", "sebab").
     /// - **Purpose**: The token(s) after a purpose marker ("untuk", "supaya", "agar").
-    pub fn extract_roles(tokens: &[&str], predicate: &str, voice: &Voice) -> HashMap<SemanticRole, String> {
+    pub fn extract_roles(
+        tokens: &[&str],
+        predicate: &str,
+        voice: &Voice,
+    ) -> HashMap<SemanticRole, String> {
         let mut roles = HashMap::new();
         let pred_idx = tokens.iter().position(|t| *t == predicate);
 
@@ -358,8 +358,14 @@ impl ExtractFrame {
                     // Patient: token after predicate (if exists and not a marker).
                     if idx + 1 < tokens.len() {
                         let patient_candidate = tokens[idx + 1];
-                        if !is_marker(patient_candidate) && !is_cause_marker(patient_candidate) && !is_purpose_marker(patient_candidate) {
-                            roles.insert(SemanticRole::Arg1Patient, patient_candidate.to_lowercase());
+                        if !is_marker(patient_candidate)
+                            && !is_cause_marker(patient_candidate)
+                            && !is_purpose_marker(patient_candidate)
+                        {
+                            roles.insert(
+                                SemanticRole::Arg1Patient,
+                                patient_candidate.to_lowercase(),
+                            );
                         }
                     }
                 }
@@ -377,7 +383,10 @@ impl ExtractFrame {
                     // Agent: token after "oleh" (by).
                     if let Some(oleh_idx) = tokens.iter().position(|t| t.to_lowercase() == "oleh") {
                         if oleh_idx + 1 < tokens.len() {
-                            roles.insert(SemanticRole::Arg0Agent, tokens[oleh_idx + 1].to_lowercase());
+                            roles.insert(
+                                SemanticRole::Arg0Agent,
+                                tokens[oleh_idx + 1].to_lowercase(),
+                            );
                         }
                     }
                 }
@@ -400,7 +409,10 @@ impl ExtractFrame {
                 if is_purpose_marker(token) && i + 1 < tokens.len() {
                     let purpose_tokens: Vec<&str> = tokens[i + 1..].to_vec();
                     if !purpose_tokens.is_empty() {
-                        roles.insert(SemanticRole::Purpose, purpose_tokens.join(" ").to_lowercase());
+                        roles.insert(
+                            SemanticRole::Purpose,
+                            purpose_tokens.join(" ").to_lowercase(),
+                        );
                     }
                     break;
                 }
@@ -414,14 +426,20 @@ impl ExtractFrame {
                     if i > 0 {
                         let ante_tokens: Vec<&str> = tokens[..i].to_vec();
                         if !ante_tokens.is_empty() {
-                            roles.insert(SemanticRole::Antecedent, ante_tokens.join(" ").to_lowercase());
+                            roles.insert(
+                                SemanticRole::Antecedent,
+                                ante_tokens.join(" ").to_lowercase(),
+                            );
                         }
                     }
                     // Consequent: tokens after the condition marker.
                     if i + 1 < tokens.len() {
                         let cons_tokens: Vec<&str> = tokens[i + 1..].to_vec();
                         if !cons_tokens.is_empty() {
-                            roles.insert(SemanticRole::Consequent, cons_tokens.join(" ").to_lowercase());
+                            roles.insert(
+                                SemanticRole::Consequent,
+                                cons_tokens.join(" ").to_lowercase(),
+                            );
                         }
                     }
                     break;
@@ -446,7 +464,10 @@ impl ExtractFrame {
     /// ```
     ///
     /// The result is clamped to [0.0, 1.0].
-    pub fn compute_frame_confidence(roles: &HashMap<SemanticRole, String>, polarity: &Polarity) -> f32 {
+    pub fn compute_frame_confidence(
+        roles: &HashMap<SemanticRole, String>,
+        polarity: &Polarity,
+    ) -> f32 {
         let mut confidence = 0.30f32;
 
         if roles.contains_key(&SemanticRole::Arg0Agent) {
@@ -475,10 +496,19 @@ impl ExtractFrame {
     }
 
     /// Classify extraction quality based on roles and confidence.
-    pub fn classify_quality(roles: &HashMap<SemanticRole, String>, confidence: f32) -> ExtractionQuality {
-        if confidence >= 0.70 && roles.contains_key(&SemanticRole::Arg0Agent) && roles.contains_key(&SemanticRole::Arg1Patient) {
+    pub fn classify_quality(
+        roles: &HashMap<SemanticRole, String>,
+        confidence: f32,
+    ) -> ExtractionQuality {
+        if confidence >= 0.70
+            && roles.contains_key(&SemanticRole::Arg0Agent)
+            && roles.contains_key(&SemanticRole::Arg1Patient)
+        {
             ExtractionQuality::HighQuality
-        } else if confidence >= 0.45 && (roles.contains_key(&SemanticRole::Arg0Agent) || roles.contains_key(&SemanticRole::Arg1Patient)) {
+        } else if confidence >= 0.45
+            && (roles.contains_key(&SemanticRole::Arg0Agent)
+                || roles.contains_key(&SemanticRole::Arg1Patient))
+        {
             ExtractionQuality::ModerateQuality
         } else if !roles.is_empty() {
             ExtractionQuality::LowQuality
@@ -601,10 +631,10 @@ impl ErasedTransform for ExtractFrame {
 
             // Update quality tracker.
             ctx.extraction_quality.frames_extracted += 1;
-            ctx.extraction_quality.average_confidence =
-                (ctx.extraction_quality.average_confidence * (ctx.extraction_quality.frames_extracted - 1) as f32
-                    + atom.confidence)
-                    / ctx.extraction_quality.frames_extracted as f32;
+            ctx.extraction_quality.average_confidence = (ctx.extraction_quality.average_confidence
+                * (ctx.extraction_quality.frames_extracted - 1) as f32
+                + atom.confidence)
+                / ctx.extraction_quality.frames_extracted as f32;
 
             if atom.confidence < 0.5 {
                 ctx.extraction_quality.low_confidence_frames += 1;
@@ -640,8 +670,8 @@ fn is_verb_like(token: &str) -> bool {
 
     // Check common verb list (very short for Phase 1).
     const COMMON_VERBS: &[&str] = &[
-        "ada", "ialah", "adalah", "ialah", "punya", "mahu", "hendak",
-        "boleh", "perlu", "harus", "boleh", "mesti",
+        "ada", "ialah", "adalah", "ialah", "punya", "mahu", "hendak", "boleh", "perlu", "harus",
+        "boleh", "mesti",
     ];
     if COMMON_VERBS.contains(&lower.as_str()) {
         return true;
@@ -652,7 +682,10 @@ fn is_verb_like(token: &str) -> bool {
 
 /// Is a token a marker (negation, cause, purpose, condition)?
 fn is_marker(token: &str) -> bool {
-    is_negation_marker(token) || is_cause_marker(token) || is_purpose_marker(token) || is_condition_marker(token)
+    is_negation_marker(token)
+        || is_cause_marker(token)
+        || is_purpose_marker(token)
+        || is_condition_marker(token)
 }
 
 /// Is a token a negation marker?
@@ -696,7 +729,9 @@ mod tests {
         assert!(!ExtractFrame::is_sentence_like("kucing besar hitam"));
 
         // Valid sentence with verb.
-        assert!(ExtractFrame::is_sentence_like("Raymond membuat aplikasi karena lambat"));
+        assert!(ExtractFrame::is_sentence_like(
+            "Raymond membuat aplikasi karena lambat"
+        ));
     }
 
     #[test]
@@ -719,7 +754,9 @@ mod tests {
 
     #[test]
     fn test_detect_polarity_negative() {
-        let tokens: Vec<&str> = "Raymond tidak membuat aplikasi".split_whitespace().collect();
+        let tokens: Vec<&str> = "Raymond tidak membuat aplikasi"
+            .split_whitespace()
+            .collect();
         assert_eq!(ExtractFrame::detect_polarity(&tokens), Polarity::Negative);
     }
 

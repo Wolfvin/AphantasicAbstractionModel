@@ -29,7 +29,7 @@
 //!   We use [`ErasedTransform`] as an object-safe wrapper that reads/writes
 //!   all data through [`PipelineContext`] and [`Graph`].
 //!
-//! - **Condition-gated execution**: Each [`TransformNode`] can have an optional
+//! - **Condition-gated execution**: Each transform node can have an optional
 //!   condition closure. Transforms whose conditions evaluate to `false` are
 //!   skipped during DAG execution.
 //!
@@ -44,14 +44,14 @@
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
-use super::types::*;
-use super::extract_frame::ExtractFrame;
-use super::reason_frame::ReasonFrame;
-use super::govern_beliefs::{GovernBeliefs, SeedAnchor};
 use super::acquisition::{DetectGaps, SelectAcquisition};
 use super::convergence::ConvergenceDetectionTransform;
+use super::extract_frame::ExtractFrame;
+use super::govern_beliefs::{GovernBeliefs, SeedAnchor};
+use super::reason_frame::ReasonFrame;
 use super::spreading::SpreadingActivationTransform;
 use super::temporal::TemporalDecayTransform;
+use super::types::*;
 // NodeId is imported from crate::types — not re-exported by super::types.
 use crate::types::NodeId;
 
@@ -97,6 +97,16 @@ impl IngestResult {
 }
 
 // ========================================================================
+// TransformCondition — Type alias for complex condition closure
+// ========================================================================
+
+/// Type alias for the optional condition closure that gates transform execution.
+///
+/// This avoids repeating the complex `Box<dyn Fn(&PipelineContext) -> bool + Send + Sync>`
+/// signature and silences the `type_complexity` clippy lint.
+pub type TransformCondition = Box<dyn Fn(&PipelineContext) -> bool + Send + Sync>;
+
+// ========================================================================
 // TransformNode — Node in the Transform DAG
 // ========================================================================
 
@@ -133,7 +143,7 @@ struct TransformNode {
     /// Optional condition that gates execution.
     /// If `None`, the transform always runs (if its dependencies are met).
     /// If `Some(predicate)`, the transform runs only if the predicate returns `true`.
-    condition: Option<Box<dyn Fn(&PipelineContext) -> bool + Send + Sync>>,
+    condition: Option<TransformCondition>,
 }
 
 impl std::fmt::Debug for TransformNode {
@@ -258,7 +268,7 @@ impl PipelineEngine {
         &mut self,
         transform: T,
         dependencies: Vec<String>,
-        condition: Option<Box<dyn Fn(&PipelineContext) -> bool + Send + Sync>>,
+        condition: Option<TransformCondition>,
     ) {
         let id = transform.id().to_string();
         let input_type = String::new(); // Could be populated from type_name
@@ -323,10 +333,7 @@ impl PipelineEngine {
             };
 
             // Check that all dependencies have completed.
-            let deps_met = node
-                .dependencies
-                .iter()
-                .all(|dep| completed.contains(dep));
+            let deps_met = node.dependencies.iter().all(|dep| completed.contains(dep));
             if !deps_met {
                 // Skip — dependencies not yet met (shouldn't happen after topological sort,
                 // but defensive).
@@ -483,7 +490,8 @@ impl PipelineEngine {
     /// Returns an error string if saving fails.
     pub fn save(&self, path: &std::path::Path) -> Result<(), String> {
         let persistence = super::persistence::Persistence::new();
-        persistence.save(&self.graph, path)
+        persistence
+            .save(&self.graph, path)
             .map_err(|e| e.to_string())
     }
 
@@ -623,11 +631,7 @@ fn topological_sort(dag: &[TransformNode]) -> Result<Vec<String>, Vec<String>> {
 /// | 13 | ConvergenceDetection | EnrichComposition, TemporalDecay | always |
 pub fn register_default_pipeline(engine: &mut PipelineEngine) {
     // 1. Tokenize — no dependencies, always runs.
-    engine.register(
-        Tokenize::new(),
-        vec![],
-        None,
-    );
+    engine.register(Tokenize::new(), vec![], None);
 
     // 2. ExtractFrame — depends on Tokenize, condition: is_sentence_like.
     engine.register(
@@ -651,24 +655,18 @@ pub fn register_default_pipeline(engine: &mut PipelineEngine) {
     );
 
     // 5. GovernBeliefs — depends on IngestAtoms, always runs.
-    engine.register(
-        GovernBeliefs::new(),
-        vec!["IngestAtoms".to_string()],
-        None,
-    );
+    engine.register(GovernBeliefs::new(), vec!["IngestAtoms".to_string()], None);
 
     // 6. SeedAnchor — depends on GovernBeliefs, always runs.
-    engine.register(
-        SeedAnchor::new(),
-        vec!["GovernBeliefs".to_string()],
-        None,
-    );
+    engine.register(SeedAnchor::new(), vec!["GovernBeliefs".to_string()], None);
 
     // 7. DetectGaps — depends on SeedAnchor, condition: gap_detection_enabled.
     engine.register(
         DetectGaps::new(),
         vec!["SeedAnchor".to_string()],
-        Some(Box::new(|ctx: &PipelineContext| ctx.gap_detection_enabled())),
+        Some(Box::new(|ctx: &PipelineContext| {
+            ctx.gap_detection_enabled()
+        })),
     );
 
     // 8. SelectAcquisition — depends on DetectGaps, condition: has_gaps.
@@ -682,21 +680,27 @@ pub fn register_default_pipeline(engine: &mut PipelineEngine) {
     engine.register(
         EnrichComposition::new(),
         vec!["SelectAcquisition".to_string()],
-        Some(Box::new(|ctx: &PipelineContext| ctx.has_enrichment_requests())),
+        Some(Box::new(|ctx: &PipelineContext| {
+            ctx.has_enrichment_requests()
+        })),
     );
 
     // 10. ReExtractFrame — depends on SelectAcquisition, condition: has_reextraction_requests.
     engine.register(
         ReExtractFrame::new(),
         vec!["SelectAcquisition".to_string()],
-        Some(Box::new(|ctx: &PipelineContext| ctx.has_reextraction_requests())),
+        Some(Box::new(|ctx: &PipelineContext| {
+            ctx.has_reextraction_requests()
+        })),
     );
 
     // 11. TemporalDecay — runs after enrichment, applies Ebbinghaus decay.
     //     No dependencies on other transforms (reads graph directly).
     //     Condition: always (decay is continuous).
     engine.register(
-        TemporalDecayTransform { engine: super::temporal::TemporalDecay::new() },
+        TemporalDecayTransform {
+            engine: super::temporal::TemporalDecay::new(),
+        },
         vec!["EnrichComposition".to_string()],
         None,
     );
@@ -714,7 +718,9 @@ pub fn register_default_pipeline(engine: &mut PipelineEngine) {
     //     Runs last, after all enrichment and decay.
     //     Condition: always (checks internally if ≥2 compositions exist).
     engine.register(
-        ConvergenceDetectionTransform { engine: super::convergence::ConvergenceDetection::new() },
+        ConvergenceDetectionTransform {
+            engine: super::convergence::ConvergenceDetection::new(),
+        },
         vec!["EnrichComposition".to_string(), "TemporalDecay".to_string()],
         None,
     );
@@ -898,7 +904,11 @@ impl Graph {
         let intersection = nodes_a.intersection(&nodes_b).count();
         let union = nodes_a.union(&nodes_b).count();
 
-        if union == 0 { 0.0 } else { intersection as f32 / union as f32 }
+        if union == 0 {
+            0.0
+        } else {
+            intersection as f32 / union as f32
+        }
     }
 
     /// Get the graph neighborhood for a set of keyword labels.
@@ -949,18 +959,27 @@ impl Graph {
         if self.compositions.is_empty() {
             return 0.0;
         }
-        self.compositions.values().map(|c| c.confidence).sum::<f32>()
+        self.compositions
+            .values()
+            .map(|c| c.confidence)
+            .sum::<f32>()
             / self.compositions.len() as f32
     }
 
     /// Count compositions with a specific epistemic state.
     pub fn count_with_epistemic(&self, state: EpistemicState) -> usize {
-        self.compositions.values().filter(|c| c.epistemic == state).count()
+        self.compositions
+            .values()
+            .filter(|c| c.epistemic == state)
+            .count()
     }
 
     /// Count compositions with a specific lifecycle state.
     pub fn count_with_lifecycle(&self, state: LifecycleState) -> usize {
-        self.compositions.values().filter(|c| c.lifecycle == state).count()
+        self.compositions
+            .values()
+            .filter(|c| c.lifecycle == state)
+            .count()
     }
 }
 
@@ -1123,11 +1142,13 @@ impl ErasedTransform for IngestAtoms {
             // For Event atoms, create a Composition.
             if atom.atom_type == AtomType::Event {
                 let comp_id = format!("comp_{}", atom.id);
-                let mut composition = Composition::default();
-                composition.id = comp_id.clone();
-                composition.composition_type = CompositionType::Event;
-                composition.confidence = atom.confidence;
-                composition.source_text = ctx.raw_text.clone();
+                let mut composition = Composition {
+                    id: comp_id.clone(),
+                    composition_type: CompositionType::Event,
+                    confidence: atom.confidence,
+                    source_text: ctx.raw_text.clone(),
+                    ..Default::default()
+                };
 
                 // Add the predicate as a member.
                 composition.members.push(CompositionMember {
@@ -1291,7 +1312,9 @@ impl ErasedTransform for EnrichComposition {
                 if !self.skip_duplicate_roles
                     && composition.has_member_with_role(request.role_to_fill.clone())
                 {
-                    composition.members.retain(|m| m.role != request.role_to_fill);
+                    composition
+                        .members
+                        .retain(|m| m.role != request.role_to_fill);
                 }
 
                 // Add the candidate as a new member.
@@ -1345,35 +1368,50 @@ impl EnrichComposition {
         let (expected, filled) = match composition.composition_type {
             CompositionType::Event => {
                 let expected = 4; // Predicate, Agent, Patient, Cause
-                let filled = composition.members.iter()
-                    .filter(|m| matches!(m.role,
-                        SemanticRole::Predicate |
-                        SemanticRole::Arg0Agent |
-                        SemanticRole::Arg1Patient |
-                        SemanticRole::Cause
-                    ))
+                let filled = composition
+                    .members
+                    .iter()
+                    .filter(|m| {
+                        matches!(
+                            m.role,
+                            SemanticRole::Predicate
+                                | SemanticRole::Arg0Agent
+                                | SemanticRole::Arg1Patient
+                                | SemanticRole::Cause
+                        )
+                    })
                     .count();
                 (expected, filled)
             }
             CompositionType::HiddenMeaning => {
                 let expected = 3; // PatternType, Problem, Solution
-                let filled = composition.members.iter()
-                    .filter(|m| matches!(m.role,
-                        SemanticRole::PatternType |
-                        SemanticRole::Problem |
-                        SemanticRole::Solution
-                    ))
+                let filled = composition
+                    .members
+                    .iter()
+                    .filter(|m| {
+                        matches!(
+                            m.role,
+                            SemanticRole::PatternType
+                                | SemanticRole::Problem
+                                | SemanticRole::Solution
+                        )
+                    })
                     .count();
                 (expected, filled)
             }
             CompositionType::Pattern => {
                 let expected = 3; // PatternType, Antecedent, Consequent
-                let filled = composition.members.iter()
-                    .filter(|m| matches!(m.role,
-                        SemanticRole::PatternType |
-                        SemanticRole::Antecedent |
-                        SemanticRole::Consequent
-                    ))
+                let filled = composition
+                    .members
+                    .iter()
+                    .filter(|m| {
+                        matches!(
+                            m.role,
+                            SemanticRole::PatternType
+                                | SemanticRole::Antecedent
+                                | SemanticRole::Consequent
+                        )
+                    })
                     .count();
                 (expected, filled)
             }
@@ -1501,7 +1539,9 @@ impl ErasedTransform for ReExtractFrame {
                     // Only replace if confidence improved (or force_replace).
                     if self.force_replace || re_confidence > current_confidence {
                         // Collect new members first (need immutable borrow for ensure_node).
-                        let new_members: Vec<CompositionMember> = re_atom.roles.iter()
+                        let new_members: Vec<CompositionMember> = re_atom
+                            .roles
+                            .iter()
                             .map(|(role, label)| {
                                 let node_id = graph.ensure_node(label);
                                 CompositionMember {
@@ -1610,6 +1650,7 @@ impl ErasedTransform for NoOpTransform {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::field_reassign_with_default)]
     use super::*;
 
     #[test]
@@ -1905,7 +1946,8 @@ mod tests {
         atom.label = "pergi".to_string();
         atom.atom_type = AtomType::Event;
         atom.confidence = 0.8;
-        atom.roles.insert(SemanticRole::Arg0Agent, "dia".to_string());
+        atom.roles
+            .insert(SemanticRole::Arg0Agent, "dia".to_string());
         ctx.current_atoms.push(atom);
 
         let mut graph = Graph::new();
@@ -2008,7 +2050,9 @@ mod tests {
 
         // Should NOT add duplicate role — enrichments_applied should be 0
         let enriched = graph.compositions.get(&comp_id).unwrap();
-        let agent_count = enriched.members.iter()
+        let agent_count = enriched
+            .members
+            .iter()
             .filter(|m| m.role == SemanticRole::Arg0Agent)
             .count();
         assert_eq!(agent_count, 1); // Still only 1 Agent
@@ -2063,7 +2107,7 @@ mod tests {
             graph_context: Vec::new(),
         });
 
-        let result = re_extract.execute(&mut ctx, &mut graph);
+        let _result = re_extract.execute(&mut ctx, &mut graph);
 
         // Pending reextractions should be consumed
         assert!(ctx.pending_reextractions.is_empty());
@@ -2131,7 +2175,10 @@ mod tests {
 
         let result = engine.ingest("karena harga naik, rakyat menderita");
         assert!(result.atoms_created > 0, "Should create atoms");
-        assert!(result.compositions_created > 0, "Should create compositions");
+        assert!(
+            result.compositions_created > 0,
+            "Should create compositions"
+        );
     }
 
     #[test]

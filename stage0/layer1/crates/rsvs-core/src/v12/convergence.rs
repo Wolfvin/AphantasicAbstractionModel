@@ -291,7 +291,11 @@ impl ConvergenceDetection {
         let intersection = nodes_a.intersection(&nodes_b).count();
         let union = nodes_a.union(&nodes_b).count();
 
-        if union == 0 { 0.0 } else { intersection as f32 / union as f32 }
+        if union == 0 {
+            0.0
+        } else {
+            intersection as f32 / union as f32
+        }
     }
 
     /// Compute role-weighted structural similarity between two compositions.
@@ -305,11 +309,7 @@ impl ConvergenceDetection {
     /// This fixes Known Limitation L1: plain Jaccard node-overlap doesn't
     /// capture role equivalence (e.g., "dokter memeriksa pasien" vs
     /// "tabib memeriksa orang_sakit" — same structure, different nodes).
-    pub fn role_weighted_similarity(
-        &self,
-        comp_a: &Composition,
-        comp_b: &Composition,
-    ) -> f32 {
+    pub fn role_weighted_similarity(&self, comp_a: &Composition, comp_b: &Composition) -> f32 {
         let alpha = self.config.role_weight.unwrap_or(0.6);
 
         // Node Jaccard (existing logic)
@@ -318,17 +318,25 @@ impl ConvergenceDetection {
         // Role Jaccard — match on (role_type,) to capture structural equivalence.
         // Two compositions with the same role types (Agent, Predicate, Patient)
         // but different labels (dokter/tabib) should score high on role structure.
-        let roles_a: HashSet<String> = comp_a.members.iter()
+        let roles_a: HashSet<String> = comp_a
+            .members
+            .iter()
             .map(|m| format!("{:?}", m.role))
             .collect();
-        let roles_b: HashSet<String> = comp_b.members.iter()
+        let roles_b: HashSet<String> = comp_b
+            .members
+            .iter()
             .map(|m| format!("{:?}", m.role))
             .collect();
 
         let role_intersection = roles_a.intersection(&roles_b).count() as f32;
         let role_union = roles_a.union(&roles_b).count() as f32;
 
-        let role_jaccard = if role_union > 0.0 { role_intersection / role_union } else { 0.0 };
+        let role_jaccard = if role_union > 0.0 {
+            role_intersection / role_union
+        } else {
+            0.0
+        };
 
         alpha * role_jaccard + (1.0 - alpha) * node_jaccard
     }
@@ -387,7 +395,9 @@ impl ErasedTransform for ConvergenceDetectionTransform {
         let mut edges_created = 0;
         for pair in &pairs {
             // Find a node from comp_b to link to (immutable borrow first).
-            let pred_node = graph.compositions.get(&pair.composition_b)
+            let pred_node = graph
+                .compositions
+                .get(&pair.composition_b)
                 .and_then(|comp_b| comp_b.member_with_role(&SemanticRole::Predicate))
                 .map(|m| (m.node_id, m.label.clone()));
 
@@ -418,6 +428,7 @@ impl ErasedTransform for ConvergenceDetectionTransform {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::field_reassign_with_default)]
     use super::*;
 
     fn make_composition(id: &str, node_ids: &[NodeId], comp_type: CompositionType) -> Composition {
@@ -430,7 +441,11 @@ mod tests {
             .enumerate()
             .map(|(i, &nid)| CompositionMember {
                 node_id: nid,
-                role: if i == 0 { SemanticRole::Predicate } else { SemanticRole::Arg0Agent },
+                role: if i == 0 {
+                    SemanticRole::Predicate
+                } else {
+                    SemanticRole::Arg0Agent
+                },
                 confidence: 0.8,
                 label: format!("node_{}", nid),
             })
@@ -471,16 +486,36 @@ mod tests {
         a.id = "a".to_string();
         a.composition_type = CompositionType::Event;
         a.members = vec![
-            CompositionMember { node_id: 1, role: SemanticRole::Arg0Agent, confidence: 0.9, label: "x".to_string() },
-            CompositionMember { node_id: 2, role: SemanticRole::Arg1Patient, confidence: 0.8, label: "y".to_string() },
+            CompositionMember {
+                node_id: 1,
+                role: SemanticRole::Arg0Agent,
+                confidence: 0.9,
+                label: "x".to_string(),
+            },
+            CompositionMember {
+                node_id: 2,
+                role: SemanticRole::Arg1Patient,
+                confidence: 0.8,
+                label: "y".to_string(),
+            },
         ];
 
         let mut b = Composition::default();
         b.id = "b".to_string();
         b.composition_type = CompositionType::Event;
         b.members = vec![
-            CompositionMember { node_id: 1, role: SemanticRole::Arg1Patient, confidence: 0.9, label: "x".to_string() },
-            CompositionMember { node_id: 2, role: SemanticRole::Arg0Agent, confidence: 0.8, label: "y".to_string() },
+            CompositionMember {
+                node_id: 1,
+                role: SemanticRole::Arg1Patient,
+                confidence: 0.9,
+                label: "x".to_string(),
+            },
+            CompositionMember {
+                node_id: 2,
+                role: SemanticRole::Arg0Agent,
+                confidence: 0.8,
+                label: "y".to_string(),
+            },
         ];
 
         let sim = ConvergenceDetection::role_aware_similarity(&a, &b);

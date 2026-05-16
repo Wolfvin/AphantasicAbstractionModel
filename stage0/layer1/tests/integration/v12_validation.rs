@@ -15,40 +15,70 @@
 //! | M.6 | Semantic Edge & Graph Neighborhood | MD-3, MD-5 |
 //! | M.7 | ExtractionQualityTracker & Dedup | MD-1, MD-3 |
 
+#![allow(clippy::field_reassign_with_default)]
+
 #[cfg(feature = "v12")]
 use rsvs::v12::{
-    // MD-6: Acquisition
-    AcquisitionDecision, AcquisitionStrategy, DetectGaps, InquiryMemory,
-    KnowledgeGap, KnowledgeGapType, SelectAcquisition, InquiryQuestion,
-    // MD-5: Executive
-    CognitiveMode, ComputeBudget, ExecutiveOrchestrator, Reflect,
-    ReflectionAction, ReflectionFindingType, StopCondition,
-    // MD-5/MD-3: Executive types from types module
-    ReasoningState, ReasoningGoal, ReflectionLoopResult,
-    // MD-4: Governance
-    GovernBeliefs, SeedAnchor, GovernanceUpdate, PromotionVerdict,
-    ContradictionResolution, ResolutionType,
-    // MD-3: Pipeline
-    register_default_pipeline, ErasedTransform, Graph, IngestResult,
-    PipelineEngine,
-    // MD-3: Types (all 6 abstractions)
-    SemanticAtom, AtomType, Polarity, Voice, AtomVariant, FrameSource,
-    PatternCategory, AcquisitionSource, SemanticRole,
-    Composition, CompositionId, CompositionType, CompositionMember,
-    LifecycleState, EpistemicState, SemanticEdge, Transform, PipelineContext,
-    SeedPrimitive, ProvenanceChain, Contradiction, EpistemicConflictType,
-    GraphDelta, GovernedDelta, AnchoredDelta,
-    EnrichmentRequest, EnrichmentSource, ReExtractionRequest,
-    ExtractionQualityTracker, ExtractionQualityStats,
-    GraphNeighborhood, GraphSnapshot, WeakFrame,
-    KnowledgeGapPlaceholder,
-    // MD-1: ExtractFrame
-    ExtractFrame,
-    // MD-2: ReasonFrame
-    ReasonFrame, ReasoningRule, ReasoningContext, ReasoningResult,
-    GraphContextRef, ProblemSolutionRule, GoalInferenceRule, PolarityConflictRule,
     // Utility
     extract_keywords,
+    // MD-3: Pipeline
+    register_default_pipeline,
+    AcquisitionSource,
+    // MD-6: Acquisition
+    AcquisitionStrategy,
+    AtomType,
+    AtomVariant,
+    // MD-5: Executive
+    CognitiveMode,
+    Composition,
+    CompositionMember,
+    CompositionType,
+    ComputeBudget,
+    Contradiction,
+    DetectGaps,
+    EnrichmentRequest,
+    EnrichmentSource,
+    EpistemicConflictType,
+    EpistemicState,
+    ExecutiveOrchestrator,
+    // MD-1: ExtractFrame
+    ExtractFrame,
+    ExtractionQualityStats,
+    ExtractionQualityTracker,
+    FrameSource,
+    // MD-4: Governance
+    GovernBeliefs,
+    Graph,
+    GraphNeighborhood,
+    GraphSnapshot,
+    IngestResult,
+    InquiryMemory,
+    InquiryQuestion,
+    KnowledgeGap,
+    KnowledgeGapType,
+    LifecycleState,
+    PipelineContext,
+    PipelineEngine,
+    Polarity,
+    // MD-2: ReasonFrame
+    ReasonFrame,
+    ReasoningGoal,
+    // MD-5/MD-3: Executive types from types module
+    ReasoningState,
+    Reflect,
+    ReflectionAction,
+    ReflectionFindingType,
+    ReflectionLoopResult,
+    ResolutionType,
+    SeedAnchor,
+    SeedPrimitive,
+    SelectAcquisition,
+    // MD-3: Types (all 6 abstractions)
+    SemanticAtom,
+    SemanticEdge,
+    SemanticRole,
+    StopCondition,
+    Voice,
 };
 
 #[cfg(feature = "v12")]
@@ -114,7 +144,9 @@ fn make_event_composition(
 }
 
 /// Create a HiddenMeaning composition with Problem/Solution.
+/// Kept for future test expansion.
 #[cfg(feature = "v12")]
+#[allow(dead_code)]
 fn make_hidden_meaning_composition(
     id: &str,
     problem_label: &str,
@@ -245,7 +277,8 @@ mod m1_critical_functions {
 
     #[test]
     fn test_contradiction_opposing_id_returns_some_when_contradicted() {
-        let mut comp = make_event_composition("comp_1", "membuat", "Raymond", "aplikasi", None, 0.8);
+        let mut comp =
+            make_event_composition("comp_1", "membuat", "Raymond", "aplikasi", None, 0.8);
         comp.contradiction = Some(Contradiction {
             conflict_type: EpistemicConflictType::PolarityConflict,
             opposing_composition_id: "comp_2".to_string(),
@@ -300,7 +333,8 @@ mod m1_critical_functions {
 
     #[test]
     fn test_has_recent_contradiction_within_window() {
-        let mut comp = make_event_composition("comp_1", "membuat", "Raymond", "aplikasi", None, 0.8);
+        let mut comp =
+            make_event_composition("comp_1", "membuat", "Raymond", "aplikasi", None, 0.8);
         comp.batch_seen = 10;
         comp.contradiction_batches = vec![8, 9]; // Recent contradictions
         assert!(comp.has_recent_contradiction(3)); // Within last 3 batches (threshold=7)
@@ -308,7 +342,8 @@ mod m1_critical_functions {
 
     #[test]
     fn test_has_recent_contradiction_outside_window() {
-        let mut comp = make_event_composition("comp_1", "membuat", "Raymond", "aplikasi", None, 0.8);
+        let mut comp =
+            make_event_composition("comp_1", "membuat", "Raymond", "aplikasi", None, 0.8);
         comp.batch_seen = 10;
         comp.contradiction_batches = vec![3, 4]; // Old contradictions
         assert!(!comp.has_recent_contradiction(3)); // Outside last 3 batches (threshold=7)
@@ -327,7 +362,9 @@ mod m1_critical_functions {
         let keywords = extract_keywords("Raymond membuat aplikasi karena lambat");
         assert!(!keywords.is_empty());
         // Should contain at least the content words
-        assert!(keywords.contains(&"raymond".to_string()) || keywords.contains(&"membuat".to_string()));
+        assert!(
+            keywords.contains(&"raymond".to_string()) || keywords.contains(&"membuat".to_string())
+        );
     }
 
     #[test]
@@ -346,7 +383,14 @@ mod m1_critical_functions {
 
     #[test]
     fn test_neighborhood_for_finds_relevant_compositions() {
-        let comp1 = make_event_composition("comp_1", "membuat", "Raymond", "aplikasi", Some("lambat"), 0.8);
+        let comp1 = make_event_composition(
+            "comp_1",
+            "membuat",
+            "Raymond",
+            "aplikasi",
+            Some("lambat"),
+            0.8,
+        );
         let comp2 = make_event_composition("comp_2", "menulis", "Budi", "buku", None, 0.7);
         let compositions = vec![comp1, comp2];
 
@@ -370,7 +414,8 @@ mod m1_critical_functions {
 
     #[test]
     fn test_neighborhood_for_has_contradictions() {
-        let mut comp1 = make_event_composition("comp_1", "membuat", "Raymond", "aplikasi", None, 0.8);
+        let mut comp1 =
+            make_event_composition("comp_1", "membuat", "Raymond", "aplikasi", None, 0.8);
         comp1.epistemic = EpistemicState::Contradicted;
         let compositions = vec![comp1];
 
@@ -397,7 +442,8 @@ mod m1_critical_functions {
 
     #[test]
     fn test_age_in_batches() {
-        let mut comp = make_event_composition("comp_1", "membuat", "Raymond", "aplikasi", None, 0.8);
+        let mut comp =
+            make_event_composition("comp_1", "membuat", "Raymond", "aplikasi", None, 0.8);
         assert_eq!(comp.age_in_batches(), 3);
         comp.batch_seen = 7;
         assert_eq!(comp.age_in_batches(), 7);
@@ -487,21 +533,27 @@ mod m2_epistemic_governance {
     #[test]
     fn test_promotion_new_to_candidate_after_one_batch() {
         let gb = GovernBeliefs::new();
-        let mut comp = make_event_composition("comp_1", "membuat", "Raymond", "aplikasi", None, 0.8);
+        let mut comp =
+            make_event_composition("comp_1", "membuat", "Raymond", "aplikasi", None, 0.8);
         comp.lifecycle = LifecycleState::New;
         comp.batch_seen = 1;
         let updates = gb.check_promotions(&mut [comp.clone()]);
-        assert!(updates.iter().any(|u| u.new_lifecycle == Some(LifecycleState::Candidate)));
+        assert!(updates
+            .iter()
+            .any(|u| u.new_lifecycle == Some(LifecycleState::Candidate)));
     }
 
     #[test]
     fn test_promotion_new_to_candidate_denied_zero_batches() {
         let gb = GovernBeliefs::new();
-        let mut comp = make_event_composition("comp_1", "membuat", "Raymond", "aplikasi", None, 0.8);
+        let mut comp =
+            make_event_composition("comp_1", "membuat", "Raymond", "aplikasi", None, 0.8);
         comp.lifecycle = LifecycleState::New;
         comp.batch_seen = 0;
         let updates = gb.check_promotions(&mut [comp.clone()]);
-        assert!(!updates.iter().any(|u| u.new_lifecycle == Some(LifecycleState::Candidate)));
+        assert!(!updates
+            .iter()
+            .any(|u| u.new_lifecycle == Some(LifecycleState::Candidate)));
     }
 
     // --- Promotion: Candidate → Stable ---
@@ -509,45 +561,57 @@ mod m2_epistemic_governance {
     #[test]
     fn test_promotion_candidate_to_stable_meets_criteria() {
         let gb = GovernBeliefs::new();
-        let mut comp = make_event_composition("comp_1", "membuat", "Raymond", "aplikasi", None, 0.8);
+        let mut comp =
+            make_event_composition("comp_1", "membuat", "Raymond", "aplikasi", None, 0.8);
         comp.lifecycle = LifecycleState::Candidate;
         comp.batch_seen = 3;
         comp.confidence = 0.7;
         comp.epistemic = EpistemicState::Observed;
         // Has 3 confirming members (confidence >= 0.5): Predicate, Agent, Patient
         let updates = gb.check_promotions(&mut [comp.clone()]);
-        assert!(updates.iter().any(|u| u.new_lifecycle == Some(LifecycleState::Stable)));
+        assert!(updates
+            .iter()
+            .any(|u| u.new_lifecycle == Some(LifecycleState::Stable)));
     }
 
     #[test]
     fn test_promotion_candidate_to_stable_denied_low_confidence() {
         let gb = GovernBeliefs::new();
-        let mut comp = make_event_composition("comp_1", "membuat", "Raymond", "aplikasi", None, 0.3);
+        let mut comp =
+            make_event_composition("comp_1", "membuat", "Raymond", "aplikasi", None, 0.3);
         comp.lifecycle = LifecycleState::Candidate;
         comp.batch_seen = 3;
         let updates = gb.check_promotions(&mut [comp.clone()]);
-        assert!(!updates.iter().any(|u| u.new_lifecycle == Some(LifecycleState::Stable)));
+        assert!(!updates
+            .iter()
+            .any(|u| u.new_lifecycle == Some(LifecycleState::Stable)));
     }
 
     #[test]
     fn test_promotion_candidate_to_stable_denied_young_age() {
         let gb = GovernBeliefs::new();
-        let mut comp = make_event_composition("comp_1", "membuat", "Raymond", "aplikasi", None, 0.8);
+        let mut comp =
+            make_event_composition("comp_1", "membuat", "Raymond", "aplikasi", None, 0.8);
         comp.lifecycle = LifecycleState::Candidate;
         comp.batch_seen = 1; // Too young
         let updates = gb.check_promotions(&mut [comp.clone()]);
-        assert!(!updates.iter().any(|u| u.new_lifecycle == Some(LifecycleState::Stable)));
+        assert!(!updates
+            .iter()
+            .any(|u| u.new_lifecycle == Some(LifecycleState::Stable)));
     }
 
     #[test]
     fn test_promotion_candidate_to_stable_denied_contradicted() {
         let gb = GovernBeliefs::new();
-        let mut comp = make_event_composition("comp_1", "membuat", "Raymond", "aplikasi", None, 0.8);
+        let mut comp =
+            make_event_composition("comp_1", "membuat", "Raymond", "aplikasi", None, 0.8);
         comp.lifecycle = LifecycleState::Candidate;
         comp.batch_seen = 3;
         comp.epistemic = EpistemicState::Contradicted;
         let updates = gb.check_promotions(&mut [comp.clone()]);
-        assert!(!updates.iter().any(|u| u.new_lifecycle == Some(LifecycleState::Stable)));
+        assert!(!updates
+            .iter()
+            .any(|u| u.new_lifecycle == Some(LifecycleState::Stable)));
     }
 
     // --- Promotion: Inferred → Grounded ---
@@ -555,7 +619,8 @@ mod m2_epistemic_governance {
     #[test]
     fn test_promotion_inferred_to_grounded_multi_source() {
         let gb = GovernBeliefs::new();
-        let mut comp = make_event_composition("comp_1", "membuat", "Raymond", "aplikasi", None, 0.8);
+        let mut comp =
+            make_event_composition("comp_1", "membuat", "Raymond", "aplikasi", None, 0.8);
         comp.lifecycle = LifecycleState::Candidate;
         comp.epistemic = EpistemicState::Inferred;
         comp.batch_seen = 5;
@@ -564,17 +629,22 @@ mod m2_epistemic_governance {
         comp.provenance.origin = EdgeSource::EnrichmentFeedback;
         // Members count >= 3 triggers the heuristic multi-source check
         let updates = gb.check_promotions(&mut [comp.clone()]);
-        assert!(updates.iter().any(|u| u.new_epistemic == Some(EpistemicState::Grounded)));
+        assert!(updates
+            .iter()
+            .any(|u| u.new_epistemic == Some(EpistemicState::Grounded)));
     }
 
     #[test]
     fn test_promotion_inferred_to_grounded_denied_low_confidence() {
         let gb = GovernBeliefs::new();
-        let mut comp = make_event_composition("comp_1", "membuat", "Raymond", "aplikasi", None, 0.5);
+        let mut comp =
+            make_event_composition("comp_1", "membuat", "Raymond", "aplikasi", None, 0.5);
         comp.epistemic = EpistemicState::Inferred;
         comp.batch_seen = 5;
         let updates = gb.check_promotions(&mut [comp.clone()]);
-        assert!(!updates.iter().any(|u| u.new_epistemic == Some(EpistemicState::Grounded)));
+        assert!(!updates
+            .iter()
+            .any(|u| u.new_epistemic == Some(EpistemicState::Grounded)));
     }
 
     // --- Contradiction Detection ---
@@ -582,11 +652,35 @@ mod m2_epistemic_governance {
     #[test]
     fn test_contradiction_detection_polarity_conflict() {
         let gb = GovernBeliefs::new();
-        let mut comp1 = make_event_composition("comp_1", "membuat", "Raymond", "aplikasi", Some("karena lambat"), 0.8);
-        let mut comp2 = make_event_composition("comp_2", "membuat", "Raymond", "aplikasi", Some("karena tidak lambat"), 0.8);
+        let mut comp1 = make_event_composition(
+            "comp_1",
+            "membuat",
+            "Raymond",
+            "aplikasi",
+            Some("karena lambat"),
+            0.8,
+        );
+        let mut comp2 = make_event_composition(
+            "comp_2",
+            "membuat",
+            "Raymond",
+            "aplikasi",
+            Some("karena tidak lambat"),
+            0.8,
+        );
         // Set different node IDs for causes to trigger different-patient detection
-        comp1.members.iter_mut().find(|m| m.role == SemanticRole::Cause).unwrap().node_id = 10;
-        comp2.members.iter_mut().find(|m| m.role == SemanticRole::Cause).unwrap().node_id = 20;
+        comp1
+            .members
+            .iter_mut()
+            .find(|m| m.role == SemanticRole::Cause)
+            .unwrap()
+            .node_id = 10;
+        comp2
+            .members
+            .iter_mut()
+            .find(|m| m.role == SemanticRole::Cause)
+            .unwrap()
+            .node_id = 20;
 
         let updates = gb.detect_contradiction(&mut [comp1, comp2]);
         // Should detect some contradiction (polarity or cause difference)
@@ -596,20 +690,44 @@ mod m2_epistemic_governance {
     #[test]
     fn test_contradiction_detection_role_reversal() {
         let gb = GovernBeliefs::new();
-        let mut comp1 = make_event_composition("comp_1", "membuat", "Raymond", "aplikasi", None, 0.8);
-        let mut comp2 = make_event_composition("comp_2", "membuat", "aplikasi", "Raymond", None, 0.8);
+        let mut comp1 =
+            make_event_composition("comp_1", "membuat", "Raymond", "aplikasi", None, 0.8);
+        let mut comp2 =
+            make_event_composition("comp_2", "membuat", "aplikasi", "Raymond", None, 0.8);
         // comp1: Agent=Raymond(1), Patient=aplikasi(2)
         // comp2: Agent=aplikasi(1), Patient=Raymond(2) — but we need swapped node IDs
         // Let's set node IDs explicitly for role reversal
-        comp1.members.iter_mut().find(|m| m.role == SemanticRole::Arg0Agent).unwrap().node_id = 1;
-        comp1.members.iter_mut().find(|m| m.role == SemanticRole::Arg1Patient).unwrap().node_id = 2;
-        comp2.members.iter_mut().find(|m| m.role == SemanticRole::Arg0Agent).unwrap().node_id = 2; // Was patient
-        comp2.members.iter_mut().find(|m| m.role == SemanticRole::Arg1Patient).unwrap().node_id = 1; // Was agent
+        comp1
+            .members
+            .iter_mut()
+            .find(|m| m.role == SemanticRole::Arg0Agent)
+            .unwrap()
+            .node_id = 1;
+        comp1
+            .members
+            .iter_mut()
+            .find(|m| m.role == SemanticRole::Arg1Patient)
+            .unwrap()
+            .node_id = 2;
+        comp2
+            .members
+            .iter_mut()
+            .find(|m| m.role == SemanticRole::Arg0Agent)
+            .unwrap()
+            .node_id = 2; // Was patient
+        comp2
+            .members
+            .iter_mut()
+            .find(|m| m.role == SemanticRole::Arg1Patient)
+            .unwrap()
+            .node_id = 1; // Was agent
 
         let updates = gb.detect_contradiction(&mut [comp1, comp2]);
         // Should detect role reversal
-        assert!(updates.iter().any(|u| u.contradiction.as_ref().map_or(false, |c|
-            c.conflict_type == EpistemicConflictType::RoleReversal)));
+        assert!(updates.iter().any(|u| u
+            .contradiction
+            .as_ref()
+            .is_some_and(|c| c.conflict_type == EpistemicConflictType::RoleReversal)));
     }
 
     // --- Contradiction Resolution ---
@@ -617,20 +735,45 @@ mod m2_epistemic_governance {
     #[test]
     fn test_contradiction_resolution_voice_confusion() {
         let gb = GovernBeliefs::new();
-        let mut comp1 = make_event_composition("comp_1", "membuat", "Raymond", "aplikasi", None, 0.8);
-        let mut comp2 = make_event_composition("comp_2", "membuat", "Raymond", "aplikasi", None, 0.8);
+        let mut comp1 =
+            make_event_composition("comp_1", "membuat", "Raymond", "aplikasi", None, 0.8);
+        let mut comp2 =
+            make_event_composition("comp_2", "membuat", "Raymond", "aplikasi", None, 0.8);
         // Same predicate, same agent, same patient, but different provenance
         comp1.provenance.origin_id = "active_extraction".to_string();
         comp2.provenance.origin_id = "passive_extraction".to_string();
         // Make node IDs match for voice confusion check
-        comp1.members.iter_mut().find(|m| m.role == SemanticRole::Arg0Agent).unwrap().node_id = 1;
-        comp1.members.iter_mut().find(|m| m.role == SemanticRole::Arg1Patient).unwrap().node_id = 2;
-        comp2.members.iter_mut().find(|m| m.role == SemanticRole::Arg0Agent).unwrap().node_id = 1;
-        comp2.members.iter_mut().find(|m| m.role == SemanticRole::Arg1Patient).unwrap().node_id = 2;
+        comp1
+            .members
+            .iter_mut()
+            .find(|m| m.role == SemanticRole::Arg0Agent)
+            .unwrap()
+            .node_id = 1;
+        comp1
+            .members
+            .iter_mut()
+            .find(|m| m.role == SemanticRole::Arg1Patient)
+            .unwrap()
+            .node_id = 2;
+        comp2
+            .members
+            .iter_mut()
+            .find(|m| m.role == SemanticRole::Arg0Agent)
+            .unwrap()
+            .node_id = 1;
+        comp2
+            .members
+            .iter_mut()
+            .find(|m| m.role == SemanticRole::Arg1Patient)
+            .unwrap()
+            .node_id = 2;
 
         let resolution = gb.check_contradiction_resolution(&comp1, &comp2);
         assert!(resolution.is_some());
-        assert_eq!(resolution.unwrap().resolution_type, ResolutionType::Misinterpretation);
+        assert_eq!(
+            resolution.unwrap().resolution_type,
+            ResolutionType::Misinterpretation
+        );
     }
 
     // --- is_sufficiently_complete ---
@@ -648,10 +791,16 @@ mod m2_epistemic_governance {
         let mut comp = Composition::default();
         comp.composition_type = CompositionType::Event;
         comp.members.push(CompositionMember {
-            node_id: 1, role: SemanticRole::Predicate, confidence: 0.8, label: "membuat".to_string(),
+            node_id: 1,
+            role: SemanticRole::Predicate,
+            confidence: 0.8,
+            label: "membuat".to_string(),
         });
         comp.members.push(CompositionMember {
-            node_id: 2, role: SemanticRole::Arg1Patient, confidence: 0.8, label: "aplikasi".to_string(),
+            node_id: 2,
+            role: SemanticRole::Arg1Patient,
+            confidence: 0.8,
+            label: "aplikasi".to_string(),
         });
         assert!(!gb.is_sufficiently_complete(&comp)); // Missing Agent
     }
@@ -662,7 +811,7 @@ mod m2_epistemic_governance {
     fn test_seed_anchor_no_data_preserves_confidence() {
         let sa = SeedAnchor::new();
         let comp = make_event_composition("comp_1", "membuat", "Raymond", "aplikasi", None, 0.8);
-        let original_confidence = comp.confidence;
+        let _original_confidence = comp.confidence;
         let adjustment = sa.seed_anchored_confidence(&comp);
         // When no seed data, weight should be 0.0, meaning original confidence preserved
         assert_eq!(adjustment.weight, 0.0);
@@ -671,7 +820,8 @@ mod m2_epistemic_governance {
     #[test]
     fn test_seed_anchor_with_data_adjusts_confidence() {
         let sa = SeedAnchor::new();
-        let mut comp = make_event_composition("comp_1", "membuat", "Raymond", "aplikasi", None, 0.5);
+        let mut comp =
+            make_event_composition("comp_1", "membuat", "Raymond", "aplikasi", None, 0.5);
         comp.seed_scores.insert(SeedPrimitive::Trust, 0.8);
         comp.seed_scores.insert(SeedPrimitive::Value, 0.7);
         let original_confidence = comp.confidence;
@@ -679,7 +829,9 @@ mod m2_epistemic_governance {
         // With positive seed scores, confidence should be adjusted
         assert!(comp.confidence > 0.0);
         // The adjustment should change the confidence from its original value
-        assert!(comp.confidence != original_confidence || comp.seed_scores.values().all(|&v| v == 0.5));
+        assert!(
+            comp.confidence != original_confidence || comp.seed_scores.values().all(|&v| v == 0.5)
+        );
     }
 }
 
@@ -745,9 +897,21 @@ mod m3_executive_cognition {
     fn test_cognitive_mode_reflective_with_deep_contradictions() {
         let mut orchestrator = ExecutiveOrchestrator::new();
         let compositions = vec![
-            Composition { confidence: 0.5, epistemic: EpistemicState::Contradicted, ..Composition::default() },
-            Composition { confidence: 0.4, epistemic: EpistemicState::Contradicted, ..Composition::default() },
-            Composition { confidence: 0.3, epistemic: EpistemicState::Contradicted, ..Composition::default() },
+            Composition {
+                confidence: 0.5,
+                epistemic: EpistemicState::Contradicted,
+                ..Composition::default()
+            },
+            Composition {
+                confidence: 0.4,
+                epistemic: EpistemicState::Contradicted,
+                ..Composition::default()
+            },
+            Composition {
+                confidence: 0.3,
+                epistemic: EpistemicState::Contradicted,
+                ..Composition::default()
+            },
         ];
         let mode = orchestrator.select_cognitive_mode("test input", &compositions);
         assert_eq!(mode, CognitiveMode::Reflective);
@@ -757,7 +921,10 @@ mod m3_executive_cognition {
 
     #[test]
     fn test_stop_condition_budget_exhausted() {
-        let condition = StopCondition { max_passes: 2, ..StopCondition::default() };
+        let condition = StopCondition {
+            max_passes: 2,
+            ..StopCondition::default()
+        };
         let state = ReasoningState {
             loops_completed: 2,
             goal_met: false,
@@ -791,7 +958,10 @@ mod m3_executive_cognition {
 
     #[test]
     fn test_stop_condition_no_evidence_stagnation() {
-        let condition = StopCondition { max_passes_without_evidence: 2, ..StopCondition::default() };
+        let condition = StopCondition {
+            max_passes_without_evidence: 2,
+            ..StopCondition::default()
+        };
         let state = ReasoningState {
             loops_completed: 1,
             goal_met: false,
@@ -822,7 +992,9 @@ mod m3_executive_cognition {
         };
         let graph = Graph::new();
         let findings = reflect.reflect(&result, &graph);
-        assert!(findings.iter().any(|f| f.finding_type == ReflectionFindingType::ContradictionResolvable));
+        assert!(findings
+            .iter()
+            .any(|f| f.finding_type == ReflectionFindingType::ContradictionResolvable));
     }
 
     #[test]
@@ -839,8 +1011,12 @@ mod m3_executive_cognition {
         };
         let graph = Graph::new();
         let findings = reflect.reflect(&result, &graph);
-        assert!(findings.iter().any(|f| f.finding_type == ReflectionFindingType::PromotionCandidate));
-        assert!(findings.iter().any(|f| matches!(f.action, ReflectionAction::ProposePromotion(_))));
+        assert!(findings
+            .iter()
+            .any(|f| f.finding_type == ReflectionFindingType::PromotionCandidate));
+        assert!(findings
+            .iter()
+            .any(|f| matches!(f.action, ReflectionAction::ProposePromotion(_))));
     }
 
     #[test]
@@ -857,8 +1033,12 @@ mod m3_executive_cognition {
         graph.compositions.insert("stagnant_comp".to_string(), comp);
 
         let findings = reflect.reflect(&result, &graph);
-        assert!(findings.iter().any(|f| f.finding_type == ReflectionFindingType::StagnantInferred));
-        assert!(findings.iter().any(|f| matches!(f.action, ReflectionAction::ProposeDeprecation(_))));
+        assert!(findings
+            .iter()
+            .any(|f| f.finding_type == ReflectionFindingType::StagnantInferred));
+        assert!(findings
+            .iter()
+            .any(|f| matches!(f.action, ReflectionAction::ProposeDeprecation(_))));
     }
 
     // --- ExecutiveOrchestrator.ingest end-to-end ---
@@ -890,7 +1070,10 @@ mod m4_closed_feedback_loop {
     fn test_full_pipeline_ingest_creates_compositions() {
         let mut engine = make_pipeline_engine();
         let result = engine.ingest("Raymond membuat aplikasi karena lambat");
-        assert!(result.atoms_created > 0, "Should create atoms from tokenization");
+        assert!(
+            result.atoms_created > 0,
+            "Should create atoms from tokenization"
+        );
         // ExtractFrame + IngestAtoms should produce compositions if sentence-like
         assert!(result.compositions_created > 0 || result.atoms_created > 0);
     }
@@ -940,10 +1123,16 @@ mod m4_closed_feedback_loop {
         let mut comp = Composition::default();
         comp.id = "comp_1".to_string();
         comp.members.push(CompositionMember {
-            node_id: node_a, role: SemanticRole::Arg0Agent, confidence: 0.9, label: "raymond".to_string(),
+            node_id: node_a,
+            role: SemanticRole::Arg0Agent,
+            confidence: 0.9,
+            label: "raymond".to_string(),
         });
         comp.members.push(CompositionMember {
-            node_id: node_b, role: SemanticRole::Arg1Patient, confidence: 0.8, label: "aplikasi".to_string(),
+            node_id: node_b,
+            role: SemanticRole::Arg1Patient,
+            confidence: 0.8,
+            label: "aplikasi".to_string(),
         });
         graph.compositions.insert("comp_1".to_string(), comp);
         assert_eq!(graph.cooccurrence_count(node_a, node_b), 1);
@@ -956,7 +1145,10 @@ mod m4_closed_feedback_loop {
         comp.id = "comp_incomplete".to_string();
         comp.composition_type = CompositionType::Event;
         comp.members.push(CompositionMember {
-            node_id: 1, role: SemanticRole::Predicate, confidence: 0.9, label: "membuat".to_string(),
+            node_id: 1,
+            role: SemanticRole::Predicate,
+            confidence: 0.9,
+            label: "membuat".to_string(),
         });
         // Missing Arg0Agent, Arg1Patient
 
@@ -966,7 +1158,9 @@ mod m4_closed_feedback_loop {
         };
         let gaps = dg.detect_atom_gaps(&snapshot);
         assert!(!gaps.is_empty());
-        assert!(gaps.iter().any(|g| g.gap_type == KnowledgeGapType::MissingRole));
+        assert!(gaps
+            .iter()
+            .any(|g| g.gap_type == KnowledgeGapType::MissingRole));
     }
 
     #[test]
@@ -985,7 +1179,9 @@ mod m4_closed_feedback_loop {
             compositions: vec![],
         };
         let gaps = dg.detect_atom_gaps(&snapshot);
-        assert!(gaps.iter().any(|g| g.gap_type == KnowledgeGapType::AmbiguousToken));
+        assert!(gaps
+            .iter()
+            .any(|g| g.gap_type == KnowledgeGapType::AmbiguousToken));
     }
 
     #[test]
@@ -1002,7 +1198,9 @@ mod m4_closed_feedback_loop {
             compositions: vec![comp],
         };
         let gaps = dg.detect_grounding_gaps(&snapshot);
-        assert!(gaps.iter().any(|g| g.gap_type == KnowledgeGapType::LowGrounding));
+        assert!(gaps
+            .iter()
+            .any(|g| g.gap_type == KnowledgeGapType::LowGrounding));
     }
 
     #[test]
@@ -1014,7 +1212,10 @@ mod m4_closed_feedback_loop {
         let mut comp = Composition::default();
         comp.id = "comp_source".to_string();
         comp.members.push(CompositionMember {
-            node_id: agent_id, role: SemanticRole::Arg0Agent, confidence: 0.9, label: "raymond".to_string(),
+            node_id: agent_id,
+            role: SemanticRole::Arg0Agent,
+            confidence: 0.9,
+            label: "raymond".to_string(),
         });
         graph.compositions.insert("comp_source".to_string(), comp);
 
@@ -1027,7 +1228,10 @@ mod m4_closed_feedback_loop {
             ..KnowledgeGap::default()
         };
         let decision = sa.select_strategy(&gap, &graph);
-        assert!(matches!(decision.strategy, AcquisitionStrategy::PassiveRecall { .. }));
+        assert!(matches!(
+            decision.strategy,
+            AcquisitionStrategy::PassiveRecall { .. }
+        ));
     }
 
     #[test]
@@ -1056,7 +1260,10 @@ mod m4_closed_feedback_loop {
         };
         let decision = sa.select_strategy(&gap, &graph);
         // Without graph candidates, should fall back to AskUser
-        assert!(matches!(decision.strategy, AcquisitionStrategy::AskUser { .. }));
+        assert!(matches!(
+            decision.strategy,
+            AcquisitionStrategy::AskUser { .. }
+        ));
     }
 
     // --- InquiryMemory ---
@@ -1104,7 +1311,7 @@ mod m5_acquisition_pipeline {
     #[test]
     fn test_knowledge_gap_type_all_variants() {
         // Ensure all KnowledgeGapType variants can be constructed
-        let types = vec![
+        let types = [
             KnowledgeGapType::MissingRole,
             KnowledgeGapType::AmbiguousToken,
             KnowledgeGapType::SparseGraph,
@@ -1119,7 +1326,7 @@ mod m5_acquisition_pipeline {
 
     #[test]
     fn test_acquisition_strategy_all_variants() {
-        let strategies = vec![
+        let strategies = [
             AcquisitionStrategy::PassiveRecall {
                 candidate_node_id: 1,
                 candidate_label: "test".to_string(),
@@ -1159,7 +1366,10 @@ mod m5_acquisition_pipeline {
         comp1.epistemic = EpistemicState::Inferred;
         comp1.confidence = 0.3;
         comp1.members.push(CompositionMember {
-            node_id: 1, role: SemanticRole::Predicate, confidence: 0.9, label: "membuat".to_string(),
+            node_id: 1,
+            role: SemanticRole::Predicate,
+            confidence: 0.9,
+            label: "membuat".to_string(),
         });
 
         let snapshot = GraphSnapshot {
@@ -1186,7 +1396,10 @@ mod m5_acquisition_pipeline {
         };
         let decision = sa.select_strategy(&gap, &graph);
         // Without graph candidates and no source_text on comp → AskUser
-        assert!(matches!(decision.strategy, AcquisitionStrategy::AskUser { .. }));
+        assert!(matches!(
+            decision.strategy,
+            AcquisitionStrategy::AskUser { .. }
+        ));
         if let AcquisitionStrategy::AskUser { question } = &decision.strategy {
             assert_eq!(question.gap_id, "gap_1");
             assert_eq!(question.target_role, Some(SemanticRole::Arg0Agent));
@@ -1195,7 +1408,7 @@ mod m5_acquisition_pipeline {
 
     #[test]
     fn test_generate_question_for_gap() {
-        let mut sa = SelectAcquisition::new();
+        let sa = SelectAcquisition::new();
         let gap = KnowledgeGap {
             gap_id: "gap_1".to_string(),
             gap_type: KnowledgeGapType::MissingRole,
@@ -1235,13 +1448,16 @@ mod m5_acquisition_pipeline {
 
     #[test]
     fn test_graph_find_role_candidate() {
-        let mut sa = SelectAcquisition::new();
+        let sa = SelectAcquisition::new();
         let mut graph = Graph::new();
         let agent_id = graph.ensure_node("raymond");
         let mut comp = Composition::default();
         comp.id = "comp_existing".to_string();
         comp.members.push(CompositionMember {
-            node_id: agent_id, role: SemanticRole::Arg0Agent, confidence: 0.9, label: "raymond".to_string(),
+            node_id: agent_id,
+            role: SemanticRole::Arg0Agent,
+            confidence: 0.9,
+            label: "raymond".to_string(),
         });
         graph.compositions.insert("comp_existing".to_string(), comp);
 
@@ -1376,7 +1592,9 @@ mod m6_semantic_edge_graph {
 
     #[test]
     fn test_neighborhood_average_confidence_no_compositions() {
-        let neighborhood = GraphNeighborhood { compositions: vec![] };
+        let neighborhood = GraphNeighborhood {
+            compositions: vec![],
+        };
         assert_eq!(neighborhood.average_confidence(), 0.0);
     }
 
@@ -1442,7 +1660,10 @@ mod m6_semantic_edge_graph {
             });
         }
         // Should be capped at RECENT_EVENTS_WINDOW (50)
-        assert_eq!(ctx.recent_events.len(), PipelineContext::RECENT_EVENTS_WINDOW);
+        assert_eq!(
+            ctx.recent_events.len(),
+            PipelineContext::RECENT_EVENTS_WINDOW
+        );
     }
 
     #[test]
@@ -1466,10 +1687,16 @@ mod m6_semantic_edge_graph {
         comp.composition_type = CompositionType::Event;
         comp.confidence = 0.3; // Low
         comp.members.push(CompositionMember {
-            node_id: 1, role: SemanticRole::Predicate, confidence: 0.3, label: "membuat".to_string(),
+            node_id: 1,
+            role: SemanticRole::Predicate,
+            confidence: 0.3,
+            label: "membuat".to_string(),
         });
         // Missing Arg0Agent → weak
-        engine.graph_mut().compositions.insert("comp_weak".to_string(), comp);
+        engine
+            .graph_mut()
+            .compositions
+            .insert("comp_weak".to_string(), comp);
 
         let weak = engine.find_weak_frames();
         assert!(!weak.is_empty());
@@ -1584,9 +1811,9 @@ mod m7_quality_tracker_dedup {
         tracker.record_gap("rule_1", "MissingRole");
         tracker.record_gap("rule_1", "MissingRole");
         tracker.record_repair("rule_1"); // 1/2 = 50% → NOT weak (repair rate = 50%, need < 50%)
-        // Add one more gap without repair
+                                         // Add one more gap without repair
         tracker.record_gap("rule_1", "MissingCause"); // 3 gaps, 1 repair = 33% repair < 50%
-        // gap_rate = 3/5 = 60% > 30% ✓, repair_rate = 1/3 = 33% < 50% ✓
+                                                      // gap_rate = 3/5 = 60% > 30% ✓, repair_rate = 1/3 = 33% < 50% ✓
         let weak = tracker.weak_rules();
         assert!(!weak.is_empty());
         assert!(weak.iter().any(|q| q.rule_id == "rule_1"));
@@ -1611,15 +1838,28 @@ mod m7_quality_tracker_dedup {
 
         assert!(tracker.quality_by_rule.contains_key("rule_A"));
         assert!(tracker.quality_by_rule.contains_key("rule_B"));
-        assert_eq!(tracker.quality_by_rule.get("rule_A").unwrap().gaps_detected, 1);
-        assert_eq!(tracker.quality_by_rule.get("rule_B").unwrap().gaps_detected, 0);
+        assert_eq!(
+            tracker.quality_by_rule.get("rule_A").unwrap().gaps_detected,
+            1
+        );
+        assert_eq!(
+            tracker.quality_by_rule.get("rule_B").unwrap().gaps_detected,
+            0
+        );
     }
 
     // --- Serde roundtrip for key types ---
 
     #[test]
     fn test_semantic_atom_serde_roundtrip() {
-        let atom = make_event_atom("atom_1", "membuat", "Raymond", "aplikasi", Some("lambat"), 0.8);
+        let atom = make_event_atom(
+            "atom_1",
+            "membuat",
+            "Raymond",
+            "aplikasi",
+            Some("lambat"),
+            0.8,
+        );
         let json = serde_json::to_string(&atom).expect("serialize");
         let deserialized: SemanticAtom = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(atom.id, deserialized.id);
@@ -1630,7 +1870,14 @@ mod m7_quality_tracker_dedup {
 
     #[test]
     fn test_composition_serde_roundtrip() {
-        let comp = make_event_composition("comp_1", "membuat", "Raymond", "aplikasi", Some("lambat"), 0.8);
+        let comp = make_event_composition(
+            "comp_1",
+            "membuat",
+            "Raymond",
+            "aplikasi",
+            Some("lambat"),
+            0.8,
+        );
         let json = serde_json::to_string(&comp).expect("serialize");
         let deserialized: Composition = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(comp.id, deserialized.id);
@@ -1657,9 +1904,13 @@ mod m7_quality_tracker_dedup {
         tracker.record_extraction("rule_1", 0.8);
         tracker.record_gap("rule_1", "MissingRole");
         let json = serde_json::to_string(&tracker).expect("serialize");
-        let deserialized: ExtractionQualityTracker = serde_json::from_str(&json).expect("deserialize");
+        let deserialized: ExtractionQualityTracker =
+            serde_json::from_str(&json).expect("deserialize");
         assert_eq!(tracker.frames_extracted, deserialized.frames_extracted);
-        assert_eq!(tracker.low_confidence_frames, deserialized.low_confidence_frames);
+        assert_eq!(
+            tracker.low_confidence_frames,
+            deserialized.low_confidence_frames
+        );
     }
 
     // --- PipelineContext serde roundtrip ---
@@ -1669,12 +1920,17 @@ mod m7_quality_tracker_dedup {
         let mut ctx = PipelineContext::default();
         ctx.set_raw_text("Raymond membuat aplikasi karena lambat");
         ctx.gap_detection_enabled = true;
-        ctx.current_atoms.push(make_event_atom("atom_1", "membuat", "Raymond", "aplikasi", None, 0.8));
+        ctx.current_atoms.push(make_event_atom(
+            "atom_1", "membuat", "Raymond", "aplikasi", None, 0.8,
+        ));
 
         let json = serde_json::to_string(&ctx).expect("serialize");
         let deserialized: PipelineContext = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(ctx.raw_text, deserialized.raw_text);
-        assert_eq!(ctx.gap_detection_enabled, deserialized.gap_detection_enabled);
+        assert_eq!(
+            ctx.gap_detection_enabled,
+            deserialized.gap_detection_enabled
+        );
         assert_eq!(ctx.current_atoms.len(), deserialized.current_atoms.len());
     }
 
@@ -1683,7 +1939,7 @@ mod m7_quality_tracker_dedup {
     #[test]
     fn test_edge_source_v12_variants() {
         // Verify v12-specific EdgeSource variants exist and are constructible
-        let sources = vec![
+        let sources = [
             EdgeSource::AcquisitionRecall,
             EdgeSource::AcquisitionSelfStudy,
             EdgeSource::AcquisitionUserAnswer,
@@ -1697,7 +1953,7 @@ mod m7_quality_tracker_dedup {
 
     #[test]
     fn test_atom_type_all_variants() {
-        let types = vec![
+        let types = [
             AtomType::Token,
             AtomType::AmbiguousToken,
             AtomType::Event,
@@ -1711,7 +1967,7 @@ mod m7_quality_tracker_dedup {
 
     #[test]
     fn test_lifecycle_state_all_variants() {
-        let states = vec![
+        let states = [
             LifecycleState::New,
             LifecycleState::Candidate,
             LifecycleState::Stable,
@@ -1723,7 +1979,7 @@ mod m7_quality_tracker_dedup {
 
     #[test]
     fn test_epistemic_state_all_variants() {
-        let states = vec![
+        let states = [
             EpistemicState::Observed,
             EpistemicState::Inferred,
             EpistemicState::Hypothesis,
@@ -1735,7 +1991,7 @@ mod m7_quality_tracker_dedup {
 
     #[test]
     fn test_seed_primitive_all_variants() {
-        let seeds = vec![
+        let seeds = [
             SeedPrimitive::Trust,
             SeedPrimitive::Risk,
             SeedPrimitive::Value,
@@ -1782,11 +2038,20 @@ mod b1_extract_frame {
         assert_eq!(atom.voice, Some(Voice::Active));
         assert_eq!(atom.polarity, Some(Polarity::Positive));
         // Agent should be "raymond" (lowercased by extraction)
-        assert_eq!(atom.roles.get(&SemanticRole::Arg0Agent), Some(&"raymond".to_string()));
+        assert_eq!(
+            atom.roles.get(&SemanticRole::Arg0Agent),
+            Some(&"raymond".to_string())
+        );
         // Patient should be "aplikasi"
-        assert_eq!(atom.roles.get(&SemanticRole::Arg1Patient), Some(&"aplikasi".to_string()));
+        assert_eq!(
+            atom.roles.get(&SemanticRole::Arg1Patient),
+            Some(&"aplikasi".to_string())
+        );
         // Cause should be "lambat"
-        assert_eq!(atom.roles.get(&SemanticRole::Cause), Some(&"lambat".to_string()));
+        assert_eq!(
+            atom.roles.get(&SemanticRole::Cause),
+            Some(&"lambat".to_string())
+        );
     }
 
     // --- Passive voice extraction ---
@@ -1803,9 +2068,15 @@ mod b1_extract_frame {
         assert_eq!(atom.atom_type, AtomType::Event);
         assert_eq!(atom.voice, Some(Voice::Passive));
         // Patient should be "aplikasi" (subject before predicate in passive)
-        assert_eq!(atom.roles.get(&SemanticRole::Arg1Patient), Some(&"aplikasi".to_string()));
+        assert_eq!(
+            atom.roles.get(&SemanticRole::Arg1Patient),
+            Some(&"aplikasi".to_string())
+        );
         // Agent should be "raymond" (after "oleh")
-        assert_eq!(atom.roles.get(&SemanticRole::Arg0Agent), Some(&"raymond".to_string()));
+        assert_eq!(
+            atom.roles.get(&SemanticRole::Arg0Agent),
+            Some(&"raymond".to_string())
+        );
     }
 
     // --- Negated sentence extraction ---
@@ -1946,11 +2217,20 @@ mod b2_reason_frame {
             "Should include ProblemSolutionRule result"
         );
 
-        let ps_result = results.iter().find(|r| r.rule_name == "ProblemSolutionRule").unwrap();
+        let ps_result = results
+            .iter()
+            .find(|r| r.rule_name == "ProblemSolutionRule")
+            .unwrap();
         assert_eq!(ps_result.atom.atom_type, AtomType::HiddenMeaning);
         assert_eq!(ps_result.atom.label, "problem_solution");
-        assert_eq!(ps_result.atom.roles.get(&SemanticRole::Problem), Some(&"lambat".to_string()));
-        assert_eq!(ps_result.atom.roles.get(&SemanticRole::Solution), Some(&"aplikasi".to_string()));
+        assert_eq!(
+            ps_result.atom.roles.get(&SemanticRole::Problem),
+            Some(&"lambat".to_string())
+        );
+        assert_eq!(
+            ps_result.atom.roles.get(&SemanticRole::Solution),
+            Some(&"aplikasi".to_string())
+        );
     }
 
     // --- GoalInferenceRule ---
@@ -1982,7 +2262,10 @@ mod b2_reason_frame {
             "Should include GoalInferenceRule result"
         );
 
-        let gi_result = results.iter().find(|r| r.rule_name == "GoalInferenceRule").unwrap();
+        let gi_result = results
+            .iter()
+            .find(|r| r.rule_name == "GoalInferenceRule")
+            .unwrap();
         assert_eq!(gi_result.atom.atom_type, AtomType::HiddenMeaning);
         assert_eq!(gi_result.atom.label, "goal_inference");
         assert_eq!(
@@ -2029,11 +2312,16 @@ mod b2_reason_frame {
         let recent = vec![event_negative];
         let results = rf.reason(&event_positive, &recent);
         assert!(
-            results.iter().any(|r| r.rule_name == "PolarityConflictRule"),
+            results
+                .iter()
+                .any(|r| r.rule_name == "PolarityConflictRule"),
             "Should detect polarity conflict between opposite-polarity events"
         );
 
-        let pc_result = results.iter().find(|r| r.rule_name == "PolarityConflictRule").unwrap();
+        let pc_result = results
+            .iter()
+            .find(|r| r.rule_name == "PolarityConflictRule")
+            .unwrap();
         assert_eq!(pc_result.atom.label, "polarity_conflict");
     }
 
@@ -2064,7 +2352,10 @@ mod b2_reason_frame {
         // ProblemSolutionRule needs Cause → doesn't apply
         // GoalInferenceRule needs Purpose → doesn't apply
         // PolarityConflictRule needs opposite polarity in recent → no recent events
-        assert!(results.is_empty(), "Simple event should trigger no reasoning rules");
+        assert!(
+            results.is_empty(),
+            "Simple event should trigger no reasoning rules"
+        );
     }
 }
 
@@ -2137,17 +2428,42 @@ mod b3_governance_e2e {
     fn test_governance_contradiction_detection_and_resolution() {
         let gb = GovernBeliefs::new();
         // Create two contradictory compositions (role reversal)
-        let mut comp1 = make_event_composition("comp_1", "membuat", "Raymond", "aplikasi", None, 0.8);
-        let mut comp2 = make_event_composition("comp_2", "membuat", "aplikasi", "Raymond", None, 0.8);
+        let mut comp1 =
+            make_event_composition("comp_1", "membuat", "Raymond", "aplikasi", None, 0.8);
+        let mut comp2 =
+            make_event_composition("comp_2", "membuat", "aplikasi", "Raymond", None, 0.8);
         // Set swapped node IDs for role reversal detection
-        comp1.members.iter_mut().find(|m| m.role == SemanticRole::Arg0Agent).unwrap().node_id = 1;
-        comp1.members.iter_mut().find(|m| m.role == SemanticRole::Arg1Patient).unwrap().node_id = 2;
-        comp2.members.iter_mut().find(|m| m.role == SemanticRole::Arg0Agent).unwrap().node_id = 2;
-        comp2.members.iter_mut().find(|m| m.role == SemanticRole::Arg1Patient).unwrap().node_id = 1;
+        comp1
+            .members
+            .iter_mut()
+            .find(|m| m.role == SemanticRole::Arg0Agent)
+            .unwrap()
+            .node_id = 1;
+        comp1
+            .members
+            .iter_mut()
+            .find(|m| m.role == SemanticRole::Arg1Patient)
+            .unwrap()
+            .node_id = 2;
+        comp2
+            .members
+            .iter_mut()
+            .find(|m| m.role == SemanticRole::Arg0Agent)
+            .unwrap()
+            .node_id = 2;
+        comp2
+            .members
+            .iter_mut()
+            .find(|m| m.role == SemanticRole::Arg1Patient)
+            .unwrap()
+            .node_id = 1;
 
         // Step 1: Detect contradiction
         let updates = gb.detect_contradiction(&mut [comp1.clone(), comp2.clone()]);
-        assert!(!updates.is_empty(), "Should detect contradiction between role-reversed compositions");
+        assert!(
+            !updates.is_empty(),
+            "Should detect contradiction between role-reversed compositions"
+        );
 
         // Step 2: Attempt resolution
         let resolution = gb.check_contradiction_resolution(&comp1, &comp2);
@@ -2156,7 +2472,10 @@ mod b3_governance_e2e {
         // (Voice confusion is not applicable here since node IDs differ)
         // This is an assertion that resolution check runs without panic
         if let Some(res) = resolution {
-            assert!(matches!(res.resolution_type, ResolutionType::Misinterpretation | ResolutionType::Superseded));
+            assert!(matches!(
+                res.resolution_type,
+                ResolutionType::Misinterpretation | ResolutionType::Superseded
+            ));
         }
     }
 
@@ -2165,20 +2484,29 @@ mod b3_governance_e2e {
     #[test]
     fn test_governance_promotion_full_lifecycle() {
         let gb = GovernBeliefs::new();
-        let mut comp = make_event_composition("comp_life", "membuat", "Raymond", "aplikasi", None, 0.8);
+        let mut comp =
+            make_event_composition("comp_life", "membuat", "Raymond", "aplikasi", None, 0.8);
 
         // Stage 1: New (after initial states)
         comp.lifecycle = LifecycleState::New;
         comp.batch_seen = 0;
         let updates = gb.check_promotions(&mut [comp.clone()]);
-        assert!(!updates.iter().any(|u| u.new_lifecycle == Some(LifecycleState::Candidate)),
-            "New with 0 batches should not promote");
+        assert!(
+            !updates
+                .iter()
+                .any(|u| u.new_lifecycle == Some(LifecycleState::Candidate)),
+            "New with 0 batches should not promote"
+        );
 
         // Stage 2: New → Candidate (after 1 batch)
         comp.batch_seen = 1;
         let updates = gb.check_promotions(&mut [comp.clone()]);
-        assert!(updates.iter().any(|u| u.new_lifecycle == Some(LifecycleState::Candidate)),
-            "New with 1 batch should promote to Candidate");
+        assert!(
+            updates
+                .iter()
+                .any(|u| u.new_lifecycle == Some(LifecycleState::Candidate)),
+            "New with 1 batch should promote to Candidate"
+        );
 
         // Stage 3: Candidate → Stable (after sufficient batches + confidence)
         comp.lifecycle = LifecycleState::Candidate;
@@ -2186,8 +2514,12 @@ mod b3_governance_e2e {
         comp.confidence = 0.7;
         comp.epistemic = EpistemicState::Observed;
         let updates = gb.check_promotions(&mut [comp.clone()]);
-        assert!(updates.iter().any(|u| u.new_lifecycle == Some(LifecycleState::Stable)),
-            "Candidate meeting criteria should promote to Stable");
+        assert!(
+            updates
+                .iter()
+                .any(|u| u.new_lifecycle == Some(LifecycleState::Stable)),
+            "Candidate meeting criteria should promote to Stable"
+        );
     }
 
     // --- Epistemic progression: Observed → Inferred → Grounded ---
@@ -2197,12 +2529,15 @@ mod b3_governance_e2e {
         let gb = GovernBeliefs::new();
 
         // Observed (from FrameCompiler) stays Observed without multi-source
-        let mut comp = make_event_composition("comp_epi", "membuat", "Raymond", "aplikasi", None, 0.8);
+        let mut comp =
+            make_event_composition("comp_epi", "membuat", "Raymond", "aplikasi", None, 0.8);
         comp.epistemic = EpistemicState::Observed;
         let updates = gb.check_promotions(&mut [comp.clone()]);
         // Observed doesn't transition to Grounded via check_promotions
         // (Inferred → Grounded is the epistemic promotion path)
-        assert!(!updates.iter().any(|u| u.new_epistemic == Some(EpistemicState::Grounded)));
+        assert!(!updates
+            .iter()
+            .any(|u| u.new_epistemic == Some(EpistemicState::Grounded)));
 
         // Inferred → Grounded (with multi-source provenance)
         comp.epistemic = EpistemicState::Inferred;
@@ -2210,8 +2545,12 @@ mod b3_governance_e2e {
         comp.confidence = 0.8;
         comp.provenance.origin = EdgeSource::EnrichmentFeedback;
         let updates = gb.check_promotions(&mut [comp.clone()]);
-        assert!(updates.iter().any(|u| u.new_epistemic == Some(EpistemicState::Grounded)),
-            "Inferred with multi-source should promote to Grounded");
+        assert!(
+            updates
+                .iter()
+                .any(|u| u.new_epistemic == Some(EpistemicState::Grounded)),
+            "Inferred with multi-source should promote to Grounded"
+        );
     }
 
     // --- Re-govern after enrichment ---
@@ -2219,14 +2558,17 @@ mod b3_governance_e2e {
     #[test]
     fn test_governance_re_govern_after_enrichment() {
         let gb = GovernBeliefs::new();
-        let mut comp = make_event_composition("comp_rich", "membuat", "Raymond", "aplikasi", None, 0.5);
+        let mut comp =
+            make_event_composition("comp_rich", "membuat", "Raymond", "aplikasi", None, 0.5);
         comp.lifecycle = LifecycleState::Candidate;
         comp.batch_seen = 1; // Too young for Stable
         comp.epistemic = EpistemicState::Observed;
 
         // First governance: too young
         let updates = gb.check_promotions(&mut [comp.clone()]);
-        assert!(!updates.iter().any(|u| u.new_lifecycle == Some(LifecycleState::Stable)));
+        assert!(!updates
+            .iter()
+            .any(|u| u.new_lifecycle == Some(LifecycleState::Stable)));
 
         // Enrich: add a Purpose role, bump member confidences, and bump composition confidence
         // Note: can_promote_to_stable requires >= 2 confirming members (confidence >= 0.5)
@@ -2246,8 +2588,12 @@ mod b3_governance_e2e {
 
         // Re-govern: now meets criteria (age >= 3, confidence >= 0.55, >= 2 confirming members)
         let updates = gb.check_promotions(&mut [comp.clone()]);
-        assert!(updates.iter().any(|u| u.new_lifecycle == Some(LifecycleState::Stable)),
-            "After enrichment, should promote to Stable");
+        assert!(
+            updates
+                .iter()
+                .any(|u| u.new_lifecycle == Some(LifecycleState::Stable)),
+            "After enrichment, should promote to Stable"
+        );
     }
 }
 
@@ -2269,10 +2615,16 @@ mod b4_closed_feedback_loop {
         comp.id = "comp_incomplete".to_string();
         comp.composition_type = CompositionType::Event;
         comp.members.push(CompositionMember {
-            node_id: 1, role: SemanticRole::Predicate, confidence: 0.9, label: "membuat".to_string(),
+            node_id: 1,
+            role: SemanticRole::Predicate,
+            confidence: 0.9,
+            label: "membuat".to_string(),
         });
         comp.members.push(CompositionMember {
-            node_id: 2, role: SemanticRole::Arg1Patient, confidence: 0.8, label: "aplikasi".to_string(),
+            node_id: 2,
+            role: SemanticRole::Arg1Patient,
+            confidence: 0.8,
+            label: "aplikasi".to_string(),
         });
         // Missing Arg0Agent
 
@@ -2290,11 +2642,19 @@ mod b4_closed_feedback_loop {
         let mut existing_comp = Composition::default();
         existing_comp.id = "comp_other".to_string();
         existing_comp.members.push(CompositionMember {
-            node_id: agent_node, role: SemanticRole::Arg0Agent, confidence: 0.9, label: "raymond".to_string(),
+            node_id: agent_node,
+            role: SemanticRole::Arg0Agent,
+            confidence: 0.9,
+            label: "raymond".to_string(),
         });
-        graph.compositions.insert("comp_other".to_string(), existing_comp);
+        graph
+            .compositions
+            .insert("comp_other".to_string(), existing_comp);
 
-        let gap = gaps.iter().find(|g| g.missing_role == Some(SemanticRole::Arg0Agent)).unwrap();
+        let gap = gaps
+            .iter()
+            .find(|g| g.missing_role == Some(SemanticRole::Arg0Agent))
+            .unwrap();
         let decision = sa.select_strategy(gap, &graph);
 
         // Step 3: Verify PassiveRecall was selected
@@ -2304,7 +2664,12 @@ mod b4_closed_feedback_loop {
         );
 
         // Step 4: Build EnrichmentRequest from the decision
-        if let AcquisitionStrategy::PassiveRecall { candidate_node_id, candidate_label, confidence } = decision.strategy {
+        if let AcquisitionStrategy::PassiveRecall {
+            candidate_node_id,
+            candidate_label,
+            confidence,
+        } = decision.strategy
+        {
             let request = EnrichmentRequest {
                 target_composition_id: comp.id.clone(),
                 role_to_fill: SemanticRole::Arg0Agent,
@@ -2329,7 +2694,10 @@ mod b4_closed_feedback_loop {
         comp.id = "comp_incomplete".to_string();
         comp.composition_type = CompositionType::Event;
         comp.members.push(CompositionMember {
-            node_id: 1, role: SemanticRole::Predicate, confidence: 0.9, label: "membuat".to_string(),
+            node_id: 1,
+            role: SemanticRole::Predicate,
+            confidence: 0.9,
+            label: "membuat".to_string(),
         });
         // Missing Arg0Agent and Arg1Patient
 
@@ -2343,16 +2711,24 @@ mod b4_closed_feedback_loop {
         // Step 2: SelectAcquisition with empty graph → AskUser
         let mut sa = SelectAcquisition::new();
         let graph = Graph::new();
-        let gap = gaps.iter().find(|g| g.missing_role == Some(SemanticRole::Arg0Agent)).unwrap();
+        let gap = gaps
+            .iter()
+            .find(|g| g.missing_role == Some(SemanticRole::Arg0Agent))
+            .unwrap();
         let decision = sa.select_strategy(gap, &graph);
-        assert!(matches!(decision.strategy, AcquisitionStrategy::AskUser { .. }),
-            "Should select AskUser when no graph candidates");
+        assert!(
+            matches!(decision.strategy, AcquisitionStrategy::AskUser { .. }),
+            "Should select AskUser when no graph candidates"
+        );
 
         // Step 3: Simulate user answering
         if let AcquisitionStrategy::AskUser { question } = &decision.strategy {
             let mut graph = Graph::new();
             let enrichment = sa.process_user_answer_merge(question, "Raymond", &mut graph);
-            assert!(enrichment.is_some(), "Should produce EnrichmentRequest from user answer");
+            assert!(
+                enrichment.is_some(),
+                "Should produce EnrichmentRequest from user answer"
+            );
 
             let req = enrichment.unwrap();
             assert_eq!(req.role_to_fill, SemanticRole::Arg0Agent);
@@ -2379,8 +2755,11 @@ mod b4_closed_feedback_loop {
             compositions: vec![comp.clone()],
         };
         let gaps = dg.detect_grounding_gaps(&snapshot);
-        assert!(gaps.iter().any(|g| g.gap_type == KnowledgeGapType::LowGrounding),
-            "Should detect low grounding gap");
+        assert!(
+            gaps.iter()
+                .any(|g| g.gap_type == KnowledgeGapType::LowGrounding),
+            "Should detect low grounding gap"
+        );
 
         // With grounding evidence in graph, SelectAcquisition may choose ReExtraction
         let mut sa = SelectAcquisition::new();
@@ -2390,12 +2769,18 @@ mod b4_closed_feedback_loop {
         comp2.id = "comp_other".to_string();
         comp2.provenance.origin = EdgeSource::HumanAssertion;
         comp2.members.push(CompositionMember {
-            node_id: 1, role: SemanticRole::Predicate, confidence: 0.8, label: "membuat".to_string(),
+            node_id: 1,
+            role: SemanticRole::Predicate,
+            confidence: 0.8,
+            label: "membuat".to_string(),
         });
         graph.compositions.insert("comp_low".to_string(), comp);
         graph.compositions.insert("comp_other".to_string(), comp2);
 
-        let grounding_gap = gaps.iter().find(|g| g.gap_type == KnowledgeGapType::LowGrounding).unwrap();
+        let grounding_gap = gaps
+            .iter()
+            .find(|g| g.gap_type == KnowledgeGapType::LowGrounding)
+            .unwrap();
         let decision = sa.select_strategy(grounding_gap, &graph);
         // Should select ReExtraction (graph has grounding evidence from different source)
         assert!(
@@ -2424,10 +2809,15 @@ mod b4_closed_feedback_loop {
         assert_eq!(atom.source, EdgeSource::AcquisitionUserAnswer);
         assert!(matches!(
             atom.variant,
-            Some(AtomVariant::AcquisitionVariant(AcquisitionSource::UserAnswer))
+            Some(AtomVariant::AcquisitionVariant(
+                AcquisitionSource::UserAnswer
+            ))
         ));
         assert!((atom.confidence - 0.9).abs() < 0.01);
-        assert!(atom.id.starts_with("acq_"), "Atom ID should be prefixed with 'acq_'");
+        assert!(
+            atom.id.starts_with("acq_"),
+            "Atom ID should be prefixed with 'acq_'"
+        );
     }
 
     // --- InquiryMemory prevents asking the same question twice ---
@@ -2449,13 +2839,17 @@ mod b4_closed_feedback_loop {
 
         // First selection: should produce AskUser (no graph candidates)
         let decision1 = sa.select_strategy(&gap, &graph);
-        assert!(matches!(decision1.strategy, AcquisitionStrategy::AskUser { .. }),
-            "First selection should be AskUser");
+        assert!(
+            matches!(decision1.strategy, AcquisitionStrategy::AskUser { .. }),
+            "First selection should be AskUser"
+        );
 
         // Second selection: same gap → should Defer (already addressed)
         let decision2 = sa.select_strategy(&gap, &graph);
-        assert!(matches!(decision2.strategy, AcquisitionStrategy::Defer),
-            "Second selection for same gap should be Defer");
+        assert!(
+            matches!(decision2.strategy, AcquisitionStrategy::Defer),
+            "Second selection for same gap should be Defer"
+        );
 
         // Verify memory recorded the gap
         assert!(sa.memory.is_gap_addressed("gap_repeat"));
@@ -2481,20 +2875,24 @@ mod b5_executive_mode_e2e {
         let compositions = vec![comp1];
 
         // Mode selection should use keywords from input to find relevant compositions
-        let mode = orchestrator.select_cognitive_mode(
-            "Raymond membuat aplikasi karena lambat",
-            &compositions,
-        );
+        let mode = orchestrator
+            .select_cognitive_mode("Raymond membuat aplikasi karena lambat", &compositions);
         // With high-confidence compositions, should be Reactive
         assert_eq!(mode, CognitiveMode::Reactive);
 
         // Verify keywords extraction works (used internally by mode selection)
         let keywords = extract_keywords("Raymond membuat aplikasi karena lambat");
-        assert!(!keywords.is_empty(), "Should extract keywords for neighborhood lookup");
+        assert!(
+            !keywords.is_empty(),
+            "Should extract keywords for neighborhood lookup"
+        );
 
         // Verify neighborhood can find relevant compositions
         let neighborhood = GraphNeighborhood::neighborhood_for(&keywords, &compositions);
-        assert!(!neighborhood.compositions.is_empty(), "Should find compositions via neighborhood");
+        assert!(
+            !neighborhood.compositions.is_empty(),
+            "Should find compositions via neighborhood"
+        );
     }
 
     // --- Analytical mode runs enrichment loop ---
@@ -2520,7 +2918,10 @@ mod b5_executive_mode_e2e {
         // Ingest through executive orchestrator with low-confidence prior
         let mut engine = make_pipeline_engine();
         let result = orchestrator.ingest("Raymond membuat aplikasi", &mut engine);
-        assert!(result.atoms_created > 0, "Analytical mode should still create atoms");
+        assert!(
+            result.atoms_created > 0,
+            "Analytical mode should still create atoms"
+        );
     }
 
     // --- Reflective mode produces ReflectionFindings ---
@@ -2533,9 +2934,21 @@ mod b5_executive_mode_e2e {
 
         let mut orchestrator = ExecutiveOrchestrator::new();
         let compositions = vec![
-            Composition { confidence: 0.5, epistemic: EpistemicState::Contradicted, ..Composition::default() },
-            Composition { confidence: 0.4, epistemic: EpistemicState::Contradicted, ..Composition::default() },
-            Composition { confidence: 0.3, epistemic: EpistemicState::Contradicted, ..Composition::default() },
+            Composition {
+                confidence: 0.5,
+                epistemic: EpistemicState::Contradicted,
+                ..Composition::default()
+            },
+            Composition {
+                confidence: 0.4,
+                epistemic: EpistemicState::Contradicted,
+                ..Composition::default()
+            },
+            Composition {
+                confidence: 0.3,
+                epistemic: EpistemicState::Contradicted,
+                ..Composition::default()
+            },
         ];
         let mode = orchestrator.select_cognitive_mode("test input", &compositions);
         assert_eq!(mode, CognitiveMode::Reflective);
@@ -2555,15 +2968,19 @@ mod b5_executive_mode_e2e {
         let findings = reflect.reflect(&result, &graph);
 
         // Should produce at least one finding
-        assert!(!findings.is_empty(), "Reflective mode should produce findings");
+        assert!(
+            !findings.is_empty(),
+            "Reflective mode should produce findings"
+        );
 
         // Check for expected finding types
         let finding_types: Vec<_> = findings.iter().map(|f| f.finding_type.clone()).collect();
         assert!(
-            finding_types.iter().any(|ft| matches!(ft,
-                ReflectionFindingType::ContradictionResolvable |
-                ReflectionFindingType::PromotionCandidate |
-                ReflectionFindingType::StagnantInferred
+            finding_types.iter().any(|ft| matches!(
+                ft,
+                ReflectionFindingType::ContradictionResolvable
+                    | ReflectionFindingType::PromotionCandidate
+                    | ReflectionFindingType::StagnantInferred
             )),
             "Should produce meaningful reflection finding types"
         );
@@ -2611,23 +3028,35 @@ mod b6_full_pipeline_e2e {
         let result = engine.ingest("Raymond membuat aplikasi karena lambat");
 
         // Should create atoms from tokenization/extraction
-        assert!(result.atoms_created > 0, "Should create atoms from sentence");
+        assert!(
+            result.atoms_created > 0,
+            "Should create atoms from sentence"
+        );
 
         // Pipeline context should track the atoms
         assert!(!engine.context.current_atoms.is_empty());
 
         // At least one atom should be an Event
-        let has_event = engine.context.current_atoms.iter()
+        let has_event = engine
+            .context
+            .current_atoms
+            .iter()
             .any(|a| a.atom_type == AtomType::Event);
         assert!(has_event, "Should produce at least one Event atom");
 
         // The Event atom should have key roles filled
-        let event_atom = engine.context.current_atoms.iter()
+        let event_atom = engine
+            .context
+            .current_atoms
+            .iter()
             .find(|a| a.atom_type == AtomType::Event);
         assert!(event_atom.is_some());
         let atom = event_atom.unwrap();
-        assert!(atom.roles.contains_key(&SemanticRole::Arg0Agent) || atom.roles.contains_key(&SemanticRole::Arg1Patient),
-            "Event atom should have Agent or Patient role");
+        assert!(
+            atom.roles.contains_key(&SemanticRole::Arg0Agent)
+                || atom.roles.contains_key(&SemanticRole::Arg1Patient),
+            "Event atom should have Agent or Patient role"
+        );
     }
 
     // --- Full pipeline with gap detection ---
@@ -2657,13 +3086,22 @@ mod b6_full_pipeline_e2e {
         let atom = atom.unwrap();
         assert_eq!(atom.voice, Some(Voice::Passive));
         // In passive: Patient is the subject (before predicate), Agent after "oleh"
-        assert_eq!(atom.roles.get(&SemanticRole::Arg1Patient), Some(&"aplikasi".to_string()));
-        assert_eq!(atom.roles.get(&SemanticRole::Arg0Agent), Some(&"raymond".to_string()));
+        assert_eq!(
+            atom.roles.get(&SemanticRole::Arg1Patient),
+            Some(&"aplikasi".to_string())
+        );
+        assert_eq!(
+            atom.roles.get(&SemanticRole::Arg0Agent),
+            Some(&"raymond".to_string())
+        );
 
         // Now verify through the full pipeline
         let mut engine = make_pipeline_engine();
         let result = engine.ingest("Aplikasi dibuat oleh Raymond");
-        assert!(result.atoms_created > 0, "Passive voice should still produce atoms");
+        assert!(
+            result.atoms_created > 0,
+            "Passive voice should still produce atoms"
+        );
     }
 
     // --- Full pipeline: two contradictory inputs → contradiction detection ---
@@ -2673,23 +3111,52 @@ mod b6_full_pipeline_e2e {
         let gb = GovernBeliefs::new();
 
         // Create two contradictory compositions (role reversal)
-        let mut comp1 = make_event_composition("comp_pos", "membuat", "Raymond", "aplikasi", None, 0.8);
-        let mut comp2 = make_event_composition("comp_neg", "membuat", "aplikasi", "Raymond", None, 0.8);
+        let mut comp1 =
+            make_event_composition("comp_pos", "membuat", "Raymond", "aplikasi", None, 0.8);
+        let mut comp2 =
+            make_event_composition("comp_neg", "membuat", "aplikasi", "Raymond", None, 0.8);
 
         // Set up role reversal node IDs
-        comp1.members.iter_mut().find(|m| m.role == SemanticRole::Arg0Agent).unwrap().node_id = 1;
-        comp1.members.iter_mut().find(|m| m.role == SemanticRole::Arg1Patient).unwrap().node_id = 2;
-        comp2.members.iter_mut().find(|m| m.role == SemanticRole::Arg0Agent).unwrap().node_id = 2;
-        comp2.members.iter_mut().find(|m| m.role == SemanticRole::Arg1Patient).unwrap().node_id = 1;
+        comp1
+            .members
+            .iter_mut()
+            .find(|m| m.role == SemanticRole::Arg0Agent)
+            .unwrap()
+            .node_id = 1;
+        comp1
+            .members
+            .iter_mut()
+            .find(|m| m.role == SemanticRole::Arg1Patient)
+            .unwrap()
+            .node_id = 2;
+        comp2
+            .members
+            .iter_mut()
+            .find(|m| m.role == SemanticRole::Arg0Agent)
+            .unwrap()
+            .node_id = 2;
+        comp2
+            .members
+            .iter_mut()
+            .find(|m| m.role == SemanticRole::Arg1Patient)
+            .unwrap()
+            .node_id = 1;
 
         // Detect contradiction
         let updates = gb.detect_contradiction(&mut [comp1.clone(), comp2.clone()]);
-        assert!(!updates.is_empty(), "Should detect contradiction between role-reversed compositions");
+        assert!(
+            !updates.is_empty(),
+            "Should detect contradiction between role-reversed compositions"
+        );
 
         // Verify contradiction is a RoleReversal type
-        assert!(updates.iter().any(|u| u.contradiction.as_ref().map_or(false, |c|
-            c.conflict_type == EpistemicConflictType::RoleReversal)),
-            "Should detect RoleReversal conflict type");
+        assert!(
+            updates.iter().any(|u| u
+                .contradiction
+                .as_ref()
+                .is_some_and(|c| c.conflict_type == EpistemicConflictType::RoleReversal)),
+            "Should detect RoleReversal conflict type"
+        );
     }
 }
 

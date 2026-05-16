@@ -20,7 +20,7 @@
 
 use pyo3::prelude::*;
 
-use crate::v12 as v12;
+use crate::v12;
 
 // ========================================================================
 // PySemanticAtom — Python wrapper for v12::SemanticAtom
@@ -257,10 +257,7 @@ impl PyKnowledgeGap {
     fn __repr__(&self) -> String {
         format!(
             "KnowledgeGap(id='{}', type='{}', confidence={:.2}, missing_role={:?})",
-            self.gap_id,
-            self.gap_type,
-            self.confidence,
-            self.missing_role
+            self.gap_id, self.gap_type, self.confidence, self.missing_role
         )
     }
 }
@@ -593,7 +590,9 @@ impl PyV12Pipeline {
     /// ReasonFrame, GovernBeliefs, DetectGaps, etc.).
     fn v12_ingest(&mut self, text: &str) -> PyResult<PyV12IngestResult> {
         let snapshot = self.engine.snapshot();
-        let mode = self.orchestrator.select_cognitive_mode(text, &snapshot.compositions);
+        let mode = self
+            .orchestrator
+            .select_cognitive_mode(text, &snapshot.compositions);
         let result = self.engine.ingest(text);
 
         Ok(PyV12IngestResult {
@@ -610,7 +609,9 @@ impl PyV12Pipeline {
     /// Select cognitive mode for the given input text.
     fn select_cognitive_mode(&mut self, text: &str) -> String {
         let snapshot = self.engine.snapshot();
-        let mode = self.orchestrator.select_cognitive_mode(text, &snapshot.compositions);
+        let mode = self
+            .orchestrator
+            .select_cognitive_mode(text, &snapshot.compositions);
         mode.name().to_string()
     }
 
@@ -661,8 +662,7 @@ impl PyV12Pipeline {
     /// Get a JSON snapshot of the current graph state.
     fn snapshot_json(&self) -> String {
         let snapshot = self.engine.snapshot();
-        serde_json::to_string(&snapshot)
-            .unwrap_or_else(|e| format!("{{\"error\": \"{}\"}}", e))
+        serde_json::to_string(&snapshot).unwrap_or_else(|e| format!("{{\"error\": \"{}\"}}", e))
     }
 
     /// Enable or disable gap detection for subsequent ingest calls.
@@ -713,7 +713,8 @@ impl PyV12Pipeline {
     fn pending_gaps(&self) -> Vec<PyKnowledgeGap> {
         let snapshot = self.engine.snapshot();
         let mut detector = v12::DetectGaps::new();
-        detector.detect_all(&snapshot)
+        detector
+            .detect_all(&snapshot)
             .iter()
             .map(PyKnowledgeGap::from)
             .collect()
@@ -771,7 +772,10 @@ impl PyV12Pipeline {
     /// Returns the verbalized sentence with epistemic qualifier, or None if
     /// the composition doesn't exist.
     fn verbalize_composition(&self, composition_id: &str) -> Option<String> {
-        let comp = self.engine.graph().get_composition(&composition_id.to_string())?;
+        let comp = self
+            .engine
+            .graph()
+            .get_composition(&composition_id.to_string())?;
         let cve = v12::CompositionalVerbalize::new();
         Some(cve.verbalize_single(comp))
     }
@@ -789,13 +793,19 @@ impl PyV12Pipeline {
     /// Get a human-readable summary of the current graph state.
     fn graph_summary(&self) -> String {
         let graph = self.engine.graph();
-        let stable = graph.compositions.values()
+        let stable = graph
+            .compositions
+            .values()
             .filter(|c| c.lifecycle == v12::LifecycleState::Stable)
             .count();
-        let candidate = graph.compositions.values()
+        let candidate = graph
+            .compositions
+            .values()
             .filter(|c| c.lifecycle == v12::LifecycleState::Candidate)
             .count();
-        let contradicted = graph.compositions.values()
+        let contradicted = graph
+            .compositions
+            .values()
             .filter(|c| c.epistemic == v12::EpistemicState::Contradicted)
             .count();
         format!(

@@ -91,8 +91,17 @@ from layer2.bridge import get_bridge  # Works automatically
 ## Test
 
 ```bash
-# Rust core tests
+# Rust core tests (282 tests: 132 unit + 8 integration + 142 validation)
 cd stage0/layer1 && cargo test --features v12
+
+# Lint (0 warnings expected)
+cd stage0/layer1 && cargo clippy --features v12
+
+# Doc generation (0 warnings expected)
+cd stage0/layer1 && cargo doc --features v12 --no-deps
+
+# Release build
+cd stage0/layer1 && cargo build --release --features v12
 
 # Python end-to-end tests
 cd stage0 && python test_e2e_mind_only.py

@@ -102,7 +102,10 @@ impl GovernBeliefs {
     /// | * | HumanAssertion | Candidate | Grounded |
     /// | * (default) | * | New | Observed |
     pub fn initial_states(&self, composition: &mut Composition) {
-        let (lifecycle, epistemic) = match (&composition.composition_type, &composition.provenance.origin) {
+        let (lifecycle, epistemic) = match (
+            &composition.composition_type,
+            &composition.provenance.origin,
+        ) {
             // Event compositions
             (CompositionType::Event, EdgeSource::FrameCompiler) => {
                 (LifecycleState::New, EpistemicState::Observed)
@@ -199,19 +202,35 @@ impl GovernBeliefs {
                     // Apply contradiction to compositions.
                     compositions[i].epistemic = EpistemicState::Contradicted;
                     compositions[i].contradiction = Some(Contradiction {
-                        conflict_type: updates.last().unwrap().contradiction.as_ref().unwrap().conflict_type.clone(),
+                        conflict_type: updates
+                            .last()
+                            .unwrap()
+                            .contradiction
+                            .as_ref()
+                            .unwrap()
+                            .conflict_type
+                            .clone(),
                         opposing_composition_id: right.id.clone(),
                         strength: 0.8,
                     });
-                    compositions[i].contradiction_batches.push(self.current_batch);
+                    compositions[i]
+                        .contradiction_batches
+                        .push(self.current_batch);
 
                     compositions[j].epistemic = EpistemicState::Contradicted;
                     compositions[j].contradiction = Some(Contradiction {
-                        conflict_type: updates[updates.len() - 2].contradiction.as_ref().unwrap().conflict_type.clone(),
+                        conflict_type: updates[updates.len() - 2]
+                            .contradiction
+                            .as_ref()
+                            .unwrap()
+                            .conflict_type
+                            .clone(),
                         opposing_composition_id: left.id.clone(),
                         strength: 0.8,
                     });
-                    compositions[j].contradiction_batches.push(self.current_batch);
+                    compositions[j]
+                        .contradiction_batches
+                        .push(self.current_batch);
                 }
             }
         }
@@ -220,7 +239,11 @@ impl GovernBeliefs {
     }
 
     /// Check for contradiction between a pair of compositions.
-    fn check_pair_contradiction(&self, left: &Composition, right: &Composition) -> Option<EpistemicConflictType> {
+    fn check_pair_contradiction(
+        &self,
+        left: &Composition,
+        right: &Composition,
+    ) -> Option<EpistemicConflictType> {
         // Both must be Event or at least one Event.
         match (&left.composition_type, &right.composition_type) {
             // Event vs Event: check all event-level contradictions.
@@ -249,8 +272,8 @@ impl GovernBeliefs {
             }
 
             // HiddenMeaning vs Event: cross-type contradiction (MD-4).
-            (CompositionType::HiddenMeaning, CompositionType::Event) |
-            (CompositionType::Event, CompositionType::HiddenMeaning) => {
+            (CompositionType::HiddenMeaning, CompositionType::Event)
+            | (CompositionType::Event, CompositionType::HiddenMeaning) => {
                 // Check if the HiddenMeaning implies something that contradicts
                 // its source Event. Per MD-4: uses find_source_event() + conflict check.
                 if self.has_hidden_meaning_event_conflict(left, right) {
@@ -262,7 +285,9 @@ impl GovernBeliefs {
 
             // Non-Event types: equivalence mismatch.
             (_, _) => {
-                if left.composition_type == right.composition_type && self.share_structure(left, right) {
+                if left.composition_type == right.composition_type
+                    && self.share_structure(left, right)
+                {
                     if self.has_equivalence_mismatch(left, right) {
                         Some(EpistemicConflictType::EquivalenceMismatch)
                     } else {
@@ -277,9 +302,12 @@ impl GovernBeliefs {
 
     /// Do two compositions share the same predicate label?
     fn share_predicate(&self, left: &Composition, right: &Composition) -> bool {
-        match (left.member_with_role(&SemanticRole::Predicate), right.member_with_role(&SemanticRole::Predicate)) {
+        match (
+            left.member_with_role(&SemanticRole::Predicate),
+            right.member_with_role(&SemanticRole::Predicate),
+        ) {
             (Some(l), Some(r)) => l.node_id == r.node_id,
-            _ => left.id.split('_').last() == right.id.split('_').last(), // Fallback: ID comparison
+            _ => left.id.split('_').next_back() == right.id.split('_').next_back(), // Fallback: ID comparison
         }
     }
 
@@ -288,8 +316,10 @@ impl GovernBeliefs {
         if left.composition_type != right.composition_type {
             return false;
         }
-        let left_roles: std::collections::HashSet<_> = left.members.iter().map(|m| m.role.clone()).collect();
-        let right_roles: std::collections::HashSet<_> = right.members.iter().map(|m| m.role.clone()).collect();
+        let left_roles: std::collections::HashSet<_> =
+            left.members.iter().map(|m| m.role.clone()).collect();
+        let right_roles: std::collections::HashSet<_> =
+            right.members.iter().map(|m| m.role.clone()).collect();
         left_roles == right_roles
     }
 
@@ -336,7 +366,9 @@ impl GovernBeliefs {
     /// Check if a composition has a Cause role that contains a negation marker.
     /// This is the XOR negation detection for polarity conflict per MD-4.
     fn has_negation_cause(&self, comp: &Composition) -> bool {
-        let negation_markers = ["tidak", "bukan", "tak", "jangan", "not", "no", "never", "don't", "doesn't", "didn't"];
+        let negation_markers = [
+            "tidak", "bukan", "tak", "jangan", "not", "no", "never", "don't", "doesn't", "didn't",
+        ];
         comp.member_with_role(&SemanticRole::Cause)
             .map(|m| {
                 let label_lower = m.label.to_lowercase();
@@ -554,7 +586,9 @@ impl GovernBeliefs {
         };
 
         let negation_markers = ["tidak", "bukan", "not", "no", "never"];
-        let problem_has_negation = negation_markers.iter().any(|nm| hm_problem_label.contains(nm));
+        let problem_has_negation = negation_markers
+            .iter()
+            .any(|nm| hm_problem_label.contains(nm));
 
         if !problem_has_negation {
             return false;
@@ -573,7 +607,8 @@ impl GovernBeliefs {
 
         // Event must be positive (asserting something) while Problem negates it
         let event_is_positive = event.members.iter().any(|m| {
-            m.role == SemanticRole::Predicate && !m.label.to_lowercase().contains("tidak")
+            m.role == SemanticRole::Predicate
+                && !m.label.to_lowercase().contains("tidak")
                 && !m.label.to_lowercase().contains("bukan")
                 && !m.label.to_lowercase().contains("not")
         });
@@ -583,7 +618,11 @@ impl GovernBeliefs {
 
     /// Check if HM's Solution label matches Event's Patient label AND Event has
     /// Negative polarity — meaning the action failed/was negated.
-    fn hm_solution_matches_event_patient_negative(&self, hm: &Composition, event: &Composition) -> bool {
+    fn hm_solution_matches_event_patient_negative(
+        &self,
+        hm: &Composition,
+        event: &Composition,
+    ) -> bool {
         let hm_solution = hm.member_with_role(&SemanticRole::Solution);
         let ev_patient = event.member_with_role(&SemanticRole::Arg1Patient);
 
@@ -591,11 +630,12 @@ impl GovernBeliefs {
             if sol.label == pat.label {
                 // Check if the event has negative polarity or negation cause
                 let event_is_negative = event.members.iter().any(|m| {
-                    m.role == SemanticRole::Cause
-                        && {
-                            let l = m.label.to_lowercase();
-                            ["tidak", "bukan", "not", "no", "never"].iter().any(|nm| l.contains(nm))
-                        }
+                    m.role == SemanticRole::Cause && {
+                        let l = m.label.to_lowercase();
+                        ["tidak", "bukan", "not", "no", "never"]
+                            .iter()
+                            .any(|nm| l.contains(nm))
+                    }
                 });
                 if event_is_negative {
                     return true;
@@ -636,9 +676,8 @@ impl GovernBeliefs {
             .unwrap_or(false);
 
         // At least 2 of {predicate, agent, patient} must be referenced
-        let ref_count = predicate_referenced as usize
-            + agent_referenced as usize
-            + patient_referenced as usize;
+        let ref_count =
+            predicate_referenced as usize + agent_referenced as usize + patient_referenced as usize;
         ref_count >= 2
     }
 
@@ -752,9 +791,7 @@ impl GovernBeliefs {
         }
 
         // Check for ≥ 2 confirming members (members with confidence ≥ 0.5)
-        let confirming_members = comp.members.iter()
-            .filter(|m| m.confidence >= 0.5)
-            .count();
+        let confirming_members = comp.members.iter().filter(|m| m.confidence >= 0.5).count();
         if confirming_members < 2 {
             return Some(PromotionVerdict::Denied(format!(
                 "only {} confirming members (need ≥ 2)",
@@ -777,7 +814,8 @@ impl GovernBeliefs {
 
         // Seed alignment check: average seed score must be ≥ 0.3, or 0.0 (no data) is okay
         if !comp.seed_scores.is_empty() {
-            let avg_seed: f32 = comp.seed_scores.values().sum::<f32>() / comp.seed_scores.len() as f32;
+            let avg_seed: f32 =
+                comp.seed_scores.values().sum::<f32>() / comp.seed_scores.len() as f32;
             if avg_seed < 0.3 && avg_seed > 0.0 {
                 return Some(PromotionVerdict::Denied(format!(
                     "seed alignment {:.2} < 0.3 required",
@@ -820,7 +858,9 @@ impl GovernBeliefs {
 
         // Check for ≥ 2 independent provenance sources.
         // Uses provenance_source_count() which counts unique EdgeSource origins.
-        let member_sources: Vec<EdgeSource> = comp.members.iter()
+        let member_sources: Vec<EdgeSource> = comp
+            .members
+            .iter()
             .filter_map(|_m| {
                 // If member label matches a known source pattern, infer the source
                 // In a full implementation, edges would carry the source directly.
@@ -845,7 +885,8 @@ impl GovernBeliefs {
 
         // Seed alignment check: average seed score must be ≥ 0.5 (or no seed data)
         if !comp.seed_scores.is_empty() {
-            let avg_seed: f32 = comp.seed_scores.values().sum::<f32>() / comp.seed_scores.len() as f32;
+            let avg_seed: f32 =
+                comp.seed_scores.values().sum::<f32>() / comp.seed_scores.len() as f32;
             if avg_seed < 0.5 && avg_seed > 0.0 {
                 return Some(PromotionVerdict::Denied(format!(
                     "seed alignment {:.2} < 0.5 required for grounding",
@@ -870,8 +911,7 @@ impl GovernBeliefs {
         }
 
         // Per MD-4: at least 1 confirming member with confidence ≥ 0.5
-        let has_confirming_member = comp.members.iter()
-            .any(|m| m.confidence >= 0.5);
+        let has_confirming_member = comp.members.iter().any(|m| m.confidence >= 0.5);
         if !has_confirming_member {
             return Some(PromotionVerdict::Denied(
                 "no confirming member with confidence ≥ 0.5".to_string(),
@@ -907,7 +947,11 @@ impl GovernBeliefs {
         let mut updates = Vec::new();
 
         // Re-compute confidence based on completeness.
-        let completeness = if self.is_sufficiently_complete(composition) { 0.1 } else { 0.0 };
+        let completeness = if self.is_sufficiently_complete(composition) {
+            0.1
+        } else {
+            0.0
+        };
         composition.confidence = (composition.confidence + completeness).min(1.0);
 
         // Increment batch_seen.
@@ -959,8 +1003,7 @@ impl GovernBeliefs {
                     && comp.has_member_with_role(SemanticRole::Arg1Patient)
             }
             CompositionType::HiddenMeaning => {
-                comp.has_member_with_role(SemanticRole::PatternType)
-                    && comp.members.len() >= 2
+                comp.has_member_with_role(SemanticRole::PatternType) && comp.members.len() >= 2
             }
             CompositionType::Pattern => {
                 comp.has_member_with_role(SemanticRole::Antecedent)
@@ -1287,8 +1330,8 @@ impl SeedAnchor {
     /// adjusted = original * (1 - weight) + seed_confidence * weight
     /// ```
     pub fn seed_anchored_confidence(&self, comp: &Composition) -> SeedAdjustment {
-        let all_defaults = comp.seed_scores.values().all(|&v| v == 0.0)
-            || comp.seed_scores.is_empty();
+        let all_defaults =
+            comp.seed_scores.values().all(|&v| v == 0.0) || comp.seed_scores.is_empty();
 
         if all_defaults {
             // Critical fix: no alignment data → weight = 0.0
@@ -1312,11 +1355,7 @@ impl SeedAnchor {
         let alignment_strength: f32 = if comp.seed_scores.is_empty() {
             0.0
         } else {
-            let deviations: f32 = comp
-                .seed_scores
-                .values()
-                .map(|&v| (v - 0.5).abs())
-                .sum();
+            let deviations: f32 = comp.seed_scores.values().map(|&v| (v - 0.5).abs()).sum();
             deviations / comp.seed_scores.len() as f32
         };
 

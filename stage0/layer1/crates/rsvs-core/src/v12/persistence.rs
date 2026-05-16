@@ -85,9 +85,7 @@ impl Default for Persistence {
 impl Persistence {
     /// Create a new persistence engine.
     pub fn new() -> Self {
-        Self {
-            pretty_print: true,
-        }
+        Self { pretty_print: true }
     }
 
     /// Save the graph to a JSON file.
@@ -114,8 +112,7 @@ impl Persistence {
     /// Load a graph from a JSON file.
     pub fn load(&self, path: &Path) -> Result<Graph, PersistenceError> {
         let json = fs::read_to_string(path)?;
-        serde_json::from_str(&json)
-            .map_err(|e| PersistenceError::Deserialization(e.to_string()))
+        serde_json::from_str(&json).map_err(|e| PersistenceError::Deserialization(e.to_string()))
     }
 
     /// Serialize the graph to a JSON string.
@@ -124,15 +121,13 @@ impl Persistence {
             serde_json::to_string_pretty(graph)
                 .map_err(|e| PersistenceError::Serialization(e.to_string()))
         } else {
-            serde_json::to_string(graph)
-                .map_err(|e| PersistenceError::Serialization(e.to_string()))
+            serde_json::to_string(graph).map_err(|e| PersistenceError::Serialization(e.to_string()))
         }
     }
 
     /// Deserialize a graph from a JSON string.
     pub fn from_json(&self, json: &str) -> Result<Graph, PersistenceError> {
-        serde_json::from_str(json)
-            .map_err(|e| PersistenceError::Deserialization(e.to_string()))
+        serde_json::from_str(json).map_err(|e| PersistenceError::Deserialization(e.to_string()))
     }
 
     /// Get graph statistics without loading the full graph.
@@ -143,17 +138,20 @@ impl Persistence {
         let value: serde_json::Value = serde_json::from_str(&json)
             .map_err(|e| PersistenceError::Deserialization(e.to_string()))?;
 
-        let node_count = value.get("nodes")
+        let node_count = value
+            .get("nodes")
             .and_then(|v| v.as_object())
             .map(|o| o.len())
             .unwrap_or(0);
 
-        let composition_count = value.get("compositions")
+        let composition_count = value
+            .get("compositions")
             .and_then(|v| v.as_object())
             .map(|o| o.len())
             .unwrap_or(0);
 
-        let edge_count = value.get("edges")
+        let edge_count = value
+            .get("edges")
             .and_then(|v| v.as_array())
             .map(|a| a.len())
             .unwrap_or(0);
@@ -183,6 +181,7 @@ pub struct GraphStats {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::field_reassign_with_default)]
     use super::*;
     use crate::v12::types::*;
 
@@ -200,8 +199,18 @@ mod tests {
         comp.composition_type = CompositionType::Event;
         comp.confidence = 0.8;
         comp.members = vec![
-            CompositionMember { node_id: node_a, role: SemanticRole::Arg0Agent, confidence: 0.9, label: "alpha".to_string() },
-            CompositionMember { node_id: node_b, role: SemanticRole::Arg1Patient, confidence: 0.8, label: "beta".to_string() },
+            CompositionMember {
+                node_id: node_a,
+                role: SemanticRole::Arg0Agent,
+                confidence: 0.9,
+                label: "alpha".to_string(),
+            },
+            CompositionMember {
+                node_id: node_b,
+                role: SemanticRole::Arg1Patient,
+                confidence: 0.8,
+                label: "beta".to_string(),
+            },
         ];
         graph.compositions.insert("comp_test".to_string(), comp);
 
@@ -209,7 +218,9 @@ mod tests {
         let temp_dir = std::env::temp_dir();
         let path = temp_dir.join("v12_test_graph.json");
 
-        persistence.save(&graph, &path).expect("Save should succeed");
+        persistence
+            .save(&graph, &path)
+            .expect("Save should succeed");
         let loaded = persistence.load(&path).expect("Load should succeed");
 
         // Verify roundtrip.
@@ -228,7 +239,9 @@ mod tests {
         graph.ensure_node("test_node");
 
         let json = persistence.to_json(&graph).expect("Serialize should work");
-        let loaded = persistence.from_json(&json).expect("Deserialize should work");
+        let loaded = persistence
+            .from_json(&json)
+            .expect("Deserialize should work");
 
         assert_eq!(loaded.nodes.len(), 1);
     }
@@ -243,7 +256,9 @@ mod tests {
         let temp_dir = std::env::temp_dir();
         let path = temp_dir.join("v12_test_stats.json");
 
-        persistence.save(&graph, &path).expect("Save should succeed");
+        persistence
+            .save(&graph, &path)
+            .expect("Save should succeed");
         let stats = Persistence::stats(&path).expect("Stats should work");
 
         assert_eq!(stats.node_count, 2);

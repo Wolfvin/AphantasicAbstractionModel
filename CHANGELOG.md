@@ -46,6 +46,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Persistence**: JSON save/load for graph state
 - **142 tests passing**: Unit + cognitive scenario coverage
 
+### Fixed — Code Quality (v1.0.0 polish)
+- **0 clippy warnings**: All 38 lib warnings resolved — derivable_impls replaced with
+  `#[derive(Default)]` + `#[default]` attribute (27 instances), TransformCondition type alias
+  for complex closure, manual_clamp → `.clamp()`, double_ended_iterator_last → `.next_back()`,
+  unnecessary_map_or → `.is_some_and()`, len_zero → `!is_empty()`, field_reassign_with_default
+  → struct update syntax, if_same_then_else fix, dead_code removal
+- **0 rustdoc warnings**: Private doc link resolved
+- **282 total tests passing** (132 unit + 8 integration + 142 validation)
+- **Release build compiles cleanly** with LTO + strip + codegen-units=1
+- **Stale v12.0.0 wheel removed** from target/wheels/
+
 ## [12.1.0] - 2026-05-16
 
 ### Fixed

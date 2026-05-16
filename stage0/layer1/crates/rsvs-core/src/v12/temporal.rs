@@ -168,7 +168,7 @@ impl TemporalDecay {
         let decay_factor = self.compute_decay_factor(composition);
 
         // Apply decay.
-        composition.confidence = (composition.confidence * decay_factor).max(0.0).min(1.0);
+        composition.confidence = (composition.confidence * decay_factor).clamp(0.0, 1.0);
 
         let confidence_after = composition.confidence;
         let mut demoted = false;
@@ -261,10 +261,7 @@ impl ErasedTransform for TemporalDecayTransform {
         let mut engine = self.engine.clone();
         let results = engine.apply_decay_all(graph);
 
-        let governance_transitions = results
-            .iter()
-            .filter(|r| r.demoted || r.deprecated)
-            .count();
+        let governance_transitions = results.iter().filter(|r| r.demoted || r.deprecated).count();
 
         IngestResult {
             governance_transitions,
@@ -279,6 +276,7 @@ impl ErasedTransform for TemporalDecayTransform {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::field_reassign_with_default)]
     use super::*;
 
     #[test]
@@ -287,7 +285,10 @@ mod tests {
         let comp = Composition::default();
         // batch_seen = 0, so elapsed = 0, decay = e^0 = 1.0
         let factor = decay.compute_decay_factor(&comp);
-        assert!((factor - 1.0).abs() < 0.01, "Fresh composition should have decay factor ~1.0");
+        assert!(
+            (factor - 1.0).abs() < 0.01,
+            "Fresh composition should have decay factor ~1.0"
+        );
     }
 
     #[test]
@@ -295,14 +296,21 @@ mod tests {
         let decay = TemporalDecay::new();
         let mut comp = Composition::default();
         comp.batch_seen = 50; // 1 TTL
-        comp.members = vec![
-            CompositionMember { node_id: 1, role: SemanticRole::Predicate, confidence: 0.9, label: "test".to_string() },
-        ];
+        comp.members = vec![CompositionMember {
+            node_id: 1,
+            role: SemanticRole::Predicate,
+            confidence: 0.9,
+            label: "test".to_string(),
+        }];
         // decay = e^(-2.0 × 50/50) = e^(-2.0) ≈ 0.135
         // reinforcement = 1.0 + 0.2 × ln(2) ≈ 1.139
         // factor ≈ 0.135 × 1.139 ≈ 0.154
         let factor = decay.compute_decay_factor(&comp);
-        assert!(factor < 0.2, "Old composition should have significant decay, got {}", factor);
+        assert!(
+            factor < 0.2,
+            "Old composition should have significant decay, got {}",
+            factor
+        );
         assert!(factor > 0.0, "Decay should be positive");
     }
 
@@ -311,9 +319,12 @@ mod tests {
         let decay = TemporalDecay::new();
         let mut comp_low_access = Composition::default();
         comp_low_access.batch_seen = 25;
-        comp_low_access.members = vec![
-            CompositionMember { node_id: 1, role: SemanticRole::Predicate, confidence: 0.9, label: "test".to_string() },
-        ];
+        comp_low_access.members = vec![CompositionMember {
+            node_id: 1,
+            role: SemanticRole::Predicate,
+            confidence: 0.9,
+            label: "test".to_string(),
+        }];
 
         let mut comp_high_access = Composition::default();
         comp_high_access.batch_seen = 25;
@@ -345,15 +356,33 @@ mod tests {
         comp.lifecycle = LifecycleState::Stable;
         comp.batch_seen = 10; // Not too old, so decay factor isn't too extreme
         comp.members = vec![
-            CompositionMember { node_id: 1, role: SemanticRole::Predicate, confidence: 0.9, label: "test".to_string() },
-            CompositionMember { node_id: 2, role: SemanticRole::Arg0Agent, confidence: 0.8, label: "test2".to_string() },
-            CompositionMember { node_id: 3, role: SemanticRole::Arg1Patient, confidence: 0.7, label: "test3".to_string() },
+            CompositionMember {
+                node_id: 1,
+                role: SemanticRole::Predicate,
+                confidence: 0.9,
+                label: "test".to_string(),
+            },
+            CompositionMember {
+                node_id: 2,
+                role: SemanticRole::Arg0Agent,
+                confidence: 0.8,
+                label: "test2".to_string(),
+            },
+            CompositionMember {
+                node_id: 3,
+                role: SemanticRole::Arg1Patient,
+                confidence: 0.7,
+                label: "test3".to_string(),
+            },
         ];
 
         let result = decay.apply_decay(&mut comp);
         assert!(result.demoted, "Should be demoted due to low confidence");
         // After demotion from Stable, goes to Candidate (not directly Deprecated unless below 0.1)
-        assert!(matches!(comp.lifecycle, LifecycleState::Candidate | LifecycleState::Quarantine | LifecycleState::Deprecated));
+        assert!(matches!(
+            comp.lifecycle,
+            LifecycleState::Candidate | LifecycleState::Quarantine | LifecycleState::Deprecated
+        ));
     }
 
     #[test]
@@ -363,12 +392,18 @@ mod tests {
         comp.confidence = 0.05; // Below deprecation threshold (0.1)
         comp.lifecycle = LifecycleState::Quarantine;
         comp.batch_seen = 100;
-        comp.members = vec![
-            CompositionMember { node_id: 1, role: SemanticRole::Predicate, confidence: 0.9, label: "test".to_string() },
-        ];
+        comp.members = vec![CompositionMember {
+            node_id: 1,
+            role: SemanticRole::Predicate,
+            confidence: 0.9,
+            label: "test".to_string(),
+        }];
 
         let result = decay.apply_decay(&mut comp);
-        assert!(result.deprecated, "Should be deprecated due to very low confidence");
+        assert!(
+            result.deprecated,
+            "Should be deprecated due to very low confidence"
+        );
         assert_eq!(comp.lifecycle, LifecycleState::Deprecated);
     }
 
@@ -379,12 +414,18 @@ mod tests {
         comp.confidence = 0.8;
         comp.lifecycle = LifecycleState::Stable;
         comp.batch_seen = 5;
-        comp.members = vec![
-            CompositionMember { node_id: 1, role: SemanticRole::Predicate, confidence: 0.9, label: "test".to_string() },
-        ];
+        comp.members = vec![CompositionMember {
+            node_id: 1,
+            role: SemanticRole::Predicate,
+            confidence: 0.9,
+            label: "test".to_string(),
+        }];
 
         let result = decay.apply_decay(&mut comp);
-        assert!(!result.demoted, "Should not be demoted with high confidence");
+        assert!(
+            !result.demoted,
+            "Should not be demoted with high confidence"
+        );
         assert_eq!(comp.lifecycle, LifecycleState::Stable);
     }
 }

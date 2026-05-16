@@ -2,7 +2,7 @@
 //!
 //! Tests the v12 DAG-based pipeline engine with all 10 transforms.
 
-use rsvs::v12::{PipelineEngine, register_default_pipeline, DetectGaps, ExecutiveOrchestrator};
+use rsvs::v12::{register_default_pipeline, DetectGaps, ExecutiveOrchestrator, PipelineEngine};
 
 /// Helper: create a fresh pipeline engine with default transforms.
 fn create_pipeline() -> PipelineEngine {
@@ -16,9 +16,18 @@ fn v12_pipeline_ingest_basic() {
     let mut engine = create_pipeline();
     let result = engine.ingest("Raymond membuat aplikasi karena lambat");
 
-    assert!(result.atoms_created > 0, "Should create atoms from input text");
-    assert!(result.compositions_created > 0, "Should create compositions from event atoms");
-    assert!(result.edges_created > 0, "Should create edges linking compositions to nodes");
+    assert!(
+        result.atoms_created > 0,
+        "Should create atoms from input text"
+    );
+    assert!(
+        result.compositions_created > 0,
+        "Should create compositions from event atoms"
+    );
+    assert!(
+        result.edges_created > 0,
+        "Should create edges linking compositions to nodes"
+    );
 }
 
 #[test]
@@ -42,7 +51,7 @@ fn v12_pipeline_graph_state() {
     engine.ingest("Fire is hot and dangerous. Water is cold and refreshing.");
 
     let graph = engine.graph();
-    assert!(graph.nodes.len() > 0, "Graph should have nodes");
+    assert!(!graph.nodes.is_empty(), "Graph should have nodes");
     // Compositions and edges may be 0 for sentences without event verbs
     // The important thing is that nodes are created for all tokens
 }
