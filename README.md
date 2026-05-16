@@ -1,19 +1,19 @@
 [![PyPI](https://img.shields.io/pypi/v/rsvs?style=flat-square&logo=pypi&color=3775A9)](https://pypi.org/project/rsvs/)
-[![CI](https://img.shields.io/github/actions/workflow/status/Wolfvin/SymbolicPuzzle3D/ci.yml?style=flat-square&logo=github&label=tests)](https://github.com/Wolfvin/SymbolicPuzzle3D/actions/workflows/ci.yml)
-[![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-8A2BE2?style=flat-square&logo=materialformkdocs&logoColor=white)](https://wolfvin.github.io/SymbolicPuzzle3D/)
+[![CI](https://img.shields.io/github/actions/workflow/status/Wolfvin/AphantasicAbstractionModel/ci.yml?style=flat-square&logo=github&label=tests)](https://github.com/Wolfvin/AphantasicAbstractionModel/actions/workflows/ci.yml)
+[![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-8A2BE2?style=flat-square&logo=materialformkdocs&logoColor=white)](https://wolfvin.github.io/AphantasicAbstractionModel/)
 [![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-green?style=flat-square)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.11+-blue?style=flat-square&logo=python)](https://python.org)
 [![Rust](https://img.shields.io/badge/Rust-1.75+-orange?style=flat-square&logo=rust)](https://www.rust-lang.org/)
 
 # AphantasicAbstractionModel (AAM)
 
-> Previously: SymbolicPuzzle3D / RSVS Genius
-
 **Compositional symbolic meaning, not embeddings. Traceable sense definitions with structural similarity.**
+
+*AAM v12.0 introduces a rule-based cognitive architecture with active enrichment loops, epistemic governance, and role-weighted structural similarity.*
 
 AAM is inspired by **Aphantasia** — the cognitive condition where no visual imagery is stored, only relational structure. This is how AAM remembers: raw input → structured tuples → knowledge graph. No photos. Only relations.
 
-📖 **[Full documentation](https://wolfvin.github.io/SymbolicPuzzle3D/)** · 🚀 [Quick Start](#quick-start) · 📚 [Tutorials](https://wolfvin.github.io/SymbolicPuzzle3D/tutorials/) · 🔧 [API Reference](https://wolfvin.github.io/SymbolicPuzzle3D/api/)
+📖 **[Full documentation](https://wolfvin.github.io/AphantasicAbstractionModel/)** · 🚀 [Quick Start](#quick-start) · 📚 [Tutorials](https://wolfvin.github.io/AphantasicAbstractionModel/tutorials/) · 🔧 [API Reference](https://wolfvin.github.io/AphantasicAbstractionModel/api/)
 
 ---
 
@@ -485,8 +485,8 @@ If you use RSVS in your research, please cite it as follows:
   title = {RSVS: Recursive Symbolic Vocabulary System},
   author = {Wolfvin},
   year = {2026},
-  version = {8.3.0},
-  url = {https://github.com/Wolfvin/SymbolicPuzzle3D}
+  version = {12.0.0},
+  url = {https://github.com/Wolfvin/AphantasicAbstractionModel}
 }
 ```
 

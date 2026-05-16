@@ -31,8 +31,8 @@ Thank you for your interest in contributing to RSVS! This guide will help you se
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/Wolfvin/SymbolicPuzzle3D.git
-cd SymbolicPuzzle3D
+git clone https://github.com/Wolfvin/AphantasicAbstractionModel.git
+cd AphantasicAbstractionModel
 
 # 2. Build and test the Rust core
 cd backend
@@ -563,7 +563,7 @@ impl RsvsPy {
 ## Getting Help
 
 - **Documentation**: [ARCHITECTURE.md](ARCHITECTURE.md) for technical reference, [docs/API.md](docs/API.md) for API docs
-- **Issues**: [GitHub Issues](https://github.com/Wolfvin/SymbolicPuzzle3D/issues) for bugs and feature requests
-- **Discussions**: [GitHub Discussions](https://github.com/Wolfvin/SymbolicPuzzle3D/discussions) for questions and ideas
+- **Issues**: [GitHub Issues](https://github.com/Wolfvin/AphantasicAbstractionModel/issues) for bugs and feature requests
+- **Discussions**: [GitHub Discussions](https://github.com/Wolfvin/AphantasicAbstractionModel/discussions) for questions and ideas
 
 Thank you for contributing to RSVS! 🚀

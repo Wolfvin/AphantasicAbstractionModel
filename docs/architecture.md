@@ -1,6 +1,6 @@
 # Architecture
 
-RSVS follows a three-tier architecture with strict separation of concerns. This page provides a high-level overview. For the full technical reference, see [ARCHITECTURE.md](https://github.com/Wolfvin/SymbolicPuzzle3D/blob/main/ARCHITECTURE.md) in the repository root.
+RSVS follows a three-tier architecture with strict separation of concerns. This page provides a high-level overview. For the full technical reference, see [ARCHITECTURE.md](https://github.com/Wolfvin/AphantasicAbstractionModel/blob/main/ARCHITECTURE.md) in the repository root.
 
 ---
 

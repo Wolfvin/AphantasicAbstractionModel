@@ -153,6 +153,6 @@ bisa di-cross-reference instan dari 4 departemen berbeda.
 
 ## Origin
 
-Previously: **SymbolicPuzzle3D** / **RSVS Genius**
+Previously: AAM v12.0 — rule-based cognitive architecture
 Renamed in v1.0.0-alpha to reflect the true cognitive model.
 v12.0 architecture refactor: 6 Unified Abstractions + Closed Feedback Loop.

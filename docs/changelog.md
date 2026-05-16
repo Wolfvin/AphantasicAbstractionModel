@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to RSVS are documented here. For the complete changelog, see [CHANGELOG.md](https://github.com/Wolfvin/SymbolicPuzzle3D/blob/main/CHANGELOG.md) in the repository root.
+All notable changes to RSVS are documented here. For the complete changelog, see [CHANGELOG.md](https://github.com/Wolfvin/AphantasicAbstractionModel/blob/main/CHANGELOG.md) in the repository root.
 
 ---
 
@@ -61,4 +61,4 @@ All notable changes to RSVS are documented here. For the complete changelog, see
 
 ---
 
-For older versions, see the [full changelog](https://github.com/Wolfvin/SymbolicPuzzle3D/blob/main/CHANGELOG.md).
+For older versions, see the [full changelog](https://github.com/Wolfvin/AphantasicAbstractionModel/blob/main/CHANGELOG.md).

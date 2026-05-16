@@ -28,8 +28,8 @@
 
 ```bash
 # Clone the repository
-git clone https://github.com/Wolfvin/SymbolicPuzzle3D.git
-cd SymbolicPuzzle3D
+git clone https://github.com/Wolfvin/AphantasicAbstractionModel.git
+cd AphantasicAbstractionModel
 
 # Build and start all services
 docker compose up --build -d

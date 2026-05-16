@@ -165,7 +165,7 @@ If you use RSVS in your research, please cite it:
   author = {Wolfvin},
   year = {2026},
   version = {8.3.0},
-  url = {https://github.com/Wolfvin/SymbolicPuzzle3D}
+  url = {https://github.com/Wolfvin/AphantasicAbstractionModel}
 }
 ```
 
@@ -173,4 +173,4 @@ If you use RSVS in your research, please cite it:
 
 ## License
 
-Dual-licensed under [MIT](https://github.com/Wolfvin/SymbolicPuzzle3D/blob/main/LICENSE) OR [Apache-2.0](https://github.com/Wolfvin/SymbolicPuzzle3D/blob/main/LICENSE). You may choose either license at your option.
+Dual-licensed under [MIT](https://github.com/Wolfvin/AphantasicAbstractionModel/blob/main/LICENSE) OR [Apache-2.0](https://github.com/Wolfvin/AphantasicAbstractionModel/blob/main/LICENSE). You may choose either license at your option.

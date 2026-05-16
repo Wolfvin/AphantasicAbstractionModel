@@ -85,3 +85,6 @@ aam-diffusion-hf/.gitattributes
 aam-diffusion-v2/
 *.pt
 *.bin
+
+# Internal agent prompt files (not for public consumption)
+docs/internal/

@@ -513,22 +513,22 @@ This release closes all 37 gaps identified in the AAM Architecture Gap Analysis 
 
 ---
 
-[8.3.0]: https://github.com/Wolfvin/SymbolicPuzzle3D/releases/tag/v8.3.0
-[8.2.0]: https://github.com/Wolfvin/SymbolicPuzzle3D/releases/tag/v8.2.0
-[8.1.0]: https://github.com/Wolfvin/SymbolicPuzzle3D/releases/tag/v8.1.0
-[8.0.0]: https://github.com/Wolfvin/SymbolicPuzzle3D/releases/tag/v8.0.0
-[7.2.0]: https://github.com/Wolfvin/SymbolicPuzzle3D/releases/tag/v7.2.0
-[7.1.0]: https://github.com/Wolfvin/SymbolicPuzzle3D/releases/tag/v7.1.0
-[7.0.0]: https://github.com/Wolfvin/SymbolicPuzzle3D/releases/tag/v7.0.0
-[6.3.0]: https://github.com/Wolfvin/SymbolicPuzzle3D/releases/tag/v6.3.0
-[6.2.0]: https://github.com/Wolfvin/SymbolicPuzzle3D/releases/tag/v6.2.0
-[6.1.0]: https://github.com/Wolfvin/SymbolicPuzzle3D/releases/tag/v6.1.0
-[6.0.0]: https://github.com/Wolfvin/SymbolicPuzzle3D/releases/tag/v6.0.0
-[5.1.0]: https://github.com/Wolfvin/SymbolicPuzzle3D/releases/tag/v5.1.0
-[5.0.0]: https://github.com/Wolfvin/SymbolicPuzzle3D/releases/tag/v5.0.0
-[4.2.0]: https://github.com/Wolfvin/SymbolicPuzzle3D/releases/tag/v4.2.0
-[4.1.0]: https://github.com/Wolfvin/SymbolicPuzzle3D/releases/tag/v4.1.0
-[4.0.0]: https://github.com/Wolfvin/SymbolicPuzzle3D/releases/tag/v4.0.0
-[3.0.0]: https://github.com/Wolfvin/SymbolicPuzzle3D/releases/tag/v3.0.0
-[2.0.0]: https://github.com/Wolfvin/SymbolicPuzzle3D/releases/tag/v2.0.0
-[1.0.0]: https://github.com/Wolfvin/SymbolicPuzzle3D/releases/tag/v1.0.0
+[8.3.0]: https://github.com/Wolfvin/AphantasicAbstractionModel/releases/tag/v8.3.0
+[8.2.0]: https://github.com/Wolfvin/AphantasicAbstractionModel/releases/tag/v8.2.0
+[8.1.0]: https://github.com/Wolfvin/AphantasicAbstractionModel/releases/tag/v8.1.0
+[8.0.0]: https://github.com/Wolfvin/AphantasicAbstractionModel/releases/tag/v8.0.0
+[7.2.0]: https://github.com/Wolfvin/AphantasicAbstractionModel/releases/tag/v7.2.0
+[7.1.0]: https://github.com/Wolfvin/AphantasicAbstractionModel/releases/tag/v7.1.0
+[7.0.0]: https://github.com/Wolfvin/AphantasicAbstractionModel/releases/tag/v7.0.0
+[6.3.0]: https://github.com/Wolfvin/AphantasicAbstractionModel/releases/tag/v6.3.0
+[6.2.0]: https://github.com/Wolfvin/AphantasicAbstractionModel/releases/tag/v6.2.0
+[6.1.0]: https://github.com/Wolfvin/AphantasicAbstractionModel/releases/tag/v6.1.0
+[6.0.0]: https://github.com/Wolfvin/AphantasicAbstractionModel/releases/tag/v6.0.0
+[5.1.0]: https://github.com/Wolfvin/AphantasicAbstractionModel/releases/tag/v5.1.0
+[5.0.0]: https://github.com/Wolfvin/AphantasicAbstractionModel/releases/tag/v5.0.0
+[4.2.0]: https://github.com/Wolfvin/AphantasicAbstractionModel/releases/tag/v4.2.0
+[4.1.0]: https://github.com/Wolfvin/AphantasicAbstractionModel/releases/tag/v4.1.0
+[4.0.0]: https://github.com/Wolfvin/AphantasicAbstractionModel/releases/tag/v4.0.0
+[3.0.0]: https://github.com/Wolfvin/AphantasicAbstractionModel/releases/tag/v3.0.0
+[2.0.0]: https://github.com/Wolfvin/AphantasicAbstractionModel/releases/tag/v2.0.0
+[1.0.0]: https://github.com/Wolfvin/AphantasicAbstractionModel/releases/tag/v1.0.0

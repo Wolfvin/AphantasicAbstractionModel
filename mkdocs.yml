@@ -8,11 +8,11 @@ site_description: >-
   Recursive Symbolic Vocabulary System — compositional symbolic meaning
   engine with structural similarity, substitution analysis, and autonomous
   tiered memory lifecycle.
-site_url: https://wolfvin.github.io/SymbolicPuzzle3D/
+site_url: https://wolfvin.github.io/AphantasicAbstractionModel/
 site_author: Wolfvin
 
-repo_name: Wolfvin/SymbolicPuzzle3D
-repo_url: https://github.com/Wolfvin/SymbolicPuzzle3D
+repo_name: Wolfvin/AphantasicAbstractionModel
+repo_url: https://github.com/Wolfvin/AphantasicAbstractionModel
 edit_uri: edit/main/docs/
 
 copyright: "Dual-licensed under MIT OR Apache-2.0"
@@ -105,7 +105,7 @@ markdown_extensions:
   - pymdownx.magiclink:
       repo_url_shorthand: true
       user: Wolfvin
-      repo: SymbolicPuzzle3D
+      repo: AphantasicAbstractionModel
   - pymdownx.mark
   - pymdownx.smartsymbols
   - pymdownx.snippets:
@@ -148,7 +148,7 @@ extra:
     provider: mike
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/Wolfvin/SymbolicPuzzle3D
+      link: https://github.com/Wolfvin/AphantasicAbstractionModel
       name: GitHub
   analytics:
     feedback:

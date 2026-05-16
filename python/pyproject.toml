@@ -35,11 +35,11 @@ keywords = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/Wolfvin/SymbolicPuzzle3D"
-Repository = "https://github.com/Wolfvin/SymbolicPuzzle3D"
-Documentation = "https://wolfvin.github.io/SymbolicPuzzle3D/"
-Changelog = "https://github.com/Wolfvin/SymbolicPuzzle3D/blob/main/CHANGELOG.md"
-Issues = "https://github.com/Wolfvin/SymbolicPuzzle3D/issues"
+Homepage = "https://github.com/Wolfvin/AphantasicAbstractionModel"
+Repository = "https://github.com/Wolfvin/AphantasicAbstractionModel"
+Documentation = "https://wolfvin.github.io/AphantasicAbstractionModel/"
+Changelog = "https://github.com/Wolfvin/AphantasicAbstractionModel/blob/main/CHANGELOG.md"
+Issues = "https://github.com/Wolfvin/AphantasicAbstractionModel/issues"
 
 # Core library has NO hard dependencies on fastapi/uvicorn.
 # Use the [server] extra for the HTTP API.

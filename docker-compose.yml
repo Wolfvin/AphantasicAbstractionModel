@@ -1,5 +1,5 @@
 # ──────────────────────────────────────────────────────────────────────
-#  SymbolicPuzzle3D — Docker Compose
+#  AphantasicAbstractionModel — Docker Compose
 #  Nginx (reverse proxy) + Backend (Rust + Python bridge) + Frontend (Next.js)
 #  v8.3: Fixed backend target (runtime, not rust-builder), added session secret,
 # ──────────────────────────────────────────────────────────────────────
