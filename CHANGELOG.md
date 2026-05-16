@@ -5,6 +5,43 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [12.1.0] - 2026-05-16
+
+### Fixed
+- CrossType contradiction detection: added predicate-label fallback strategy
+  when HiddenMeaning has no SourceEvent link (commit a9d40ab)
+- PassiveRecall self-referent: candidates already in target composition are now
+  excluded, preventing same node filling multiple roles (commit ee371b9)
+
+### Added
+- 6 blind spot tests + 1 critical learning test (commits 1d17515, a85f903)
+- P0 semantic verification for process_user_answer (4-proof test)
+- Feedback-loop commutativity test with ≤0.15 confidence tolerance
+- Active enrichment loop in ExecutiveOrchestrator.run_enrichment_loop():
+  DetectGaps → SelectAcquisition → EnrichComposition → GovernBeliefs per round
+- 3 missing transforms registered in pipeline: TemporalDecay, SpreadingActivation,
+  ConvergenceDetection (13 transforms total, was 10)
+- Persistence: PipelineEngine::save() / load() + PyO3 bindings
+- Role-weighted structural similarity in ConvergenceDetection (α=0.6):
+  role_jaccard weighted 60%, node_jaccard weighted 40%
+- PyV12Pipeline: run_enrichment_loop(), submit_answer(), graph_summary(),
+  save(), load(), pending_gaps() exposed to Python
+
+### Changed
+- AGENT_PROMPT_* files moved to docs/internal/ (not public-facing)
+- Workspace version: 8.3.0 → 12.0.0
+- Repository URLs: SymbolicPuzzle3D → AphantasicAbstractionModel everywhere
+- README badges, mkdocs.yml, CONTRIBUTING.md, pyproject.toml URLs updated
+- ConvergenceDetection.detect() now uses role_weighted_similarity instead of
+  plain Jaccard node-overlap
+- PipelineEngine.context_and_graph_mut() for split mutable borrow access
+- test_register_default_pipeline count: 10 → 13
+
+### Known Limitations (remaining)
+- L3: ExecutiveOrchestrator cognitive mode selection not covered by cognitive tests
+- L4: TemporalDecay test coverage minimal (integration only)
+- L6: Commutativity is structurally guaranteed but confidence may differ ≤0.15
+
 ## [12.0.0] - 2026-05-15
 
 ### Added — 6 Unified Abstractions (Architecture Refactor)
