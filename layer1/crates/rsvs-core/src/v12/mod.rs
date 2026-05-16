@@ -54,6 +54,9 @@ pub mod spreading;
 pub mod temporal;
 pub mod types;
 
+#[cfg(test)]
+mod cognitive_tests;
+
 // Re-export key types for convenience.
 // Users can import from `rsvs::v12::SemanticAtom` instead of `rsvs::v12::types::SemanticAtom`.
 pub use types::{
