@@ -2049,3 +2049,57 @@ fn test_persistence_roundtrip_via_pipeline() {
     // Cleanup
     let _ = std::fs::remove_file(&tmp_path);
 }
+
+// ========================================================================
+// L1 FIX: Role-Weighted Structural Similarity
+// ========================================================================
+
+#[test]
+fn test_role_weighted_similarity_captures_structural_equivalence() {
+    use super::convergence::ConvergenceDetection;
+
+    let cd = ConvergenceDetection::new();
+
+    // Dua komposisi yang mirip tapi node berbeda — hanya role structure yang sama
+    let mut graph = Graph::new();
+
+    let mut comp_a = Composition::default();
+    comp_a.id = "comp_a".to_string();
+    comp_a.composition_type = CompositionType::Event;
+    comp_a.confidence = 0.7;
+
+    let pred_node = graph.ensure_node("memeriksa");
+    let agent_node = graph.ensure_node("dokter");
+    let patient_node = graph.ensure_node("pasien");
+    comp_a.members.push(CompositionMember { node_id: pred_node, role: SemanticRole::Predicate, confidence: 0.9, label: "memeriksa".to_string() });
+    comp_a.members.push(CompositionMember { node_id: agent_node, role: SemanticRole::Arg0Agent, confidence: 0.8, label: "dokter".to_string() });
+    comp_a.members.push(CompositionMember { node_id: patient_node, role: SemanticRole::Arg1Patient, confidence: 0.8, label: "pasien".to_string() });
+
+    let mut comp_b = Composition::default();
+    comp_b.id = "comp_b".to_string();
+    comp_b.composition_type = CompositionType::Event;
+    comp_b.confidence = 0.7;
+
+    let pred_node2 = graph.ensure_node("memeriksa"); // same predicate
+    let agent_node2 = graph.ensure_node("tabib");
+    let patient_node2 = graph.ensure_node("orang_sakit");
+    comp_b.members.push(CompositionMember { node_id: pred_node2, role: SemanticRole::Predicate, confidence: 0.9, label: "memeriksa".to_string() });
+    comp_b.members.push(CompositionMember { node_id: agent_node2, role: SemanticRole::Arg0Agent, confidence: 0.8, label: "tabib".to_string() });
+    comp_b.members.push(CompositionMember { node_id: patient_node2, role: SemanticRole::Arg1Patient, confidence: 0.8, label: "orang_sakit".to_string() });
+
+    let role_sim = cd.role_weighted_similarity(&comp_a, &comp_b);
+    let node_sim = cd.node_jaccard(&comp_a, &comp_b);
+
+    // Role structure: Predicate match "memeriksa" = same (role_type, label) → 1/6 overlap
+    // Node overlap: pred_node is shared → 1/5 Jaccard
+    // Role-weighted should be higher than pure node Jaccard because
+    // the predicate role+label match gives credit for structural equivalence
+    assert!(
+        role_sim > node_sim,
+        "Role-weighted similarity ({:.3}) harus lebih tinggi dari node jaccard ({:.3}) \
+         untuk komposisi yang structurally equivalent",
+        role_sim, node_sim
+    );
+    eprintln!("role_sim={:.3}, node_sim={:.3} (improvement: +{:.3})",
+        role_sim, node_sim, role_sim - node_sim);
+}

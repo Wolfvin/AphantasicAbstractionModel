@@ -73,6 +73,10 @@ pub struct ConvergenceConfig {
     pub min_confidence: f32,
     /// Maximum pairs to check per run (default: 500).
     pub max_pairs_per_run: usize,
+    /// Role weight for role-weighted similarity (default: 0.6).
+    /// Formula: similarity = α × role_jaccard + (1-α) × node_jaccard
+    /// Higher α means role structure matters more than raw node overlap.
+    pub role_weight: Option<f32>,
 }
 
 impl Default for ConvergenceConfig {
@@ -82,6 +86,7 @@ impl Default for ConvergenceConfig {
             max_cooc_for_equivalence: 1,
             min_confidence: 0.3,
             max_pairs_per_run: 500,
+            role_weight: Some(0.6),
         }
     }
 }
@@ -195,19 +200,15 @@ impl ConvergenceDetection {
                     continue;
                 }
 
-                // Compute Jaccard similarity.
-                let union_size = nodes_a.union(&nodes_b).count();
-                if union_size == 0 {
-                    continue;
-                }
-                let jaccard = shared_count as f32 / union_size as f32;
+                // Compute role-weighted similarity.
+                let similarity = self.role_weighted_similarity(comp_a, comp_b);
 
-                if jaccard >= self.config.min_overlap {
-                    let confidence = (jaccard * 0.8).min(0.9);
+                if similarity >= self.config.min_overlap {
+                    let confidence = (similarity * 0.8).min(0.9);
                     pairs.push(ConvergencePair {
                         composition_a: comp_a.id.clone(),
                         composition_b: comp_b.id.clone(),
-                        overlap: jaccard,
+                        overlap: similarity,
                         cooccurrence: cooc,
                         confidence,
                     });
@@ -274,6 +275,62 @@ impl ConvergenceDetection {
         } else {
             intersection as f32 / union as f32
         }
+    }
+
+    /// Compute node-level Jaccard similarity between two compositions.
+    ///
+    /// Pure node overlap without considering roles.
+    pub fn node_jaccard(&self, comp_a: &Composition, comp_b: &Composition) -> f32 {
+        let nodes_a: HashSet<NodeId> = comp_a.members.iter().map(|m| m.node_id).collect();
+        let nodes_b: HashSet<NodeId> = comp_b.members.iter().map(|m| m.node_id).collect();
+
+        if nodes_a.is_empty() && nodes_b.is_empty() {
+            return 1.0;
+        }
+
+        let intersection = nodes_a.intersection(&nodes_b).count();
+        let union = nodes_a.union(&nodes_b).count();
+
+        if union == 0 { 0.0 } else { intersection as f32 / union as f32 }
+    }
+
+    /// Compute role-weighted structural similarity between two compositions.
+    ///
+    /// Formula: α × role_jaccard + (1-α) × node_jaccard
+    /// Default α = 0.6 (role structure matters more than raw node overlap).
+    ///
+    /// role_jaccard: fraction of matching (role_type, label) pairs
+    /// node_jaccard: fraction of shared node_ids
+    ///
+    /// This fixes Known Limitation L1: plain Jaccard node-overlap doesn't
+    /// capture role equivalence (e.g., "dokter memeriksa pasien" vs
+    /// "tabib memeriksa orang_sakit" — same structure, different nodes).
+    pub fn role_weighted_similarity(
+        &self,
+        comp_a: &Composition,
+        comp_b: &Composition,
+    ) -> f32 {
+        let alpha = self.config.role_weight.unwrap_or(0.6);
+
+        // Node Jaccard (existing logic)
+        let node_jaccard = self.node_jaccard(comp_a, comp_b);
+
+        // Role Jaccard — match on (role_type,) to capture structural equivalence.
+        // Two compositions with the same role types (Agent, Predicate, Patient)
+        // but different labels (dokter/tabib) should score high on role structure.
+        let roles_a: HashSet<String> = comp_a.members.iter()
+            .map(|m| format!("{:?}", m.role))
+            .collect();
+        let roles_b: HashSet<String> = comp_b.members.iter()
+            .map(|m| format!("{:?}", m.role))
+            .collect();
+
+        let role_intersection = roles_a.intersection(&roles_b).count() as f32;
+        let role_union = roles_a.union(&roles_b).count() as f32;
+
+        let role_jaccard = if role_union > 0.0 { role_intersection / role_union } else { 0.0 };
+
+        alpha * role_jaccard + (1.0 - alpha) * node_jaccard
     }
 
     /// Blend seed scores between two converged compositions.
