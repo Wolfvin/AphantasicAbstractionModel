@@ -466,6 +466,15 @@ impl PipelineEngine {
         &mut self.graph
     }
 
+    /// Get mutable references to both the context and graph simultaneously.
+    ///
+    /// This is needed when a transform's `execute()` requires `&mut PipelineContext`
+    /// and `&mut Graph` at the same time, which can't be done through the
+    /// individual `graph_mut()` and context field access due to borrow checker rules.
+    pub fn context_and_graph_mut(&mut self) -> (&mut PipelineContext, &mut Graph) {
+        (&mut self.context, &mut self.graph)
+    }
+
     /// Convenience method for running a specific transform by type.
     ///
     /// Creates a new instance of `T`, reads its input from the context,

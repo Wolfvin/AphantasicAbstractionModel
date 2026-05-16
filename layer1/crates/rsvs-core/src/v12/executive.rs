@@ -35,8 +35,10 @@
 //! This module is only compiled when the `v12` feature is enabled.
 
 use serde::{Deserialize, Serialize};
-use super::pipeline::{Graph, IngestResult, PipelineEngine};
+use super::pipeline::{EnrichComposition, ErasedTransform, Graph, IngestResult, PipelineEngine};
 use super::types::*;
+use super::acquisition::{DetectGaps, SelectAcquisition, AcquisitionStrategy};
+use super::govern_beliefs::GovernBeliefs;
 use crate::types::NodeId;
 
 // ========================================================================
@@ -523,15 +525,16 @@ impl ExecutiveOrchestrator {
         self.mode.clone()
     }
 
-    /// Run the shared enrichment loop for Analytical and Reflective modes.
+    /// Run the active enrichment loop for Analytical and Reflective modes.
     ///
-    /// The enrichment loop:
-    /// 1. Detect gaps
-    /// 2. Select acquisition strategies
-    /// 3. Apply enrichment/re-extraction
-    /// 4. Re-govern compositions
-    /// 5. Check stop conditions
-    /// 6. Repeat if budget allows
+    /// The enrichment loop actively:
+    /// 1. Snapshot the graph and detect gaps via `DetectGaps`
+    /// 2. Select acquisition strategies via `SelectAcquisition`
+    /// 3. Convert `PassiveRecall` decisions into `EnrichmentRequest`s
+    /// 4. Apply enrichments via `EnrichComposition`
+    /// 5. Re-govern affected compositions via `GovernBeliefs`
+    /// 6. Update state tracking (evidence_count, confidence, stagnation)
+    /// 7. Check stop conditions and repeat if budget allows
     ///
     /// Returns a `ReflectionLoopResult` summarizing what was accomplished.
     pub fn run_enrichment_loop(
@@ -552,8 +555,8 @@ impl ExecutiveOrchestrator {
         };
 
         let mut modified_compositions = Vec::new();
-        let mut resolved_contradictions = Vec::new();
-        let filled_gaps = Vec::new();
+        let resolved_contradictions = Vec::new();
+        let mut filled_gaps = Vec::new();
 
         // Compute initial confidence.
         let snapshot = engine.snapshot();
@@ -564,72 +567,130 @@ impl ExecutiveOrchestrator {
                 / snapshot.compositions.len() as f32
         };
 
-        for _pass in 0..self.budget.max_enrichment_rounds {
+        for pass in 0..self.budget.max_enrichment_rounds {
             if stop_condition.should_stop(&state) {
                 break;
             }
 
-            // Apply pending enrichments.
-            let enrichments: Vec<_> = engine.context.pending_enrichments.drain(..).collect();
-            let new_evidence = !enrichments.is_empty();
+            state.evidence_at_loop_start = state.evidence_count;
 
-            for request in &enrichments {
-                modified_compositions.push(request.target_composition_id.clone());
+            // ── Step 1: Detect gaps actively ──
+            let snapshot = engine.snapshot();
+            let gaps = {
+                let mut dg = DetectGaps::new();
+                dg.detect_all(&snapshot)
+            };
+
+            if gaps.is_empty() {
+                // No gaps → nothing to enrich → stop.
+                break;
             }
 
-            // Apply pending re-extractions.
-            let reextractions: Vec<_> = engine.context.pending_reextractions.drain(..).collect();
-            for request in &reextractions {
-                modified_compositions.push(request.target_composition_id.clone());
-            }
+            // ── Step 2: Select strategies for each gap ──
+            let mut sa = SelectAcquisition::new();
+            let mut enrichments_queued = 0;
 
-            // Re-govern after enrichment.
-            let graph = engine.graph();
-            let contradicted_before: Vec<_> = graph
-                .compositions
-                .values()
-                .filter(|c| c.epistemic == EpistemicState::Contradicted)
-                .map(|c| c.id.clone())
-                .collect();
-
-            // After re-governance, check if any contradictions were resolved.
-            // (Simplified: we check if the contradicted count decreased.)
-            let graph_after = engine.graph();
-            let contradicted_after: Vec<_> = graph_after
-                .compositions
-                .values()
-                .filter(|c| c.epistemic == EpistemicState::Contradicted)
-                .map(|c| c.id.clone())
-                .collect();
-
-            for id in &contradicted_before {
-                if !contradicted_after.contains(id) {
-                    resolved_contradictions.push(id.clone());
+            for gap in &gaps {
+                let decision = sa.select_strategy(gap, engine.graph());
+                match &decision.strategy {
+                    AcquisitionStrategy::PassiveRecall {
+                        candidate_node_id,
+                        candidate_label,
+                        confidence,
+                    } => {
+                        // Queue enrichment for gap with known candidate.
+                        if let Some(comp_id) = &gap.source_composition_id {
+                            engine.context.pending_enrichments.push(EnrichmentRequest {
+                                target_composition_id: comp_id.clone(),
+                                role_to_fill: gap.missing_role.clone()
+                                    .unwrap_or(SemanticRole::Arg0Agent),
+                                candidate_node_id: *candidate_node_id,
+                                candidate_label: candidate_label.clone(),
+                                confidence: *confidence,
+                                source: EnrichmentSource::PassiveRecall,
+                            });
+                            enrichments_queued += 1;
+                            filled_gaps.push(gap.gap_id.clone());
+                        }
+                    }
+                    AcquisitionStrategy::AskUser { .. }
+                    | AcquisitionStrategy::ReExtraction { .. }
+                    | AcquisitionStrategy::Defer => {
+                        // These require external input or are deferred — skip for now.
+                    }
                 }
             }
 
-            // Update reasoning state.
-            state.loops_completed += 1;
-            if new_evidence {
-                state.loops_without_new_evidence = 0;
-            } else {
+            if enrichments_queued == 0 {
+                // No actionable enrichments → increment stagnation counter.
                 state.loops_without_new_evidence += 1;
             }
 
-            // Recompute confidence.
-            let snapshot = engine.snapshot();
-            let new_confidence = if snapshot.compositions.is_empty() {
-                0.0
-            } else {
-                snapshot.compositions.iter().map(|c| c.confidence).sum::<f32>()
-                    / snapshot.compositions.len() as f32
+            // ── Step 3: Apply enrichments via EnrichComposition ──
+            // Track enrichment targets before they are drained.
+            let enrichment_targets: Vec<_> = engine.context.pending_enrichments
+                .iter()
+                .map(|r| r.target_composition_id.clone())
+                .collect();
+
+            let result = {
+                let enrich = EnrichComposition::new();
+                let (ctx, graph) = engine.context_and_graph_mut();
+                enrich.execute(ctx, graph)
             };
 
-            let delta = (new_confidence - state.confidence).abs();
+            // Track which compositions were enriched.
+            for comp_id in &enrichment_targets {
+                if !modified_compositions.contains(comp_id) {
+                    modified_compositions.push(comp_id.clone());
+                }
+            }
+
+            // Track evidence from enrichments that were actually applied.
+            if result.enrichments_applied > 0 {
+                state.evidence_count += result.enrichments_applied;
+            }
+
+            // ── Step 4: Re-govern affected compositions ──
+            {
+                let gb = GovernBeliefs::new();
+                // Collect IDs of compositions that were modified.
+                let affected_ids: Vec<_> = modified_compositions.clone();
+                // Gather all affected compositions into a mutable vec for batch check.
+                let mut affected_comps: Vec<Composition> = affected_ids.iter()
+                    .filter_map(|id| engine.graph().compositions.get(id).cloned())
+                    .collect();
+                gb.check_promotions(&mut affected_comps);
+                // Write back any promoted compositions.
+                for comp in affected_comps {
+                    engine.graph_mut().compositions.insert(comp.id.clone(), comp);
+                }
+            }
+
+            // ── Step 5: Update state tracking ──
+            state.loops_completed = pass + 1;
+
+            // Recompute confidence.
+            let prev_confidence = state.confidence;
+            let snapshot2 = engine.snapshot();
+            let new_confidence = if snapshot2.compositions.is_empty() {
+                0.0
+            } else {
+                snapshot2.compositions.iter().map(|c| c.confidence).sum::<f32>()
+                    / snapshot2.compositions.len() as f32
+            };
             state.confidence = new_confidence;
 
-            // Check if confidence converged.
-            if delta < stop_condition.min_confidence_delta && state.loops_completed > 1 {
+            // Check for new evidence.
+            if state.evidence_count == state.evidence_at_loop_start {
+                state.loops_without_new_evidence += 1;
+            } else {
+                state.loops_without_new_evidence = 0;
+            }
+
+            // Check if confidence converged (only after the first pass).
+            let delta = (new_confidence - prev_confidence).abs();
+            if state.loops_completed > 1 && delta < stop_condition.min_confidence_delta {
                 break;
             }
 
@@ -643,7 +704,7 @@ impl ExecutiveOrchestrator {
         ReflectionLoopResult {
             current_confidence: state.confidence,
             elapsed_ms: 0, // Caller should time this
-            evidence_count: modified_compositions.len(),
+            evidence_count: state.evidence_count,
             modified_compositions,
             has_gaps: engine.context.has_gaps(),
             resolved_contradictions,
