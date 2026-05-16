@@ -984,18 +984,25 @@ fn test_blind_spot_3_semua_tipe_kontradiksi() {
         let mut comps = vec![event_comp, hm_comp];
         let updates = gb.detect_contradiction(&mut comps);
 
-        // CrossType may or may not fire depending on the exact predicate sharing logic.
-        // At minimum, the two compositions should be compared without panicking.
-        let has_any_conflict = !updates.is_empty();
-        if has_any_conflict {
-            let conflict_types: Vec<_> = updates.iter()
+        // CrossType must fire — HM's Problem "obat tidak menyembuhkan penyakit"
+        // negates Event's assertion "obat menyembuhkan penyakit".
+        // Strategy 1: SourceEvent label "menyembuhkan" matches Event's Predicate "menyembuhkan"
+        // Strategy 2: Problem contains negation + references "obat" (Agent) and "penyakit" (Patient)
+        let has_crosstype_conflict = updates.iter().any(|u| {
+            u.contradiction
+                .as_ref()
+                .map(|c| matches!(c.conflict_type, EpistemicConflictType::SemanticContradiction))
+                .unwrap_or(false)
+        });
+        assert!(
+            has_crosstype_conflict,
+            "CrossType contradiction MUST be detected: HiddenMeaning Problem='obat tidak menyembuhkan penyakit' \
+             negates Event 'obat menyembuhkan penyakit'. Got: {:?}",
+            updates.iter()
                 .filter_map(|u| u.contradiction.as_ref().map(|c| format!("{:?}", c.conflict_type)))
-                .collect();
-            eprintln!("  → CrossType (HM vs Event): conflict detected: {:?}", conflict_types);
-        } else {
-            eprintln!("  → CrossType (HM vs Event): no conflict detected (HiddenMeaning doesn't share predicate directly)");
-        }
-        // We assert that detect_contradiction does NOT panic on mixed types
+                .collect::<Vec<_>>()
+        );
+        eprintln!("  → CrossType (HM vs Event): SemanticContradiction DETECTED ✅");
     }
 
     // ---- 3d: EquivalenceMismatch ----

@@ -447,6 +447,21 @@ impl GovernBeliefs {
     /// contradicts the Event it was derived from. For example:
     /// - Event says "X causes Y", HiddenMeaning says Problem=Y but Solution=NOT-Y
     /// - Event has positive polarity, HiddenMeaning implies negative outcome
+    ///
+    /// Two strategies are used (tried in order):
+    ///
+    /// **Strategy 1 (existing)**: via SourceEvent role → direct link to Event.
+    /// The HiddenMeaning's SourceEvent member label must match either the
+    /// Event's provenance.origin_id, the Event's id, or the Event's Predicate
+    /// member label.
+    ///
+    /// **Strategy 2 (new)**: predicate-label fallback. When the SourceEvent
+    /// role is absent or doesn't directly link, we check if the HiddenMeaning's
+    /// Problem negates what the Event affirms by checking:
+    /// - HM's Solution label matches Event's Patient label AND Event has
+    ///   Negative polarity (the action failed/was negated)
+    /// - HM's Problem contains negation AND references the same entity as
+    ///   the Event's Agent or Patient
     pub fn has_hidden_meaning_event_conflict(
         &self,
         left: &Composition,
@@ -459,27 +474,63 @@ impl GovernBeliefs {
             _ => return false,
         };
 
-        // Check if the HiddenMeaning references this Event via SourceEvent role
+        // ── Strategy 1: SourceEvent role linking ──
         let source_event_member = hm.member_with_role(&SemanticRole::SourceEvent);
         let is_source = match source_event_member {
-            Some(m) => m.label == event.provenance.origin_id || m.label == event.id,
+            Some(m) => {
+                // Primary: match against provenance.origin_id or event id
+                if m.label == event.provenance.origin_id || m.label == event.id {
+                    true
+                }
+                // Extended: match against Event's Predicate member label
+                else if let Some(pred) = event.member_with_role(&SemanticRole::Predicate) {
+                    m.label == pred.label
+                } else {
+                    false
+                }
+            }
             None => true, // No source reference: check via predicate overlap
         };
 
-        if !is_source {
+        if is_source {
+            // Direct conflict: HiddenMeaning's Problem contradicts Event's Cause
+            if self.hm_problem_contradicts_event(hm, event) {
+                return true;
+            }
+
+            // Also check: HM's Problem negates the Event's core assertion
+            if self.hm_problem_negates_event_core(hm, event) {
+                return true;
+            }
+        } else {
             // Check if they share a predicate — indirect conflict
-            return self.share_predicate(left, right);
+            if self.share_predicate(left, right) {
+                return true;
+            }
         }
 
-        // Direct conflict: HiddenMeaning's Problem contradicts Event's Cause
+        // ── Strategy 2: predicate-label fallback ──
+        // When no SourceEvent link, try matching HM content to Event content.
+        if self.hm_solution_matches_event_patient_negative(hm, event) {
+            return true;
+        }
+
+        // HM's Problem contains negation AND references Event's Agent or Patient
+        if self.hm_problem_negates_event_entity(hm, event) {
+            return true;
+        }
+
+        false
+    }
+
+    /// Check if HM's Problem contradicts Event's Cause via negation XOR.
+    fn hm_problem_contradicts_event(&self, hm: &Composition, event: &Composition) -> bool {
         let hm_problem = hm.member_with_role(&SemanticRole::Problem);
         let event_cause = event.member_with_role(&SemanticRole::Cause);
 
         if let (Some(prob), Some(cause)) = (hm_problem, event_cause) {
-            // If the problem is the negation of the cause, that's a conflict
             let prob_lower = prob.label.to_lowercase();
             let cause_lower = cause.label.to_lowercase();
-            // Check for negation in one but not the other
             let negation_markers = ["tidak", "bukan", "not", "no", "never"];
             let prob_has_negation = negation_markers.iter().any(|nm| prob_lower.contains(nm));
             let cause_has_negation = negation_markers.iter().any(|nm| cause_lower.contains(nm));
@@ -487,8 +538,108 @@ impl GovernBeliefs {
                 return true;
             }
         }
-
         false
+    }
+
+    /// Check if HM's Problem negates the Event's core assertion.
+    ///
+    /// When the Event says "X menyembuhkan Y" (positive) and HM's Problem
+    /// says "X tidak menyembuhkan Y" (negated), the Problem contains negation
+    /// AND references the same entities (X and Y) as the Event.
+    fn hm_problem_negates_event_core(&self, hm: &Composition, event: &Composition) -> bool {
+        let hm_problem = hm.member_with_role(&SemanticRole::Problem);
+        let hm_problem_label = match hm_problem {
+            Some(p) => p.label.to_lowercase(),
+            None => return false,
+        };
+
+        let negation_markers = ["tidak", "bukan", "not", "no", "never"];
+        let problem_has_negation = negation_markers.iter().any(|nm| hm_problem_label.contains(nm));
+
+        if !problem_has_negation {
+            return false;
+        }
+
+        // Check if the Problem references the Event's Agent or Patient
+        let event_agent = event.member_with_role(&SemanticRole::Arg0Agent);
+        let event_patient = event.member_with_role(&SemanticRole::Arg1Patient);
+
+        let agent_referenced = event_agent
+            .map(|a| hm_problem_label.contains(&a.label.to_lowercase()))
+            .unwrap_or(false);
+        let patient_referenced = event_patient
+            .map(|p| hm_problem_label.contains(&p.label.to_lowercase()))
+            .unwrap_or(false);
+
+        // Event must be positive (asserting something) while Problem negates it
+        let event_is_positive = event.members.iter().any(|m| {
+            m.role == SemanticRole::Predicate && !m.label.to_lowercase().contains("tidak")
+                && !m.label.to_lowercase().contains("bukan")
+                && !m.label.to_lowercase().contains("not")
+        });
+
+        (agent_referenced || patient_referenced) && event_is_positive
+    }
+
+    /// Check if HM's Solution label matches Event's Patient label AND Event has
+    /// Negative polarity — meaning the action failed/was negated.
+    fn hm_solution_matches_event_patient_negative(&self, hm: &Composition, event: &Composition) -> bool {
+        let hm_solution = hm.member_with_role(&SemanticRole::Solution);
+        let ev_patient = event.member_with_role(&SemanticRole::Arg1Patient);
+
+        if let (Some(sol), Some(pat)) = (hm_solution, ev_patient) {
+            if sol.label == pat.label {
+                // Check if the event has negative polarity or negation cause
+                let event_is_negative = event.members.iter().any(|m| {
+                    m.role == SemanticRole::Cause
+                        && {
+                            let l = m.label.to_lowercase();
+                            ["tidak", "bukan", "not", "no", "never"].iter().any(|nm| l.contains(nm))
+                        }
+                });
+                if event_is_negative {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    /// Check if HM's Problem contains negation AND references the same
+    /// entity as the Event's Agent or Patient — even without a SourceEvent link.
+    fn hm_problem_negates_event_entity(&self, hm: &Composition, event: &Composition) -> bool {
+        let hm_problem = hm.member_with_role(&SemanticRole::Problem);
+        let problem_label = match hm_problem {
+            Some(p) => p.label.to_lowercase(),
+            None => return false,
+        };
+
+        let negation_markers = ["tidak", "bukan", "not", "no", "never"];
+        if !negation_markers.iter().any(|nm| problem_label.contains(nm)) {
+            return false;
+        }
+
+        // Check if Event's Predicate label appears in the Problem
+        let event_predicate = event.member_with_role(&SemanticRole::Predicate);
+        let predicate_referenced = event_predicate
+            .map(|p| problem_label.contains(&p.label.to_lowercase()))
+            .unwrap_or(false);
+
+        // Check if Event's Agent or Patient label appears in the Problem
+        let event_agent = event.member_with_role(&SemanticRole::Arg0Agent);
+        let event_patient = event.member_with_role(&SemanticRole::Arg1Patient);
+        let agent_referenced = event_agent
+            .map(|a| problem_label.contains(&a.label.to_lowercase()))
+            .unwrap_or(false);
+        let patient_referenced = event_patient
+            .map(|p| problem_label.contains(&p.label.to_lowercase()))
+            .unwrap_or(false);
+
+        // At least 2 of {predicate, agent, patient} must be referenced
+        let ref_count = predicate_referenced as usize
+            + agent_referenced as usize
+            + patient_referenced as usize;
+        ref_count >= 2
     }
 
     // ====================================================================
