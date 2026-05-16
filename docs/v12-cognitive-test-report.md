@@ -563,6 +563,18 @@ fn role_weighted_similarity(comp_a: &Composition, comp_b: &Composition, alpha: f
 
 **Deskripsi**: Persistence (JSON save/load) belum tercakup oleh skenario kognitif. Perlu test yang membuktikan bahwa graph dapat di-serialize, di-deserialize, dan tetap berfungsi dengan benar.
 
+### L6: Commutativity Partial (Known Limitation)
+
+**Ditemukan oleh**: test_commutativity_with_feedback_loop_active
+
+**Deskripsi**: Pipeline v12.0 adalah **structurally commutative** (node count, composition count, label sets identik terlepas urutan ingest) tapi **confidence-non-commutative** (average confidence boleh berbeda ≤0.15 antara urutan ingest berbeda).
+
+**Mengapa**: EnrichComposition dan ReExtractFrame membaca graph state saat enrichment berjalan. Ingest pertama membangun context yang digunakan oleh ingest berikutnya. Ketika urutan berubah, context berbeda → confidence adjustment berbeda.
+
+**Apakah ini bug?** Tidak — ini adalah perilaku yang diharapkan untuk sistem yang belajar dari konteks. Yang penting adalah divergensi dibatasi (≤0.15) dan sistem converge ke representasi yang structurally sama.
+
+**Test**: `test_commutativity_with_feedback_loop_active` memverifikasi batas ini.
+
 ---
 
 ## 14. Cara Menjalankan Ulang
