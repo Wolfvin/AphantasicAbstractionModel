@@ -1708,6 +1708,80 @@ impl ErasedTransform for GovernBeliefs {
         gb.check_sense_promotions(graph);
         gb.update_sense_grounding_from_evidence(graph);
 
+        // ── Audit v5 fix (PW2): Wire contradiction resolution ──
+        // Previously, check_contradiction_resolution() and resolve_contradiction()
+        // were fully implemented but never called from execute(). Contradicted
+        // compositions stayed Contradicted forever.
+        //
+        // Now we attempt resolution for all currently-contradicted pairs.
+        // Collect pairs first (two-pass to avoid borrow issues).
+        let contradicted_pairs: Vec<(CompositionId, CompositionId)> = {
+            let mut pairs = Vec::new();
+            let contras: Vec<&Composition> = graph
+                .compositions
+                .values()
+                .filter(|c| c.epistemic == EpistemicState::Contradicted)
+                .collect();
+            for comp in &contras {
+                if let Some(contra) = &comp.contradiction {
+                    if !contra.opposing_composition_id.is_empty() {
+                        pairs.push((comp.id.clone(), contra.opposing_composition_id.clone()));
+                    }
+                }
+            }
+            pairs
+        };
+
+        // Attempt resolution for each contradicted pair.
+        let mut resolutions_applied = 0usize;
+        for (comp_id, opposing_id) in &contradicted_pairs {
+            // Clone both compositions for resolution check.
+            let comp_clone = graph.compositions.get(comp_id).cloned();
+            let opposing_clone = graph.compositions.get(opposing_id).cloned();
+            if let (Some(comp), Some(opposing)) = (comp_clone, opposing_clone) {
+                if let Some(resolution) = gb.check_contradiction_resolution(&comp, &opposing) {
+                    // Apply resolution: un-contradict or deprecate.
+                    match resolution.resolution_type {
+                        ResolutionType::Misinterpretation | ResolutionType::ScopedValidity => {
+                            // Both compositions are un-contradicted.
+                            if let Some(c) = graph.compositions.get_mut(comp_id) {
+                                c.epistemic = EpistemicState::Observed;
+                                c.contradiction = None;
+                            }
+                            if let Some(c) = graph.compositions.get_mut(opposing_id) {
+                                c.epistemic = EpistemicState::Observed;
+                                c.contradiction = None;
+                            }
+                        }
+                        ResolutionType::Superseded => {
+                            // The weaker composition is deprecated.
+                            if let Some(c) = graph.compositions.get_mut(comp_id) {
+                                c.lifecycle = LifecycleState::Deprecated;
+                                c.epistemic = EpistemicState::Observed;
+                                c.contradiction = None;
+                            }
+                            if let Some(c) = graph.compositions.get_mut(opposing_id) {
+                                c.epistemic = EpistemicState::Observed;
+                                c.contradiction = None;
+                            }
+                        }
+                        ResolutionType::ContextResolved => {
+                            if let Some(c) = graph.compositions.get_mut(comp_id) {
+                                c.epistemic = EpistemicState::Observed;
+                                c.contradiction = None;
+                            }
+                            if let Some(c) = graph.compositions.get_mut(opposing_id) {
+                                c.epistemic = EpistemicState::Observed;
+                                c.contradiction = None;
+                            }
+                        }
+                        ResolutionType::Unresolved => continue,
+                    }
+                    resolutions_applied += 1;
+                }
+            }
+        }
+
         // ── Fix 3 (Critical): Wire can_deprecate_node into deprecation guard ──
         // Check all compositions that were marked as Deprecated and guard
         // their member nodes from deprecation if they are bridge/Mature/high-connectivity.
@@ -1743,6 +1817,12 @@ impl ErasedTransform for GovernBeliefs {
         graph
             .metadata
             .insert("govern_batch".to_string(), gb.current_batch.to_string());
+
+        // Store resolution count in metadata for observability.
+        graph.metadata.insert(
+            "last_contradiction_resolutions".to_string(),
+            resolutions_applied.to_string(),
+        );
 
         IngestResult {
             atoms_created: 0,

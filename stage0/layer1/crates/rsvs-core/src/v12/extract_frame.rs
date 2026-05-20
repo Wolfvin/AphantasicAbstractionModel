@@ -117,6 +117,12 @@ pub enum ExtractionQuality {
 /// Maintains running statistics on extraction quality, enabling the
 /// feedback loop to identify systematic weaknesses and trigger
 /// re-extraction for low-confidence frames.
+///
+/// **Audit v5 fix (D14)**: This is now wired into `ExtractFrame::execute()`
+/// alongside the simpler `ExtractionQualityTracker` in `PipelineContext`.
+/// The `ExtractionQualityTracker` stores aggregate stats (frames_extracted,
+/// average_confidence, low_confidence_frames) while this tracker provides
+/// per-quality-level breakdown (high/moderate/low/failed counts).
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ExtractionQualityTrackerExt {
     /// Number of high-quality extractions.
@@ -618,6 +624,8 @@ impl ErasedTransform for ExtractFrame {
         if !Self::is_sentence_like(&text) {
             // Update quality tracker.
             ctx.extraction_quality.low_confidence_frames += 1;
+            // Audit v5 fix (D14): Also update the per-quality-level tracker.
+            ctx.extraction_quality_ext.record(&ExtractionQuality::Failed, 0.0);
             return IngestResult::new();
         }
 
@@ -635,6 +643,16 @@ impl ErasedTransform for ExtractFrame {
                 * (ctx.extraction_quality.frames_extracted - 1) as f32
                 + atom.confidence)
                 / ctx.extraction_quality.frames_extracted as f32;
+
+            // Audit v5 fix (D14): Also update the per-quality-level tracker.
+            let quality = if atom.confidence >= 0.7 {
+                ExtractionQuality::HighQuality
+            } else if atom.confidence >= 0.4 {
+                ExtractionQuality::ModerateQuality
+            } else {
+                ExtractionQuality::LowQuality
+            };
+            ctx.extraction_quality_ext.record(&quality, atom.confidence);
 
             if atom.confidence < 0.5 {
                 ctx.extraction_quality.low_confidence_frames += 1;

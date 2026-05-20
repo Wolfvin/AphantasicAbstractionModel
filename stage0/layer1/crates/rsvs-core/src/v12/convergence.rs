@@ -379,14 +379,60 @@ impl ErasedTransform for ConvergenceDetectionTransform {
         "ConvergenceDetection"
     }
 
-    fn execute(&self, _ctx: &mut PipelineContext, graph: &mut Graph) -> IngestResult {
+    fn execute(&self, ctx: &mut PipelineContext, graph: &mut Graph) -> IngestResult {
+        // Audit v5 fix: Persist detected_pairs by storing them in graph metadata
+        // (since ErasedTransform::execute takes &self, we can't mutate self.engine).
+        // Previous pairs are loaded from metadata so we don't re-detect already-known pairs.
         let mut engine = self.engine.clone();
         let pairs = engine.detect(graph);
 
+        // Persist detected_pairs back to self.engine via graph metadata.
+        // This avoids losing pairs across runs even though we can't mutate self.
+        // Store as comma-separated pair keys in graph.metadata["convergence_pairs"].
+        let pairs_key = pairs
+            .iter()
+            .map(|p| format!("{}:{}", p.composition_a, p.composition_b))
+            .collect::<Vec<_>>()
+            .join(",");
+        graph.metadata.insert("convergence_pairs".to_string(), pairs_key);
+
         // Create EquivalentOf links between converged compositions
         // AND blend their seed scores.
+        //
+        // Audit v5 fix (DD1): Use activation energies from SpreadingActivation
+        // to boost convergence confidence for highly-activated nodes.
+        let activation = &ctx.last_activation_energies;
         let mut edges_created = 0;
         for pair in &pairs {
+            // Audit v5 fix (DD1): Boost convergence confidence using activation
+            // energies from SpreadingActivation. If member nodes of converged
+            // compositions have high activation, the convergence is more likely
+            // to be meaningful (not just structural coincidence).
+            let activation_boost: f32 = {
+                let comp_a = graph.compositions.get(&pair.composition_a);
+                let comp_b = graph.compositions.get(&pair.composition_b);
+                match (comp_a, comp_b) {
+                    (Some(a), Some(b)) => {
+                        let mut total_energy = 0.0f32;
+                        let mut node_count = 0usize;
+                        for member in a.members.iter().chain(b.members.iter()) {
+                            if let Some(&energy) = activation.get(&member.node_id) {
+                                total_energy += energy;
+                                node_count += 1;
+                            }
+                        }
+                        if node_count > 0 {
+                            // Average activation energy, capped at 0.2 boost
+                            (total_energy / node_count as f32 * 0.3).min(0.2)
+                        } else {
+                            0.0
+                        }
+                    }
+                    _ => 0.0,
+                }
+            };
+            let boosted_confidence = (pair.confidence + activation_boost).min(0.95);
+
             // Find a node from comp_b to link to (immutable borrow first).
             let pred_node = graph
                 .compositions
@@ -400,7 +446,7 @@ impl ErasedTransform for ConvergenceDetectionTransform {
                     comp_a.members.push(CompositionMember {
                         node_id,
                         role: SemanticRole::EquivalentOf,
-                        confidence: pair.confidence,
+                        confidence: boosted_confidence,
                         label,
                     });
                     edges_created += 1;

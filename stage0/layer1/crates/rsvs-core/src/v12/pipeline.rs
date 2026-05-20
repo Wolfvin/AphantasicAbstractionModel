@@ -373,6 +373,12 @@ impl PipelineEngine {
     /// This is the post-pipeline step: after the full DAG has executed and
     /// produced an `AnchoredDelta` (from `SeedAnchor`), apply it to the
     /// graph by upserting all compositions.
+    ///
+    /// **Note**: In the current pipeline, `GovernBeliefs::execute()` writes
+    /// compositions directly to the graph, bypassing this method. This
+    /// method exists for external callers who want to apply an `AnchoredDelta`
+    /// manually (e.g., from Python FFI). It is NOT called by the default
+    /// pipeline flow.
     pub fn apply(&mut self, anchored: AnchoredDelta) {
         for composition in anchored.compositions {
             self.graph
@@ -612,7 +618,7 @@ fn topological_sort(dag: &[TransformNode]) -> Result<Vec<String>, Vec<String>> {
 
 /// Register all core v1.0.0 transforms in dependency order.
 ///
-/// This wires up the complete default pipeline with 13 transforms:
+/// This wires up the complete default pipeline with 14 transforms:
 ///
 /// | # | Transform | Dependencies | Condition |
 /// |---|-----------|-------------|------------|
@@ -629,6 +635,7 @@ fn topological_sort(dag: &[TransformNode]) -> Result<Vec<String>, Vec<String>> {
 /// | 11 | TemporalDecay | EnrichComposition | always |
 /// | 12 | SpreadingActivation | GovernBeliefs | has_event_atoms |
 /// | 13 | ConvergenceDetection | EnrichComposition, TemporalDecay | always |
+/// | 14 | CompositionalVerbalize | ConvergenceDetection | has_event_atoms |
 ///
 /// Parse a semantic role name string into a `SemanticRole` enum.
 ///
@@ -756,6 +763,17 @@ pub fn register_default_pipeline(engine: &mut PipelineEngine) {
         },
         vec!["EnrichComposition".to_string(), "TemporalDecay".to_string()],
         None,
+    );
+
+    // 14. CompositionalVerbalize — generates explanations for compositions.
+    //     Audit v5 fix: Previously NOT in default pipeline — the CVE transform
+    //     was fully implemented but never registered. ctx.last_verbalization
+    //     was always None. Now registered after ConvergenceDetection.
+    //     Condition: always when compositions exist (checked internally).
+    engine.register(
+        super::verbalize::CompositionalVerbalizeTransform::new(),
+        vec!["ConvergenceDetection".to_string()],
+        Some(Box::new(|ctx: &PipelineContext| ctx.has_event_atoms())),
     );
 }
 
@@ -2499,8 +2517,8 @@ mod tests {
     fn test_register_default_pipeline() {
         let mut engine = PipelineEngine::new();
         register_default_pipeline(&mut engine);
-        assert_eq!(engine.transforms.len(), 13);
-        assert_eq!(engine.dag.len(), 13);
+        assert_eq!(engine.transforms.len(), 14);
+        assert_eq!(engine.dag.len(), 14);
     }
 
     #[test]

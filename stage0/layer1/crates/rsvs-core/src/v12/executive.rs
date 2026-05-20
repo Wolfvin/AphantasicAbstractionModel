@@ -739,9 +739,18 @@ impl ExecutiveOrchestrator {
             // Step 4: If Reflective, produce reflection findings.
             if mode == CognitiveMode::Reflective {
                 let findings = self.reflect.reflect(&loop_result, engine.graph());
-                // Findings could be logged, stored, or used to guide further action.
-                // For now, we just count them.
-                let _ = findings; // Available for future use
+                // Audit v5 fix (DD3): Previously, findings were discarded with
+                // `let _ = findings`. Now we store them in graph metadata so
+                // they're accessible for downstream actions and debugging.
+                let findings_summary = findings
+                    .iter()
+                    .map(|f| format!("{:?}:{}", f.finding_type, f.affected_compositions.join("+")))
+                    .collect::<Vec<_>>()
+                    .join(",");
+                engine.graph_mut().metadata.insert(
+                    "reflection_findings".to_string(),
+                    findings_summary,
+                );
             }
         }
 

@@ -817,6 +817,23 @@ pub struct PipelineContext {
     /// for downstream transforms (convergence, gap detection, attention).
     #[serde(default)]
     pub last_activation_energies: HashMap<u32, f32>,
+
+    /// Audit v5 fix (DD5): Decay summary from TemporalDecay transform.
+    /// Previously, DecayResult was computed but never stored — only the
+    /// governance_transitions count was kept. Now we store the number of
+    /// compositions that were demoted or deprecated by decay.
+    #[serde(default)]
+    pub last_decay_demoted: usize,
+
+    /// Number of compositions deprecated by temporal decay.
+    #[serde(default)]
+    pub last_decay_deprecated: usize,
+
+    /// Audit v5 fix (D14): Per-quality-level extraction tracker from ExtractFrame.
+    /// Provides high/moderate/low/failed breakdown alongside the aggregate
+    /// `extraction_quality` field. Previously defined but never wired.
+    #[serde(default)]
+    pub extraction_quality_ext: super::extract_frame::ExtractionQualityTrackerExt,
 }
 
 /// Maximum recent events to keep in the sliding window.
