@@ -49,7 +49,7 @@ use super::convergence::ConvergenceDetectionTransform;
 use super::extract_frame::ExtractFrame;
 use super::govern_beliefs::{GovernBeliefs, SeedAnchor};
 use super::reason_frame::ReasonFrame;
-use super::spreading::SpreadingActivationTransform;
+use super::spreading::{SpreadingActivation, SpreadingActivationTransform};
 use super::temporal::TemporalDecayTransform;
 use super::types::*;
 // NodeId is imported from crate::types — not re-exported by super::types.
@@ -629,6 +629,39 @@ fn topological_sort(dag: &[TransformNode]) -> Result<Vec<String>, Vec<String>> {
 /// | 11 | TemporalDecay | EnrichComposition | always |
 /// | 12 | SpreadingActivation | GovernBeliefs | has_event_atoms |
 /// | 13 | ConvergenceDetection | EnrichComposition, TemporalDecay | always |
+
+/// Parse a semantic role name string into a `SemanticRole` enum.
+///
+/// Accepts both the Debug format (e.g., "Arg0Agent") and common
+/// abbreviations (e.g., "Agent", "Patient", "Cause", "Problem", "Solution").
+fn parse_semantic_role(name: &str) -> Option<SemanticRole> {
+    match name {
+        "Arg0Agent" | "Agent" | "agent" => Some(SemanticRole::Arg0Agent),
+        "Arg1Patient" | "Patient" | "patient" => Some(SemanticRole::Arg1Patient),
+        "Arg2Recipient" | "Recipient" | "recipient" => Some(SemanticRole::Arg2Recipient),
+        "Cause" | "cause" => Some(SemanticRole::Cause),
+        "Purpose" | "purpose" => Some(SemanticRole::Purpose),
+        "Location" | "location" => Some(SemanticRole::Location),
+        "Time" | "time" => Some(SemanticRole::Time),
+        "Instrument" | "instrument" => Some(SemanticRole::Instrument),
+        "Predicate" | "predicate" => Some(SemanticRole::Predicate),
+        "Problem" | "problem" => Some(SemanticRole::Problem),
+        "Solution" | "solution" => Some(SemanticRole::Solution),
+        "Beneficiary" | "beneficiary" => Some(SemanticRole::Beneficiary),
+        "Tool" | "tool" => Some(SemanticRole::Tool),
+        "Motivation" | "motivation" => Some(SemanticRole::Motivation),
+        "PainPoint" | "painpoint" | "Pain" | "pain" => Some(SemanticRole::PainPoint),
+        "ImpliedGoal" | "implied_goal" | "Goal" | "goal" => Some(SemanticRole::ImpliedGoal),
+        "PatternType" | "pattern_type" => Some(SemanticRole::PatternType),
+        "Antecedent" | "antecedent" => Some(SemanticRole::Antecedent),
+        "Consequent" | "consequent" => Some(SemanticRole::Consequent),
+        "SourceAtom" | "source_atom" => Some(SemanticRole::SourceAtom),
+        "SourceEvent" | "source_event" => Some(SemanticRole::SourceEvent),
+        "EquivalentOf" | "equivalent_of" => Some(SemanticRole::EquivalentOf),
+        _ => None,
+    }
+}
+
 pub fn register_default_pipeline(engine: &mut PipelineEngine) {
     // 1. Tokenize — no dependencies, always runs.
     engine.register(Tokenize::new(), vec![], None);
@@ -1094,6 +1127,247 @@ impl Graph {
             .filter(|(&id, _)| self.is_bridge(id))
             .map(|(&id, _)| id)
             .collect()
+    }
+
+    // ================================================================
+    // Semantic Query API — query by meaning, similarity, path finding
+    // ================================================================
+
+    /// Query compositions by concept label.
+    ///
+    /// Unlike `neighborhood_for()` which only matches exact keywords,
+    /// this method also finds compositions where the concept appears
+    /// as a member label (substring matching) and ranks results by
+    /// relevance: exact label match > role match > substring match.
+    ///
+    /// Returns compositions sorted by relevance (highest first).
+    pub fn query_by_concept(&self, concept: &str) -> Vec<(&Composition, f32)> {
+        let concept_lower = concept.to_lowercase();
+        let mut results: Vec<(&Composition, f32)> = Vec::new();
+
+        for comp in self.compositions.values() {
+            let mut score = 0.0f32;
+
+            for member in &comp.members {
+                let label_lower = member.label.to_lowercase();
+
+                if label_lower == concept_lower {
+                    // Exact match — highest relevance
+                    score = score.max(1.0);
+                } else if label_lower.contains(&concept_lower)
+                    || concept_lower.contains(&label_lower)
+                {
+                    // Substring match — medium relevance, weighted by member confidence
+                    score = score.max(0.6 * member.confidence);
+                }
+            }
+
+            // Boost score for Stable/Grounded compositions
+            if score > 0.0 {
+                if comp.lifecycle == LifecycleState::Stable {
+                    score *= 1.2;
+                }
+                if comp.epistemic == EpistemicState::Grounded {
+                    score *= 1.1;
+                }
+                score = score.min(1.0);
+                results.push((comp, score));
+            }
+        }
+
+        // Sort by relevance (highest first)
+        results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        results
+    }
+
+    /// Query compositions by role structure.
+    ///
+    /// Find all compositions that contain ALL the specified semantic roles.
+    /// For example, `query_by_structure(&["Arg0Agent", "Cause"])` finds
+    /// all compositions that have both an Agent and a Cause role.
+    ///
+    /// This enables queries like "find all causal compositions" or
+    /// "find all compositions with a Problem and Solution."
+    ///
+    /// Returns compositions sorted by confidence (highest first).
+    pub fn query_by_structure(&self, role_names: &[String]) -> Vec<&Composition> {
+        // Parse role names into SemanticRole enums
+        let target_roles: Vec<SemanticRole> = role_names
+            .iter()
+            .filter_map(|name| parse_semantic_role(name))
+            .collect();
+
+        if target_roles.is_empty() {
+            return Vec::new();
+        }
+
+        let mut results: Vec<&Composition> = self
+            .compositions
+            .values()
+            .filter(|comp| {
+                target_roles.iter().all(|role| {
+                    comp.members.iter().any(|m| m.role == *role)
+                })
+            })
+            .collect();
+
+        // Sort by confidence (highest first)
+        results.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap_or(std::cmp::Ordering::Equal));
+        results
+    }
+
+    /// Compute similarity between two nodes identified by label.
+    ///
+    /// Uses structural overlap (Jaccard) of their composition neighborhoods
+    /// plus spreading activation overlap. Two nodes are "similar" if they
+    /// participate in compositions with similar structure.
+    ///
+    /// Returns a score from 0.0 (completely unrelated) to 1.0 (identical neighborhood).
+    pub fn similarity(&self, label_a: &str, label_b: &str) -> f32 {
+        let node_a = match self.find_node_by_label(label_a) {
+            Some(id) => id,
+            None => return 0.0,
+        };
+        let node_b = match self.find_node_by_label(label_b) {
+            Some(id) => id,
+            None => return 0.0,
+        };
+
+        if node_a == node_b {
+            return 1.0;
+        }
+
+        // Strategy 1: Composition neighborhood Jaccard
+        let comps_a: HashSet<CompositionId> = self
+            .compositions_for_node(node_a)
+            .iter()
+            .map(|c| c.id.clone())
+            .collect();
+        let comps_b: HashSet<CompositionId> = self
+            .compositions_for_node(node_b)
+            .iter()
+            .map(|c| c.id.clone())
+            .collect();
+
+        let jaccard = if comps_a.is_empty() && comps_b.is_empty() {
+            0.0
+        } else {
+            let intersection = comps_a.intersection(&comps_b).count();
+            let union = comps_a.union(&comps_b).count();
+            intersection as f32 / union as f32
+        };
+
+        // Strategy 2: Spreading activation overlap
+        let sa = SpreadingActivation::default();
+        let activation_a = sa.spread(&[(node_a, 1.0)], self);
+        let activation_b = sa.spread(&[(node_b, 1.0)], self);
+
+        let spreading_overlap = if activation_a.is_empty() || activation_b.is_empty() {
+            0.0
+        } else {
+            // Cosine similarity of activation vectors
+            let mut dot = 0.0f32;
+            let mut norm_a = 0.0f32;
+            let mut norm_b = 0.0f32;
+
+            for (&id, &e) in &activation_a.energies {
+                norm_a += e * e;
+                let eb = activation_b.energy(id);
+                dot += e * eb;
+            }
+            for &e in activation_b.energies.values() {
+                norm_b += e * e;
+            }
+
+            let denom = norm_a.sqrt() * norm_b.sqrt();
+            if denom > 0.0 { dot / denom } else { 0.0 }
+        };
+
+        // Blend: 60% Jaccard + 40% spreading overlap
+        0.6 * jaccard + 0.4 * spreading_overlap
+    }
+
+    /// Find related nodes using spreading activation from a seed label.
+    ///
+    /// Returns the top-N most activated nodes, sorted by activation energy.
+    /// This is the core "query by meaning" mechanism: start from a concept,
+    /// spread activation through the graph, and the most activated nodes
+    /// are the most semantically related.
+    ///
+    /// Each result includes the node label and activation energy.
+    pub fn find_related(&self, label: &str, top_n: usize) -> Vec<(String, f32)> {
+        let node_id = match self.find_node_by_label(label) {
+            Some(id) => id,
+            None => return Vec::new(),
+        };
+
+        let sa = SpreadingActivation::default();
+        let activation = sa.spread(&[(node_id, 1.0)], self);
+
+        activation
+            .top_n(top_n)
+            .iter()
+            .filter_map(|&(id, energy)| {
+                self.node_label(id).map(|lbl| (lbl.to_string(), energy))
+            })
+            .filter(|(lbl, _)| lbl != label) // Exclude the seed itself
+            .collect()
+    }
+
+    /// Find a reasoning path between two nodes identified by label.
+    ///
+    /// Uses bidirectional spreading activation to find compositions
+    /// that connect two concepts. Returns the chain of composition IDs
+    /// that form the shortest reasoning path.
+    ///
+    /// This answers questions like "why are X and Y related?" by
+    /// showing the compositions that connect them.
+    pub fn find_path(&self, label_from: &str, label_to: &str) -> Vec<String> {
+        let node_from = match self.find_node_by_label(label_from) {
+            Some(id) => id,
+            None => return Vec::new(),
+        };
+        let node_to = match self.find_node_by_label(label_to) {
+            Some(id) => id,
+            None => return Vec::new(),
+        };
+
+        if node_from == node_to {
+            return Vec::new();
+        }
+
+        // Spread from both directions
+        let sa = SpreadingActivation::default();
+        let activation_from = sa.spread(&[(node_from, 1.0)], self);
+        let activation_to = sa.spread(&[(node_to, 1.0)], self);
+
+        // Find compositions that are activated from both sides
+        let mut bridge_comps: Vec<(&Composition, f32)> = Vec::new();
+
+        for comp in self.compositions.values() {
+            let mut energy_from = 0.0f32;
+            let mut energy_to = 0.0f32;
+
+            for member in &comp.members {
+                energy_from += activation_from.energy(member.node_id);
+                energy_to += activation_to.energy(member.node_id);
+            }
+
+            // Both sides must have activation for this to be a bridge
+            if energy_from > 0.0 && energy_to > 0.0 {
+                // Score = harmonic mean of energies (high when both are high)
+                let score = if energy_from + energy_to > 0.0 {
+                    2.0 * energy_from * energy_to / (energy_from + energy_to)
+                } else {
+                    0.0
+                };
+                bridge_comps.push((comp, score));
+            }
+        }
+
+        // Sort by bridge score (highest first) and return composition IDs
+        bridge_comps.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        bridge_comps.iter().map(|(comp, _)| comp.id.clone()).collect()
     }
 
     // ================================================================

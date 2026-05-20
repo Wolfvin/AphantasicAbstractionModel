@@ -817,6 +817,291 @@ impl PyV12Pipeline {
             contradicted,
         )
     }
+
+    // ================================================================
+    // Semantic Query API — query by meaning, similarity, path finding
+    // ================================================================
+
+    /// Query compositions by concept label.
+    ///
+    /// Unlike simple keyword matching, this finds compositions where the concept
+    /// appears as a member label (including substring matching) and ranks results
+    /// by relevance: exact label match > role match > substring match.
+    ///
+    /// Returns list of (composition, relevance_score) tuples sorted by relevance.
+    ///
+    /// # Example
+    ///
+    /// ```python
+    /// pipeline = PyV12Pipeline()
+    /// pipeline.v12_ingest("Raja memimpin kerajaan")
+    /// results = pipeline.query_concept("raja")
+    /// for comp, score in results:
+    ///     print(f"  {comp.id}: relevance={score:.2f}")
+    /// ```
+    fn query_concept(&self, concept: &str) -> Vec<(PyComposition, f32)> {
+        self.engine
+            .graph()
+            .query_by_concept(concept)
+            .iter()
+            .map(|(comp, score)| (PyComposition::from(*comp), *score))
+            .collect()
+    }
+
+    /// Query compositions by semantic role structure.
+    ///
+    /// Find all compositions that contain ALL the specified semantic roles.
+    /// Accepts both formal names ("Arg0Agent", "Cause") and common
+    /// abbreviations ("Agent", "Patient", "Problem", "Solution").
+    ///
+    /// Returns compositions sorted by confidence (highest first).
+    ///
+    /// # Example
+    ///
+    /// ```python
+    /// # Find all causal compositions (with Agent + Cause)
+    /// causal = pipeline.query_structure(["Agent", "Cause"])
+    ///
+    /// # Find all problem-solution compositions
+    /// ps = pipeline.query_structure(["Problem", "Solution"])
+    /// ```
+    fn query_structure(&self, role_names: Vec<String>) -> Vec<PyComposition> {
+        self.engine
+            .graph()
+            .query_by_structure(&role_names)
+            .iter()
+            .map(|comp| PyComposition::from(*comp))
+            .collect()
+    }
+
+    /// Compute similarity between two nodes identified by label.
+    ///
+    /// Uses a blend of:
+    /// - 60% Jaccard overlap of composition neighborhoods
+    /// - 40% Spreading activation cosine similarity
+    ///
+    /// Returns a score from 0.0 (completely unrelated) to 1.0 (identical).
+    ///
+    /// # Example
+    ///
+    /// ```python
+    /// score = pipeline.similarity("raja", "ratu")
+    /// print(f"Similarity: {score:.3f}")
+    /// ```
+    fn similarity(&self, label_a: &str, label_b: &str) -> f32 {
+        self.engine.graph().similarity(label_a, label_b)
+    }
+
+    /// Find related concepts using spreading activation.
+    ///
+    /// Starts from the given label and spreads activation through the graph.
+    /// Returns the top-N most activated node labels with their energy scores.
+    /// This is the core "query by meaning" mechanism.
+    ///
+    /// # Example
+    ///
+    /// ```python
+    /// related = pipeline.find_related("raja", top_n=5)
+    /// for label, energy in related:
+    ///     print(f"  {label}: energy={energy:.3f}")
+    /// ```
+    fn find_related(&self, label: &str, top_n: Option<usize>) -> Vec<(String, f32)> {
+        self.engine.graph().find_related(label, top_n.unwrap_or(10))
+    }
+
+    /// Find a reasoning path between two concepts.
+    ///
+    /// Uses bidirectional spreading activation to find compositions
+    /// that connect two concepts. Returns composition IDs forming
+    /// the strongest reasoning path, sorted by bridge score.
+    ///
+    /// This answers "why are X and Y related?" by showing the
+    /// connecting compositions.
+    ///
+    /// # Example
+    ///
+    /// ```python
+    /// path = pipeline.find_path("raja", "kerajaan")
+    /// for comp_id in path:
+    ///     text = pipeline.verbalize_composition(comp_id)
+    ///     print(f"  {comp_id}: {text}")
+    /// ```
+    fn find_path(&self, label_from: &str, label_to: &str) -> Vec<String> {
+        self.engine.graph().find_path(label_from, label_to)
+    }
+
+    /// Explain why two concepts are related.
+    ///
+    /// Combines `find_path()` with `verbalize_composition()` to produce
+    /// a natural language explanation of the connection between two concepts.
+    /// Returns a list of verbalized sentences, one per bridging composition.
+    ///
+    /// # Example
+    ///
+    /// ```python
+    /// explanation = pipeline.explain_connection("obat", "penyakit")
+    /// for sentence in explanation:
+    ///     print(f"  → {sentence}")
+    /// ```
+    fn explain_connection(&self, label_from: &str, label_to: &str) -> Vec<String> {
+        let path = self.engine.graph().find_path(label_from, label_to);
+        let cve = v12::CompositionalVerbalize::new();
+        let graph = self.engine.graph();
+
+        path.iter()
+            .filter_map(|comp_id| {
+                graph.get_composition(comp_id).map(|comp| cve.verbalize_single(comp))
+            })
+            .collect()
+    }
+
+    /// Get all compositions involving a specific node label.
+    ///
+    /// This is a more direct alternative to `query_concept()` for
+    /// exact label matching only.
+    fn compositions_for_label(&self, label: &str) -> Vec<PyComposition> {
+        let graph = self.engine.graph();
+        let node_id = match graph.find_node_by_label(label) {
+            Some(id) => id,
+            None => return Vec::new(),
+        };
+        graph
+            .compositions_for_node(node_id)
+            .iter()
+            .map(|comp| PyComposition::from(*comp))
+            .collect()
+    }
+
+    // ================================================================
+    // Training Corpus Integration — learn with priority
+    // ================================================================
+
+    /// Ingest multiple sentences from a list, with optional priority.
+    ///
+    /// Priority affects governance: high-priority sentences get their
+    /// compositions processed first and are more likely to be promoted
+    /// to Stable quickly.
+    ///
+    /// Returns the total ingest result across all sentences.
+    ///
+    /// # Example
+    ///
+    /// ```python
+    /// corpus = [
+    ///     "Raja memimpin kerajaan",
+    ///     "Rakyat mendukung raja",
+    ///     "Kerajaan makmur karena kebijakan raja",
+    /// ]
+    /// result = pipeline.learn_corpus(corpus, priority="high")
+    /// print(f"Learned {result.compositions_created} compositions")
+    /// ```
+    fn learn_corpus(&mut self, sentences: Vec<String>, priority: Option<String>) -> PyV12IngestResult {
+        let mut total_atoms = 0;
+        let mut total_comps = 0;
+        let mut total_gaps = 0;
+        let mut total_edges = 0;
+        let mut total_enrichments = 0;
+        let mut total_governance = 0;
+
+        // High priority: run enrichment loop after each sentence
+        let is_high = priority.as_deref() == Some("high");
+
+        for sentence in &sentences {
+            let result = self.engine.ingest(sentence);
+            total_atoms += result.atoms_created;
+            total_comps += result.compositions_created;
+            total_gaps += result.gaps_detected;
+            total_edges += result.edges_created;
+            total_enrichments += result.enrichments_applied;
+            total_governance += result.governance_transitions;
+
+            if is_high {
+                let _ = self.orchestrator.run_enrichment_loop(&mut self.engine);
+            }
+        }
+
+        let mode = if is_high { "high_priority_corpus" } else { "corpus" };
+
+        PyV12IngestResult {
+            atoms_created: total_atoms,
+            compositions_created: total_comps,
+            gaps_detected: total_gaps,
+            edges_created: total_edges,
+            enrichments_applied: total_enrichments,
+            governance_transitions: total_governance,
+            cognitive_mode: mode.to_string(),
+        }
+    }
+
+    /// Check comprehension of a topic by querying the graph.
+    ///
+    /// Returns a summary of how well the system "understands" a concept:
+    /// - Number of compositions involving the concept
+    /// - Average confidence of those compositions
+    /// - Lifecycle distribution (Stable vs Candidate vs New)
+    /// - Related concepts via spreading activation
+    ///
+    /// # Example
+    ///
+    /// ```python
+    /// pipeline.learn_corpus(["Raja memimpin kerajaan karena kebijakan"])
+    /// check = pipeline.comprehension_check("raja")
+    /// print(check)
+    /// ```
+    fn comprehension_check(&self, topic: &str) -> String {
+        let graph = self.engine.graph();
+
+        // Find compositions involving the topic
+        let results = graph.query_by_concept(topic);
+
+        if results.is_empty() {
+            return format!("Topic '{}' not found in graph. No comprehension data available.", topic);
+        }
+
+        let comp_count = results.len();
+        let avg_confidence: f32 = results.iter().map(|(_, s)| *s).sum::<f32>() / comp_count as f32;
+
+        let stable_count = results.iter()
+            .filter(|(c, _)| c.lifecycle == v12::LifecycleState::Stable)
+            .count();
+        let candidate_count = results.iter()
+            .filter(|(c, _)| c.lifecycle == v12::LifecycleState::Candidate)
+            .count();
+        let grounded_count = results.iter()
+            .filter(|(c, _)| c.epistemic == v12::EpistemicState::Grounded)
+            .count();
+
+        // Find related concepts
+        let related = graph.find_related(topic, 5);
+
+        let related_str = if related.is_empty() {
+            "None found".to_string()
+        } else {
+            related.iter()
+                .map(|(label, energy)| format!("{} ({:.2})", label, energy))
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
+
+        let comprehension_level = if stable_count > 0 && grounded_count > 0 {
+            "Strong"
+        } else if stable_count > 0 {
+            "Moderate"
+        } else if candidate_count > 0 {
+            "Weak"
+        } else {
+            "Minimal"
+        };
+
+        format!(
+            "Comprehension of '{}': {} ({} compositions, {:.0}% avg relevance)\n\
+             Lifecycle: {} stable, {} candidate\n\
+             Epistemic: {} grounded\n\
+             Related: {}",
+            topic, comprehension_level, comp_count, avg_confidence * 100.0,
+            stable_count, candidate_count, grounded_count, related_str
+        )
+    }
 }
 
 // ========================================================================
