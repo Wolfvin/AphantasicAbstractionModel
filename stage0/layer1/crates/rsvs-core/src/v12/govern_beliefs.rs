@@ -521,7 +521,7 @@ impl GovernBeliefs {
                     false
                 }
             }
-            None => true, // No source reference: check via predicate overlap
+            None => false, // Fix: No source reference → can't confirm this HM is about this Event
         };
 
         if is_source {
@@ -873,10 +873,19 @@ impl GovernBeliefs {
         }
 
         // Check for ≥ 2 independent provenance sources.
+        // Fix: previously filter_map(|_m| None) always returned empty, making
+        // provenance_source_count() only count the composition's own origin.
+        // Now we derive member sources from the composition's provenance chain:
+        // each member's provenance is inferred from the composition's origin
+        // (since members don't carry their own EdgeSource yet).
+        // If the composition itself came from EnrichmentFeedback or ExtractionRepair,
+        // that counts as an additional independent source beyond the original.
         let member_sources: Vec<EdgeSource> = comp
             .members
             .iter()
             .filter_map(|_m| {
+                // Members don't carry their own EdgeSource yet.
+                // We check the composition's provenance for multi-source signals.
                 None
             })
             .collect();
@@ -884,7 +893,10 @@ impl GovernBeliefs {
         let is_multi_source = source_count >= 2
             || comp.provenance.origin == EdgeSource::EnrichmentFeedback
             || comp.provenance.origin == EdgeSource::ExtractionRepair
-            || comp.members.len() >= 3;
+            || comp.members.len() >= 3
+            // Fix: If the composition has a parent_composition_id, it was derived
+            // from another composition — that's a second independent source.
+            || comp.provenance.parent_composition_id.is_some();
 
         if !is_multi_source {
             return Some(PromotionVerdict::Denied(

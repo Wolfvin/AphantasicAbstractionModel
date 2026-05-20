@@ -3595,3 +3595,67 @@ fn test_audit_v2_deprecation_guard() {
 
     eprintln!("✅ Audit v2: can_deprecate_node() guard works for bridge and normal nodes");
 }
+
+#[test]
+fn test_audit_v3_hm_no_source_event_no_false_positive() {
+    // Fix 2: HiddenMeaning without SourceEvent should NOT be assumed to conflict
+    // with every Event. The `None => false` fix prevents false-positive
+    // cross-type contradictions.
+    let gb = GovernBeliefs::new();
+    let mut hm = Composition::default();
+    hm.id = "hm_no_source".to_string();
+    hm.composition_type = CompositionType::HiddenMeaning;
+    hm.members.push(CompositionMember {
+        node_id: 1,
+        role: SemanticRole::Problem,
+        confidence: 0.7,
+        label: "some_problem".to_string(),
+    });
+
+    let mut event = Composition::default();
+    event.id = "event_unrelated".to_string();
+    event.composition_type = CompositionType::Event;
+    event.members.push(CompositionMember {
+        node_id: 2,
+        role: SemanticRole::Predicate,
+        confidence: 0.8,
+        label: "membuat".to_string(),
+    });
+
+    // No SourceEvent link → should NOT detect conflict
+    let result = gb.has_hidden_meaning_event_conflict(&hm, &event);
+    assert!(!result, "HM without SourceEvent should NOT conflict with unrelated Event");
+
+    eprintln!("✅ Audit v3: HM without SourceEvent does not false-positive conflict");
+}
+
+#[test]
+fn test_audit_v3_provenance_parent_counts_as_multi_source() {
+    // Fix 1: A composition with parent_composition_id should be considered
+    // multi-source for Inferred → Grounded promotion.
+    let mut comp = Composition::default();
+    comp.id = "comp_derived".to_string();
+    comp.epistemic = EpistemicState::Inferred;
+    comp.lifecycle = LifecycleState::Stable;
+    comp.confidence = 0.8;
+    comp.provenance.origin = EdgeSource::HiddenMeaningRule;
+    comp.provenance.parent_composition_id = Some("comp_original".to_string());
+    comp.members.push(CompositionMember {
+        node_id: 1,
+        role: SemanticRole::Predicate,
+        confidence: 0.8,
+        label: "test".to_string(),
+    });
+
+    let gb = GovernBeliefs::new();
+    let mut comps = vec![comp];
+    let updates = gb.check_promotions(&mut comps);
+
+    // Should promote Inferred → Grounded: parent_composition_id counts as second source
+    let grounded = updates.iter().any(|u| u.new_epistemic == Some(EpistemicState::Grounded));
+    assert!(grounded, "Composition with parent_composition_id should be promoted to Grounded");
+    assert_eq!(comps[0].epistemic, EpistemicState::Grounded,
+        "Composition epistemic should be Grounded after promotion");
+
+    eprintln!("✅ Audit v3: parent_composition_id counts as multi-source for grounding");
+}

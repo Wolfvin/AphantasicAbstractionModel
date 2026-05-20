@@ -383,7 +383,8 @@ impl ErasedTransform for ConvergenceDetectionTransform {
         let mut engine = self.engine.clone();
         let pairs = engine.detect(graph);
 
-        // Create EquivalentOf links between converged compositions.
+        // Create EquivalentOf links between converged compositions
+        // AND blend their seed scores.
         let mut edges_created = 0;
         for pair in &pairs {
             // Find a node from comp_b to link to (immutable borrow first).
@@ -403,6 +404,24 @@ impl ErasedTransform for ConvergenceDetectionTransform {
                         label,
                     });
                     edges_created += 1;
+                }
+            }
+
+            // Blend seed scores between converged compositions.
+            // This merges the semantic alignment from equivalent compositions.
+            let blended = {
+                let comp_a = graph.compositions.get(&pair.composition_a);
+                let comp_b = graph.compositions.get(&pair.composition_b);
+                match (comp_a, comp_b) {
+                    (Some(a), Some(b)) => ConvergenceDetection::blend_seed_scores(a, b),
+                    _ => HashMap::new(),
+                }
+            };
+            if !blended.is_empty() {
+                if let Some(comp_a) = graph.compositions.get_mut(&pair.composition_a) {
+                    for (seed, score) in &blended {
+                        comp_a.seed_scores.insert(seed.clone(), *score);
+                    }
                 }
             }
         }
