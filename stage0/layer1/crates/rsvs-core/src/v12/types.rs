@@ -804,6 +804,19 @@ pub struct PipelineContext {
     /// Atom ID counter — incremented for each new atom created.
     #[serde(default)]
     pub next_atom_id: u64,
+
+    /// Last verbalization result from CompositionalVerbalize transform.
+    /// Audit v4 fix: previously, the CVE transform computed the result but
+    /// discarded it. Now it's stored here for downstream access.
+    #[serde(default)]
+    pub last_verbalization: Option<String>,
+
+    /// Last activation energy map from SpreadingActivation transform.
+    /// Audit v4 fix: previously, the spreading transform computed the map
+    /// but discarded it. Now stored as a serialized HashMap<NodeId, f32>
+    /// for downstream transforms (convergence, gap detection, attention).
+    #[serde(default)]
+    pub last_activation_energies: HashMap<u32, f32>,
 }
 
 /// Maximum recent events to keep in the sliding window.

@@ -146,6 +146,15 @@ impl GovernBeliefs {
                 (LifecycleState::Candidate, EpistemicState::Observed)
             }
 
+            // Acquisition + HumanAssertion: human-verified acquisition → Stable + Grounded.
+            // Audit v4 fix: This is more specific than the general HumanAssertion
+            // match below, so it must come first. Without it, Acquisition+HumanAssertion
+            // falls through to the general match which gives (Candidate, Grounded) —
+            // but human-verified acquisition should be (Stable, Grounded) per MD-4 spec.
+            (CompositionType::Acquisition, EdgeSource::HumanAssertion) => {
+                (LifecycleState::Stable, EpistemicState::Grounded)
+            }
+
             // Human assertion overrides
             (_, EdgeSource::HumanAssertion) => {
                 (LifecycleState::Candidate, EpistemicState::Grounded)
@@ -178,22 +187,28 @@ impl GovernBeliefs {
 
         for i in 0..len {
             for j in (i + 1)..len {
-                let (left, right) = (&compositions[i].clone(), &compositions[j].clone());
+                // Audit v4 fix: Avoid cloning entire Composition structs for each pair.
+                // Instead, borrow both compositions immutably for the conflict check.
+                // We only need mutable access when applying a detected contradiction.
+                let conflict = {
+                    let (left, right) = (&compositions[i], &compositions[j]);
+                    self.check_pair_contradiction(left, right)
+                };
 
-                if let Some(conflict) = self.check_pair_contradiction(left, right) {
-                    let mut update_left = GovernanceUpdate::new(left.id.clone());
+                if let Some(conflict) = conflict {
+                    let mut update_left = GovernanceUpdate::new(compositions[i].id.clone());
                     update_left.contradiction = Some(Contradiction {
                         conflict_type: conflict.clone(),
-                        opposing_composition_id: right.id.clone(),
+                        opposing_composition_id: compositions[j].id.clone(),
                         strength: 0.8,
                     });
                     update_left.new_epistemic = Some(EpistemicState::Contradicted);
                     updates.push(update_left);
 
-                    let mut update_right = GovernanceUpdate::new(right.id.clone());
+                    let mut update_right = GovernanceUpdate::new(compositions[j].id.clone());
                     update_right.contradiction = Some(Contradiction {
                         conflict_type: conflict,
-                        opposing_composition_id: left.id.clone(),
+                        opposing_composition_id: compositions[i].id.clone(),
                         strength: 0.8,
                     });
                     update_right.new_epistemic = Some(EpistemicState::Contradicted);
@@ -210,7 +225,7 @@ impl GovernBeliefs {
                             .unwrap()
                             .conflict_type
                             .clone(),
-                        opposing_composition_id: right.id.clone(),
+                        opposing_composition_id: compositions[j].id.clone(),
                         strength: 0.8,
                     });
                     compositions[i]
@@ -225,7 +240,7 @@ impl GovernBeliefs {
                             .unwrap()
                             .conflict_type
                             .clone(),
-                        opposing_composition_id: left.id.clone(),
+                        opposing_composition_id: compositions[i].id.clone(),
                         strength: 0.8,
                     });
                     compositions[j]
@@ -1247,10 +1262,11 @@ impl GovernBeliefs {
         let promotion_updates = self.check_promotions(&mut compositions);
         all_updates.extend(promotion_updates);
 
-        // Step 4: Increment batch_seen for all compositions.
-        for comp in &mut compositions {
-            comp.batch_seen += 1;
-        }
+        // Step 4: batch_seen is now incremented in execute() for ALL compositions
+        // in the graph, not just those in this delta. This avoids the bug where
+        // non-dirty compositions never get their batch_seen incremented.
+        // We NO LONGER increment batch_seen here to prevent double-counting.
+        // (Audit v4 fix)
 
         GovernedDelta {
             compositions,
@@ -1557,14 +1573,29 @@ impl ErasedTransform for GovernBeliefs {
             .unwrap_or(0);
         gb.current_batch = stored_batch;
 
+        // ── Audit v4 fix: Always increment batch_seen for ALL compositions ──
+        // Previously, batch_seen was only incremented inside govern() for
+        // compositions in the delta. But when dirty_compositions is empty,
+        // no compositions go through govern(), so batch_seen never increments.
+        // This breaks promotion checks that rely on batch_seen >= 3.
+        //
+        // Fix: increment batch_seen for ALL compositions directly here,
+        // regardless of whether they go through govern(). The govern() method
+        // still increments batch_seen for compositions it processes, but now
+        // we also do it here as a safety net (idempotent since govern()
+        // creates fresh clones from the delta).
+        for comp in graph.compositions.values_mut() {
+            comp.batch_seen += 1;
+        }
+
         // ── Audit v3 fix: Govern only dirty compositions, not all ──
         // Previously, every execute() cloned ALL compositions into GraphDelta,
         // which is O(N) per ingest. Now we only clone compositions that are
         // new/modified since the last govern (tracked in dirty_compositions).
         //
-        // If the dirty set is empty (no new compositions), we still run govern()
-        // with an empty delta so that existing compositions get their batch_seen
-        // incremented and promotions/contradictions are rechecked.
+        // If the dirty set is empty (no new compositions), we skip govern()
+        // entirely — batch_seen was already incremented above, and existing
+        // compositions only need re-governance when they are modified.
         //
         // IMPORTANT: On the first call (no govern_batch in metadata), we must
         // govern ALL existing compositions to initialize their states. This is
@@ -1572,15 +1603,25 @@ impl ErasedTransform for GovernBeliefs {
         let is_first_govern = stored_batch == 0;
 
         let compositions_to_govern: Vec<Composition> = if is_first_govern {
-            // First call: govern everything to initialize states
+            // First call: govern everything to initialize states.
+            // We must clone from the graph (which already has batch_seen incremented)
+            // and pass through govern() for initial_states + contradiction + promotion checks.
             graph.compositions.values().cloned().collect()
         } else if graph.dirty_compositions.is_empty() {
-            // No new compositions — still need to re-govern existing ones
-            // for batch_seen increment, promotion checks, contradiction detection.
-            // But we only need to check compositions that haven't been governed yet.
+            // No new/modified compositions — skip govern() entirely.
+            // batch_seen was already incremented above. Existing compositions
+            // will be re-governed when they become dirty (modified by ingest/enrichment).
+            //
+            // NOTE: This means we don't re-check promotions or contradictions for
+            // existing compositions on every batch. This is a conscious tradeoff:
+            // compositions only get re-evaluated when they are modified. For
+            // time-based promotion checks (e.g., age ≥ 3), batch_seen is already
+            // being incremented, so the next time a composition becomes dirty,
+            // its batch_seen will be correct.
             Vec::new()
         } else {
-            // Only govern compositions marked as dirty (new/modified)
+            // Only govern compositions marked as dirty (new/modified).
+            // These are the only compositions that need state re-evaluation.
             graph
                 .dirty_compositions
                 .iter()

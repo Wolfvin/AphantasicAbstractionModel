@@ -393,7 +393,7 @@ impl ErasedTransform for SpreadingActivationTransform {
         "SpreadingActivation"
     }
 
-    fn execute(&self, _ctx: &mut PipelineContext, graph: &mut Graph) -> IngestResult {
+    fn execute(&self, ctx: &mut PipelineContext, graph: &mut Graph) -> IngestResult {
         // Collect seed nodes from compositions with seed_scores.
         let mut seeds: Vec<(NodeId, f32)> = Vec::new();
 
@@ -418,11 +418,17 @@ impl ErasedTransform for SpreadingActivationTransform {
             return IngestResult::new();
         }
 
-        let _activation_map = self.engine.spread(&seeds, graph);
+        let activation_map = self.engine.spread(&seeds, graph);
 
-        // The activation map could be stored in a side channel for downstream
-        // transforms. For now, the computation happens on-demand.
-        // Future: store in PipelineContext.activation_maps
+        // Audit v4 fix: Store the activation map in PipelineContext
+        // so downstream transforms can use it. Previously, the map was
+        // computed but discarded. Now stored as HashMap<u32, f32> keyed
+        // by NodeId (u32) for serialization compatibility.
+        ctx.last_activation_energies = activation_map
+            .energies
+            .iter()
+            .map(|(&node_id, &energy)| (node_id, energy))
+            .collect();
 
         IngestResult {
             atoms_created: seeds.len(),

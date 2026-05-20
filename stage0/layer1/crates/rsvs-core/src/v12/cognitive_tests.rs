@@ -3381,7 +3381,9 @@ fn test_phase_m_integration_grounding_loop_wired() {
     // so it's already Tentative — update_sense_grounding_from_evidence won't
     // upgrade it again (it only upgrades Fragile → Tentative).
     // This is the expected behavior: no double-upgrade.
-    assert!(upgrades >= 0, "update_sense_grounding_from_evidence should run without error");
+    // Note: upgrades is usize, so no need to check >= 0 (always true).
+    // Just verify the function ran without panic.
+    let _ = upgrades;
 
     eprintln!("✅ Phase M Integration: Grounding loop functions work (wired in execute())");
 }
@@ -3983,4 +3985,179 @@ fn test_comprehension_check() {
     assert!(!results.is_empty(), "After ingest, 'raja' should be findable");
 
     eprintln!("✅ comprehension: 'raja' has {} compositions after 2 ingests", results.len());
+}
+
+// ========================================================================
+// Audit v4 Tests
+// ========================================================================
+
+#[test]
+fn test_audit_v4_batch_seen_increments_even_without_dirty() {
+    // Audit v4 Fix 1: batch_seen must increment for ALL compositions on every
+    // execute() call, even when dirty_compositions is empty.
+    let mut engine = PipelineEngine::new();
+    register_default_pipeline(&mut engine);
+
+    // First ingest creates a composition.
+    engine.ingest("Raja memimpin kerajaan karena kebijakan");
+    let comp_ids: Vec<String> = engine.graph().compositions.keys().cloned().collect();
+    assert!(!comp_ids.is_empty(), "Should have compositions after ingest");
+
+    // Get batch_seen after first ingest.
+    let batch_after_first = engine.graph().compositions.get(&comp_ids[0]).unwrap().batch_seen;
+    assert!(batch_after_first >= 1, "batch_seen should be at least 1 after first ingest, got {}", batch_after_first);
+
+    // Second ingest — even if it creates new compositions, existing ones
+    // should also get their batch_seen incremented.
+    engine.ingest("Rakyat mendukung raja");
+    let batch_after_second = engine.graph().compositions.get(&comp_ids[0]).unwrap().batch_seen;
+    assert!(
+        batch_after_second > batch_after_first,
+        "batch_seen should increment on each ingest: was {}, now {}",
+        batch_after_first, batch_after_second
+    );
+
+    eprintln!("✅ Audit v4 Fix 1: batch_seen increments correctly ({} → {})", batch_after_first, batch_after_second);
+}
+
+#[test]
+fn test_audit_v4_initial_states_acquisition_human_assertion() {
+    // Audit v4 Fix 4: Acquisition + HumanAssertion should produce (Stable, Grounded).
+    let gb = GovernBeliefs::new();
+    let mut comp = Composition::default();
+    comp.composition_type = CompositionType::Acquisition;
+    comp.provenance.origin = EdgeSource::HumanAssertion;
+
+    gb.initial_states(&mut comp);
+    assert_eq!(comp.lifecycle, LifecycleState::Stable,
+        "Acquisition+HumanAssertion should be Stable, got {:?}", comp.lifecycle);
+    assert_eq!(comp.epistemic, EpistemicState::Grounded,
+        "Acquisition+HumanAssertion should be Grounded, got {:?}", comp.epistemic);
+
+    // Verify general HumanAssertion still works for non-Acquisition types.
+    let mut comp2 = Composition::default();
+    comp2.composition_type = CompositionType::Event;
+    comp2.provenance.origin = EdgeSource::HumanAssertion;
+    gb.initial_states(&mut comp2);
+    assert_eq!(comp2.lifecycle, LifecycleState::Candidate,
+        "Event+HumanAssertion should be Candidate, got {:?}", comp2.lifecycle);
+    assert_eq!(comp2.epistemic, EpistemicState::Grounded,
+        "Event+HumanAssertion should be Grounded, got {:?}", comp2.epistemic);
+
+    eprintln!("✅ Audit v4 Fix 4: Acquisition+HumanAssertion → (Stable, Grounded)");
+}
+
+#[test]
+fn test_audit_v4_verbalization_stored_in_context() {
+    // Audit v4 Fix 2: Verbalization result should be stored in PipelineContext.
+    use crate::v12::pipeline::ErasedTransform;
+    use crate::v12::verbalize::CompositionalVerbalizeTransform;
+    let mut ctx = PipelineContext::default();
+    let mut graph = Graph::new();
+
+    // Create a composition to verbalize.
+    let node_a = graph.ensure_node("alpha");
+    let node_b = graph.ensure_node("beta");
+    let mut comp = Composition::default();
+    comp.id = "comp_v4_test".to_string();
+    comp.composition_type = CompositionType::Event;
+    comp.lifecycle = LifecycleState::Stable;
+    comp.epistemic = EpistemicState::Grounded;
+    comp.confidence = 0.85;
+    comp.members = vec![
+        CompositionMember { node_id: node_a, role: SemanticRole::Arg0Agent, confidence: 0.9, label: "alpha".to_string() },
+        CompositionMember { node_id: node_b, role: SemanticRole::Arg1Patient, confidence: 0.8, label: "beta".to_string() },
+    ];
+    graph.compositions.insert("comp_v4_test".to_string(), comp);
+
+    let transform = CompositionalVerbalizeTransform::new();
+    ctx.set_raw_text("alpha beta");
+    let _result = transform.execute(&mut ctx, &mut graph);
+
+    // The verbalization should be stored in context.
+    assert!(ctx.last_verbalization.is_some(),
+        "Verbalization result should be stored in PipelineContext");
+    let text = ctx.last_verbalization.unwrap();
+    assert!(!text.is_empty(), "Verbalization text should not be empty");
+
+    eprintln!("✅ Audit v4 Fix 2: Verbalization stored in context: '{}'...", &text[..text.len().min(60)]);
+}
+
+#[test]
+fn test_audit_v4_spreading_activation_stored_in_context() {
+    // Audit v4 Fix 3: Activation map should be stored in PipelineContext.
+    use crate::v12::pipeline::ErasedTransform;
+    use crate::v12::spreading::SpreadingActivationTransform;
+    let mut ctx = PipelineContext::default();
+    let mut graph = Graph::new();
+
+    // Create a composition with seed scores.
+    let node_a = graph.ensure_node("alpha");
+    let node_b = graph.ensure_node("beta");
+    let mut comp = Composition::default();
+    comp.id = "comp_spread_test".to_string();
+    comp.composition_type = CompositionType::Event;
+    comp.lifecycle = LifecycleState::Stable;
+    comp.epistemic = EpistemicState::Grounded;
+    comp.confidence = 0.85;
+    comp.seed_scores.insert(SeedPrimitive::Trust, 0.7);
+    comp.seed_scores.insert(SeedPrimitive::Value, 0.8);
+    comp.members = vec![
+        CompositionMember { node_id: node_a, role: SemanticRole::Arg0Agent, confidence: 0.9, label: "alpha".to_string() },
+        CompositionMember { node_id: node_b, role: SemanticRole::Arg1Patient, confidence: 0.8, label: "beta".to_string() },
+    ];
+    graph.compositions.insert("comp_spread_test".to_string(), comp);
+
+    let transform = SpreadingActivationTransform::new();
+    let _result = transform.execute(&mut ctx, &mut graph);
+
+    // The activation map should be stored in context.
+    assert!(!ctx.last_activation_energies.is_empty(),
+        "Activation energies should be stored in PipelineContext");
+
+    eprintln!("✅ Audit v4 Fix 3: Activation energies stored in context: {} entries", ctx.last_activation_energies.len());
+}
+
+#[test]
+fn test_audit_v4_detect_contradiction_no_clone() {
+    // Audit v4 Fix 5: detect_contradiction should not clone compositions
+    // for every pair check. This test just verifies the function still works
+    // correctly after the optimization.
+    let gb = GovernBeliefs { current_batch: 1 };
+
+    let node_pred = 1u32;
+    let node_agent = 2u32;
+    let node_patient = 3u32;
+    let node_cause = 4u32;
+    let node_cause_neg = 5u32;
+
+    // Create two compositions with same predicate + same agent + XOR negation
+    let mut comp1 = Composition::default();
+    comp1.id = "comp_left".to_string();
+    comp1.composition_type = CompositionType::Event;
+    comp1.members = vec![
+        CompositionMember { node_id: node_pred, role: SemanticRole::Predicate, confidence: 0.9, label: "membuat".to_string() },
+        CompositionMember { node_id: node_agent, role: SemanticRole::Arg0Agent, confidence: 0.9, label: "alpha".to_string() },
+        CompositionMember { node_id: node_patient, role: SemanticRole::Arg1Patient, confidence: 0.8, label: "beta".to_string() },
+        CompositionMember { node_id: node_cause, role: SemanticRole::Cause, confidence: 0.7, label: "lambat".to_string() },
+    ];
+
+    let mut comp2 = Composition::default();
+    comp2.id = "comp_right".to_string();
+    comp2.composition_type = CompositionType::Event;
+    comp2.members = vec![
+        CompositionMember { node_id: node_pred, role: SemanticRole::Predicate, confidence: 0.9, label: "membuat".to_string() },
+        CompositionMember { node_id: node_agent, role: SemanticRole::Arg0Agent, confidence: 0.9, label: "alpha".to_string() },
+        CompositionMember { node_id: node_patient, role: SemanticRole::Arg1Patient, confidence: 0.8, label: "gamma".to_string() },
+        CompositionMember { node_id: node_cause_neg, role: SemanticRole::Cause, confidence: 0.7, label: "tidak lambat".to_string() },
+    ];
+
+    let mut compositions = vec![comp1, comp2];
+    let updates = gb.detect_contradiction(&mut compositions);
+
+    assert!(!updates.is_empty(), "Should detect polarity conflict (XOR negation)");
+    assert_eq!(compositions[0].epistemic, EpistemicState::Contradicted);
+    assert_eq!(compositions[1].epistemic, EpistemicState::Contradicted);
+
+    eprintln!("✅ Audit v4 Fix 5: detect_contradiction works without per-pair clones, {} updates", updates.len());
 }

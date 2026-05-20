@@ -686,20 +686,25 @@ impl ErasedTransform for CompositionalVerbalizeTransform {
         "CompositionalVerbalize"
     }
 
-    fn execute(&self, _ctx: &mut PipelineContext, graph: &mut Graph) -> IngestResult {
+    fn execute(&self, ctx: &mut PipelineContext, graph: &mut Graph) -> IngestResult {
         // Only run if there are compositions to verbalize.
         if graph.composition_count() == 0 {
             return IngestResult::new();
         }
 
         // Generate a default explanation of all compositions.
-        // In pipeline context, we don't have a specific query, so we use
-        // the raw text if available, otherwise we produce a summary.
-        let _result = self.engine.explain("semua", graph);
+        // In pipeline context, we use the raw text if available,
+        // otherwise we produce a summary of all compositions.
+        let query = ctx
+            .raw_text
+            .as_deref()
+            .unwrap_or("semua");
+        let result = self.engine.explain(query, graph);
 
-        // The verbalization result is currently computed but not stored
-        // in PipelineContext. Future: add `last_verbalization` field
-        // to PipelineContext.
+        // Audit v4 fix: Store the verbalization result in PipelineContext
+        // so it's accessible to downstream transforms and Python API callers.
+        // Previously, this was computed but discarded.
+        ctx.last_verbalization = Some(result.text.clone());
 
         IngestResult {
             atoms_created: 0,
