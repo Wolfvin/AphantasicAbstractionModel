@@ -565,13 +565,18 @@ impl ErasedTransform for DetectGaps {
 
         let gaps_detected = gaps.len();
 
-        // Store gaps in pipeline context (convert to placeholders for now).
+        // Store gaps in pipeline context with full gap data.
+        // Audit v4 fix: Previously dropped gap_type, missing_role, and
+        // source_composition_id — forcing SelectAcquisition to re-detect.
         ctx.pending_gaps = gaps
             .iter()
             .map(|g| KnowledgeGapPlaceholder {
                 gap_id: g.gap_id.clone(),
                 description: g.description.clone(),
                 confidence: g.confidence,
+                gap_type: format!("{:?}", g.gap_type),
+                missing_role: g.missing_role.as_ref().map(|r| format!("{:?}", r)),
+                source_composition_id: g.source_composition_id.clone(),
             })
             .collect();
 
@@ -822,25 +827,25 @@ impl SelectAcquisition {
             KnowledgeGapType::MissingRole
             | KnowledgeGapType::MissingCause
             | KnowledgeGapType::MissingPurpose => {
-                if let Some(comp_id) = &gap.source_composition_id {
-                    if let Some(source_comp) = graph.get_composition(comp_id) {
-                        // Check if any other composition has the same predicate
-                        // with the missing role filled.
-                        let predicate = source_comp.member_with_role(&SemanticRole::Predicate);
-                        if let Some(_pred) = predicate {
-                            for comp in graph.compositions() {
-                                if comp.id == *comp_id {
-                                    continue;
-                                }
-                                if comp.has_member_with_role_and_label(SemanticRole::Predicate, "")
-                                {
-                                    if let Some(role) = &gap.missing_role {
-                                        if comp.has_member_with_role(role.clone()) {
-                                            return true;
-                                        }
-                                    }
-                                }
+                // Audit v4 fix: Previously called `has_member_with_role_and_label(Predicate, "")`
+                // which passed an empty string as label — this NEVER matched any real predicate,
+                // making the entire method return false for MissingRole gaps (dead code).
+                //
+                // Fix: Simply check if any other composition has the missing role filled,
+                // regardless of predicate label. The predicate match was overly restrictive
+                // and the empty label was a bug. What matters is whether ANY composition in
+                // the graph has a node filling the missing role — that's a valid candidate
+                // for PassiveRecall.
+                if let Some(role) = &gap.missing_role {
+                    for comp in graph.compositions() {
+                        // Skip the source composition itself.
+                        if let Some(comp_id) = &gap.source_composition_id {
+                            if comp.id == *comp_id {
+                                continue;
                             }
+                        }
+                        if comp.has_member_with_role(role.clone()) {
+                            return true;
                         }
                     }
                 }

@@ -1019,11 +1019,16 @@ impl ExtractionQualityTracker {
     }
 }
 
-/// Placeholder for `KnowledgeGap` until the full MD-6 acquisition module is implemented.
+/// Placeholder for `KnowledgeGap` in `PipelineContext`.
 ///
-/// This type is defined here so that `PipelineContext` can reference it. The full
-/// definition (with `KnowledgeGapType`, `GapSource`, etc.) will be in the
-/// acquisition module.
+/// Audit v4 fix: This type now carries the same critical fields as `KnowledgeGap`
+/// so that downstream transforms (especially `SelectAcquisition`) can use the
+/// gap data directly from `PipelineContext::pending_gaps` without re-detecting.
+///
+/// Previously, `KnowledgeGapPlaceholder` only had `gap_id`, `description`, and
+/// `confidence` — dropping `gap_type`, `missing_role`, and `source_composition_id`.
+/// This forced `SelectAcquisition` to re-run `DetectGaps` independently, which is
+/// wasteful and may produce different results if the graph has changed.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KnowledgeGapPlaceholder {
     /// Unique gap identifier.
@@ -1032,6 +1037,19 @@ pub struct KnowledgeGapPlaceholder {
     pub description: String,
     /// Confidence of this gap detection (0.0–1.0).
     pub confidence: f32,
+    /// Gap type as a string (e.g., "MissingRole", "AmbiguousToken").
+    /// Audit v4 fix: previously dropped from KnowledgeGap.
+    #[serde(default)]
+    pub gap_type: String,
+    /// The specific role that's missing (for MissingRole/MissingCause/MissingPurpose gaps).
+    /// Stored as a Debug-format string (e.g., "Arg0Agent", "Cause").
+    /// Audit v4 fix: previously dropped from KnowledgeGap.
+    #[serde(default)]
+    pub missing_role: Option<String>,
+    /// The composition that has this gap (if applicable).
+    /// Audit v4 fix: previously dropped from KnowledgeGap.
+    #[serde(default)]
+    pub source_composition_id: Option<String>,
 }
 
 impl Default for KnowledgeGapPlaceholder {
@@ -1040,6 +1058,9 @@ impl Default for KnowledgeGapPlaceholder {
             gap_id: String::new(),
             description: String::new(),
             confidence: 0.0,
+            gap_type: String::new(),
+            missing_role: None,
+            source_composition_id: None,
         }
     }
 }

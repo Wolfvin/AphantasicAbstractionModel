@@ -1608,17 +1608,30 @@ impl ErasedTransform for GovernBeliefs {
             // and pass through govern() for initial_states + contradiction + promotion checks.
             graph.compositions.values().cloned().collect()
         } else if graph.dirty_compositions.is_empty() {
-            // No new/modified compositions — skip govern() entirely.
-            // batch_seen was already incremented above. Existing compositions
-            // will be re-governed when they become dirty (modified by ingest/enrichment).
+            // No new/modified compositions — skip full govern(), but still
+            // run lightweight promotion check. Without this, compositions
+            // that have accumulated enough batch_seen (e.g., age ≥ 3) would
+            // NEVER get promoted unless something marks them dirty.
             //
-            // NOTE: This means we don't re-check promotions or contradictions for
-            // existing compositions on every batch. This is a conscious tradeoff:
-            // compositions only get re-evaluated when they are modified. For
-            // time-based promotion checks (e.g., age ≥ 3), batch_seen is already
-            // being incremented, so the next time a composition becomes dirty,
-            // its batch_seen will be correct.
-            Vec::new()
+            // Audit v4 fix: Previously, the empty-dirty branch returned Vec::new()
+            // and skipped ALL governance, including promotions. A composition could
+            // sit at Candidate with batch_seen=100 and confidence=0.9 but never
+            // get promoted to Stable because nothing marked it dirty. This was a
+            // critical bug.
+            //
+            // Now we collect non-Deprecated, non-Contradicted compositions that
+            // are in a promotable lifecycle state (New or Candidate) so that
+            // check_promotions() can evaluate them. We skip Stable/Grounded/Deprecated
+            // since they don't need promotion checks.
+            graph
+                .compositions
+                .values()
+                .filter(|c| {
+                    matches!(c.lifecycle, LifecycleState::New | LifecycleState::Candidate)
+                        && c.epistemic != EpistemicState::Contradicted
+                })
+                .cloned()
+                .collect()
         } else {
             // Only govern compositions marked as dirty (new/modified).
             // These are the only compositions that need state re-evaluation.
@@ -1722,7 +1735,7 @@ impl ErasedTransform for GovernBeliefs {
 
         // ── Phase O: Prune fragile senses every 5 batches ──
         // Fix 6: Now uses persisted batch counter, so this correctly fires every 5 batches.
-        if gb.current_batch > 0 && gb.current_batch % 5 == 0 {
+        if gb.current_batch > 0 && gb.current_batch.is_multiple_of(5) {
             gb.prune_fragile_senses(graph);
         }
 

@@ -629,7 +629,7 @@ fn topological_sort(dag: &[TransformNode]) -> Result<Vec<String>, Vec<String>> {
 /// | 11 | TemporalDecay | EnrichComposition | always |
 /// | 12 | SpreadingActivation | GovernBeliefs | has_event_atoms |
 /// | 13 | ConvergenceDetection | EnrichComposition, TemporalDecay | always |
-
+///
 /// Parse a semantic role name string into a `SemanticRole` enum.
 ///
 /// Accepts both the Debug format (e.g., "Arg0Agent") and common
