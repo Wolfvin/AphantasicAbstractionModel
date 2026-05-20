@@ -645,13 +645,7 @@ impl ErasedTransform for ExtractFrame {
                 / ctx.extraction_quality.frames_extracted as f32;
 
             // Audit v5 fix (D14): Also update the per-quality-level tracker.
-            let quality = if atom.confidence >= 0.7 {
-                ExtractionQuality::HighQuality
-            } else if atom.confidence >= 0.4 {
-                ExtractionQuality::ModerateQuality
-            } else {
-                ExtractionQuality::LowQuality
-            };
+            let quality = Self::classify_quality(&atom.roles, atom.confidence);
             ctx.extraction_quality_ext.record(&quality, atom.confidence);
 
             if atom.confidence < 0.5 {

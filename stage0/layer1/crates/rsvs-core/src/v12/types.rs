@@ -554,6 +554,9 @@ pub struct CompositionMember {
     /// Set during ingest from `graph.get_node(self.node_id).label`.
     #[serde(default)]
     pub label: String,
+    /// Provenance source for this member (which EdgeSource added it).
+    #[serde(default)]
+    pub source: Option<EdgeSource>,
 }
 
 impl CompositionMember {
@@ -806,22 +809,18 @@ pub struct PipelineContext {
     pub next_atom_id: u64,
 
     /// Last verbalization result from CompositionalVerbalize transform.
-    /// Audit v4 fix: previously, the CVE transform computed the result but
-    /// discarded it. Now it's stored here for downstream access.
+    /// Previously, the CVE transform computed the result but discarded it.
+    /// Now stored for downstream access.
     #[serde(default)]
-    pub last_verbalization: Option<String>,
+    pub last_verbalization_text: String,
 
     /// Last activation energy map from SpreadingActivation transform.
-    /// Audit v4 fix: previously, the spreading transform computed the map
-    /// but discarded it. Now stored as a serialized HashMap<NodeId, f32>
-    /// for downstream transforms (convergence, gap detection, attention).
+    /// Stored as HashMap<NodeId, f32> for downstream transforms
+    /// (convergence, gap detection, attention).
     #[serde(default)]
-    pub last_activation_energies: HashMap<u32, f32>,
+    pub last_activation_energies: HashMap<NodeId, f32>,
 
     /// Audit v5 fix (DD5): Decay summary from TemporalDecay transform.
-    /// Previously, DecayResult was computed but never stored — only the
-    /// governance_transitions count was kept. Now we store the number of
-    /// compositions that were demoted or deprecated by decay.
     #[serde(default)]
     pub last_decay_demoted: usize,
 
@@ -831,9 +830,17 @@ pub struct PipelineContext {
 
     /// Audit v5 fix (D14): Per-quality-level extraction tracker from ExtractFrame.
     /// Provides high/moderate/low/failed breakdown alongside the aggregate
-    /// `extraction_quality` field. Previously defined but never wired.
+    /// `extraction_quality` field.
     #[serde(default)]
     pub extraction_quality_ext: super::extract_frame::ExtractionQualityTrackerExt,
+
+    /// Converged composition pairs from last ConvergenceDetection run.
+    #[serde(default)]
+    pub last_converged_pairs: Vec<(CompositionId, CompositionId)>,
+
+    /// Number of reflection findings from last Reflective cycle.
+    #[serde(default)]
+    pub last_reflection_findings_count: usize,
 }
 
 /// Maximum recent events to keep in the sliding window.

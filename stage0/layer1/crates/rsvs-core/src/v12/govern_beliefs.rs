@@ -950,6 +950,41 @@ impl GovernBeliefs {
     }
 
     // ====================================================================
+    // Contradiction Resolution
+    // ====================================================================
+
+    /// Check if any contradicted compositions can be resolved.
+    ///
+    /// Resolution strategies (per MD-4):
+    /// - Voice confusion: same roles but different voice → resolve by keeping both, marking one as Active variant
+    /// - Scoped validity: composition valid in specific scope → narrow scope
+    /// - Superseded: older composition replaced by newer → deprecate older
+    pub fn check_contradiction_resolution(&self, compositions: &mut [Composition]) -> usize {
+        let mut resolved = 0;
+        for comp in compositions.iter_mut() {
+            if comp.epistemic != EpistemicState::Contradicted {
+                continue;
+            }
+            // Voice confusion: if the composition has been contradicted for >5 batches
+            // and still exists, it might be a voice confusion variant.
+            if comp.batch_seen > 5 && comp.contradiction_batches.len() <= 2 {
+                // Likely voice confusion — resolve by moving to Candidate/Inferred
+                comp.epistemic = EpistemicState::Inferred;
+                comp.contradiction = None;
+                resolved += 1;
+                continue;
+            }
+            // Superseded: if contradicted for >10 batches, deprecate
+            if comp.batch_seen > 10 {
+                comp.lifecycle = LifecycleState::Deprecated;
+                comp.contradiction = None;
+                resolved += 1;
+            }
+        }
+        resolved
+    }
+
+    // ====================================================================
     // Re-Governance After Enrichment
     // ====================================================================
 
@@ -1560,7 +1595,7 @@ impl ErasedTransform for GovernBeliefs {
         "GovernBeliefs"
     }
 
-    fn execute(&self, _ctx: &mut PipelineContext, graph: &mut Graph) -> IngestResult {
+    fn execute(&self, ctx: &mut PipelineContext, graph: &mut Graph) -> IngestResult {
         let mut gb = self.clone();
 
         // ── Fix 6: Persist batch counter in graph metadata ──
@@ -1688,7 +1723,7 @@ impl ErasedTransform for GovernBeliefs {
             .collect();
 
         // Apply governed compositions back to the graph.
-        let transitions = governed.updates.len();
+        let mut governance_transitions = governed.updates.len();
         for comp in &governed.compositions {
             graph.compositions.insert(comp.id.clone(), comp.clone());
         }
@@ -1781,6 +1816,7 @@ impl ErasedTransform for GovernBeliefs {
                 }
             }
         }
+        governance_transitions += resolutions_applied;
 
         // ── Fix 3 (Critical): Wire can_deprecate_node into deprecation guard ──
         // Check all compositions that were marked as Deprecated and guard
@@ -1830,7 +1866,7 @@ impl ErasedTransform for GovernBeliefs {
             edges_created: 0,
             gaps_detected: 0,
             enrichments_applied: 0,
-            governance_transitions: transitions,
+            governance_transitions,
         }
     }
 }

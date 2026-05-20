@@ -380,21 +380,13 @@ impl ErasedTransform for ConvergenceDetectionTransform {
     }
 
     fn execute(&self, ctx: &mut PipelineContext, graph: &mut Graph) -> IngestResult {
-        // Audit v5 fix: Persist detected_pairs by storing them in graph metadata
-        // (since ErasedTransform::execute takes &self, we can't mutate self.engine).
-        // Previous pairs are loaded from metadata so we don't re-detect already-known pairs.
         let mut engine = self.engine.clone();
         let pairs = engine.detect(graph);
 
-        // Persist detected_pairs back to self.engine via graph metadata.
-        // This avoids losing pairs across runs even though we can't mutate self.
-        // Store as comma-separated pair keys in graph.metadata["convergence_pairs"].
-        let pairs_key = pairs
-            .iter()
-            .map(|p| format!("{}:{}", p.composition_a, p.composition_b))
-            .collect::<Vec<_>>()
-            .join(",");
-        graph.metadata.insert("convergence_pairs".to_string(), pairs_key);
+        // Store converged pairs in PipelineContext.
+        ctx.last_converged_pairs = pairs.iter()
+            .map(|p| (p.composition_a.clone(), p.composition_b.clone()))
+            .collect();
 
         // Create EquivalentOf links between converged compositions
         // AND blend their seed scores.
@@ -431,7 +423,7 @@ impl ErasedTransform for ConvergenceDetectionTransform {
                     _ => 0.0,
                 }
             };
-            let boosted_confidence = (pair.confidence + activation_boost).min(0.95);
+            let confidence = (pair.confidence + activation_boost).min(0.95);
 
             // Find a node from comp_b to link to (immutable borrow first).
             let pred_node = graph
@@ -440,21 +432,21 @@ impl ErasedTransform for ConvergenceDetectionTransform {
                 .and_then(|comp_b| comp_b.member_with_role(&SemanticRole::Predicate))
                 .map(|m| (m.node_id, m.label.clone()));
 
-            // Add EquivalentOf member to composition A (mutable borrow second).
             if let Some((node_id, label)) = pred_node {
                 if let Some(comp_a) = graph.compositions.get_mut(&pair.composition_a) {
                     comp_a.members.push(CompositionMember {
                         node_id,
                         role: SemanticRole::EquivalentOf,
-                        confidence: boosted_confidence,
+                        confidence,
                         label,
+                        source: None,
                     });
                     edges_created += 1;
                 }
             }
 
-            // Blend seed scores between converged compositions.
-            // This merges the semantic alignment from equivalent compositions.
+            // Blend seed scores between converged compositions so that
+            // equivalent knowledge shares epistemic anchoring.
             let blended = {
                 let comp_a = graph.compositions.get(&pair.composition_a);
                 let comp_b = graph.compositions.get(&pair.composition_b);
@@ -467,6 +459,11 @@ impl ErasedTransform for ConvergenceDetectionTransform {
                 if let Some(comp_a) = graph.compositions.get_mut(&pair.composition_a) {
                     for (seed, score) in &blended {
                         comp_a.seed_scores.insert(seed.clone(), *score);
+                    }
+                }
+                if let Some(comp_b) = graph.compositions.get_mut(&pair.composition_b) {
+                    for (seed, score) in &blended {
+                        comp_b.seed_scores.insert(seed.clone(), *score);
                     }
                 }
             }

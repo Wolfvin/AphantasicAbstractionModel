@@ -52,6 +52,7 @@ use super::reason_frame::ReasonFrame;
 use super::spreading::{SpreadingActivation, SpreadingActivationTransform};
 use super::temporal::TemporalDecayTransform;
 use super::types::*;
+use super::verbalize::CompositionalVerbalizeTransform;
 // NodeId is imported from crate::types — not re-exported by super::types.
 use crate::types::NodeId;
 
@@ -635,7 +636,7 @@ fn topological_sort(dag: &[TransformNode]) -> Result<Vec<String>, Vec<String>> {
 /// | 11 | TemporalDecay | EnrichComposition | always |
 /// | 12 | SpreadingActivation | GovernBeliefs | has_event_atoms |
 /// | 13 | ConvergenceDetection | EnrichComposition, TemporalDecay | always |
-/// | 14 | CompositionalVerbalize | ConvergenceDetection | has_event_atoms |
+/// | 14 | CompositionalVerbalize | ConvergenceDetection | always |
 ///
 /// Parse a semantic role name string into a `SemanticRole` enum.
 ///
@@ -765,15 +766,13 @@ pub fn register_default_pipeline(engine: &mut PipelineEngine) {
         None,
     );
 
-    // 14. CompositionalVerbalize — generates explanations for compositions.
+    // 14. CompositionalVerbalize — generates explanations from the graph.
     //     Audit v5 fix: Previously NOT in default pipeline — the CVE transform
-    //     was fully implemented but never registered. ctx.last_verbalization
-    //     was always None. Now registered after ConvergenceDetection.
-    //     Condition: always when compositions exist (checked internally).
+    //     was fully implemented but never registered. Now registered after ConvergenceDetection.
     engine.register(
-        super::verbalize::CompositionalVerbalizeTransform::new(),
+        CompositionalVerbalizeTransform::new(),
         vec!["ConvergenceDetection".to_string()],
-        Some(Box::new(|ctx: &PipelineContext| ctx.has_event_atoms())),
+        None,
     );
 }
 
@@ -1802,6 +1801,7 @@ impl ErasedTransform for IngestAtoms {
                             role: role.clone(),
                             confidence: atom.confidence * 0.9,
                             label: label.clone(),
+                            source: None,
                         });
                     }
 
@@ -1853,6 +1853,7 @@ impl ErasedTransform for IngestAtoms {
                             role: role.clone(),
                             confidence: atom.confidence * 0.9,
                             label: label.clone(),
+                            source: None,
                         });
                     }
 
@@ -1907,6 +1908,7 @@ impl ErasedTransform for IngestAtoms {
                             role: role.clone(),
                             confidence: atom.confidence * 0.9,
                             label: label.clone(),
+                            source: None,
                         });
                     }
 

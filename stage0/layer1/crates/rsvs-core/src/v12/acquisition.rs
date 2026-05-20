@@ -558,10 +558,18 @@ impl ErasedTransform for DetectGaps {
         let snapshot = graph.compositions.values().cloned().collect();
         let atoms = ctx.current_atoms.clone();
 
-        let gaps = dg.detect_all(&GraphSnapshot {
+        let all_gaps = dg.detect_all(&GraphSnapshot {
             recent_atoms: atoms,
             compositions: snapshot,
         });
+
+        // Filter gaps: skip those where the graph already has relevant context.
+        // This prevents flagging gaps that can be resolved internally.
+        let sa = SelectAcquisition::new();
+        let gaps: Vec<KnowledgeGap> = all_gaps
+            .into_iter()
+            .filter(|g| !sa.graph_has_relevant_context(graph, g))
+            .collect();
 
         let gaps_detected = gaps.len();
 

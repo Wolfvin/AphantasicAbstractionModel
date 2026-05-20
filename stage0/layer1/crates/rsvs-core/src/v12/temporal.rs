@@ -261,7 +261,12 @@ impl ErasedTransform for TemporalDecayTransform {
         let mut engine = self.engine.clone();
         let results = engine.apply_decay_all(graph);
 
-        let governance_transitions = results.iter().filter(|r| r.demoted || r.deprecated).count();
+        let demoted = results.iter().filter(|r| r.demoted).count();
+        let deprecated = results.iter().filter(|r| r.deprecated).count();
+
+        // Store in PipelineContext.
+        ctx.last_decay_demoted = demoted;
+        ctx.last_decay_deprecated = deprecated;
 
         // Audit v5 fix (DD5): Store decay summary in PipelineContext.
         // Previously, individual DecayResults were computed but dropped.
@@ -274,7 +279,7 @@ impl ErasedTransform for TemporalDecayTransform {
             edges_created: 0,
             gaps_detected: 0,
             enrichments_applied: 0,
-            governance_transitions,
+            governance_transitions: demoted + deprecated,
         }
     }
 }

@@ -31,7 +31,7 @@ use std::collections::HashMap;
 
 use super::pipeline::{ErasedTransform, Graph, IngestResult};
 use super::types::*;
-use crate::types::EdgeSource;
+use crate::types::{EdgeSource, NodeId};
 
 // ========================================================================
 // ReasoningRule — Trait for Deriving Hidden Meanings
@@ -738,6 +738,33 @@ impl ReasonFrame {
 
         results
     }
+
+    /// Build a GraphContextRef from the graph for the given event.
+    fn build_graph_context(event: &SemanticAtom, graph: &Graph) -> GraphContextRef {
+        let mut same_predicate_count = 0usize;
+        let mut has_contradiction = false;
+        let mut total_confidence = 0.0f32;
+        let mut count = 0usize;
+
+        for comp in graph.compositions.values() {
+            if let Some(pred) = comp.member_with_role(&SemanticRole::Predicate) {
+                if pred.label == event.label {
+                    same_predicate_count += 1;
+                    total_confidence += comp.confidence;
+                    count += 1;
+                }
+            }
+            if comp.epistemic == EpistemicState::Contradicted {
+                has_contradiction = true;
+            }
+        }
+
+        GraphContextRef {
+            same_predicate_count,
+            has_contradiction,
+            avg_confidence: if count > 0 { total_confidence / count as f32 } else { 0.0 },
+        }
+    }
 }
 
 /// Implement the `Transform` trait for `ReasonFrame`.
@@ -761,7 +788,7 @@ impl ErasedTransform for ReasonFrame {
         "ReasonFrame"
     }
 
-    fn execute(&self, ctx: &mut PipelineContext, _graph: &mut Graph) -> IngestResult {
+    fn execute(&self, ctx: &mut PipelineContext, graph: &mut Graph) -> IngestResult {
         let mut atoms_created = 0;
 
         // Collect event atoms from current_atoms.
@@ -775,7 +802,9 @@ impl ErasedTransform for ReasonFrame {
         let recent = ctx.recent_events().clone();
 
         for event in &event_atoms {
-            let results = self.reason(event, &recent);
+            // Build graph context for graph-guided reasoning.
+            let graph_ref = Self::build_graph_context(event, graph);
+            let results = self.reason_with_graph(event, &recent, &graph_ref);
 
             for result in results {
                 let mut atom = result.into_atom();

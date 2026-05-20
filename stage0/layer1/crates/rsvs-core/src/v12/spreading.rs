@@ -299,6 +299,12 @@ impl SpreadingActivation {
     /// ```
     ///
     /// Default weights: α=0.4, β=0.4, γ=0.2
+    ///
+    /// **Note**: This is an external API utility, not wired into the default pipeline.
+    /// The CVE (Compositional Verbalization Engine) uses its own scoring in
+    /// `build_reasoning_path()`. Wiring `attention_score()` into CVE would change
+    /// existing scoring behavior and is thus a potential regression. Use this method
+    /// for custom attention-based queries from external callers.
     pub fn attention_score(
         &self,
         target: NodeId,
@@ -394,44 +400,40 @@ impl ErasedTransform for SpreadingActivationTransform {
     }
 
     fn execute(&self, ctx: &mut PipelineContext, graph: &mut Graph) -> IngestResult {
-        // Collect seed nodes from compositions with seed_scores.
-        let mut seeds: Vec<(NodeId, f32)> = Vec::new();
+        // Collect seed nodes with grounding score (confidence as proxy).
+        let mut seeds_with_grounding: Vec<(NodeId, f32, f32)> = Vec::new();
 
         for composition in graph.compositions.values() {
             if composition.seed_scores.is_empty() {
                 continue;
             }
-            // Use the average seed score as activation energy.
             let avg_seed: f32 = composition.seed_scores.values().sum::<f32>()
                 / composition.seed_scores.len() as f32;
             if avg_seed < 0.01 {
                 continue;
             }
 
-            // Add each member node as a seed.
+            // Use composition confidence as grounding score proxy.
+            let grounding_score = composition.confidence;
+
             for member in &composition.members {
-                seeds.push((member.node_id, avg_seed * member.confidence));
+                seeds_with_grounding.push((member.node_id, avg_seed * member.confidence, grounding_score));
             }
         }
 
-        if seeds.is_empty() {
+        if seeds_with_grounding.is_empty() {
             return IngestResult::new();
         }
 
-        let activation_map = self.engine.spread(&seeds, graph);
-
+        // Use targeted_spread() with grounding-score-adjusted energy.
         // Audit v4 fix: Store the activation map in PipelineContext
         // so downstream transforms can use it. Previously, the map was
-        // computed but discarded. Now stored as HashMap<u32, f32> keyed
-        // by NodeId (u32) for serialization compatibility.
-        ctx.last_activation_energies = activation_map
-            .energies
-            .iter()
-            .map(|(&node_id, &energy)| (node_id, energy))
-            .collect();
+        // computed but discarded.
+        let activation_map = self.engine.targeted_spread(&seeds_with_grounding, graph);
+        ctx.last_activation_energies = activation_map.energies.clone();
 
         IngestResult {
-            atoms_created: seeds.len(),
+            atoms_created: seeds_with_grounding.len(),
             compositions_created: 0,
             edges_created: 0,
             gaps_detected: 0,

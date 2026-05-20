@@ -715,6 +715,55 @@ impl ExecutiveOrchestrator {
         }
     }
 
+    /// Execute actions proposed by reflection findings.
+    fn execute_reflection_actions(&self, findings: &[ReflectionFinding], engine: &mut PipelineEngine) {
+        for finding in findings {
+            match &finding.action {
+                ReflectionAction::ProposePromotion(comp_id) => {
+                    // Try to promote the composition.
+                    if let Some(comp) = engine.graph_mut().compositions.get_mut(comp_id) {
+                        if comp.lifecycle == LifecycleState::Candidate && comp.batch_seen >= 3 && comp.confidence >= 0.6 {
+                            comp.lifecycle = LifecycleState::Stable;
+                        }
+                    }
+                }
+                ReflectionAction::ProposeDeprecation(comp_id) => {
+                    if let Some(comp) = engine.graph_mut().compositions.get_mut(comp_id) {
+                        comp.lifecycle = LifecycleState::Deprecated;
+                    }
+                }
+                ReflectionAction::ProposeContradictionResolution(a_id, b_id) => {
+                    // Mark both as Inferred (voice confusion resolution).
+                    for comp_id in [a_id, b_id] {
+                        if let Some(comp) = engine.graph_mut().compositions.get_mut(comp_id) {
+                            if comp.epistemic == EpistemicState::Contradicted {
+                                comp.epistemic = EpistemicState::Inferred;
+                                comp.contradiction = None;
+                            }
+                        }
+                    }
+                }
+                ReflectionAction::ProposeMerge(a_id, b_id) => {
+                    // For now, deprecate the lower-confidence one.
+                    let (keep, remove) = {
+                        let graph = engine.graph();
+                        let comp_a = graph.get_composition(a_id);
+                        let comp_b = graph.get_composition(b_id);
+                        match (comp_a, comp_b) {
+                            (Some(a), Some(b)) if a.confidence >= b.confidence => (a_id.clone(), b_id.clone()),
+                            (Some(_), Some(_)) => (b_id.clone(), a_id.clone()),
+                            _ => continue,
+                        }
+                    };
+                    if let Some(comp) = engine.graph_mut().compositions.get_mut(&remove) {
+                        comp.lifecycle = LifecycleState::Deprecated;
+                    }
+                }
+                ReflectionAction::NoAction => {}
+            }
+        }
+    }
+
     /// Top-level ingest with mode-specific behavior.
     ///
     /// 1. Select cognitive mode from graph neighborhood
@@ -740,17 +789,10 @@ impl ExecutiveOrchestrator {
             if mode == CognitiveMode::Reflective {
                 let findings = self.reflect.reflect(&loop_result, engine.graph());
                 // Audit v5 fix (DD3): Previously, findings were discarded with
-                // `let _ = findings`. Now we store them in graph metadata so
-                // they're accessible for downstream actions and debugging.
-                let findings_summary = findings
-                    .iter()
-                    .map(|f| format!("{:?}:{}", f.finding_type, f.affected_compositions.join("+")))
-                    .collect::<Vec<_>>()
-                    .join(",");
-                engine.graph_mut().metadata.insert(
-                    "reflection_findings".to_string(),
-                    findings_summary,
-                );
+                // `let _ = findings`. Now we store the count and execute actions.
+                engine.context.last_reflection_findings_count = findings.len();
+                // Execute reflection actions.
+                self.execute_reflection_actions(&findings, engine);
             }
         }
 

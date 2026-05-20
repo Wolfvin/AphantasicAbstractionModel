@@ -18,7 +18,7 @@
 //! ## Pipeline Engine
 //!
 //! The [`PipelineEngine`] executes transforms in topological order based on
-//! their dependency DAG. Use [`register_default_pipeline`] to wire all 13 core
+//! their dependency DAG. Use [`register_default_pipeline`] to wire all 14 core
 //! transforms, then call [`PipelineEngine::ingest`] to process text.
 //!
 //! ## MD-Specific Transforms

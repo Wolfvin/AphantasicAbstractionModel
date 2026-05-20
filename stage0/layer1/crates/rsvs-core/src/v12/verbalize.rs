@@ -693,18 +693,11 @@ impl ErasedTransform for CompositionalVerbalizeTransform {
         }
 
         // Generate a default explanation of all compositions.
-        // In pipeline context, we use the raw text if available,
-        // otherwise we produce a summary of all compositions.
-        let query = ctx
-            .raw_text
-            .as_deref()
-            .unwrap_or("semua");
+        // Use the raw text from context if available, otherwise produce a summary.
+        let query = ctx.raw_text.as_deref().unwrap_or("semua");
         let result = self.engine.explain(query, graph);
-
-        // Audit v4 fix: Store the verbalization result in PipelineContext
-        // so it's accessible to downstream transforms and Python API callers.
-        // Previously, this was computed but discarded.
-        ctx.last_verbalization = Some(result.text.clone());
+        // Store verbalization text in PipelineContext for downstream access.
+        ctx.last_verbalization_text = result.text.clone();
 
         IngestResult {
             atoms_created: 0,
