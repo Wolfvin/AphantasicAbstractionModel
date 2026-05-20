@@ -141,6 +141,7 @@ pub use pipeline::{
     NoOpTransform,
     // --- Core pipeline types ---
     PipelineEngine,
+    PipelineError,
     ReExtractFrame,
     // --- Placeholder transforms (STUB:PLACEHOLDER) ---
     Tokenize,

@@ -43,6 +43,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
+use std::fmt;
 
 use super::acquisition::{DetectGaps, SelectAcquisition};
 use super::convergence::ConvergenceDetectionTransform;
@@ -55,6 +56,36 @@ use super::types::*;
 use super::verbalize::CompositionalVerbalizeTransform;
 // NodeId is imported from crate::types — not re-exported by super::types.
 use crate::types::NodeId;
+
+// ========================================================================
+// PipelineError — Errors from Pipeline Execution
+// ========================================================================
+
+/// Errors that can occur during pipeline execution.
+///
+/// Replaces the previous `eprintln!` approach for cycle detection,
+/// providing proper error propagation that callers can handle.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum PipelineError {
+    /// A cycle was detected in the transform dependency DAG.
+    /// This is a registration error — the pipeline cannot execute.
+    CycleDetected {
+        /// The transform IDs that form the cycle.
+        cycle_nodes: Vec<String>,
+    },
+}
+
+impl fmt::Display for PipelineError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            PipelineError::CycleDetected { cycle_nodes } => {
+                write!(f, "Cycle detected in transform DAG: {:?}", cycle_nodes)
+            }
+        }
+    }
+}
+
+impl std::error::Error for PipelineError {}
 
 // ========================================================================
 // IngestResult — Summary of a Pipeline Execution
@@ -217,7 +248,7 @@ pub trait ErasedTransform: Send + Sync {
 /// ```ignore
 /// let mut engine = PipelineEngine::new();
 /// register_default_pipeline(&mut engine);
-/// let result = engine.ingest("Raymond membuat aplikasi karena lambat");
+/// let result = engine.ingest("Raymond membuat aplikasi karena lambat").unwrap();
 /// ```
 ///
 /// # Thread Safety
@@ -301,7 +332,7 @@ impl PipelineEngine {
     /// # Returns
     ///
     /// An [`IngestResult`] summarizing the pipeline execution.
-    pub fn execute_dag(&mut self, initial_input: &str) -> IngestResult {
+    pub fn execute_dag(&mut self, initial_input: &str) -> Result<IngestResult, PipelineError> {
         // Reset per-run state in the context.
         self.context.set_raw_text(initial_input);
         self.context.current_atoms.clear();
@@ -313,12 +344,9 @@ impl PipelineEngine {
         let sorted_ids = match topological_sort(&self.dag) {
             Ok(ids) => ids,
             Err(cycle) => {
-                // In production, this would log an error. For now, return empty.
-                eprintln!(
-                    "[PipelineEngine] Cycle detected in transform DAG: {:?}",
-                    cycle
-                );
-                return IngestResult::new();
+                return Err(PipelineError::CycleDetected {
+                    cycle_nodes: cycle,
+                });
             }
         };
 
@@ -359,13 +387,14 @@ impl PipelineEngine {
             completed.insert(id.clone());
         }
 
-        result
+        Ok(result)
     }
 
     /// Convenience method — identical to [`execute_dag`](Self::execute_dag).
     ///
-    /// Provided for ergonomic API: `engine.ingest("some text")`.
-    pub fn ingest(&mut self, text: &str) -> IngestResult {
+    /// Provided for ergonomic API: `engine.ingest("some text").unwrap()`.
+    /// Returns `Result` so callers can handle pipeline errors properly.
+    pub fn ingest(&mut self, text: &str) -> Result<IngestResult, PipelineError> {
         self.execute_dag(text)
     }
 
@@ -960,22 +989,11 @@ impl Graph {
     /// and gap detection to find related compositions.
     ///
     /// Returns a value in [0, 1]: 1.0 = identical members, 0.0 = no overlap.
+    ///
+    /// Delegates to [`ConvergenceDetection::structural_similarity`] to avoid
+    /// duplicating the Jaccard computation.
     pub fn structural_similarity(&self, comp_a: &Composition, comp_b: &Composition) -> f32 {
-        let nodes_a: HashSet<NodeId> = comp_a.members.iter().map(|m| m.node_id).collect();
-        let nodes_b: HashSet<NodeId> = comp_b.members.iter().map(|m| m.node_id).collect();
-
-        if nodes_a.is_empty() && nodes_b.is_empty() {
-            return 1.0;
-        }
-
-        let intersection = nodes_a.intersection(&nodes_b).count();
-        let union = nodes_a.union(&nodes_b).count();
-
-        if union == 0 {
-            0.0
-        } else {
-            intersection as f32 / union as f32
-        }
+        super::convergence::ConvergenceDetection::structural_similarity(comp_a, comp_b)
     }
 
     /// Get the graph neighborhood for a set of keyword labels.
@@ -1791,6 +1809,7 @@ impl ErasedTransform for IngestAtoms {
                         role: SemanticRole::Predicate,
                         confidence: atom.confidence,
                         label: atom.label.clone(),
+                        source: None,
                     });
 
                     // Add role members from the atom's roles map.
@@ -1843,6 +1862,7 @@ impl ErasedTransform for IngestAtoms {
                         role: SemanticRole::Predicate,
                         confidence: atom.confidence,
                         label: atom.label.clone(),
+                        source: None,
                     });
 
                     // Add role members from the atom's roles map.
@@ -1899,6 +1919,7 @@ impl ErasedTransform for IngestAtoms {
                         role: SemanticRole::Predicate,
                         confidence: atom.confidence,
                         label: atom.label.clone(),
+                        source: None,
                     });
 
                     for (role, label) in &atom.roles {
@@ -1960,6 +1981,7 @@ impl ErasedTransform for IngestAtoms {
                     role: role.clone(),
                     confidence: 0.5,
                     label,
+                    source: None,
                 });
                 graph.edges.push((
                     comp_id.clone(),
@@ -2111,6 +2133,7 @@ impl ErasedTransform for EnrichComposition {
                     role: request.role_to_fill.clone(),
                     confidence: request.confidence,
                     label: request.candidate_label.clone(),
+                    source: None,
                 });
 
                 // Re-compute confidence based on completeness.
@@ -2339,6 +2362,7 @@ impl ErasedTransform for ReExtractFrame {
                                     role: role.clone(),
                                     confidence: re_confidence * 0.95,
                                     label: label.clone(),
+                                    source: None,
                                 }
                             })
                             .collect();
@@ -2528,7 +2552,7 @@ mod tests {
         let mut engine = PipelineEngine::new();
         register_default_pipeline(&mut engine);
 
-        let result = engine.ingest("Raymond membuat aplikasi karena lambat");
+        let result = engine.ingest("Raymond membuat aplikasi karena lambat").unwrap();
         assert!(result.atoms_created > 0);
     }
 
@@ -2564,12 +2588,14 @@ mod tests {
                 role: SemanticRole::Arg0Agent,
                 confidence: 1.0,
                 label: String::new(),
+                source: None,
             });
             comp.members.push(CompositionMember {
                 node_id: b,
                 role: SemanticRole::Arg1Patient,
                 confidence: 1.0,
                 label: String::new(),
+                source: None,
             });
             graph.compositions.insert(comp.id.clone(), comp);
         }
@@ -2619,6 +2645,7 @@ mod tests {
             role: SemanticRole::Predicate,
             confidence: 0.3,
             label: String::new(),
+            source: None,
         });
         // Missing Arg0Agent and Arg1Patient.
         engine.graph.compositions.insert(comp.id.clone(), comp);
@@ -2633,18 +2660,21 @@ mod tests {
             role: SemanticRole::Arg0Agent,
             confidence: 0.8,
             label: String::new(),
+            source: None,
         });
         comp2.members.push(CompositionMember {
             node_id: 3,
             role: SemanticRole::Arg1Patient,
             confidence: 0.8,
             label: String::new(),
+            source: None,
         });
         comp2.members.push(CompositionMember {
             node_id: 4,
             role: SemanticRole::Cause,
             confidence: 0.8,
             label: String::new(),
+            source: None,
         });
         engine.graph.compositions.insert(comp2.id.clone(), comp2);
 
@@ -2778,6 +2808,7 @@ mod tests {
             role: SemanticRole::Predicate,
             confidence: 0.5,
             label: "pergi".to_string(),
+            source: None,
         });
         graph.compositions.insert(comp_id.clone(), comp);
 
@@ -2817,12 +2848,14 @@ mod tests {
             role: SemanticRole::Predicate,
             confidence: 0.5,
             label: "pergi".to_string(),
+            source: None,
         });
         comp.members.push(CompositionMember {
             node_id: agent_id,
             role: SemanticRole::Arg0Agent,
             confidence: 0.7,
             label: "dia".to_string(),
+            source: None,
         });
         graph.compositions.insert(comp_id.clone(), comp);
 
@@ -2887,6 +2920,7 @@ mod tests {
             role: SemanticRole::Predicate,
             confidence: 0.3,
             label: "makan".to_string(),
+            source: None,
         });
         graph.compositions.insert(comp_id.clone(), comp);
 
@@ -2935,6 +2969,7 @@ mod tests {
             role: SemanticRole::Predicate,
             confidence: 0.5,
             label: "pergi".to_string(),
+            source: None,
         });
         // Add seed scores
         comp.seed_scores.insert(SeedPrimitive::Trust, 0.8);
@@ -2964,7 +2999,7 @@ mod tests {
         let mut engine = PipelineEngine::new();
         register_default_pipeline(&mut engine);
 
-        let result = engine.ingest("karena harga naik, rakyat menderita");
+        let result = engine.ingest("karena harga naik, rakyat menderita").unwrap();
         assert!(result.atoms_created > 0, "Should create atoms");
         assert!(
             result.compositions_created > 0,
@@ -2977,8 +3012,8 @@ mod tests {
         let mut engine = PipelineEngine::new();
         register_default_pipeline(&mut engine);
 
-        let r1 = engine.ingest("kucing makan ikan");
-        let r2 = engine.ingest("karena hujan, jalan basah");
+        let r1 = engine.ingest("kucing makan ikan").unwrap();
+        let r2 = engine.ingest("karena hujan, jalan basah").unwrap();
 
         assert!(r1.atoms_created > 0);
         assert!(r2.atoms_created > 0);

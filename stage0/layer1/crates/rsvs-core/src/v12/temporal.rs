@@ -315,6 +315,7 @@ mod tests {
             role: SemanticRole::Predicate,
             confidence: 0.9,
             label: "test".to_string(),
+            source: None,
         }];
         // decay = e^(-2.0 × 50/50) = e^(-2.0) ≈ 0.135
         // reinforcement = 1.0 + 0.2 × ln(2) ≈ 1.139
@@ -338,6 +339,7 @@ mod tests {
             role: SemanticRole::Predicate,
             confidence: 0.9,
             label: "test".to_string(),
+            source: None,
         }];
 
         let mut comp_high_access = Composition::default();
@@ -348,6 +350,7 @@ mod tests {
                 role: SemanticRole::Predicate,
                 confidence: 0.9,
                 label: format!("node_{}", i),
+                source: None,
             })
             .collect();
 
@@ -375,18 +378,21 @@ mod tests {
                 role: SemanticRole::Predicate,
                 confidence: 0.9,
                 label: "test".to_string(),
+                source: None,
             },
             CompositionMember {
                 node_id: 2,
                 role: SemanticRole::Arg0Agent,
                 confidence: 0.8,
                 label: "test2".to_string(),
+                source: None,
             },
             CompositionMember {
                 node_id: 3,
                 role: SemanticRole::Arg1Patient,
                 confidence: 0.7,
                 label: "test3".to_string(),
+                source: None,
             },
         ];
 
@@ -411,6 +417,7 @@ mod tests {
             role: SemanticRole::Predicate,
             confidence: 0.9,
             label: "test".to_string(),
+            source: None,
         }];
 
         let result = decay.apply_decay(&mut comp);
@@ -433,6 +440,7 @@ mod tests {
             role: SemanticRole::Predicate,
             confidence: 0.9,
             label: "test".to_string(),
+            source: None,
         }];
 
         let result = decay.apply_decay(&mut comp);

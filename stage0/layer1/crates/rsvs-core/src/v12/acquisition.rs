@@ -1311,12 +1311,14 @@ mod tests {
                     role: SemanticRole::Predicate,
                     confidence: 0.8,
                     label: String::new(),
+                    source: None,
                 },
                 CompositionMember {
                     node_id: 2,
                     role: SemanticRole::Arg1Patient,
                     confidence: 0.7,
                     label: String::new(),
+                    source: None,
                 },
             ],
             ..Composition::default()
@@ -1398,6 +1400,7 @@ mod tests {
             role: SemanticRole::Arg0Agent,
             confidence: 0.8,
             label: String::new(),
+            source: None,
         });
         graph.compositions.insert("comp_other".to_string(), comp);
 
@@ -1462,6 +1465,7 @@ mod tests {
             role: SemanticRole::Arg0Agent,
             confidence: 0.8,
             label: String::new(),
+            source: None,
         });
         graph.compositions.insert("comp_1".to_string(), comp);
 

@@ -9,11 +9,11 @@
 
 **Compositional symbolic meaning, not embeddings. Traceable sense definitions with structural similarity.**
 
-*AAM v12.0 introduces a rule-based cognitive architecture with active enrichment loops, epistemic governance, and role-weighted structural similarity.*
+*AAM v12 introduces a rule-based cognitive architecture with active enrichment loops, epistemic governance, and role-weighted structural similarity.*
 
 AAM is inspired by **Aphantasia** — the cognitive condition where no visual imagery is stored, only relational structure. This is how AAM remembers: raw input → structured tuples → knowledge graph. No photos. Only relations.
 
-📖 **[Full documentation](https://wolfvin.github.io/AphantasicAbstractionModel/)** · 🚀 [Quick Start](#quick-start) · 📚 [Tutorials](https://wolfvin.github.io/AphantasicAbstractionModel/tutorials/) · 🔧 [API Reference](https://wolfvin.github.io/AphantasicAbstractionModel/api/)
+📖 **[Full documentation](https://wolfvin.github.io/AphantasicAbstractionModel/)** · 🚀 [Quick Start](#quick-start) · 📚 [Tutorials](https://wolfvin.github.io/AphantasicAbstractionModel/tutorials/) · 🔧 [API Reference](#api-reference)
 
 ---
 
@@ -23,9 +23,9 @@ RSVS (Recursive Symbolic Vector Space) is a compositional symbolic meaning engin
 
 Unlike vector embeddings that compress meaning into opaque floating-point arrays, RSVS represents every concept as a composition of other concepts — and every composition is traceable. You can follow the chain from any concept down to its constituent parts, explain precisely why two concepts are related, and identify the exact substitution that transforms one into another.
 
-At its core, RSVS ingests text and builds a knowledge graph composed of atoms, senses, and compositions. An atom is the smallest unit of meaning — a token that has been promoted to entity status through co-occurrence statistics, but only if it is *groundable* to existing knowledge (the grounding gate). A sense is a particular meaning of a concept, defined by which other senses it is composed from. A composition is a directed reference from one sense to another, forming a directed acyclic graph of meaning.
+At its core, RSVS ingests text through a 14-transform DAG pipeline and builds a knowledge graph composed of semantic atoms, compositions, and typed edges. A **semantic atom** is the smallest unit of meaning — a token, event frame, or hidden meaning candidate unified into one type. A **composition** is a structured group of atoms playing semantic roles (agent, patient, cause, etc.), forming a directed acyclic graph of meaning. Every composition carries dual-axis status: **lifecycle** (structural maturity) and **epistemic** (truth confidence), governed by belief management rules.
 
-RSVS is built with a Rust core compiled to Python via PyO3 and maturin, giving you the safety and speed of Rust with the ergonomics of a Python library. It prioritizes Bahasa Indonesia as its primary language for development and testing, while supporting English and other languages through a fully language-agnostic architecture. The system includes an autonomous tiered memory lifecycle (New, Candidate, Stable, Deprecated), Monte Carlo Tree Search for complex reasoning paths, consolidation and reflection engines for self-maintenance, and an optional FastAPI server for production deployments. A Next.js demo frontend provides interactive 3D graph visualization.
+RSVS is built with a Rust core compiled to Python via PyO3 and maturin, giving you the safety and speed of Rust with the ergonomics of a Python library. It prioritizes Bahasa Indonesia as its primary language for development and testing; verbalization currently supports Bahasa Indonesia, while the architecture is designed to be language-agnostic for future extension. The system includes an autonomous tiered memory lifecycle (New → Candidate → Stable → Deprecated, plus Quarantine), epistemic governance with seed alignment scores, active gap detection and enrichment loops, three cognitive modes (Reactive, Analytical, Reflective) with an executive orchestrator, and a compositional verbalization engine that generates zero-hallucination explanations.
 
 ---
 
@@ -33,9 +33,9 @@ RSVS is built with a Rust core compiled to Python via PyO3 and maturin, giving y
 
 If you have used word embeddings or sentence transformers, you are familiar with the pattern: "raja and ratu have cosine similarity 0.87." But what does that number mean? Which aspects of meaning make them similar? What would you need to change to transform one into the other? Embeddings cannot answer these questions because they compress meaning into a single opaque vector. Knowledge graphs and ontologies offer more structure, but they require manual schema design and struggle with ambiguity, multiple senses, and the fluid nature of natural language meaning.
 
-RSVS occupies a different position. It provides the structural precision of a knowledge graph without requiring upfront schema design, and the fuzzy similarity of embeddings without the opacity. When RSVS tells you that "raja" and "ratu" share two compositions (tahta_tertinggi and kerajaan) and differ in exactly one (laki_laki versus perempuan), you have an answer you can inspect, debug, and reason about. This structural approach enables substitution analysis (what transforms concept A into concept B?), context-aware queries (which sense of this word is active given these context atoms?), and compositional verification (are the compositions of this sense well-grounded in evidence?).
+RSVS occupies a different position. It provides the structural precision of a knowledge graph without requiring upfront schema design, and the fuzzy similarity of embeddings without the opacity. When RSVS computes `similarity("raja", "ratu")` and returns a score, that score is derived from Jaccard overlap of composition neighborhoods plus spreading activation — and you can inspect exactly which compositions are shared and which differ. This structural approach enables semantic queries (find compositions by concept or role structure), path finding (trace the reasoning chain between two concepts), and compositional verification (are the compositions of this sense well-grounded in evidence?).
 
-Compared to traditional knowledge graphs, RSVS does not require you to define a schema or ontology upfront. The system bootstraps from 24 seed atoms and induces senses automatically from text. Compared to ontologies, RSVS handles ambiguity natively through its multi-sense framework -- a single concept can have multiple senses, each with its own composition structure. Compared to embeddings, RSVS provides full traceability: every similarity score can be decomposed into shared and differing compositions, and every substitution can be named explicitly.
+Compared to traditional knowledge graphs, RSVS does not require you to define a schema or ontology upfront. The system bootstraps from seed atoms and induces compositions automatically from text through a 14-transform pipeline. Compared to ontologies, RSVS handles ambiguity natively through its dual-axis status system — a single composition can exist in different lifecycle and epistemic states simultaneously. Compared to embeddings, RSVS provides full traceability: every similarity score can be decomposed into shared and differing compositions, and every connection can be verbalized as natural language.
 
 ---
 
@@ -49,12 +49,6 @@ pip install rsvs
 
 The core library has zero Python dependencies. The Rust engine is compiled into the wheel via PyO3, so there is no separate Rust toolchain needed at install time.
 
-For the optional FastAPI server:
-
-```bash
-pip install rsvs[server]
-```
-
 For development (includes test tools, linters, and maturin):
 
 ```bash
@@ -67,330 +61,358 @@ To install everything:
 pip install rsvs[all]
 ```
 
+> **Note:** Python bindings are available via `PyV12Pipeline`. The v8.3 CLI and FastAPI server infrastructure may not reflect the current v12 API.
+
 ---
 
 ## Quick Start
 
 ```python
-from rsvs import Rsvs
+from rsvs import PyV12Pipeline
 
-r = Rsvs(entity_promote_n=3, theta_assign=0.12, n_warm=20, eta=0.1)
+pipeline = PyV12Pipeline()
+result = pipeline.v12_ingest("Raymond membuat aplikasi karena lambat")
+print(f"Created {result.atoms_created} atoms, {result.compositions_created} compositions")
 
-r.ingest("Raja adalah pemimpin kerajaan laki-laki. "
-         "Ratu adalah pemimpin kerajaan perempuan. "
-         "Tahta tertinggi ada di kerajaan.")
+# Inspect the graph
+for comp in pipeline.compositions():
+    print(f"  {comp.id}: {comp.composition_type} (confidence={comp.confidence:.2f})")
 
-r.compose("raja", [("tahta_tertinggi", 0), ("laki_laki", 0), ("kerajaan", 0)], lang="id")
-r.compose("ratu", [("tahta_tertinggi", 0), ("perempuan", 0), ("kerajaan", 0)], lang="id")
+# Detect gaps
+gaps = pipeline.detect_gaps()
+for gap in gaps:
+    print(f"  Gap: {gap.gap_type} - {gap.description}")
 
-sim = r.structural_similarity("raja", "ratu")
-print(f"Structural similarity: {sim.structural_similarity:.3f}")  # 0.667
+# Explain a concept
+explanation = pipeline.explain("aplikasi")
+print(explanation.text)
 
-sub = r.substitution_analysis("raja", "ratu")
-print(f"Substitution: {sub.substitution_labels(r)}")  # [("laki_laki", 0, "perempuan", 0)]
+# Find related concepts
+related = pipeline.find_related("lambat", top_n=5)
+for label, energy in related:
+    print(f"  {label}: energy={energy:.3f}")
+
+# Compute similarity
+score = pipeline.similarity("raja", "ratu")
+print(f"Similarity: {score:.3f}")
 ```
-
-One swap -- `laki_laki` becomes `perempuan` -- is the entire semantic difference between king and queen, expressed as a precise structural transformation rather than a fuzzy vector distance.
 
 ---
 
 ## Core Concepts
 
-### Atoms
+### SemanticAtom
 
-An atom is the smallest unit of meaning in RSVS. When text is ingested, tokens are extracted and tracked for co-occurrence statistics. Tokens that appear frequently enough and with sufficient co-occurrence diversity are promoted to atom status. The system bootstraps with 24 seed atoms (basic semantic primitives like "laki_laki", "perempuan", "kekerasan", and others) that provide the initial vocabulary for compositional definitions. Promotion is controlled by the `entity_promote_n` parameter, which sets the minimum number of co-occurrence contexts required before a token becomes an atom.
+A `SemanticAtom` is the universal ingest primitive — the only type that enters the RSVS graph. A token, an event frame, a hidden meaning candidate — these are all atoms with varying richness. A token is a sparse atom (no roles). An event frame is a rich atom (roles like Agent, Patient, Cause). A hidden meaning is a derived atom (roles like Problem, Solution). Atoms are classified by `AtomType` (Token, AmbiguousToken, Event, HiddenMeaning, Pattern, Hypothesis, Acquisition) and carry semantic role assignments, polarity, voice, and provenance. The v12 pipeline produces atoms through the Tokenize, ExtractFrame, and ReasonFrame transforms.
 
-### Senses
+### Composition
 
-A sense is a particular meaning of a concept. Every node in the RSVS graph can have multiple senses, each representing a distinct usage. For example, "batu" (stone/rock) might have one sense for geological material and another for a gemstone. Each sense carries its own composition structure, grounding score, coherence metric, and status. Senses are induced automatically during ingestion -- the system identifies which atoms are active in the context of each token and uses them as the compositions of a new sense. Senses can also be defined explicitly via the `compose()` method.
+A `Composition` is the universal structured grouping in the RSVS graph. When a `SemanticAtom` is ingested, it becomes a `Composition`: a group of nodes with typed roles, dual-axis status, and seed alignment scores. This replaces the separate EventFrame, HiddenMeaningCandidate, Pattern, Hypothesis, and SituationState types from earlier versions. Compositions are classified by `CompositionType` (Event, HiddenMeaning, Pattern, Situation, Hypothesis, Acquisition). Each member of a composition is a `CompositionMember` with a node ID, semantic role, confidence, and provenance.
 
-### Compositions
+### LifecycleState + EpistemicState
 
-A composition is a directed reference from one sense to another sense, forming the edges of the meaning graph. When you define "raja" as composed of ("tahta_tertinggi", sense 0), ("laki_laki", sense 0), and ("kerajaan", sense 0), you are creating three composition edges. Compositions are the fundamental building blocks of meaning in RSVS. They enable structural similarity (comparing shared and differing compositions between two concepts), substitution analysis (identifying the precise swaps that transform one concept into another), and compositional verification (checking whether a sense's compositions are well-grounded in evidence).
+Every composition (and node) carries two orthogonal status axes:
 
-### Layers
+- **LifecycleState** (structural maturity): `New → Candidate → Stable → Deprecated`, plus `Quarantine` for isolated entities. This replaces the old NodeStatus + Tier system.
+- **EpistemicState** (truth confidence): `Observed → Inferred → Grounded`, plus `Hypothesis` and `Contradicted`. This replaces the old BeliefState + GroundingVerdict system.
 
-Layers represent the depth of compositional structure. Seed atoms exist at layer 0. A concept composed entirely of layer-0 atoms exists at layer 1. A concept composed of at least one layer-1 sense exists at layer 2, and so on. Layers create a natural hierarchy: you cannot define a higher-layer concept without first having the lower-layer concepts it depends on. The layer system prevents circular definitions and enables the system to reason about compositional depth.
+These combine to express rich status: `(Candidate, Inferred)` means "rule-derived, under review"; `(Stable, Grounded)` means "well-established, repeatedly confirmed"; `(Quarantine, Hypothesis)` means "unconfirmed scenario, isolated."
 
-### Tiers and Autonomous Memory
+### SemanticEdge
 
-RSVS implements an autonomous tiered memory lifecycle for all nodes. Every node progresses through four tiers based on its confidence and activity: New (just created, low confidence), Candidate (some evidence, gaining confidence), Stable (well-established, high confidence), and Deprecated (inactive, low confidence, scheduled for removal). This lifecycle is managed by the autonomy engine, which uses exponential moving averages (EMA) and hysteresis thresholds to prevent rapid oscillation between tiers. The `eta` parameter controls the EMA smoothing factor.
+A `SemanticEdge` is a single typed triple with three dimensions: **relation** (what kind: Categorical, Causal, etc.), **role** (optional: if part of a composition), and **source** (provenance: where this edge came from). This replaces the separate RelationType, EdgeSource, SemanticRole, and ProvenanceSource systems from earlier versions with a single edge structure.
 
-### Grounding
+### Transform DAG
 
-Grounding is the process of verifying that a sense's compositions are supported by evidence in the corpus. After a sense is formed, every subsequent ingestion that involves that sense updates its grounding score. Confirming contexts (where the sense's compositions are also active) boost the grounding score; contradicting contexts (where expected compositions are absent) penalize it. The asymmetric penalty (0.10) versus boost (0.05) ensures that poorly grounded compositions are caught quickly. A sense with a grounding score above 0.60 is considered well-grounded; below 0.20 it needs revision; and below that threshold it is a candidate for retirement.
+The v12 pipeline is not a hardcoded sequence — it is a directed acyclic graph of declarative transforms. Each transform declares what it consumes and produces, and the pipeline engine routes data through transforms in topological order with condition-gated execution. This replaces the fixed pipeline stages of earlier versions and enables feedback loops (EnrichComposition, ReExtractFrame) to be wired into the same DAG as the forward path.
+
+### SeedPrimitive + seed_scores
+
+Every composition carries a `seed_scores` map that aligns it against seed primitives — foundational semantic dimensions like AgentiveAction, CausalRelation, and TemporalEvent. These scores replace the old source trust weight system and provide the basis for epistemic governance: compositions with strong seed alignment are promoted faster through the lifecycle, while those with weak alignment require more independent evidence.
+
+---
+
+## Architecture Overview
+
+### 14-Transform DAG Pipeline
+
+RSVS v12 processes text through a condition-gated DAG of 14 transforms, executed in topological order:
+
+```
+Tokenize → ExtractFrame → ReasonFrame → IngestAtoms → GovernBeliefs → SeedAnchor
+→ DetectGaps → SelectAcquisition → EnrichComposition / ReExtractFrame
+→ TemporalDecay → SpreadingActivation → ConvergenceDetection → CompositionalVerbalize
+```
+
+| # | Transform | Dependencies | Condition | Purpose |
+|---|-----------|-------------|-----------|---------|
+| 1 | Tokenize | (none) | always | Extract tokens from raw text |
+| 2 | ExtractFrame | Tokenize | is_sentence_like | Rule-based frame extraction (MD-1) |
+| 3 | ReasonFrame | ExtractFrame | has_event_atoms | Pre-ingest reasoning (MD-2) |
+| 4 | IngestAtoms | Tokenize, ReasonFrame | always | Create nodes and edges |
+| 5 | GovernBeliefs | IngestAtoms | always | Lifecycle/epistemic governance (MD-4) |
+| 6 | SeedAnchor | GovernBeliefs | always | Compute seed alignment scores (MD-4) |
+| 7 | DetectGaps | SeedAnchor | gap_detection_enabled | Find knowledge gaps (MD-6) |
+| 8 | SelectAcquisition | DetectGaps | has_gaps | Choose gap-filling strategy (MD-6) |
+| 9 | EnrichComposition | SelectAcquisition | has_enrichment_requests | Fill gaps from graph recall |
+| 10 | ReExtractFrame | SelectAcquisition | has_reextraction_requests | Re-extract with graph context |
+| 11 | TemporalDecay | EnrichComposition | always | Apply Ebbinghaus-style decay |
+| 12 | SpreadingActivation | GovernBeliefs | has_event_atoms | Propagate activation energy |
+| 13 | ConvergenceDetection | EnrichComposition, TemporalDecay | always | Detect structurally equivalent compositions |
+| 14 | CompositionalVerbalize | ConvergenceDetection | always | Generate zero-hallucination explanations |
+
+### Three Cognitive Modes (MD-5)
+
+The `ExecutiveOrchestrator` selects a cognitive mode for each input based on graph neighborhood health:
+
+| Mode | Trigger | Behavior | Enrichment Rounds |
+|------|---------|----------|-------------------|
+| **Reactive** | No contradictions, no gaps, high confidence | Fast path — just extract and ingest | 0 |
+| **Analytical** | Contradictions OR low confidence (<0.5) | Enrichment loop to fill gaps and resolve issues | 1 |
+| **Reflective** | Deep contradictions (3+) | Extended reflection with finding analysis | 2 |
+
+The orchestrator runs the enrichment loop (DetectGaps → SelectAcquisition → EnrichComposition → GovernBeliefs) for Analytical and Reflective modes, and produces reflection findings (PromotionCandidate, ContradictionResolvable, StagnantInferred, DecayedConfidence, OverlapDetected) in Reflective mode.
+
+### Codebase Structure
+
+- **Rust Core** (`stage0/layer1/crates/rsvs-core/src/`): All computational logic — graph storage, pipeline engine, transforms, governance, gap detection, convergence, spreading activation, temporal decay, verbalization, and persistence. No HTTP, no file I/O, no Python dependencies. Compiles independently.
+
+- **Python Bridge** (`stage0/layer1/crates/rsvs-core/src/bindings.rs`): PyO3 bindings exposing `PyV12Pipeline` and all v12 types to Python. Compiled via maturin. No computation happens in Python — everything delegates to the Rust core.
+
+- **Frontend** (`_archived/frontend/`): A Next.js application with React Three Fiber for 3D graph visualization.
+
+For the full technical reference, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ---
 
 ## API Reference
 
+All operations are accessed through `PyV12Pipeline`, the main Python class wrapping the Rust pipeline engine.
+
 ### Core Operations
 
-These are the primary operations for building and querying a knowledge graph.
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `v12_ingest` | `pipeline.v12_ingest(text: str) -> PyV12IngestResult` | Ingest text through the full 14-transform DAG. Returns stats on atoms created, compositions created, gaps detected, edges, enrichments, governance transitions, and selected cognitive mode. |
+| `select_cognitive_mode` | `pipeline.select_cognitive_mode(text: str) -> str` | Select cognitive mode (Reactive/Analytical/Reflective) for the given input based on graph neighborhood health. |
+| `save` | `pipeline.save(path: str) -> None` | Serialize the entire knowledge graph to a JSON file. |
+| `load` | `pipeline.load(path: str) -> None` | Load a knowledge graph from a JSON file, replacing the current state. |
+
+### Graph Inspection
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
-| `ingest` | `r.ingest(text: str) -> IngestStats` | Ingest text, update co-occurrence stats, promote atoms, induce senses. Returns stats on sentences processed, atoms promoted, senses created. |
-| `query` | `r.query(concept: str, context: str) -> QueryResult \| None` | Context-aware query. Returns the active sense, its layer, grounding score, compositions, and scored atoms. |
-| `context_query` | `r.context_query(concept, atoms, max_depth, gamma, halt_confidence, tau_relevance) -> ContextQueryResult \| None` | Depth-controlled lazy traversal with context atoms. Supports configurable depth limits, relevance thresholds, and halt conditions. |
-| `compose` | `r.compose(label, compositions, lang) -> int` | Create a new compositional node. `compositions` is a list of `(label, sense_idx)` tuples. Returns the new node ID. |
+| `compositions` | `pipeline.compositions() -> list[PyComposition]` | All compositions in the graph, each with ID, type, members, lifecycle, epistemic, confidence, seed scores, and provenance. |
+| `composition_count` | `pipeline.composition_count() -> int` | Total number of compositions. |
+| `node_count` | `pipeline.node_count() -> int` | Total number of nodes. |
+| `get_composition` | `pipeline.get_composition(id: str) -> PyComposition \| None` | Get a specific composition by its ID. |
+| `find_weak_frames` | `pipeline.find_weak_frames() -> list[str]` | Low-confidence Event compositions missing expected roles. Returns composition IDs. |
+| `snapshot_json` | `pipeline.snapshot_json() -> str` | JSON snapshot of current graph state for serialization or UI consumption. |
+| `graph_summary` | `pipeline.graph_summary() -> str` | Human-readable summary: node count, composition count, lifecycle/epistemic distribution. |
 
-### Analysis Operations
-
-These methods compare concepts and analyze text against the knowledge graph.
-
-| Method | Signature | Description |
-|--------|-----------|-------------|
-| `similarity` | `r.similarity(a: str, b: str) -> SimResult \| None` | Flat Jaccard similarity based on shared atoms. Returns Jaccard score, shared atoms, and atoms unique to each side. |
-| `structural_similarity` | `r.structural_similarity(a: str, b: str) -> StructuralSimResult \| None` | Sense-level composition comparison. Returns the structural similarity score, shared compositions, and compositions unique to each sense. |
-| `substitution_analysis` | `r.substitution_analysis(a: str, b: str) -> SubstitutionResult \| None` | Find the precise swaps that transform concept A into concept B. Returns paired substitutions and unpaired remainders. |
-| `context_similarity` | `r.context_similarity(a: str, b: str, context: list[str]) -> float \| None` | Context-weighted similarity. Weights shared atoms by their relevance to the provided context. |
-| `appraise` | `r.appraise(text: str) -> AppraiseResult` | Evaluate text plausibility against the graph. Returns agree/disagree percentages, verdict, and supporting evidence. |
-| `relate` | `r.relate(concept: str) -> RelateResult \| None` | Find related nodes and edges via spreading activation along composition edges. |
-
-### Composition Operations
+### Gap Detection & Enrichment
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
-| `compose` | `r.compose(label, compositions, lang) -> int` | Create compositional node from label/sense references. |
-| `compose_from_ids` | `r.compose_from_ids(label, atom_ids, lang) -> int` | Create compositional node from integer atom IDs. |
+| `detect_gaps` | `pipeline.detect_gaps() -> list[PyKnowledgeGap]` | Detect knowledge gaps in the current graph. Each gap has a type (MissingRole, AmbiguousToken, etc.), description, confidence, and source composition. |
+| `pending_gaps` | `pipeline.pending_gaps() -> list[PyKnowledgeGap]` | Get all pending knowledge gaps as structured objects (alias for detect_gaps). |
+| `submit_answer` | `pipeline.submit_answer(gap_id: str, answer: str) -> bool` | Submit a user answer to fill a knowledge gap. Returns True if applied. |
+| `set_gap_detection` | `pipeline.set_gap_detection(enabled: bool) -> None` | Enable or disable gap detection for subsequent ingest calls. |
+| `run_enrichment_loop` | `pipeline.run_enrichment_loop() -> PyV12IngestResult` | Run the active enrichment loop: DetectGaps → SelectAcquisition → EnrichComposition → GovernBeliefs. |
 
-### Reasoning Operations
-
-| Method | Signature | Description |
-|--------|-----------|-------------|
-| `mcts_query` | `r.mcts_query(label, simulations, exploration) -> MCTSResult \| None` | Monte Carlo Tree Search for complex disambiguation. Uses UCB1 selection and structural value functions. Returns active sense, scored atoms, depth reached, and halt reason. |
-| `set_thinking_mode` | `r.set_thinking_mode(mode)` | Control traversal depth. `-1` = AUTO (router decides), `0` = NON_THINKING (shallow, fast), `1` = THINKING (deep, thorough). |
-| `consolidate` | `r.consolidate() -> ConsolidationResult` | Periodic graph cleanup: merge similar senses, remove dead senses, prune weak edges, compact records. |
-| `run_reflection` | `r.run_reflection() -> ReflectionResult` | Self-evaluate all senses. Produces CONFIRM, REVIEW, REVISE, or RETIRE actions based on grounding evidence. |
-| `verify` | `r.verify() -> dict` | Neuro-symbolic composition verification. Checks five structural rules: no self-reference, layer consistency, grounding threshold, frequency threshold, and no circular chains. |
-
-### Inspection Operations
+### Semantic Query API
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
-| `node_info` | `r.node_info(label) -> NodeInfo` | Detailed node information: label, layer, confidence, tier, status, composition state. |
-| `senses` | `r.senses(concept) -> list[SenseInfo]` | All senses of a concept with grounding evidence, coherence, compositions, and status. |
-| `nodes` | `r.nodes(include_seeds=False) -> list[str]` | List all known node labels. |
-| `atoms` | `r.atoms(include_seeds=False) -> list[str]` | List all known atom labels. |
-| `confidence_map` | `r.confidence_map() -> dict[str, float]` | Confidence scores for all nodes. |
-| `entity_candidates` | `r.entity_candidates(top_k) -> list[tuple[str, float]]` | Unpromoted tokens with highest centrality scores. |
-| `status` | `r.status() -> dict[str, float]` | System status including total nodes, atoms, contexts, and configuration parameters. |
+| `query_concept` | `pipeline.query_concept(concept: str) -> list[tuple[PyComposition, float]]` | Find compositions where the concept appears as a member label. Results ranked by relevance score. |
+| `query_structure` | `pipeline.query_structure(role_names: list[str]) -> list[PyComposition]` | Find compositions containing ALL specified semantic roles (e.g., `["Agent", "Cause"]` for causal events). |
+| `similarity` | `pipeline.similarity(label_a: str, label_b: str) -> float` | Compute similarity between two concepts using Jaccard composition overlap (60%) + spreading activation cosine (40%). Returns 0.0–1.0. |
+| `find_related` | `pipeline.find_related(label: str, top_n: int = 10) -> list[tuple[str, float]]` | Find related concepts using spreading activation. Returns top-N labels with activation energy. |
+| `find_path` | `pipeline.find_path(label_from: str, label_to: str) -> list[str]` | Find a reasoning path between two concepts. Returns composition IDs forming the strongest bridge. |
+| `explain_connection` | `pipeline.explain_connection(label_from: str, label_to: str) -> list[str]` | Combine find_path with verbalization to produce natural language explanation of why two concepts are related. |
+| `compositions_for_label` | `pipeline.compositions_for_label(label: str) -> list[PyComposition]` | All compositions involving a specific node label. Exact match only. |
 
-### Persistence Operations
+### Verbalization
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
-| `save` | `r.save(path: str) -> None` | Serialize the entire knowledge graph to a JSON file. |
-| `load` | `Rsvs.load(path: str) -> Rsvs` | Class method. Deserialize a knowledge graph from a JSON file. |
-| `snapshot_v1` | `r.snapshot_v1() -> str` | Runtime snapshot for UI consumption. Returns JSON string. |
-| `consume_events_v1` | `r.consume_events_v1(after_seq, limit) -> str` | Incremental event stream. Returns events with sequence numbers after `after_seq`. |
-| `latest_seq_v1` | `r.latest_seq_v1() -> int` | Current monotonic event sequence number. |
+| `explain` | `pipeline.explain(query: str) -> PyVerbalizationResult` | Explain a concept using the Compositional Verbalization Engine. Traverses the graph, builds a reasoning path, and verbalizes each composition. Zero hallucination by design. |
+| `verbalize_composition` | `pipeline.verbalize_composition(composition_id: str) -> str \| None` | Verbalize a single composition by its ID. Returns the sentence with epistemic qualifier. |
+| `detect_convergence` | `pipeline.detect_convergence() -> list[PyConvergencePair]` | Detect structurally equivalent compositions (high overlap, low co-occurrence). |
+
+### Training
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `learn_corpus` | `pipeline.learn_corpus(sentences: list[str], priority: str = None) -> PyV12IngestResult` | Ingest multiple sentences with optional priority. High priority runs enrichment after each sentence. |
+| `comprehension_check` | `pipeline.comprehension_check(topic: str) -> str` | Check how well the system "understands" a concept: composition count, average confidence, lifecycle distribution, related concepts. |
 
 ---
 
-## CLI Usage
+## Examples
 
-RSVS installs a `rsvs` command-line tool after `pip install rsvs`. The CLI provides access to all core operations without writing Python code. State is persisted to a JSON file (default: `./rsvs.json`).
-
-```bash
-# Initialize a new knowledge graph
-rsvs init --db my_graph.json
-
-# Ingest text (literal string or file path)
-rsvs ingest "Batu adalah material keras dari alam" --db my_graph.json
-rsvs ingest corpus.txt --db my_graph.json
-
-# Query a concept in context
-rsvs query batu "material keras" --db my_graph.json
-
-# Compute similarity between two concepts
-rsvs similarity batu kayu --db my_graph.json
-
-# Inspect a concept
-rsvs info batu --db my_graph.json
-rsvs senses batu --db my_graph.json
-
-# List all atoms
-rsvs atoms --db my_graph.json
-
-# Show system status
-rsvs status --db my_graph.json
-
-# Ingest from embedded corpus (Bahasa Indonesia domains)
-rsvs ingest-corpus --domains geology materials --db my_graph.json
-rsvs ingest-corpus --all --db my_graph.json
-
-# Run quality evaluation
-rsvs eval --db my_graph.json --json
-
-# Replay incremental event stream
-rsvs replay-events --db my_graph.json --after-seq 100 --limit 50
-```
-
-All commands support `--json` for machine-readable output. The `init` command accepts tuning parameters: `--promote-n`, `--theta`, `--n-warm`, and `--eta` to configure the RSVS hyperparameters.
-
----
-
-## FastAPI Server
-
-RSVS includes an optional FastAPI server for HTTP access to all operations. Install with the `server` extra:
-
-```bash
-pip install rsvs[server]
-```
-
-Start the server:
-
-```bash
-# Development mode (auto-reload)
-RSVS_DEV_RELOAD=1 python -m rsvs.fastapi_server
-
-# Production mode
-RSVS_API_KEY=your-secret-key RSVS_SESSION_SECRET=your-session-secret python -m rsvs.fastapi_server
-```
-
-The server runs on `0.0.0.0:8000` by default. Configure with environment variables: `RSVS_HOST`, `RSVS_PORT`, `RSVS_API_KEY`, `RSVS_SESSION_SECRET`, `RSVS_ALLOWED_ORIGINS`.
-
-Key endpoints:
-
-```bash
-# Ingest text
-curl -X POST http://localhost:8000/ingest \
-  -H "Content-Type: application/json" \
-  -H "X-API-Key: your-key" \
-  -d '{"text": "Raja adalah pemimpin kerajaan."}'
-
-# Compose a node
-curl -X POST http://localhost:8000/compose \
-  -H "Content-Type: application/json" \
-  -d '{"label": "raja", "compositions": [{"label": "tahta_tertinggi", "sense_id": 0}], "lang": "id"}'
-
-# Structural similarity
-curl "http://localhost:8000/structural-similarity?a=raja&b=ratu"
-
-# Substitution analysis
-curl "http://localhost:8000/substitution-analysis?a=raja&b=ratu"
-
-# MCTS query
-curl -X POST http://localhost:8000/mcts-query \
-  -H "Content-Type: application/json" \
-  -d '{"label": "batu", "simulations": 100}'
-
-# Consolidate the graph
-curl -X POST http://localhost:8000/consolidate \
-  -H "Content-Type: application/json" \
-  -d '{"force": true}'
-```
-
-The server includes API-key-based rate limiting, CORS configuration, request size limits, and production fail-fast checks for required secrets. OpenAPI documentation is available at `http://localhost:8000/docs`.
-
----
-
-## Examples Gallery
-
-### Comparing King and Queen
+### Ingesting and Exploring
 
 ```python
-from rsvs import Rsvs
+from rsvs import PyV12Pipeline
 
-r = Rsvs()
-r.ingest("Raja adalah pemimpin kerajaan laki-laki. "
-         "Ratu adalah pemimpin kerajaan perempuan. "
-         "Tahta tertinggi ada di kerajaan.")
+pipeline = PyV12Pipeline()
 
-r.compose("raja", [("tahta_tertinggi", 0), ("laki_laki", 0), ("kerajaan", 0)], lang="id")
-r.compose("ratu", [("tahta_tertinggi", 0), ("perempuan", 0), ("kerajaan", 0)], lang="id")
+# Ingest a sentence
+result = pipeline.v12_ingest("Raja memimpin kerajaan karena kebijakan")
+print(f"Atoms: {result.atoms_created}, Compositions: {result.compositions_created}")
+print(f"Cognitive mode: {result.cognitive_mode}")
 
-sim = r.structural_similarity("raja", "ratu")
-print(f"Similarity: {sim.structural_similarity:.3f}")   # 0.667
-print(f"Shared: {sim.shared_labels(r)}")                # [(tahta_tertinggi, 0), (kerajaan, 0)]
+# Inspect what was created
+for comp in pipeline.compositions():
+    print(f"  {comp.id}: {comp.composition_type}")
+    print(f"    Lifecycle: {comp.lifecycle}, Epistemic: {comp.epistemic}")
+    print(f"    Confidence: {comp.confidence:.2f}")
+    for member in comp.members:
+        print(f"    {member.role}: {member.label} (confidence={member.confidence:.2f})")
 
-sub = r.substitution_analysis("raja", "ratu")
-print(f"Substitution: {sub.substitution_labels(r)}")    # [(laki_laki, 0, perempuan, 0)]
+# Get a human-readable summary
+print(pipeline.graph_summary())
 ```
 
-### Context-Aware Querying
+### Semantic Similarity and Related Concepts
 
 ```python
-from rsvs import Rsvs
+from rsvs import PyV12Pipeline
 
-r = Rsvs()
-r.ingest("Batu adalah material keras. Tulang juga material keras. "
-         "Batu ditemukan di alam. Tulang ada di tubuh.")
+pipeline = PyV12Pipeline()
+pipeline.learn_corpus([
+    "Raja adalah pemimpin kerajaan laki-laki",
+    "Ratu adalah pemimpin kerajaan perempuan",
+    "Tahta tertinggi ada di kerajaan",
+    "Kerajaan dipimpin oleh raja atau ratu",
+])
 
-result = r.context_query("batu", ["material", "keras"], max_depth=5)
-if result:
-    print(f"Active sense: {result.active_sense_idx}")
-    print(f"Depth reached: {result.depth_reached}")
-    print(f"Scored atoms: {result.scored_atoms[:5]}")
+# Compute similarity
+score = pipeline.similarity("raja", "ratu")
+print(f"Similarity: {score:.3f}")
+
+# Find related concepts
+related = pipeline.find_related("raja", top_n=5)
+for label, energy in related:
+    print(f"  {label}: energy={energy:.3f}")
+
+# Explain why two concepts are related
+explanation = pipeline.explain_connection("raja", "kerajaan")
+for sentence in explanation:
+    print(f"  → {sentence}")
 ```
 
-### MCTS Reasoning
+### Gap Detection and Enrichment
 
 ```python
-from rsvs import Rsvs
+from rsvs import PyV12Pipeline
 
-r = Rsvs()
-r.ingest("Batu adalah material keras dari alam. "
-         "Batu digunakan untuk konstruksi. "
-         "Mineral adalah komponen batu.")
+pipeline = PyV12Pipeline()
+pipeline.set_gap_detection(True)
 
-result = r.mcts_query("batu", simulations=100)
-if result:
-    print(f"Active sense: {result.active_sense_idx}")
-    print(f"Simulations: {result.simulations_run}")
-    print(f"Depth: {result.depth_reached}")
-    print(f"Halt reason: {result.halt_reason}")
-    print(f"Best path: {result.best_path}")
+result = pipeline.v12_ingest("Aplikasi dibuat karena lambat")
+print(f"Gaps detected: {result.gaps_detected}")
+
+# Inspect gaps
+gaps = pipeline.detect_gaps()
+for gap in gaps:
+    print(f"  Gap: {gap.gap_type} - {gap.description}")
+    if gap.missing_role:
+        print(f"    Missing role: {gap.missing_role}")
+
+# Fill a gap with a user answer
+if gaps:
+    pipeline.submit_answer(gaps[0].gap_id, "Raymond")
+
+# Run the enrichment loop
+enrichment = pipeline.run_enrichment_loop()
+print(f"Enrichments applied: {enrichment.enrichments_applied}")
 ```
 
-### Appraising Text Plausibility
+### Explaining Concepts
 
 ```python
-from rsvs import Rsvs
+from rsvs import PyV12Pipeline
 
-r = Rsvs()
-r.ingest("Batu adalah material keras. Kayu adalah material organik. "
-         "Besi adalah logam keras.")
+pipeline = PyV12Pipeline()
+pipeline.learn_corpus([
+    "Raymond membuat aplikasi karena lambat",
+    "Aplikasi mempercepat pekerjaan",
+    "Lambat menyebabkan masalah",
+], priority="high")
 
-appraisal = r.appraise("Batu sangat keras")
-print(f"Verdict: {appraisal.verdict}")           # "agree" or "disagree"
-print(f"Agree: {appraisal.agree_pct:.0f}%")      # e.g. 85%
-print(f"Evidence: {appraisal.evidence[:3]}")
+# Explain a concept
+explanation = pipeline.explain("aplikasi")
+print(explanation.text)
+print(f"  Confidence: {explanation.avg_confidence:.2f}")
+print(f"  Compositions used: {explanation.total_compositions}")
+print(f"  Reasoning path: {' → '.join(explanation.path)}")
+
+# Verbalize a specific composition
+for comp in pipeline.compositions():
+    text = pipeline.verbalize_composition(comp.id)
+    if text:
+        print(f"  {comp.id}: {text}")
 ```
 
-### Persistence and Loading
+### Finding Reasoning Paths
 
 ```python
-from rsvs import Rsvs
+from rsvs import PyV12Pipeline
+
+pipeline = PyV12Pipeline()
+pipeline.learn_corpus([
+    "Obat menyembuhkan penyakit",
+    "Penyakit disebabkan oleh virus",
+    "Virus menyebar melalui udara",
+])
+
+# Find a reasoning path between two concepts
+path = pipeline.find_path("obat", "virus")
+print(f"Path: {' → '.join(path)}")
+
+# Explain the connection with natural language
+explanation = pipeline.explain_connection("obat", "virus")
+for sentence in explanation:
+    print(f"  → {sentence}")
+```
+
+### Persistence
+
+```python
+from rsvs import PyV12Pipeline
 
 # Build a knowledge graph
-r = Rsvs()
-r.ingest("Kerajaan dipimpin oleh raja atau ratu.")
-r.compose("kerajaan", [("raja", 0), ("negara", 0)], lang="id")
+pipeline = PyV12Pipeline()
+pipeline.learn_corpus([
+    "Kerajaan dipimpin oleh raja atau ratu",
+    "Raja membuat kebijakan untuk rakyat",
+])
 
 # Save to disk
-r.save("my_graph.json")
+pipeline.save("my_graph.json")
 
 # Load later in a different session
-r2 = Rsvs.load("my_graph.json")
-print(r2.status())
+pipeline2 = PyV12Pipeline()
+pipeline2.load("my_graph.json")
+print(pipeline2.graph_summary())
 ```
 
-### Finding Related Concepts
+### Comprehension Check
 
 ```python
-from rsvs import Rsvs
+from rsvs import PyV12Pipeline
 
-r = Rsvs()
-r.ingest("Raja memimpin kerajaan. Ratu memimpin kerajaan. "
-         "Kerajaan memiliki tahta. Tahta adalah simbol kekuasaan.")
+pipeline = PyV12Pipeline()
+pipeline.learn_corpus([
+    "Batu adalah material keras dari alam",
+    "Batu digunakan untuk konstruksi",
+    "Mineral adalah komponen batu",
+], priority="high")
 
-related = r.relate("raja")
-if related:
-    print(f"Related nodes: {related.node_labels(r)[:5]}")
-    print(f"Structural relations: {related.structural_labels(r)[:5]}")
+check = pipeline.comprehension_check("batu")
+print(check)
 ```
 
 ---
@@ -403,30 +425,15 @@ The core observation: humans receive information constantly, but most of it is n
 
 RSVS implements this directly:
 
-- **Grounding gate** (`sentence_contains_seed`) — information only enters the graph if it connects to something already known, just as new information only enters long-term human memory if it anchors to existing knowledge
-- **Spreading activation** (`relate()`) — retrieval works by activation spreading through composition edges, exactly as described by Collins & Loftus (1975) and Anderson (1983)
-- **Dual memory** (`SessionGraph` + main `Rsvs`) — working memory (volatile, per-context) versus long-term memory (persistent, consolidated), following Baddeley's model
+- **Seed anchoring** (GovernBeliefs + SeedAnchor) — compositions are promoted through the lifecycle only when they have sufficient seed alignment and independent evidence, just as new information only enters long-term human memory if it anchors to existing knowledge
+- **Spreading activation** (SpreadingActivation transform) — retrieval works by activation spreading through composition edges, exactly as described by Collins & Loftus (1975) and Anderson (1983)
+- **Epistemic governance** (GovernBeliefs) — dual-axis status (lifecycle + epistemic) mirrors how human memory tracks both structural maturity and truth confidence independently
+- **Active enrichment** (DetectGaps → SelectAcquisition → EnrichComposition) — the system detects what it does not know and actively seeks to fill gaps, similar to curiosity-driven learning
 - **Prediction layer** — RSVS is designed as the symbolic grounding layer for a prediction system (transformer), not as a replacement. The unconscious (RSVS graph) shapes what can be predicted before prediction happens
 
 This is backed by established cognitive science: Predictive Coding (Friston), Global Workspace Theory (Baars 1988), State-Dependent Memory (Radulovic et al.), and recent involuntary memory research (Kobelt et al., 2025).
 
 For the full theoretical foundation, see **[COGNITIVE_FOUNDATIONS.md](docs/COGNITIVE_FOUNDATIONS.md)**.
-
----
-
-## Architecture Overview
-
-RSVS follows a three-tier architecture with strict separation of concerns:
-
-- **stage0/** (`stage0/`): The complete rule-based system — all core logic from ingest (Layer 0) through reasoning (Layer 3), including the Rust core, Python bridge, cognitive runtime, deductive reasoning, and narrative generation. This is the self-contained AAM engine.
-
-- **Rust Core** (`stage0/layer1/crates/rsvs-core/src/`): All computational logic lives here -- graph storage, attention scoring, sense management, autonomy lifecycle, pipeline orchestration, MCTS, consolidation, reflection, and persistence. The core has no HTTP, no file I/O, and no Python dependencies. It compiles independently and exposes a pure Rust API.
-
-- **Python Bridge** (`stage0/python/rsvs/`): The Python layer provides the PyO3 bindings (compiled from Rust via maturin), FastAPI server, CLI tool, validation, and artifact persistence. No computation happens in Python -- it delegates everything to the Rust core. The Python package is typed (PEP 561) and ships with `.pyi` stubs for IDE support.
-
-- **Frontend** (`frontend/`): A Next.js 16 application with React Three Fiber for 3D graph visualization, Zustand for state management, and shadcn/ui for UI components. The frontend communicates with the Python bridge via an API proxy that keeps the API key server-side.
-
-For the full technical reference, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ---
 
@@ -438,18 +445,17 @@ Representative benchmarks (Apple M2 Pro, Criterion.rs):
 
 | Operation | Time | Notes |
 |-----------|------|-------|
-| Jaccard similarity (100-element sets) | ~2 us | Atom set comparison |
+| Jaccard similarity (100-element sets) | ~2 us | Composition member comparison |
 | NPMI lookup | ~50 ns | Single table lookup |
 | Co-occurrence ingest (20 tokens) | ~5 us | Per-sentence |
-| Sense ingest (10 atoms) | ~15 us | Sense assignment |
-| Full pipeline ingest | ~800 us | Tokenize through autonomy |
-| Structural similarity | ~5 us | Compare two nodes' compositions |
-| Substitution analysis | ~8 us | Find substitutions |
+| Full pipeline ingest | ~800 us | Tokenize through verbalization |
+| Similarity (composition overlap) | ~5 us | Compare two nodes' compositions |
+| Spreading activation | ~20 us | Single propagation step |
 
 Run benchmarks yourself:
 
 ```bash
-cd layer1 && cargo bench
+cd stage0/layer1 && cargo bench
 ```
 
 For detailed benchmark methodology and scaling characteristics, see [BENCHMARKS.md](docs/BENCHMARKS.md).

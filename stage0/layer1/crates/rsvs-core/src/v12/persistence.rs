@@ -331,6 +331,7 @@ impl Persistence {
                                                         role: super::types::SemanticRole::Arg1Patient,
                                                         confidence: 0.7,
                                                         label: target_label,
+                                                        source: None,
                                                     });
                                                 }
                                             }
@@ -343,6 +344,7 @@ impl Persistence {
                                         role: super::types::SemanticRole::Arg0Agent,
                                         confidence: 1.0,
                                         label: label.clone(),
+                                        source: None,
                                     });
 
                                     graph.compositions.insert(comp_id, comp);
@@ -430,6 +432,7 @@ impl Persistence {
                                                         role: super::types::SemanticRole::Arg1Patient,
                                                         confidence: 0.7,
                                                         label: target_label,
+                                                        source: None,
                                                     });
                                                 }
                                             }
@@ -441,6 +444,7 @@ impl Persistence {
                                         role: super::types::SemanticRole::Arg0Agent,
                                         confidence: 1.0,
                                         label: label.clone(),
+                                        source: None,
                                     });
 
                                     graph.compositions.insert(comp_id, comp);
@@ -515,12 +519,14 @@ impl Persistence {
                         role: super::types::SemanticRole::Arg0Agent,
                         confidence: 1.0,
                         label: from_label.clone(),
+                        source: None,
                     });
                     comp.members.push(super::types::CompositionMember {
                         node_id: to_id,
                         role: super::types::SemanticRole::Arg1Patient,
                         confidence: weight,
                         label: to_label,
+                        source: None,
                     });
                     comp.provenance = super::types::ProvenanceChain::default();
                     graph.compositions.insert(comp_id.clone(), comp);
@@ -560,12 +566,14 @@ impl Persistence {
                             role: super::types::SemanticRole::Arg0Agent,
                             confidence: 1.0,
                             label: from_str.to_string(),
+                            source: None,
                         });
                         comp.members.push(super::types::CompositionMember {
                             node_id: to_id,
                             role: super::types::SemanticRole::Arg1Patient,
                             confidence: weight,
                             label: to_str.to_string(),
+                            source: None,
                         });
                         graph.compositions.insert(comp_id.clone(), comp);
 
@@ -602,12 +610,14 @@ impl Persistence {
                 role: super::types::SemanticRole::Arg0Agent,
                 confidence: 1.0,
                 label: label_a,
+                source: None,
             });
             comp.members.push(super::types::CompositionMember {
                 node_id: *node_b,
                 role: super::types::SemanticRole::Arg1Patient,
                 confidence: avg_weight,
                 label: label_b,
+                source: None,
             });
 
             // Add edges for this composition.
@@ -666,12 +676,14 @@ mod tests {
                 role: SemanticRole::Arg0Agent,
                 confidence: 0.9,
                 label: "alpha".to_string(),
+                source: None,
             },
             CompositionMember {
                 node_id: node_b,
                 role: SemanticRole::Arg1Patient,
                 confidence: 0.8,
                 label: "beta".to_string(),
+                source: None,
             },
         ];
         graph.compositions.insert("comp_test".to_string(), comp);

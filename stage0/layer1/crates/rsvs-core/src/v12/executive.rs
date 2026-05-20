@@ -745,7 +745,7 @@ impl ExecutiveOrchestrator {
                 }
                 ReflectionAction::ProposeMerge(a_id, b_id) => {
                     // For now, deprecate the lower-confidence one.
-                    let (keep, remove) = {
+                    let (_keep, remove) = {
                         let graph = engine.graph();
                         let comp_a = graph.get_composition(a_id);
                         let comp_b = graph.get_composition(b_id);
@@ -776,7 +776,10 @@ impl ExecutiveOrchestrator {
         let mode = self.select_cognitive_mode(text, &snapshot.compositions);
 
         // Step 2: Run standard pipeline.
-        let mut result = engine.ingest(text);
+        let mut result = engine.ingest(text).unwrap_or_else(|e| {
+            eprintln!("[ExecutiveOrchestrator] Pipeline error: {}", e);
+            IngestResult::new()
+        });
 
         // Step 3: If Analytical or Reflective, run enrichment loop.
         if mode != CognitiveMode::Reactive && self.budget.max_enrichment_rounds > 0 {

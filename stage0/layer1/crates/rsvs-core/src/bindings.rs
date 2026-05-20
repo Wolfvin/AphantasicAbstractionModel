@@ -593,7 +593,8 @@ impl PyV12Pipeline {
         let mode = self
             .orchestrator
             .select_cognitive_mode(text, &snapshot.compositions);
-        let result = self.engine.ingest(text);
+        let result = self.engine.ingest(text)
+            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
 
         Ok(PyV12IngestResult {
             atoms_created: result.atoms_created,
@@ -1007,7 +1008,12 @@ impl PyV12Pipeline {
         let is_high = priority.as_deref() == Some("high");
 
         for sentence in &sentences {
-            let result = self.engine.ingest(sentence);
+            let result = match self.engine.ingest(sentence) {
+                Ok(r) => r,
+                Err(e) => {
+                    return Err(pyo3::exceptions::PyRuntimeError::new_err(e.to_string()));
+                }
+            };
             total_atoms += result.atoms_created;
             total_comps += result.compositions_created;
             total_gaps += result.gaps_detected;

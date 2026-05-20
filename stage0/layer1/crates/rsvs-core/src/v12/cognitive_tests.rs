@@ -89,6 +89,7 @@ fn make_event_composition(comp_id: &str, atom: &SemanticAtom, graph: &mut Graph)
         role: SemanticRole::Predicate,
         confidence: atom.confidence,
         label: atom.label.clone(),
+        source: None,
     });
 
     for (role, label) in &atom.roles {
@@ -101,6 +102,7 @@ fn make_event_composition(comp_id: &str, atom: &SemanticAtom, graph: &mut Graph)
             role: role.clone(),
             confidence: atom.confidence * 0.9,
             label: label.clone(),
+            source: None,
         });
     }
 
@@ -303,6 +305,7 @@ fn test_5_tanya_yang_tepat() {
         role: SemanticRole::Arg0Agent,
         confidence: 0.7,
         label: "hacker".to_string(),
+        source: None,
     });
 
     let gb2 = GovernBeliefs::new();
@@ -326,6 +329,7 @@ fn test_5_tanya_yang_tepat() {
         role: SemanticRole::Arg0Agent,
         confidence: 0.7,
         label: "hacker".to_string(),
+        source: None,
     });
     let old_confidence = original_comp.confidence;
     original_comp.confidence = (original_comp.confidence + 0.15).min(1.0);
@@ -549,6 +553,7 @@ fn test_4_graph_tumbuh_confidence_naik() {
             role: SemanticRole::Purpose,
             confidence: 0.6,
             label: "kepemimpinan".to_string(),
+            source: None,
         });
     }
 
@@ -717,7 +722,7 @@ fn test_bonus_full_pipeline_e2e() {
     let mut engine = PipelineEngine::new();
     register_default_pipeline(&mut engine);
 
-    let result = engine.ingest("Raymond membuat aplikasi karena lambat");
+    let result = engine.ingest("Raymond membuat aplikasi karena lambat").unwrap();
 
     assert!(result.atoms_created > 0, "Pipeline should create atoms");
     assert!(engine.graph().node_count() > 0, "Graph should have nodes");
@@ -730,7 +735,7 @@ fn test_bonus_full_pipeline_e2e() {
         result.gaps_detected
     );
 
-    let result2 = engine.ingest("Aplikasi mempercepat pekerjaan tim");
+    let result2 = engine.ingest("Aplikasi mempercepat pekerjaan tim").unwrap();
     assert!(
         result2.atoms_created > 0,
         "Second ingest should also create atoms"
@@ -760,7 +765,7 @@ fn test_blind_spot_1_bahasa_natural_messy() {
     register_default_pipeline(&mut engine);
 
     // Case 1: Mixed Indonesian-English — "Raymond deploy-in aplikasinya karena slow banget"
-    let result1 = engine.ingest("Raymond deploy-in aplikasinya karena slow banget");
+    let result1 = engine.ingest("Raymond deploy-in aplikasinya karena slow banget").unwrap();
     assert!(
         result1.atoms_created > 0,
         "Mixed Indo-English should still create atoms (got {})",
@@ -774,7 +779,7 @@ fn test_blind_spot_1_bahasa_natural_messy() {
     let nodes_after_1 = engine.graph().node_count();
 
     // Case 2: Typo and informal — "rymnd buat app karna lemot"
-    let result2 = engine.ingest("rymnd buat app karna lemot");
+    let result2 = engine.ingest("rymnd buat app karna lemot").unwrap();
     assert!(
         result2.atoms_created > 0,
         "Typo/informal should still create atoms (got {})",
@@ -794,7 +799,7 @@ fn test_blind_spot_1_bahasa_natural_messy() {
 
     // Case 3: Subjectless — "bikin dulu, deploy nanti"
     // This should still tokenize and create atoms even without a clear agent.
-    let result3 = engine.ingest("bikin dulu deploy nanti");
+    let result3 = engine.ingest("bikin dulu deploy nanti").unwrap();
     assert!(
         result3.atoms_created > 0,
         "Subjectless should still create atoms (got {})",
@@ -813,7 +818,7 @@ fn test_blind_spot_1_bahasa_natural_messy() {
     );
 
     // Verify that the pipeline is still functional after messy inputs
-    let result4 = engine.ingest("Tim mengoptimasi database");
+    let result4 = engine.ingest("Tim mengoptimasi database").unwrap();
     assert!(
         result4.atoms_created > 0,
         "Pipeline should still work after messy inputs"
@@ -1054,6 +1059,7 @@ fn test_blind_spot_3_semua_tipe_kontradiksi() {
             role: SemanticRole::Problem,
             confidence: 0.6,
             label: "obat tidak menyembuhkan penyakit".to_string(),
+            source: None,
         });
         let source_event_node_id = graph.ensure_node("menyembuhkan");
         hm_comp.members.push(CompositionMember {
@@ -1061,6 +1067,7 @@ fn test_blind_spot_3_semua_tipe_kontradiksi() {
             role: SemanticRole::SourceEvent,
             confidence: 0.5,
             label: "menyembuhkan".to_string(),
+            source: None,
         });
         gb.initial_states(&mut hm_comp);
 
@@ -1115,12 +1122,14 @@ fn test_blind_spot_3_semua_tipe_kontradiksi() {
             role: SemanticRole::Problem,
             confidence: 0.6,
             label: "lambat".to_string(),
+            source: None,
         });
         hm_a.members.push(CompositionMember {
             node_id: sol_a_node,
             role: SemanticRole::Solution,
             confidence: 0.6,
             label: "cache".to_string(),
+            source: None,
         });
 
         let mut hm_b = Composition::default();
@@ -1139,12 +1148,14 @@ fn test_blind_spot_3_semua_tipe_kontradiksi() {
             role: SemanticRole::Problem,
             confidence: 0.6,
             label: "lambat".to_string(),
+            source: None,
         });
         hm_b.members.push(CompositionMember {
             node_id: sol_b_node, // DIFFERENT solution
             role: SemanticRole::Solution,
             confidence: 0.6,
             label: "indexing".to_string(),
+            source: None,
         });
 
         let gb = GovernBeliefs::new();
@@ -1308,7 +1319,7 @@ fn test_blind_spot_5_commutativity() {
     let mut engine1 = PipelineEngine::new();
     register_default_pipeline(&mut engine1);
     for input in &inputs {
-        engine1.ingest(input);
+        engine1.ingest(input).unwrap();
     }
     let nodes_abc = engine1.graph().node_count();
     let comps_abc = engine1.graph().composition_count();
@@ -1317,7 +1328,7 @@ fn test_blind_spot_5_commutativity() {
     let mut engine2 = PipelineEngine::new();
     register_default_pipeline(&mut engine2);
     for input in inputs.iter().rev() {
-        engine2.ingest(input);
+        engine2.ingest(input).unwrap();
     }
     let nodes_cab = engine2.graph().node_count();
     let comps_cab = engine2.graph().composition_count();
@@ -1327,7 +1338,7 @@ fn test_blind_spot_5_commutativity() {
     register_default_pipeline(&mut engine3);
     let order3 = [&inputs[1], &inputs[2], &inputs[0]];
     for input in &order3 {
-        engine3.ingest(input);
+        engine3.ingest(input).unwrap();
     }
     let nodes_bca = engine3.graph().node_count();
     let comps_bca = engine3.graph().composition_count();
@@ -1415,14 +1426,14 @@ fn test_commutativity_with_feedback_loop_active() {
     let mut engine_abc = PipelineEngine::new();
     register_default_pipeline(&mut engine_abc);
     for text in &texts {
-        engine_abc.ingest(text);
+        engine_abc.ingest(text).unwrap();
     }
 
     // Run CBA
     let mut engine_cba = PipelineEngine::new();
     register_default_pipeline(&mut engine_cba);
     for text in texts.iter().rev() {
-        engine_cba.ingest(text);
+        engine_cba.ingest(text).unwrap();
     }
 
     // Node count harus sama (structural commutativity)
@@ -1731,6 +1742,7 @@ fn test_p0_process_user_answer_semantic() {
             role: SemanticRole::Arg0Agent,
             confidence: 0.85,
             label: "Raymond".to_string(),
+            source: None,
         });
     }
     let final_comp = graph.compositions.get("comp_target").unwrap();
@@ -2102,8 +2114,8 @@ fn test_convergence_detection_integrated_in_pipeline() {
     let mut engine = PipelineEngine::new();
     register_default_pipeline(&mut engine);
 
-    engine.ingest("Dokter memeriksa pasien.");
-    engine.ingest("Tabib memeriksa orang sakit.");
+    engine.ingest("Dokter memeriksa pasien.").unwrap();
+    engine.ingest("Tabib memeriksa orang sakit.").unwrap();
 
     // Setelah 2 ingest, convergence transform sudah berjalan
     // Ada EquivalentOf edge di graph (dari ConvergenceDetectionTransform)
@@ -2127,7 +2139,7 @@ fn test_temporal_decay_integrated_in_pipeline() {
     register_default_pipeline(&mut engine);
 
     // Ingest, lalu simulasi aging dengan batch_seen tinggi
-    engine.ingest("Aplikasi ini sudah lama tidak dipakai.");
+    engine.ingest("Aplikasi ini sudah lama tidak dipakai.").unwrap();
 
     // Manually age a composition to trigger decay
     let comp_ids: Vec<_> = engine.graph().compositions.keys().cloned().collect();
@@ -2138,7 +2150,7 @@ fn test_temporal_decay_integrated_in_pipeline() {
     }
 
     // Next ingest triggers TemporalDecay transform
-    engine.ingest("Sistem baru dibuat untuk menggantikannya.");
+    engine.ingest("Sistem baru dibuat untuk menggantikannya.").unwrap();
 
     // Pipeline tidak crash, compositions masih ada
     assert!(
@@ -2160,8 +2172,8 @@ fn test_persistence_roundtrip_via_pipeline() {
     let mut engine = PipelineEngine::new();
     register_default_pipeline(&mut engine);
 
-    engine.ingest("Raymond membuat aplikasi untuk klien.");
-    engine.ingest("Aplikasi selesai dalam dua minggu.");
+    engine.ingest("Raymond membuat aplikasi untuk klien.").unwrap();
+    engine.ingest("Aplikasi selesai dalam dua minggu.").unwrap();
 
     let original_comp_count = engine.graph().compositions.len();
     let original_node_count = engine.graph().nodes.len();
@@ -2223,18 +2235,21 @@ fn test_role_weighted_similarity_captures_structural_equivalence() {
         role: SemanticRole::Predicate,
         confidence: 0.9,
         label: "memeriksa".to_string(),
+        source: None,
     });
     comp_a.members.push(CompositionMember {
         node_id: agent_node,
         role: SemanticRole::Arg0Agent,
         confidence: 0.8,
         label: "dokter".to_string(),
+        source: None,
     });
     comp_a.members.push(CompositionMember {
         node_id: patient_node,
         role: SemanticRole::Arg1Patient,
         confidence: 0.8,
         label: "pasien".to_string(),
+        source: None,
     });
 
     let mut comp_b = Composition::default();
@@ -2250,18 +2265,21 @@ fn test_role_weighted_similarity_captures_structural_equivalence() {
         role: SemanticRole::Predicate,
         confidence: 0.9,
         label: "memeriksa".to_string(),
+        source: None,
     });
     comp_b.members.push(CompositionMember {
         node_id: agent_node2,
         role: SemanticRole::Arg0Agent,
         confidence: 0.8,
         label: "tabib".to_string(),
+        source: None,
     });
     comp_b.members.push(CompositionMember {
         node_id: patient_node2,
         role: SemanticRole::Arg1Patient,
         confidence: 0.8,
         label: "orang_sakit".to_string(),
+        source: None,
     });
 
     let role_sim = cd.role_weighted_similarity(&comp_a, &comp_b);
@@ -2302,7 +2320,7 @@ fn test_condition_consequence_from_indonesian_if_then() {
 
     // Ingest a conditional sentence in Indonesian
     let result =
-        engine.ingest("wajib pajak jika penghasilan di atas 500 juta dikenakan tarif 30 persen");
+        engine.ingest("wajib pajak jika penghasilan di atas 500 juta dikenakan tarif 30 persen").unwrap();
 
     // Should create atoms and compositions
     assert!(
@@ -2448,24 +2466,28 @@ fn test_cve_verbalize_graph_driven_explanation() {
             role: SemanticRole::Arg0Agent,
             confidence: 0.9,
             label: "Raymond".to_string(),
+            source: None,
         },
         CompositionMember {
             node_id: node_membuat,
             role: SemanticRole::Predicate,
             confidence: 0.9,
             label: "membuat".to_string(),
+            source: None,
         },
         CompositionMember {
             node_id: node_aplikasi,
             role: SemanticRole::Arg1Patient,
             confidence: 0.8,
             label: "aplikasi".to_string(),
+            source: None,
         },
         CompositionMember {
             node_id: node_lambat,
             role: SemanticRole::Cause,
             confidence: 0.7,
             label: "lambat".to_string(),
+            source: None,
         },
     ];
     graph.compositions.insert(comp_event.id.clone(), comp_event);
@@ -2490,12 +2512,14 @@ fn test_cve_verbalize_graph_driven_explanation() {
             role: SemanticRole::Antecedent,
             confidence: 0.9,
             label: "database_penuh".to_string(),
+            source: None,
         },
         CompositionMember {
             node_id: node_lambat,
             role: SemanticRole::Consequent,
             confidence: 0.85,
             label: "lambat".to_string(),
+            source: None,
         },
     ];
     graph
@@ -2522,12 +2546,14 @@ fn test_cve_verbalize_graph_driven_explanation() {
             role: SemanticRole::Solution,
             confidence: 0.8,
             label: "cache".to_string(),
+            source: None,
         },
         CompositionMember {
             node_id: node_lambat,
             role: SemanticRole::Problem,
             confidence: 0.7,
             label: "lambat".to_string(),
+            source: None,
         },
     ];
     graph.compositions.insert(comp_hm.id.clone(), comp_hm);
@@ -2633,8 +2659,8 @@ fn test_cve_pipeline_integration() {
     let mut engine = PipelineEngine::new();
     register_default_pipeline(&mut engine);
 
-    engine.ingest("Raymond membuat aplikasi karena lambat");
-    engine.ingest("Tim mengoptimasi database");
+    engine.ingest("Raymond membuat aplikasi karena lambat").unwrap();
+    engine.ingest("Tim mengoptimasi database").unwrap();
 
     let cve = CompositionalVerbalize::new();
     let result = cve.explain("aplikasi", engine.graph());
@@ -2704,6 +2730,7 @@ fn test_phase_j_build_freq_map() {
         role: SemanticRole::Arg0Agent,
         confidence: 0.8,
         label: "bank".to_string(),
+        source: None,
     });
     graph.compositions.insert(comp1.id.clone(), comp1);
 
@@ -2715,6 +2742,7 @@ fn test_phase_j_build_freq_map() {
         role: SemanticRole::Location,
         confidence: 0.5,
         label: "bank".to_string(),
+        source: None,
     });
     graph.compositions.insert(comp2.id.clone(), comp2);
 
@@ -2764,6 +2792,7 @@ fn test_phase_k_coherence_penalty_low_coherence() {
         role: SemanticRole::Arg0Agent,
         confidence: 0.7,
         label: "obat".to_string(),
+        source: None,
     });
 
     let gb = GovernBeliefs::new();
@@ -2794,6 +2823,7 @@ fn test_phase_k_coherence_penalty_high_coherence() {
         role: SemanticRole::Arg0Agent,
         confidence: 0.7,
         label: "raja".to_string(),
+        source: None,
     });
 
     let gb = GovernBeliefs::new();
@@ -2888,18 +2918,21 @@ fn test_phase_l_extract_properties_from_composition() {
         role: SemanticRole::Predicate,
         confidence: 0.9,
         label: "membuat".to_string(),
+        source: None,
     });
     comp.members.push(CompositionMember {
         node_id: agent_id,
         role: SemanticRole::Arg0Agent,
         confidence: 0.8,
         label: "raymond".to_string(),
+        source: None,
     });
     comp.members.push(CompositionMember {
         node_id: patient_id,
         role: SemanticRole::Arg1Patient,
         confidence: 0.7,
         label: "aplikasi".to_string(),
+        source: None,
     });
 
     // Without freq_map entries, should use default weight 1.0
@@ -2937,6 +2970,7 @@ fn test_phase_m_update_sense_evidence_confirming() {
         role: SemanticRole::Arg1Patient,
         confidence: 0.7,
         label: "database".to_string(),
+        source: None,
     });
     graph.compositions.insert(comp.id.clone(), comp);
 
@@ -2966,6 +3000,7 @@ fn test_phase_m_update_sense_evidence_contradicting() {
         role: SemanticRole::Arg0Agent,
         confidence: 0.6,
         label: "obat".to_string(),
+        source: None,
     });
     graph.compositions.insert(comp.id.clone(), comp);
 
@@ -3082,6 +3117,7 @@ fn test_phase_n_utterance_context() {
         role: SemanticRole::Predicate,
         confidence: 0.7,
         label: "test_comp".to_string(),
+        source: None,
     });
     graph.compositions.insert(comp.id.clone(), comp);
 
@@ -3095,6 +3131,7 @@ fn test_phase_n_utterance_context() {
         role: SemanticRole::Location,
         confidence: 0.6,
         label: "sit_context".to_string(),
+        source: None,
     });
     graph.compositions.insert(sit_comp.id.clone(), sit_comp);
 
@@ -3151,6 +3188,7 @@ fn test_phase_o_connectivity_score() {
             role: SemanticRole::Predicate,
             confidence: 0.7,
             label: "hub".to_string(),
+            source: None,
         });
         graph.compositions.insert(comp.id.clone(), comp);
     }
@@ -3180,6 +3218,7 @@ fn test_phase_o_connectivity_saturates() {
             role: SemanticRole::Predicate,
             confidence: 0.7,
             label: "mega_hub".to_string(),
+            source: None,
         });
         graph.compositions.insert(comp.id.clone(), comp);
     }
@@ -3366,6 +3405,7 @@ fn test_phase_m_integration_grounding_loop_wired() {
         role: SemanticRole::Arg0Agent,
         confidence: 0.8,
         label: "tim".to_string(),
+        source: None,
     });
     graph.compositions.insert(comp.id.clone(), comp);
 
@@ -3481,6 +3521,7 @@ fn test_audit_v2_update_sense_evidence_wired() {
         role: SemanticRole::Predicate,
         confidence: 0.8,
         label: "entity".to_string(),
+        source: None,
     });
     graph.compositions.insert(comp.id.clone(), comp);
 
@@ -3526,6 +3567,7 @@ fn test_audit_v2_no_false_positive_grounding_upgrade() {
         role: SemanticRole::Arg0Agent,
         confidence: 0.9,
         label: "coherent_but_no_evidence".to_string(),
+        source: None,
     });
     graph.compositions.insert(comp.id.clone(), comp);
 
@@ -3640,6 +3682,7 @@ fn test_audit_v3_hm_no_source_event_no_false_positive() {
         role: SemanticRole::Problem,
         confidence: 0.7,
         label: "some_problem".to_string(),
+        source: None,
     });
 
     let mut event = Composition::default();
@@ -3650,6 +3693,7 @@ fn test_audit_v3_hm_no_source_event_no_false_positive() {
         role: SemanticRole::Predicate,
         confidence: 0.8,
         label: "membuat".to_string(),
+        source: None,
     });
 
     // No SourceEvent link → should NOT detect conflict
@@ -3761,6 +3805,7 @@ fn test_audit_v3_only_stable_evidence_counts() {
         role: SemanticRole::Predicate,
         confidence: 0.75,
         label: "test".to_string(),
+        source: None,
     });
     // Add a sense to the node so we can check evidence
     let mut sense = Sense::new_primitive("test_sense");
@@ -3800,6 +3845,7 @@ fn test_audit_v3_only_stable_evidence_counts() {
             role: SemanticRole::Arg1Patient,
             confidence: 0.6,
             label: "test_patient".to_string(),
+            source: None,
         });
     }
     graph.dirty_compositions.insert("comp_test_stable_evidence".to_string());
@@ -3839,6 +3885,7 @@ fn test_audit_v3_provenance_parent_counts_as_multi_source() {
         role: SemanticRole::Predicate,
         confidence: 0.8,
         label: "test".to_string(),
+        source: None,
     });
 
     let gb = GovernBeliefs::new();
@@ -3863,8 +3910,8 @@ fn test_query_by_concept() {
     let mut engine = PipelineEngine::new();
     register_default_pipeline(&mut engine);
 
-    engine.ingest("Raja memimpin kerajaan");
-    engine.ingest("Rakyat mendukung raja");
+    engine.ingest("Raja memimpin kerajaan").unwrap();
+    engine.ingest("Rakyat mendukung raja").unwrap();
 
     let results = engine.graph().query_by_concept("raja");
     assert!(!results.is_empty(), "query_by_concept('raja') should find compositions");
@@ -3887,7 +3934,7 @@ fn test_query_by_structure() {
     let mut engine = PipelineEngine::new();
     register_default_pipeline(&mut engine);
 
-    engine.ingest("Raja memimpin kerajaan karena kebijakan");
+    engine.ingest("Raja memimpin kerajaan karena kebijakan").unwrap();
 
     // Find all compositions with Agent + Cause roles
     let causal = engine.graph().query_by_structure(&[
@@ -3915,8 +3962,8 @@ fn test_similarity() {
     let mut engine = PipelineEngine::new();
     register_default_pipeline(&mut engine);
 
-    engine.ingest("Raja memimpin kerajaan");
-    engine.ingest("Rakyat mendukung raja");
+    engine.ingest("Raja memimpin kerajaan").unwrap();
+    engine.ingest("Rakyat mendukung raja").unwrap();
 
     // Self-similarity should be 1.0
     let self_sim = engine.graph().similarity("raja", "raja");
@@ -3938,9 +3985,9 @@ fn test_find_related() {
     let mut engine = PipelineEngine::new();
     register_default_pipeline(&mut engine);
 
-    engine.ingest("Raja memimpin kerajaan");
-    engine.ingest("Rakyat mendukung raja");
-    engine.ingest("Kerajaan makmur karena kebijakan raja");
+    engine.ingest("Raja memimpin kerajaan").unwrap();
+    engine.ingest("Rakyat mendukung raja").unwrap();
+    engine.ingest("Kerajaan makmur karena kebijakan raja").unwrap();
 
     let related = engine.graph().find_related("raja", 5);
     // Should find at least "kerajaan" as related
@@ -3959,8 +4006,8 @@ fn test_find_path() {
     let mut engine = PipelineEngine::new();
     register_default_pipeline(&mut engine);
 
-    engine.ingest("Obat menyembuhkan penyakit");
-    engine.ingest("Penyakit disebabkan oleh virus");
+    engine.ingest("Obat menyembuhkan penyakit").unwrap();
+    engine.ingest("Penyakit disebabkan oleh virus").unwrap();
 
     let path = engine.graph().find_path("obat", "virus");
     // Should find bridging compositions through "penyakit"
@@ -3978,8 +4025,8 @@ fn test_comprehension_check() {
     assert!(results.is_empty(), "Empty graph should have no results for 'raja'");
 
     // After ingesting, comprehension should improve
-    engine.ingest("Raja memimpin kerajaan");
-    engine.ingest("Rakyat mendukung raja");
+    engine.ingest("Raja memimpin kerajaan").unwrap();
+    engine.ingest("Rakyat mendukung raja").unwrap();
 
     let results = engine.graph().query_by_concept("raja");
     assert!(!results.is_empty(), "After ingest, 'raja' should be findable");
@@ -4000,7 +4047,7 @@ fn test_audit_v4_batch_seen_increments_even_without_dirty() {
     register_default_pipeline(&mut engine);
 
     // First ingest creates a composition.
-    engine.ingest("Raja memimpin kerajaan karena kebijakan");
+    engine.ingest("Raja memimpin kerajaan karena kebijakan").unwrap();
     let comp_ids: Vec<String> = engine.graph().compositions.keys().cloned().collect();
     assert!(!comp_ids.is_empty(), "Should have compositions after ingest");
 
@@ -4009,7 +4056,7 @@ fn test_audit_v4_batch_seen_increments_even_without_dirty() {
     assert!(batch_after_first >= 1, "batch_seen should be at least 1 after first ingest, got {}", batch_after_first);
 
     // Second ingest — existing compositions should get their batch_seen incremented.
-    engine.ingest("Rakyat mendukung raja");
+    engine.ingest("Rakyat mendukung raja").unwrap();
     let batch_after_second = engine.graph().compositions.get(&comp_ids[0]).unwrap().batch_seen;
     assert!(
         batch_after_second > batch_after_first,
@@ -4018,7 +4065,7 @@ fn test_audit_v4_batch_seen_increments_even_without_dirty() {
     );
 
     // Third ingest for additional verification.
-    engine.ingest("Menteri membantu negara");
+    engine.ingest("Menteri membantu negara").unwrap();
     let batch_after_third = engine.graph().compositions.get(&comp_ids[0]).unwrap().batch_seen;
     assert!(
         batch_after_third > batch_after_second,
@@ -4074,8 +4121,8 @@ fn test_audit_v4_verbalization_stored_in_context() {
     comp.epistemic = EpistemicState::Grounded;
     comp.confidence = 0.85;
     comp.members = vec![
-        CompositionMember { node_id: node_a, role: SemanticRole::Arg0Agent, confidence: 0.9, label: "alpha".to_string() },
-        CompositionMember { node_id: node_b, role: SemanticRole::Arg1Patient, confidence: 0.8, label: "beta".to_string() },
+        CompositionMember { node_id: node_a, role: SemanticRole::Arg0Agent, confidence: 0.9, label: "alpha".to_string() , source: None},
+        CompositionMember { node_id: node_b, role: SemanticRole::Arg1Patient, confidence: 0.8, label: "beta".to_string() , source: None},
     ];
     graph.compositions.insert("comp_v4_test".to_string(), comp);
 
@@ -4084,9 +4131,9 @@ fn test_audit_v4_verbalization_stored_in_context() {
     let _result = transform.execute(&mut ctx, &mut graph);
 
     // The verbalization should be stored in context.
-    assert!(ctx.last_verbalization.is_some(),
+    assert!(!ctx.last_verbalization_text.is_empty(),
         "Verbalization result should be stored in PipelineContext");
-    let text = ctx.last_verbalization.unwrap();
+    let text = ctx.last_verbalization_text.clone();
     assert!(!text.is_empty(), "Verbalization text should not be empty");
 
     eprintln!("✅ Audit v4 Fix 2: Verbalization stored in context: '{}'...", &text[..text.len().min(60)]);
@@ -4112,8 +4159,8 @@ fn test_audit_v4_spreading_activation_stored_in_context() {
     comp.seed_scores.insert(SeedPrimitive::Trust, 0.7);
     comp.seed_scores.insert(SeedPrimitive::Value, 0.8);
     comp.members = vec![
-        CompositionMember { node_id: node_a, role: SemanticRole::Arg0Agent, confidence: 0.9, label: "alpha".to_string() },
-        CompositionMember { node_id: node_b, role: SemanticRole::Arg1Patient, confidence: 0.8, label: "beta".to_string() },
+        CompositionMember { node_id: node_a, role: SemanticRole::Arg0Agent, confidence: 0.9, label: "alpha".to_string() , source: None},
+        CompositionMember { node_id: node_b, role: SemanticRole::Arg1Patient, confidence: 0.8, label: "beta".to_string() , source: None},
     ];
     graph.compositions.insert("comp_spread_test".to_string(), comp);
 
@@ -4145,20 +4192,20 @@ fn test_audit_v4_detect_contradiction_no_clone() {
     comp1.id = "comp_left".to_string();
     comp1.composition_type = CompositionType::Event;
     comp1.members = vec![
-        CompositionMember { node_id: node_pred, role: SemanticRole::Predicate, confidence: 0.9, label: "membuat".to_string() },
-        CompositionMember { node_id: node_agent, role: SemanticRole::Arg0Agent, confidence: 0.9, label: "alpha".to_string() },
-        CompositionMember { node_id: node_patient, role: SemanticRole::Arg1Patient, confidence: 0.8, label: "beta".to_string() },
-        CompositionMember { node_id: node_cause, role: SemanticRole::Cause, confidence: 0.7, label: "lambat".to_string() },
+        CompositionMember { node_id: node_pred, role: SemanticRole::Predicate, confidence: 0.9, label: "membuat".to_string() , source: None},
+        CompositionMember { node_id: node_agent, role: SemanticRole::Arg0Agent, confidence: 0.9, label: "alpha".to_string() , source: None},
+        CompositionMember { node_id: node_patient, role: SemanticRole::Arg1Patient, confidence: 0.8, label: "beta".to_string() , source: None},
+        CompositionMember { node_id: node_cause, role: SemanticRole::Cause, confidence: 0.7, label: "lambat".to_string() , source: None},
     ];
 
     let mut comp2 = Composition::default();
     comp2.id = "comp_right".to_string();
     comp2.composition_type = CompositionType::Event;
     comp2.members = vec![
-        CompositionMember { node_id: node_pred, role: SemanticRole::Predicate, confidence: 0.9, label: "membuat".to_string() },
-        CompositionMember { node_id: node_agent, role: SemanticRole::Arg0Agent, confidence: 0.9, label: "alpha".to_string() },
-        CompositionMember { node_id: node_patient, role: SemanticRole::Arg1Patient, confidence: 0.8, label: "gamma".to_string() },
-        CompositionMember { node_id: node_cause_neg, role: SemanticRole::Cause, confidence: 0.7, label: "tidak lambat".to_string() },
+        CompositionMember { node_id: node_pred, role: SemanticRole::Predicate, confidence: 0.9, label: "membuat".to_string() , source: None},
+        CompositionMember { node_id: node_agent, role: SemanticRole::Arg0Agent, confidence: 0.9, label: "alpha".to_string() , source: None},
+        CompositionMember { node_id: node_patient, role: SemanticRole::Arg1Patient, confidence: 0.8, label: "gamma".to_string() , source: None},
+        CompositionMember { node_id: node_cause_neg, role: SemanticRole::Cause, confidence: 0.7, label: "tidak lambat".to_string() , source: None},
     ];
 
     let mut compositions = vec![comp1, comp2];
@@ -4192,7 +4239,7 @@ fn test_audit_v4_candidate_promoted_without_dirty() {
     register_default_pipeline(&mut engine);
 
     // First ingest creates compositions.
-    engine.ingest("Raja memimpin kerajaan karena kebijakan");
+    engine.ingest("Raja memimpin kerajaan karena kebijakan").unwrap();
 
     let comp_ids: Vec<String> = engine.graph().compositions.keys().cloned().collect();
     assert!(!comp_ids.is_empty(), "Should have compositions after first ingest");
@@ -4202,7 +4249,7 @@ fn test_audit_v4_candidate_promoted_without_dirty() {
     assert!(batch_after_first >= 1, "batch_seen should be at least 1 after first ingest, got {}", batch_after_first);
 
     // Second ingest — existing compositions should get their batch_seen incremented.
-    engine.ingest("Rakyat mendukung raja karena bijaksana");
+    engine.ingest("Rakyat mendukung raja karena bijaksana").unwrap();
 
     let batch_after_second = engine.graph().compositions.get(&comp_ids[0]).unwrap().batch_seen;
     assert!(
@@ -4212,7 +4259,7 @@ fn test_audit_v4_candidate_promoted_without_dirty() {
     );
 
     // Third ingest — further increment.
-    engine.ingest("Menteri membantu raja membangun negara");
+    engine.ingest("Menteri membantu raja membangun negara").unwrap();
 
     let batch_after_third = engine.graph().compositions.get(&comp_ids[0]).unwrap().batch_seen;
     assert!(
@@ -4260,9 +4307,9 @@ fn test_audit_v4_graph_has_relevant_context_returns_true() {
     comp1.composition_type = CompositionType::Event;
     comp1.confidence = 0.7;
     comp1.members = vec![
-        CompositionMember { node_id: node_pred, role: SemanticRole::Predicate, confidence: 0.8, label: "memimpin".to_string() },
-        CompositionMember { node_id: node_raja, role: SemanticRole::Arg0Agent, confidence: 0.8, label: "raja".to_string() },
-        CompositionMember { node_id: node_kerajaan, role: SemanticRole::Arg1Patient, confidence: 0.7, label: "kerajaan".to_string() },
+        CompositionMember { node_id: node_pred, role: SemanticRole::Predicate, confidence: 0.8, label: "memimpin".to_string() , source: None},
+        CompositionMember { node_id: node_raja, role: SemanticRole::Arg0Agent, confidence: 0.8, label: "raja".to_string() , source: None},
+        CompositionMember { node_id: node_kerajaan, role: SemanticRole::Arg1Patient, confidence: 0.7, label: "kerajaan".to_string() , source: None},
     ];
     graph.compositions.insert(comp1.id.clone(), comp1);
 
@@ -4275,8 +4322,8 @@ fn test_audit_v4_graph_has_relevant_context_returns_true() {
     comp2.composition_type = CompositionType::Event;
     comp2.confidence = 0.6;
     comp2.members = vec![
-        CompositionMember { node_id: node_pred2, role: SemanticRole::Predicate, confidence: 0.7, label: "membantu".to_string() },
-        CompositionMember { node_id: node_menteri, role: SemanticRole::Arg0Agent, confidence: 0.7, label: "menteri".to_string() },
+        CompositionMember { node_id: node_pred2, role: SemanticRole::Predicate, confidence: 0.7, label: "membantu".to_string() , source: None},
+        CompositionMember { node_id: node_menteri, role: SemanticRole::Arg0Agent, confidence: 0.7, label: "menteri".to_string() , source: None},
         // NOTE: No Arg1Patient!
     ];
     graph.compositions.insert(comp2.id.clone(), comp2);
@@ -4340,21 +4387,21 @@ fn test_audit_v4_graph_has_relevant_context_returns_true() {
 #[test]
 fn test_audit_v5_verbalize_in_default_pipeline() {
     // Audit v5 Fix D1: CompositionalVerbalize is now registered in the
-    // default pipeline. After ingest, ctx.last_verbalization should be
+    // default pipeline. After ingest, ctx.last_verbalization_text should be
     // populated (not None) when event atoms were produced.
     let mut engine = PipelineEngine::new();
     register_default_pipeline(&mut engine);
 
-    let result = engine.ingest("Raja memimpin kerajaan karena kebijakan");
+    let result = engine.ingest("Raja memimpin kerajaan karena kebijakan").unwrap();
     assert!(result.atoms_created > 0, "Pipeline should create atoms");
 
     // The verbalization should have been produced by the CVE transform.
     assert!(
-        engine.context.last_verbalization.is_some(),
+        !engine.context.last_verbalization_text.is_empty(),
         "After ingest with event atoms, last_verbalization should be populated. \
          CVE transform was supposed to run but verbalization is None — unwired?"
     );
-    let text = engine.context.last_verbalization.unwrap();
+    let text = engine.context.last_verbalization_text.clone();
     assert!(!text.is_empty(), "Verbalization text should not be empty");
 
     eprintln!("✅ Audit v5 D1: CompositionalVerbalize wired into default pipeline, verbalization produced: '{}'...",
@@ -4372,8 +4419,8 @@ fn test_audit_v5_contradiction_resolution_wired() {
     // Ingest the same event twice from different sources — this should trigger
     // a contradiction but then resolve it as voice confusion (same agent + same patient +
     // same predicate + different provenance).
-    engine.ingest("Obat menyembuhkan penyakit karena riset");
-    engine.ingest("Obat menyembuhkan penyakit karena penelitian");
+    engine.ingest("Obat menyembuhkan penyakit karena riset").unwrap();
+    engine.ingest("Obat menyembuhkan penyakit karena penelitian").unwrap();
 
     // Check that at least one composition is NOT stuck in Contradicted state
     // (voice confusion should resolve it back to Observed)
@@ -4400,7 +4447,7 @@ fn test_audit_v5_decay_summary_stored() {
     register_default_pipeline(&mut engine);
 
     // Ingest enough to have compositions that can decay
-    engine.ingest("Raja memimpin kerajaan karena kebijakan");
+    engine.ingest("Raja memimpin kerajaan karena kebijakan").unwrap();
 
     // The decay fields should be populated (even if 0 demoted/deprecated
     // since compositions are still young)
@@ -4425,7 +4472,7 @@ fn test_audit_v5_extraction_quality_ext_wired() {
     let mut engine = PipelineEngine::new();
     register_default_pipeline(&mut engine);
 
-    engine.ingest("Raja memimpin kerajaan karena kebijakan");
+    engine.ingest("Raja memimpin kerajaan karena kebijakan").unwrap();
 
     // The ext tracker should have at least one recorded extraction
     let ext = &engine.context.extraction_quality_ext;
@@ -4449,8 +4496,8 @@ fn test_audit_v5_convergence_uses_activation_energies() {
     register_default_pipeline(&mut engine);
 
     // Ingest enough to create compositions with seed scores
-    engine.ingest("Dokter memeriksa pasien di rumah sakit");
-    engine.ingest("Tabib memeriksa orang sakit di balai pengobatan");
+    engine.ingest("Dokter memeriksa pasien di rumah sakit").unwrap();
+    engine.ingest("Tabib memeriksa orang sakit di balai pengobatan").unwrap();
 
     // After ingest, the activation energies should be populated
     // (if SpreadingActivation ran — which it does when has_event_atoms is true)

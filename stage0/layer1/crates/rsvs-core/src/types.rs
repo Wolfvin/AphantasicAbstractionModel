@@ -33,6 +33,21 @@ pub type SenseId = u32;
 // -----------------------------------------------------------------------
 
 /// Source type for edges.
+///
+/// # Active vs Reserved Variants
+///
+/// Variants currently produced by the v12 pipeline:
+/// - `Bootstrap`, `FrameCompiler`, `HiddenMeaningRule`, `EpistemicGovernance`,
+///   `ExecutiveControl`, `AcquisitionRecall`, `AcquisitionSelfStudy`,
+///   `AcquisitionUserAnswer`, `HumanAssertion`, `EnrichmentFeedback`, `ExtractionRepair`
+///
+/// Reserved for future pipeline extensions (not yet produced by default pipeline):
+/// - `Learned`, `Composition`, `GapDetection`, `Discourse` (v8.3-era, may be re-activated)
+/// - `Blending`, `Abductive`, `PatternMining`, `Synthesis`, `CompoundDiscovery` (v10.0-era)
+///
+/// These reserved variants are kept for forward compatibility — they may be produced
+/// by future transforms or custom pipeline configurations. They are not "dead code";
+/// they are part of the provenance vocabulary that the system is designed to support.
 #[non_exhaustive]
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 pub enum EdgeSource {
@@ -40,25 +55,34 @@ pub enum EdgeSource {
     #[default]
     Bootstrap,
     /// Created through learning from text ingestion.
+    /// Reserved: not yet produced by v12 default pipeline.
     Learned,
     /// Created by explicit composition (compose API).
+    /// Reserved: not yet produced by v12 default pipeline.
     Composition,
     /// Created by gap detection (P1) — predicted but not observed compositions.
+    /// Reserved: not yet produced by v12 default pipeline.
     GapDetection,
     /// Created by discourse tracking (P3) — rhetorical/performative edges.
+    /// Reserved: not yet produced by v12 default pipeline.
     Discourse,
     /// v10.0: Created by compositional blending — hybrid A∧B edges.
+    /// Reserved for future pipeline extension.
     Blending,
     /// v10.0: Created by abductive reasoning — hypothetical X→Y→Z edges.
+    /// Reserved for future pipeline extension.
     Abductive,
     /// v10.0: Created by pattern mining — named pattern edges.
+    /// Reserved for future pipeline extension.
     PatternMining,
     /// v10.0: Created by cross-pathway synthesis — hidden meaning edges.
+    /// Reserved for future pipeline extension.
     Synthesis,
     /// v10.1: Created by compound discovery — multi-word expression edges.
+    /// Reserved for future pipeline extension.
     CompoundDiscovery,
 
-    // Provenance sources from MD-1 through MD-6
+    // Provenance sources from MD-1 through MD-6 (all active in v12)
     /// From MD-1: semantic frame extraction.
     FrameCompiler,
     /// From MD-2: pre-ingest reasoning.

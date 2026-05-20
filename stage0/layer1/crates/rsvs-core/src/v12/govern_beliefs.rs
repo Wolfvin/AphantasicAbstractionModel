@@ -1089,7 +1089,7 @@ impl GovernBeliefs {
     /// Check if a contradicted composition can be resolved.
     ///
     /// Returns `Some(ContradictionResolution)` if resolved, `None` if still unresolved.
-    pub fn check_contradiction_resolution(
+    pub fn check_contradiction_resolution_pair(
         &self,
         composition: &Composition,
         opposing: &Composition,
@@ -1228,7 +1228,7 @@ impl GovernBeliefs {
         composition: &mut Composition,
         opposing: &mut Composition,
     ) -> Option<ContradictionResolution> {
-        let resolution = self.check_contradiction_resolution(composition, opposing)?;
+        let resolution = self.check_contradiction_resolution_pair(composition, opposing)?;
 
         match resolution.resolution_type {
             ResolutionType::Misinterpretation => {
@@ -1595,7 +1595,7 @@ impl ErasedTransform for GovernBeliefs {
         "GovernBeliefs"
     }
 
-    fn execute(&self, ctx: &mut PipelineContext, graph: &mut Graph) -> IngestResult {
+    fn execute(&self, _ctx: &mut PipelineContext, graph: &mut Graph) -> IngestResult {
         let mut gb = self.clone();
 
         // ── Fix 6: Persist batch counter in graph metadata ──
@@ -1774,7 +1774,7 @@ impl ErasedTransform for GovernBeliefs {
             let comp_clone = graph.compositions.get(comp_id).cloned();
             let opposing_clone = graph.compositions.get(opposing_id).cloned();
             if let (Some(comp), Some(opposing)) = (comp_clone, opposing_clone) {
-                if let Some(resolution) = gb.check_contradiction_resolution(&comp, &opposing) {
+                if let Some(resolution) = gb.check_contradiction_resolution_pair(&comp, &opposing) {
                     // Apply resolution: un-contradict or deprecate.
                     match resolution.resolution_type {
                         ResolutionType::Misinterpretation | ResolutionType::ScopedValidity => {
@@ -2132,6 +2132,7 @@ mod tests {
                     role,
                     confidence: 0.8,
                     label: String::new(),
+                    source: None,
                 })
                 .collect(),
             lifecycle: LifecycleState::New,
@@ -2218,18 +2219,21 @@ mod tests {
                     role: SemanticRole::Predicate,
                     confidence: 0.8,
                     label: "membuat".to_string(),
+                    source: None,
                 },
                 CompositionMember {
                     node_id: 2,
                     role: SemanticRole::Arg0Agent,
                     confidence: 0.7,
                     label: "Raymond".to_string(),
+                    source: None,
                 },
                 CompositionMember {
                     node_id: 3,
                     role: SemanticRole::Arg1Patient,
                     confidence: 0.6,
                     label: "aplikasi".to_string(),
+                    source: None,
                 },
             ],
             ..Composition::default()

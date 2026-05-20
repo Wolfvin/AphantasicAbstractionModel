@@ -31,7 +31,7 @@ use std::collections::HashMap;
 
 use super::pipeline::{ErasedTransform, Graph, IngestResult};
 use super::types::*;
-use crate::types::{EdgeSource, NodeId};
+use crate::types::EdgeSource;
 
 // ========================================================================
 // ReasoningRule — Trait for Deriving Hidden Meanings

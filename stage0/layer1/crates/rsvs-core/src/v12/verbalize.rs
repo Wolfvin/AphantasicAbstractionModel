@@ -741,24 +741,28 @@ mod tests {
                 role: SemanticRole::Arg0Agent,
                 confidence: 0.9,
                 label: "Raymond".to_string(),
+                source: None,
             },
             CompositionMember {
                 node_id: node_membuat,
                 role: SemanticRole::Predicate,
                 confidence: 0.9,
                 label: "membuat".to_string(),
+                source: None,
             },
             CompositionMember {
                 node_id: node_aplikasi,
                 role: SemanticRole::Arg1Patient,
                 confidence: 0.8,
                 label: "aplikasi".to_string(),
+                source: None,
             },
             CompositionMember {
                 node_id: node_lambat,
                 role: SemanticRole::Cause,
                 confidence: 0.7,
                 label: "lambat".to_string(),
+                source: None,
             },
         ];
         graph.compositions.insert(comp_event.id.clone(), comp_event);
@@ -777,12 +781,14 @@ mod tests {
                 role: SemanticRole::Solution,
                 confidence: 0.8,
                 label: "cache".to_string(),
+                source: None,
             },
             CompositionMember {
                 node_id: node_lambat,
                 role: SemanticRole::Problem,
                 confidence: 0.7,
                 label: "lambat".to_string(),
+                source: None,
             },
         ];
         graph.compositions.insert(comp_hm.id.clone(), comp_hm);
@@ -801,12 +807,14 @@ mod tests {
                 role: SemanticRole::Antecedent,
                 confidence: 0.9,
                 label: "database_penuh".to_string(),
+                source: None,
             },
             CompositionMember {
                 node_id: node_lambat,
                 role: SemanticRole::Consequent,
                 confidence: 0.85,
                 label: "lambat".to_string(),
+                source: None,
             },
         ];
         graph
@@ -1027,12 +1035,14 @@ mod tests {
                 role: SemanticRole::Arg1Patient,
                 confidence: 0.5,
                 label: "server".to_string(),
+                source: None,
             },
             CompositionMember {
                 node_id: node_pred,
                 role: SemanticRole::Predicate,
                 confidence: 0.4,
                 label: "mengalami_kegagalan".to_string(),
+                source: None,
             },
         ];
 
@@ -1073,18 +1083,21 @@ mod tests {
                 role: SemanticRole::Arg0Agent,
                 confidence: 0.7,
                 label: "tim_develop".to_string(),
+                source: None,
             },
             CompositionMember {
                 node_id: node_pred,
                 role: SemanticRole::Predicate,
                 confidence: 0.6,
                 label: "mengembangkan".to_string(),
+                source: None,
             },
             CompositionMember {
                 node_id: node_patient,
                 role: SemanticRole::Arg1Patient,
                 confidence: 0.5,
                 label: "fitur_baru".to_string(),
+                source: None,
             },
         ];
 
@@ -1121,18 +1134,21 @@ mod tests {
                 role: SemanticRole::Arg0Agent,
                 confidence: 0.8,
                 label: "auditor".to_string(),
+                source: None,
             },
             CompositionMember {
                 node_id: node_pred,
                 role: SemanticRole::Predicate,
                 confidence: 0.7,
                 label: "menemukan".to_string(),
+                source: None,
             },
             CompositionMember {
                 node_id: node_patient,
                 role: SemanticRole::Arg1Patient,
                 confidence: 0.7,
                 label: "pelanggaran".to_string(),
+                source: None,
             },
         ];
 
@@ -1208,48 +1224,56 @@ mod tests {
                 role: SemanticRole::Arg0Agent,
                 confidence: 0.9,
                 label: "tim".to_string(),
+                source: None,
             },
             CompositionMember {
                 node_id: node_pred,
                 role: SemanticRole::Predicate,
                 confidence: 0.9,
                 label: "mengoptimasi".to_string(),
+                source: None,
             },
             CompositionMember {
                 node_id: node_patient,
                 role: SemanticRole::Arg1Patient,
                 confidence: 0.8,
                 label: "database".to_string(),
+                source: None,
             },
             CompositionMember {
                 node_id: node_cause,
                 role: SemanticRole::Cause,
                 confidence: 0.7,
                 label: "keluhan".to_string(),
+                source: None,
             },
             CompositionMember {
                 node_id: node_purpose,
                 role: SemanticRole::Purpose,
                 confidence: 0.7,
                 label: "performa".to_string(),
+                source: None,
             },
             CompositionMember {
                 node_id: node_location,
                 role: SemanticRole::Location,
                 confidence: 0.6,
                 label: "server_room".to_string(),
+                source: None,
             },
             CompositionMember {
                 node_id: node_time,
                 role: SemanticRole::Time,
                 confidence: 0.6,
                 label: "malam".to_string(),
+                source: None,
             },
             CompositionMember {
                 node_id: node_instrument,
                 role: SemanticRole::Instrument,
                 confidence: 0.5,
                 label: "tool_monitoring".to_string(),
+                source: None,
             },
         ];
 

@@ -506,6 +506,7 @@ mod tests {
                 },
                 confidence: 0.8,
                 label: format!("node_{}", nid),
+                source: None,
             })
             .collect();
         comp
@@ -549,12 +550,14 @@ mod tests {
                 role: SemanticRole::Arg0Agent,
                 confidence: 0.9,
                 label: "x".to_string(),
+                source: None,
             },
             CompositionMember {
                 node_id: 2,
                 role: SemanticRole::Arg1Patient,
                 confidence: 0.8,
                 label: "y".to_string(),
+                source: None,
             },
         ];
 
@@ -567,12 +570,14 @@ mod tests {
                 role: SemanticRole::Arg1Patient,
                 confidence: 0.9,
                 label: "x".to_string(),
+                source: None,
             },
             CompositionMember {
                 node_id: 2,
                 role: SemanticRole::Arg0Agent,
                 confidence: 0.8,
                 label: "y".to_string(),
+                source: None,
             },
         ];
 

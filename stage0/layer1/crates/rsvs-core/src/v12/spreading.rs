@@ -490,18 +490,21 @@ mod tests {
                 role: SemanticRole::Arg0Agent,
                 confidence: 0.9,
                 label: "alpha".to_string(),
+                source: None,
             },
             CompositionMember {
                 node_id: node_b,
                 role: SemanticRole::Arg1Patient,
                 confidence: 0.8,
                 label: "beta".to_string(),
+                source: None,
             },
             CompositionMember {
                 node_id: node_c,
                 role: SemanticRole::Cause,
                 confidence: 0.7,
                 label: "gamma".to_string(),
+                source: None,
             },
         ];
         graph.compositions.insert("comp_test".to_string(), comp);
@@ -574,12 +577,14 @@ mod tests {
                 role: SemanticRole::Predicate,
                 confidence: 1.0,
                 label: "a".to_string(),
+                source: None,
             },
             CompositionMember {
                 node_id: node_b,
                 role: SemanticRole::Arg0Agent,
                 confidence: 1.0,
                 label: "b".to_string(),
+                source: None,
             },
         ];
         graph.compositions.insert("comp_ab".to_string(), comp);
