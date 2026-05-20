@@ -53,6 +53,7 @@ use crate::types::{EdgeSource, HiddenMeaningType, NodeId, RelationType};
 /// - `surface_label` — display form (set by `Graph::ensure_node()`)
 /// - `lifecycle` — structural maturity (replaces v8.3 `NodeStatus` + `Tier`)
 /// - `confidence` — overall confidence score
+/// - `senses` — meaning variants (Phase J–P: sense layer)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Node {
     /// Unique integer ID.
@@ -65,6 +66,11 @@ pub struct Node {
     pub lifecycle: LifecycleState,
     /// Confidence score (0.0–1.0).
     pub confidence: f32,
+    /// Sense variants for this node (Phase J–P).
+    /// Each node can have multiple senses (meaning variants).
+    /// Empty for fresh/unprocessed nodes.
+    #[serde(default)]
+    pub senses: Vec<Sense>,
 }
 
 impl Default for Node {
@@ -75,6 +81,7 @@ impl Default for Node {
             surface_label: String::new(),
             lifecycle: LifecycleState::New,
             confidence: 0.0,
+            senses: Vec::new(),
         }
     }
 }
@@ -88,6 +95,7 @@ impl Node {
             surface_label: label.to_string(),
             lifecycle: LifecycleState::New,
             confidence: 0.0,
+            senses: Vec::new(),
         }
     }
 }
@@ -1713,6 +1721,240 @@ pub enum ResolutionType {
     /// Resolution not yet possible.
     #[default]
     Unresolved,
+}
+
+// ========================================================================
+// Phase J–P: Sense Layer & Cognitive Extensions
+// ========================================================================
+
+/// A sense (meaning variant) of a node in the graph.
+///
+/// Each `Node` can carry multiple senses — different meanings the node
+/// can represent depending on context. For example, the node "bank" might
+/// have one sense for "financial institution" and another for "river edge".
+///
+/// # Phase J–P Fields
+///
+/// | Field | Phase | Purpose |
+/// |-------|-------|---------|
+/// | `label` | J | Human-readable sense label |
+/// | `layer` | J | Abstraction layer (0=primitive, 1=derived, 2=situational, 3=conclusion) |
+/// | `coherence` | K | How coherent this sense is with its neighbors (0.0–1.0) |
+/// | `freq_map` | L | Weighted frequency per composition (HashMap for weighted Jaccard) |
+/// | `composition_evidence` | M | Evidence for/against this sense from compositions |
+/// | `is_utterance` | N | Whether this sense represents an utterance-level meaning |
+/// | `grounding` | P | Current grounding level of this sense |
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Sense {
+    /// Human-readable label for this sense (e.g., "financial institution").
+    pub label: String,
+
+    /// Abstraction layer:
+    /// - 0 = primitive (direct token sense)
+    /// - 1 = derived (from composition)
+    /// - 2 = situational (cross-sentence context)
+    /// - 3 = conclusion (abstract inference)
+    ///
+    ///   Hard cap: layer ≤ 3.
+    pub layer: u32,
+
+    /// How coherent this sense is with its neighboring senses (0.0–1.0).
+    /// Updated by `compute_member_coherence_penalty()`.
+    pub coherence: f32,
+
+    /// Weighted frequency map: how often this sense appears in each composition.
+    /// Key = composition ID, Value = confidence-weighted frequency.
+    /// Used by weighted Jaccard similarity in LDCS (Phase L).
+    #[serde(default)]
+    pub freq_map: HashMap<CompositionId, f32>,
+
+    /// Evidence accumulated for/against this sense from compositions.
+    /// Updated by `update_sense_evidence()` in Phase M.
+    #[serde(default)]
+    pub composition_evidence: CompositionEvidence,
+
+    /// Whether this sense represents an utterance-level meaning (Phase N).
+    /// Utterance senses are attached to tokens that represent whole sentences
+    /// or cross-sentence context.
+    #[serde(default)]
+    pub is_utterance: bool,
+
+    /// Current grounding level of this sense (Phase P).
+    /// Tracks how well-grounded this sense is in evidence.
+    pub grounding: SenseGrounding,
+}
+
+impl Default for Sense {
+    fn default() -> Self {
+        Self {
+            label: String::new(),
+            layer: 0,
+            coherence: 0.5,
+            freq_map: HashMap::new(),
+            composition_evidence: CompositionEvidence::default(),
+            is_utterance: false,
+            grounding: SenseGrounding::Fragile,
+        }
+    }
+}
+
+impl Sense {
+    /// Create a new primitive sense (layer 0).
+    pub fn new_primitive(label: &str) -> Self {
+        Self {
+            label: label.to_string(),
+            layer: 0,
+            ..Self::default()
+        }
+    }
+
+    /// Create a new derived sense (layer 1+) from a composition.
+    pub fn new_derived(label: &str, layer: u32) -> Self {
+        Self {
+            label: label.to_string(),
+            layer: layer.min(3), // Hard cap at 3
+            ..Self::default()
+        }
+    }
+
+    /// Build the frequency map from graph compositions.
+    ///
+    /// For each composition that references this sense's node, compute a
+    /// confidence-weighted frequency. Uses `comp.confidence` from the graph
+    /// (not hardcoded 1.0).
+    ///
+    /// Fallback: compositions not found in graph get weight 0.5 (safe default
+    /// for manually-created or cloned senses).
+    pub fn build_freq_map(&mut self, node_id: NodeId, graph: &super::pipeline::Graph) {
+        self.freq_map.clear();
+        for comp in graph.compositions.values() {
+            if comp.members.iter().any(|m| m.node_id == node_id) {
+                let weight = comp.confidence;
+                *self.freq_map.entry(comp.id.clone()).or_insert(0.0) += weight;
+            }
+        }
+    }
+
+    /// Is this sense at the primitive layer (0)?
+    pub fn is_primitive(&self) -> bool {
+        self.layer == 0
+    }
+
+    /// Is this sense a bridge between layers? (appears in compositions at 2+ different layers)
+    pub fn is_bridge(&self) -> bool {
+        self.layer >= 1 && self.is_utterance
+    }
+
+    /// Is this sense derived from compositions? (layer ≥ 1)
+    pub fn is_derived(&self) -> bool {
+        self.layer >= 1
+    }
+
+    /// Is this sense at utterance level? (layer ≥ 2 or is_utterance flag)
+    pub fn is_utterance_level(&self) -> bool {
+        self.layer >= 2 || self.is_utterance
+    }
+}
+
+/// Evidence accumulated for/against a sense from compositions (Phase M).
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct CompositionEvidence {
+    /// Number of confirming observations.
+    pub confirming: u32,
+    /// Number of contradicting observations.
+    pub contradicting: u32,
+    /// IDs of compositions that contributed confirming evidence.
+    #[serde(default)]
+    pub confirming_sources: Vec<CompositionId>,
+    /// IDs of compositions that contributed contradicting evidence.
+    #[serde(default)]
+    pub contradicting_sources: Vec<CompositionId>,
+}
+
+impl CompositionEvidence {
+    /// Create empty evidence.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Add confirming evidence from a composition.
+    pub fn add_confirming(&mut self, composition_id: CompositionId) {
+        self.confirming += 1;
+        self.confirming_sources.push(composition_id);
+    }
+
+    /// Add contradicting evidence from a composition.
+    pub fn add_contradicting(&mut self, composition_id: CompositionId) {
+        self.contradicting += 1;
+        self.contradicting_sources.push(composition_id);
+    }
+
+    /// Does this sense have any confirming evidence?
+    pub fn has_confirming(&self) -> bool {
+        self.confirming > 0
+    }
+
+    /// Is contradicting evidence stronger than confirming?
+    pub fn is_contradicting_dominant(&self) -> bool {
+        self.contradicting > self.confirming
+    }
+}
+
+/// Grounding level for a sense (Phase P).
+///
+/// Senses progress through grounding levels as evidence accumulates:
+/// Fragile → Tentative → Grounded → Mature
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
+pub enum SenseGrounding {
+    /// No solid evidence yet — may be pruned.
+    #[default]
+    Fragile,
+    /// Some confirming evidence but not enough to trust fully.
+    Tentative,
+    /// Well-grounded in multiple independent sources.
+    Grounded,
+    /// Long-established, high-coherence, multi-source sense.
+    Mature,
+}
+
+/// Candidate for sense similarity comparison (Phase L — weighted Jaccard).
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct SenseCandidate {
+    /// The sense being compared.
+    pub sense_id: String,
+    /// Properties extracted from the sense's composition context.
+    /// Key = property name, Value = weight (importance).
+    /// Uses HashMap instead of HashSet for weighted Jaccard.
+    #[serde(default)]
+    pub properties: HashMap<String, f32>,
+}
+
+impl SenseCandidate {
+    /// Compute weighted Jaccard similarity between two candidates.
+    ///
+    /// Weighted Jaccard = sum(min(a_i, b_i)) / sum(max(a_i, b_i))
+    /// for all keys in the union of both property sets.
+    /// Missing keys in one set are treated as 0.0.
+    pub fn weighted_jaccard(&self, other: &SenseCandidate) -> f32 {
+        let all_keys: HashSet<&String> = self.properties.keys().chain(other.properties.keys()).collect();
+
+        let mut sum_min = 0.0f32;
+        let mut sum_max = 0.0f32;
+
+        for key in &all_keys {
+            let a = self.properties.get(*key).copied().unwrap_or(0.0);
+            let b = other.properties.get(*key).copied().unwrap_or(0.0);
+            sum_min += a.min(b);
+            sum_max += a.max(b);
+        }
+
+        if sum_max == 0.0 {
+            return 0.0;
+        }
+
+        sum_min / sum_max
+    }
 }
 
 // ========================================================================

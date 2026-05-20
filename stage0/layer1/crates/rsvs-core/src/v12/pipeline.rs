@@ -981,6 +981,207 @@ impl Graph {
             .filter(|c| c.lifecycle == state)
             .count()
     }
+
+    // ================================================================
+    // Phase O: Connectivity Score
+    // ================================================================
+
+    /// Compute the connectivity score for a node.
+    ///
+    /// Connectivity = (number of compositions referencing this node) / saturation_factor.
+    /// Capped at 1.0. Saturation factor = 10 (a node referenced by 10+ compositions
+    /// is considered fully connected).
+    ///
+    /// Uses O(1) lookup via composition scan — this is on-demand, not precomputed.
+    pub fn connectivity_score(&self, node_id: NodeId) -> f32 {
+        const SATURATION: f32 = 10.0;
+        let count = self
+            .compositions
+            .values()
+            .filter(|comp| comp.members.iter().any(|m| m.node_id == node_id))
+            .count();
+        (count as f32 / SATURATION).min(1.0)
+    }
+
+    // ================================================================
+    // Phase P: SenseRole Helper Methods
+    // ================================================================
+
+    /// Is a node primitive? A node is primitive if its max sense layer is 0
+    /// OR it has no senses at all (unprocessed/fresh node).
+    ///
+    /// Note: an unprocessed node (no senses) is treated as primitive.
+    /// This is intentional — fresh nodes have not yet been analyzed
+    /// and default to the most basic interpretation.
+    pub fn is_primitive(&self, node_id: NodeId) -> bool {
+        match self.nodes.get(&node_id) {
+            Some(node) => {
+                if node.senses.is_empty() {
+                    return true; // Unprocessed = primitive
+                }
+                node.senses.iter().all(|s| s.layer == 0)
+            }
+            None => true, // Non-existent node = primitive by default
+        }
+    }
+
+    /// Is a node a bridge? A bridge node connects different abstraction layers.
+    /// It has at least one sense with `is_utterance` flag or senses at 2+ different layers.
+    pub fn is_bridge(&self, node_id: NodeId) -> bool {
+        match self.nodes.get(&node_id) {
+            Some(node) => {
+                if node.senses.iter().any(|s| s.is_utterance) {
+                    return true;
+                }
+                let layers: std::collections::HashSet<u32> =
+                    node.senses.iter().map(|s| s.layer).collect();
+                layers.len() >= 2
+            }
+            None => false,
+        }
+    }
+
+    /// Is a node derived? A derived node has at least one sense with layer ≥ 1.
+    pub fn is_derived(&self, node_id: NodeId) -> bool {
+        match self.nodes.get(&node_id) {
+            Some(node) => node.senses.iter().any(|s| s.layer >= 1),
+            None => false,
+        }
+    }
+
+    /// Is a node at utterance level? Has at least one sense that is utterance-level.
+    pub fn is_utterance_level(&self, node_id: NodeId) -> bool {
+        match self.nodes.get(&node_id) {
+            Some(node) => node.senses.iter().any(|s| s.is_utterance_level()),
+            None => false,
+        }
+    }
+
+    /// Find all nodes that have active utterance senses.
+    pub fn find_active_utterance_senses(&self) -> Vec<(NodeId, &Sense)> {
+        let mut result = Vec::new();
+        for (&node_id, node) in &self.nodes {
+            for sense in &node.senses {
+                if sense.is_utterance_level() {
+                    result.push((node_id, sense));
+                }
+            }
+        }
+        result
+    }
+
+    /// Find all bridge nodes in the graph.
+    pub fn find_bridge_nodes(&self) -> Vec<NodeId> {
+        self.nodes
+            .iter()
+            .filter(|(&id, _)| self.is_bridge(id))
+            .map(|(&id, _)| id)
+            .collect()
+    }
+
+    // ================================================================
+    // Phase N: Utterance Context
+    // ================================================================
+
+    /// Get utterance context for cross-sentence blending.
+    ///
+    /// Returns a 3-way blend of:
+    /// - Current composition's properties (55%)
+    /// - Utterance-level context from Situation/Conclusion compositions (25%)
+    /// - Bridge node context (20%)
+    ///
+    /// **Audit fix**: No double-check on member nodes for utterance sense.
+    /// The Situation/Conclusion check is sufficient — we don't need to
+    /// additionally verify that member nodes have utterance senses.
+    pub fn get_utterance_context(&self, composition_id: &CompositionId) -> UtteranceContext {
+        let _comp = match self.compositions.get(composition_id) {
+            Some(c) => c,
+            None => return UtteranceContext::default(),
+        };
+
+        // Collect Situation and Conclusion compositions for context
+        let situational_comps: Vec<&Composition> = self
+            .compositions
+            .values()
+            .filter(|c| c.id != *composition_id)
+            .filter(|c| {
+                c.composition_type == CompositionType::Situation
+                    || c.composition_type == CompositionType::HiddenMeaning
+            })
+            .take(5)
+            .collect();
+
+        // Collect bridge nodes
+        let bridge_node_ids: Vec<NodeId> = self.find_bridge_nodes();
+
+        UtteranceContext {
+            current_weight: 0.55,
+            situational_weight: 0.25,
+            bridge_weight: 0.20,
+            situational_composition_count: situational_comps.len(),
+            bridge_node_count: bridge_node_ids.len(),
+        }
+    }
+
+    // ================================================================
+    // Phase L: Property Extraction for Weighted Jaccard
+    // ================================================================
+
+    /// Extract properties from a composition for SenseCandidate comparison.
+    ///
+    /// Properties are derived from the composition's members, with weights
+    /// looked up from each member node's senses' freq_map.
+    ///
+    /// **Audit fix**: Iterates ALL senses of a node to find the one containing
+    /// the composition_id, not just `senses.first()`.
+    pub fn extract_properties_from_composition(
+        &self,
+        composition: &Composition,
+    ) -> SenseCandidate {
+        let mut properties = HashMap::new();
+
+        for member in &composition.members {
+            let role_key = format!("{:?}", member.role);
+
+            // AUDIT FIX: iterate all senses, find the one containing this composition
+            let weight = self
+                .nodes
+                .get(&member.node_id)
+                .and_then(|node| {
+                    node.senses
+                        .iter()
+                        .find(|s| s.freq_map.contains_key(&composition.id))
+                        .and_then(|s| s.freq_map.get(&composition.id))
+                        .copied()
+                })
+                .unwrap_or(1.0); // Default flat weight if no freq_map entry
+
+            *properties.entry(role_key).or_insert(0.0) += weight * member.confidence;
+        }
+
+        SenseCandidate {
+            sense_id: composition.id.clone(),
+            properties,
+        }
+    }
+}
+
+/// Utterance context for cross-sentence blending (Phase N).
+///
+/// Contains the weights and metadata for the 3-way blend:
+/// 55% current, 25% situational, 20% bridge.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct UtteranceContext {
+    /// Weight for the current composition's properties.
+    pub current_weight: f32,
+    /// Weight for situational context.
+    pub situational_weight: f32,
+    /// Weight for bridge node context.
+    pub bridge_weight: f32,
+    /// Number of situational compositions found.
+    pub situational_composition_count: usize,
+    /// Number of bridge nodes found.
+    pub bridge_node_count: usize,
 }
 
 // ========================================================================

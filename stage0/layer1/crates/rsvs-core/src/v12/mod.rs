@@ -69,6 +69,7 @@ pub use types::{
     AtomVariant,
     // --- Abstraction 2: Composition ---
     Composition,
+    CompositionEvidence,
     CompositionId,
     CompositionMember,
     CompositionType,
@@ -118,6 +119,10 @@ pub use types::{
     SemanticEdge,
     // --- Abstraction 1b: SemanticRole ---
     SemanticRole,
+    // --- Phase J–P: Sense Layer ---
+    Sense,
+    SenseCandidate,
+    SenseGrounding,
     // --- Abstraction 5: Transform ---
     Transform,
     Voice,
