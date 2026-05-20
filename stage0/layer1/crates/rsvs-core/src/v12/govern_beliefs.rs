@@ -873,29 +873,26 @@ impl GovernBeliefs {
         }
 
         // Check for ≥ 2 independent provenance sources.
-        // Fix: previously filter_map(|_m| None) always returned empty, making
-        // provenance_source_count() only count the composition's own origin.
-        // Now we derive member sources from the composition's provenance chain:
-        // each member's provenance is inferred from the composition's origin
-        // (since members don't carry their own EdgeSource yet).
-        // If the composition itself came from EnrichmentFeedback or ExtractionRepair,
-        // that counts as an additional independent source beyond the original.
-        let member_sources: Vec<EdgeSource> = comp
-            .members
-            .iter()
-            .filter_map(|_m| {
-                // Members don't carry their own EdgeSource yet.
-                // We check the composition's provenance for multi-source signals.
-                None
-            })
-            .collect();
-        let source_count = comp.provenance_source_count(&member_sources);
-        let is_multi_source = source_count >= 2
-            || comp.provenance.origin == EdgeSource::EnrichmentFeedback
+        //
+        // Audit v3 fix: removed dead `member_sources` vec + `source_count >= 2`.
+        // `CompositionMember` doesn't carry `EdgeSource`, so `member_sources`
+        // was always empty and `source_count >= 2` was a dead condition that
+        // could never be true. The actual multi-source detection now uses
+        // explicit provenance signals:
+        //
+        // 1. `EnrichmentFeedback` / `ExtractionRepair` origin → came from
+        //    a feedback loop, which is inherently a second source.
+        // 2. `members.len() >= 3` → 3+ members from different extractions
+        //    implies multiple source signals.
+        // 3. `parent_composition_id` is_some → derived from another comp,
+        //    which is an independent source by definition.
+        //
+        // When `CompositionMember` gains an `EdgeSource` field in a future
+        // phase, we can reintroduce `provenance_source_count()` with real
+        // member source data.
+        let is_multi_source = comp.provenance.origin == EdgeSource::EnrichmentFeedback
             || comp.provenance.origin == EdgeSource::ExtractionRepair
             || comp.members.len() >= 3
-            // Fix: If the composition has a parent_composition_id, it was derived
-            // from another composition — that's a second independent source.
             || comp.provenance.parent_composition_id.is_some();
 
         if !is_multi_source {
@@ -1560,14 +1557,52 @@ impl ErasedTransform for GovernBeliefs {
             .unwrap_or(0);
         gb.current_batch = stored_batch;
 
-        // Build a GraphDelta from the current graph state.
+        // ── Audit v3 fix: Govern only dirty compositions, not all ──
+        // Previously, every execute() cloned ALL compositions into GraphDelta,
+        // which is O(N) per ingest. Now we only clone compositions that are
+        // new/modified since the last govern (tracked in dirty_compositions).
+        //
+        // If the dirty set is empty (no new compositions), we still run govern()
+        // with an empty delta so that existing compositions get their batch_seen
+        // incremented and promotions/contradictions are rechecked.
+        //
+        // IMPORTANT: On the first call (no govern_batch in metadata), we must
+        // govern ALL existing compositions to initialize their states. This is
+        // handled by checking if this is the first batch (stored_batch == 0).
+        let is_first_govern = stored_batch == 0;
+
+        let compositions_to_govern: Vec<Composition> = if is_first_govern {
+            // First call: govern everything to initialize states
+            graph.compositions.values().cloned().collect()
+        } else if graph.dirty_compositions.is_empty() {
+            // No new compositions — still need to re-govern existing ones
+            // for batch_seen increment, promotion checks, contradiction detection.
+            // But we only need to check compositions that haven't been governed yet.
+            Vec::new()
+        } else {
+            // Only govern compositions marked as dirty (new/modified)
+            graph
+                .dirty_compositions
+                .iter()
+                .filter_map(|id| graph.compositions.get(id).cloned())
+                .collect()
+        };
+
+        // Build a GraphDelta from the selected compositions.
         let delta = GraphDelta {
             new_nodes: Vec::new(),
-            new_compositions: graph.compositions.values().cloned().collect(),
+            new_compositions: compositions_to_govern,
             new_edges: Vec::new(),
         };
 
         let governed = gb.govern(delta);
+
+        // ── Clear dirty set after governing ──
+        // All dirty compositions have been governed, so clear the set.
+        // Any compositions modified by govern() itself (promotions, contradictions)
+        // will be written back to the graph below — they don't need re-governing
+        // until the next ingest modifies them.
+        graph.dirty_compositions.clear();
 
         // ── Fix 1 (Critical): Wire update_sense_evidence into production ──
         // After govern() applies promotions and contradictions to compositions,
@@ -1575,13 +1610,19 @@ impl ErasedTransform for GovernBeliefs {
         // so that check_sense_promotions() has data to work with.
 
         // Collect promoted and contradicted composition IDs before applying to graph.
+        //
+        // Audit v3 fix: Only Stable promotions count as confirming evidence.
+        // Candidate is the initial state after initial_states() — a composition
+        // that was just created hasn't proven anything yet. Giving it confirming
+        // evidence would inflate sense evidence counts prematurely.
+        //
+        // Rationale: "confirming" means the composition has survived governance
+        // scrutiny (age ≥ 3, confidence ≥ 0.55, no contradictions, seed alignment
+        // ≥ 0.3). Candidate just means "not rejected yet" — that's not confirmation.
         let promoted_comp_ids: Vec<CompositionId> = governed
             .updates
             .iter()
-            .filter(|u| {
-                u.new_lifecycle == Some(LifecycleState::Stable)
-                    || u.new_lifecycle == Some(LifecycleState::Candidate)
-            })
+            .filter(|u| u.new_lifecycle == Some(LifecycleState::Stable))
             .map(|u| u.composition_id.clone())
             .collect();
 

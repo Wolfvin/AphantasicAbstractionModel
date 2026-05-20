@@ -774,6 +774,16 @@ pub struct Graph {
     /// persist across `execute()` calls (e.g., `govern_batch` counter).
     #[serde(default)]
     pub metadata: HashMap<String, String>,
+
+    /// Audit v3 fix: Set of composition IDs that are new or modified since
+    /// the last `GovernBeliefs.execute()` call. Only these compositions are
+    /// sent to `govern()` — not the entire graph. This avoids O(N) clone
+    /// per ingest for large graphs.
+    ///
+    /// Marked dirty by `IngestAtoms` when compositions are created or modified.
+    /// Cleared after `GovernBeliefs.execute()` finishes.
+    #[serde(default)]
+    pub dirty_compositions: HashSet<CompositionId>,
 }
 
 impl Default for Graph {
@@ -792,6 +802,7 @@ impl Graph {
             label_to_id: HashMap::new(),
             next_id: 1, // 0 is reserved/unassigned
             metadata: HashMap::new(),
+            dirty_compositions: HashSet::new(),
         }
     }
 
@@ -1517,7 +1528,8 @@ impl ErasedTransform for IngestAtoms {
                     }
 
                     comp_id_assignments.push((i, comp_id.clone()));
-                    graph.compositions.insert(comp_id, composition);
+                    graph.compositions.insert(comp_id.clone(), composition);
+                    graph.dirty_compositions.insert(comp_id);
                     compositions_created += 1;
                     event_atoms.push(atom.clone());
                 }
@@ -1567,7 +1579,8 @@ impl ErasedTransform for IngestAtoms {
                     }
 
                     comp_id_assignments.push((i, comp_id.clone()));
-                    graph.compositions.insert(comp_id, composition);
+                    graph.compositions.insert(comp_id.clone(), composition);
+                    graph.dirty_compositions.insert(comp_id);
                     compositions_created += 1;
                 }
 
@@ -1619,7 +1632,8 @@ impl ErasedTransform for IngestAtoms {
                     }
 
                     comp_id_assignments.push((i, comp_id.clone()));
-                    graph.compositions.insert(comp_id, composition);
+                    graph.compositions.insert(comp_id.clone(), composition);
+                    graph.dirty_compositions.insert(comp_id);
                     compositions_created += 1;
                 }
             }
