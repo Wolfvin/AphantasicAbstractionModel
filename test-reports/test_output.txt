@@ -1,0 +1,1531 @@
+warning: unused import: `ThinkingMode`
+  --> crates/rsvs-core/src/matryoshka.rs:24:41
+   |
+24 | use crate::thinking::{ComplexitySignal, ThinkingMode, ThinkingToggle, ThinkingToggleConfig};
+   |                                         ^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `CompositionRef`
+  --> crates/rsvs-core/src/matryoshka.rs:25:29
+   |
+25 | use crate::types::{AtomSet, CompositionRef, ContextQueryResult, HaltReason, NodeId, TraversalConfig};
+   |                             ^^^^^^^^^^^^^^
+
+warning: unused import: `SenseId`
+  --> crates/rsvs-core/src/mcts.rs:23:85
+   |
+23 | use crate::types::{AtomSet, CompositionRef, ContextQueryResult, HaltReason, NodeId, SenseId, TraversalConfig};
+   |                                                                                     ^^^^^^^
+
+warning: unused import: `RelationType`
+ --> crates/rsvs-core/src/pipeline/snapshot.rs:7:62
+  |
+7 | use crate::types::{CompressionState, EdgeSource, NodeStatus, RelationType, Tier};
+  |                                                              ^^^^^^^^^^^^
+
+warning: unused import: `CompositionRef`
+  --> crates/rsvs-core/src/spreading.rs:21:28
+   |
+21 | use crate::types::{NodeId, CompositionRef};
+   |                            ^^^^^^^^^^^^^^
+
+warning: unused import: `HashSet`
+  --> crates/rsvs-core/src/batch_spreading.rs:20:33
+   |
+20 | use std::collections::{HashMap, HashSet};
+   |                                 ^^^^^^^
+
+warning: unused imports: `EdgeSource` and `Edge`
+  --> crates/rsvs-core/src/gap_detection.rs:23:21
+   |
+23 |     CompositionRef, Edge, EdgeSource, GapAnnotation, GapType, NodeId, RelationType, SenseId,
+   |                     ^^^^  ^^^^^^^^^^
+
+warning: unused import: `crate::composition_index::CompositionIndex`
+  --> crates/rsvs-core/src/seed_activation.rs:19:5
+   |
+19 | use crate::composition_index::CompositionIndex;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `crate::composition_index::CompositionIndex`
+  --> crates/rsvs-core/src/discourse_tracking.rs:20:5
+   |
+20 | use crate::composition_index::CompositionIndex;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `crate::sense::SenseManager`
+  --> crates/rsvs-core/src/discourse_tracking.rs:22:5
+   |
+22 | use crate::sense::SenseManager;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `SenseId`
+  --> crates/rsvs-core/src/discourse_tracking.rs:26:19
+   |
+26 |     SemanticMeta, SenseId, SeedPathway, SpeechActType, Tier, TransitionType,
+   |                   ^^^^^^^
+
+warning: unused import: `crate::batch_spreading::BatchSeedSpreading`
+  --> crates/rsvs-core/src/compositional_blending.rs:21:5
+   |
+21 | use crate::batch_spreading::BatchSeedSpreading;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `crate::graph::RsvsGraph`
+  --> crates/rsvs-core/src/compositional_blending.rs:22:5
+   |
+22 | use crate::graph::RsvsGraph;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused imports: `EdgeSource`, `Edge`, `NodeStatus`, `Node`, `RelationType`, `SemanticMeta`, and `Tier`
+  --> crates/rsvs-core/src/compositional_blending.rs:25:34
+   |
+25 |     BlendResult, CompositionRef, Edge, EdgeSource, Node, NodeId, NodeStatus, RelationType,
+   |                                  ^^^^  ^^^^^^^^^^  ^^^^          ^^^^^^^^^^  ^^^^^^^^^^^^
+26 |     SemanticMeta, SenseId, Tier,
+   |     ^^^^^^^^^^^^           ^^^^
+
+warning: unused imports: `GapAnnotation`, `SeedPathway`, and `SenseId`
+  --> crates/rsvs-core/src/abductive_reasoning.rs:24:26
+   |
+24 |     AbductiveHypothesis, GapAnnotation, NodeId, SeedPathway, SenseId,
+   |                          ^^^^^^^^^^^^^          ^^^^^^^^^^^  ^^^^^^^
+
+warning: unused import: `crate::batch_spreading::BatchSeedSpreading`
+  --> crates/rsvs-core/src/pattern_mining.rs:18:5
+   |
+18 | use crate::batch_spreading::BatchSeedSpreading;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `crate::composition_index::CompositionIndex`
+  --> crates/rsvs-core/src/pattern_mining.rs:19:5
+   |
+19 | use crate::composition_index::CompositionIndex;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused imports: `EdgeSource`, `Edge`, `NodeStatus`, `Node`, `RelationType`, `SemanticMeta`, `SenseId`, and `Tier`
+  --> crates/rsvs-core/src/pattern_mining.rs:23:35
+   |
+23 |     CompositionRef, NamedPattern, Node, NodeId, NodeStatus, RelationType, SemanticMeta,
+   |                                   ^^^^          ^^^^^^^^^^  ^^^^^^^^^^^^  ^^^^^^^^^^^^
+24 |     SenseId, Tier, EdgeSource, Edge,
+   |     ^^^^^^^  ^^^^  ^^^^^^^^^^  ^^^^
+
+warning: unused import: `crate::batch_spreading::BatchSeedSpreading`
+  --> crates/rsvs-core/src/cross_pathway_synthesis.rs:24:5
+   |
+24 | use crate::batch_spreading::BatchSeedSpreading;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `crate::sense::SenseManager`
+  --> crates/rsvs-core/src/cross_pathway_synthesis.rs:26:5
+   |
+26 | use crate::sense::SenseManager;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `SeedPathway`
+  --> crates/rsvs-core/src/cross_pathway_synthesis.rs:29:5
+   |
+29 |     SeedPathway, SenseId, SynthesisResult,
+   |     ^^^^^^^^^^^
+
+warning: unused import: `std::collections::HashMap`
+  --> crates/rsvs-core/src/cross_pathway_synthesis.rs:31:5
+   |
+31 | use std::collections::HashMap;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `SenseId`
+  --> crates/rsvs-core/src/compound_discovery.rs:29:5
+   |
+29 |     SenseId, Tier, CompressionState,
+   |     ^^^^^^^
+
+warning: unused import: `std::collections::HashMap`
+  --> crates/rsvs-core/src/v12/executive.rs:38:5
+   |
+38 | use std::collections::HashMap;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `EdgeSource`
+  --> crates/rsvs-core/src/v12/executive.rs:42:20
+   |
+42 | use crate::types::{EdgeSource, NodeId};
+   |                    ^^^^^^^^^^
+
+warning: unused imports: `Deserialize` and `Serialize`
+  --> crates/rsvs-core/src/v12/govern_beliefs.rs:46:13
+   |
+46 | use serde::{Deserialize, Serialize};
+   |             ^^^^^^^^^^^  ^^^^^^^^^
+
+warning: unused import: `std::collections::HashMap`
+  --> crates/rsvs-core/src/v12/govern_beliefs.rs:47:5
+   |
+47 | use std::collections::HashMap;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `NodeId`
+  --> crates/rsvs-core/src/v12/govern_beliefs.rs:51:32
+   |
+51 | use crate::types::{EdgeSource, NodeId};
+   |                                ^^^^^^
+
+warning: unused import: `NodeId`
+  --> crates/rsvs-core/src/v12/reason_frame.rs:33:32
+   |
+33 | use crate::types::{EdgeSource, NodeId};
+   |                                ^^^^^^
+
+warning: unused import: `SenseId`
+  --> crates/rsvs-core/src/v12/types.rs:35:73
+   |
+35 | use crate::types::{EdgeSource, HiddenMeaningType, NodeId, RelationType, SenseId};
+   |                                                                         ^^^^^^^
+
+warning: unused import: `rayon::prelude`
+  --> crates/rsvs-core/src/pipeline/modes.rs:19:5
+   |
+19 | use rayon::prelude::*;
+   |     ^^^^^^^^^^^^^^
+
+warning: unused import: `ErasedTransform`
+  --> crates/rsvs-core/src/v12/executive.rs:40:23
+   |
+40 | use super::pipeline::{ErasedTransform, Graph, IngestResult, PipelineEngine};
+   |                       ^^^^^^^^^^^^^^^
+
+warning: unused variable: `graph`
+   --> crates/rsvs-core/src/mcts.rs:257:9
+    |
+257 |         graph: &RsvsGraph,
+    |         ^^^^^ help: if this is intentional, prefix it with an underscore: `_graph`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `node_ids`
+   --> crates/rsvs-core/src/pipeline/modes.rs:436:13
+    |
+436 |         let node_ids: Vec<NodeId> = self.graph.nodes.keys().copied().collect();
+    |             ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_node_ids`
+
+warning: unused variable: `sense_id`
+   --> crates/rsvs-core/src/gap_detection.rs:431:9
+    |
+431 |         sense_id: SenseId,
+    |         ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_sense_id`
+
+warning: unused variable: `conflicting`
+   --> crates/rsvs-core/src/discourse_tracking.rs:496:13
+    |
+496 |         let conflicting = atoms_a.iter().any(|a| {
+    |             ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_conflicting`
+
+warning: unreachable pattern
+   --> crates/rsvs-core/src/discourse_tracking.rs:649:49
+    |
+649 |                     "semua" | "all" | "every" | "semua" => return Some(Quantifier::Universal),
+    |                     -------                     ^^^^^^^ no value can reach this
+    |                     |
+    |                     matches all the relevant values
+    |
+    = note: `#[warn(unreachable_patterns)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `senses`
+   --> crates/rsvs-core/src/abductive_reasoning.rs:121:9
+    |
+121 |         senses: &HashMap<NodeId, SenseManager>,
+    |         ^^^^^^ help: if this is intentional, prefix it with an underscore: `_senses`
+
+warning: unused variable: `conflict`
+   --> crates/rsvs-core/src/cross_pathway_synthesis.rs:115:9
+    |
+115 |         conflict: &PathwayConflict,
+    |         ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_conflict`
+
+warning: unused variable: `pred`
+   --> crates/rsvs-core/src/v12/acquisition.rs:845:37
+    |
+845 |                         if let Some(pred) = predicate {
+    |                                     ^^^^ help: if this is intentional, prefix it with an underscore: `_pred`
+
+warning: unused variable: `gap`
+   --> crates/rsvs-core/src/v12/acquisition.rs:965:9
+    |
+965 |         gap: &KnowledgeGap,
+    |         ^^^ help: if this is intentional, prefix it with an underscore: `_gap`
+
+warning: unused variable: `comp_id`
+    --> crates/rsvs-core/src/v12/acquisition.rs:1158:33
+     |
+1158 |                     if let Some(comp_id) = &decision.gap_id.split('_').next() {
+     |                                 ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_comp_id`
+
+warning: unused variable: `reextractions_count`
+    --> crates/rsvs-core/src/v12/acquisition.rs:1258:13
+     |
+1258 |         let reextractions_count = reextractions.len();
+     |             ^^^^^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_reextractions_count`
+
+warning: variable does not need to be mutable
+   --> crates/rsvs-core/src/v12/executive.rs:558:13
+    |
+558 |         let mut filled_gaps = Vec::new();
+    |             ----^^^^^^^^^^^
+    |             |
+    |             help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `m`
+   --> crates/rsvs-core/src/v12/govern_beliefs.rs:676:26
+    |
+676 |             .filter_map(|m| {
+    |                          ^ help: if this is intentional, prefix it with an underscore: `_m`
+
+warning: unused variable: `ctx`
+    --> crates/rsvs-core/src/v12/govern_beliefs.rs:1069:23
+     |
+1069 |     fn execute(&self, ctx: &mut PipelineContext, graph: &mut Graph) -> IngestResult {
+     |                       ^^^ help: if this is intentional, prefix it with an underscore: `_ctx`
+
+warning: unused variable: `ctx`
+    --> crates/rsvs-core/src/v12/govern_beliefs.rs:1227:23
+     |
+1227 |     fn execute(&self, ctx: &mut PipelineContext, graph: &mut Graph) -> IngestResult {
+     |                       ^^^ help: if this is intentional, prefix it with an underscore: `_ctx`
+
+warning: unused variable: `atom`
+    --> crates/rsvs-core/src/v12/pipeline.rs:1066:13
+     |
+1066 |         for atom in input {
+     |             ^^^^ help: if this is intentional, prefix it with an underscore: `_atom`
+
+warning: unused variable: `count`
+    --> crates/rsvs-core/src/v12/pipeline.rs:1213:13
+     |
+1213 |         let count = ctx.pending_reextractions.len();
+     |             ^^^^^ help: if this is intentional, prefix it with an underscore: `_count`
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/consolidation.rs:94:5
+   |
+94 |     pub config: ConsolidationConfig,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+note: the lint level is defined here
+  --> crates/rsvs-core/src/lib.rs:1:9
+   |
+ 1 | #![warn(missing_docs)]
+   |         ^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> crates/rsvs-core/src/graph.rs:624:5
+    |
+624 |     pub shared: Vec<NodeId>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> crates/rsvs-core/src/graph.rs:625:5
+    |
+625 |     pub only_a: Vec<NodeId>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> crates/rsvs-core/src/graph.rs:626:5
+    |
+626 |     pub only_b: Vec<NodeId>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> crates/rsvs-core/src/graph.rs:627:5
+    |
+627 |     pub jaccard: f32,
+    |     ^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> crates/rsvs-core/src/mcts.rs:132:5
+    |
+132 |     pub config: MCTSConfig,
+    |     ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/persist.rs:35:5
+   |
+35 |     pub link_type: String,
+   |     ^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/persist.rs:36:5
+   |
+36 |     pub target_id: u32,
+   |     ^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/persist.rs:42:5
+   |
+42 |     pub id: u32,
+   |     ^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/persist.rs:43:5
+   |
+43 |     pub label: String,
+   |     ^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/persist.rs:44:5
+   |
+44 |     pub surface_label: String,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/persist.rs:45:5
+   |
+45 |     pub kind: String,
+   |     ^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/persist.rs:46:5
+   |
+46 |     pub tier: u8,
+   |     ^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/persist.rs:47:5
+   |
+47 |     pub confidence: f32,
+   |     ^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/persist.rs:48:5
+   |
+48 |     pub status: String,
+   |     ^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/persist.rs:49:5
+   |
+49 |     pub is_seed: bool,
+   |     ^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/persist.rs:50:5
+   |
+50 |     pub is_locked: bool,
+   |     ^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/persist.rs:51:5
+   |
+51 |     pub compression_state: String,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/persist.rs:52:5
+   |
+52 |     pub layer: u32,
+   |     ^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/persist.rs:53:5
+   |
+53 |     pub derived_from_node_ids: Vec<u32>,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/persist.rs:54:5
+   |
+54 |     pub compression_reason: Option<String>,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/persist.rs:61:5
+   |
+61 |     pub policy_meta: Option<SavedPolicyMeta>,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/persist.rs:62:5
+   |
+62 |     pub atoms: Vec<u32>,
+   |     ^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/persist.rs:68:5
+   |
+68 |     pub policy_version: String,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/persist.rs:69:5
+   |
+69 |     pub governance_score: f32,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/persist.rs:70:5
+   |
+70 |     pub candidate_evidence_pool: f32,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/persist.rs:71:5
+   |
+71 |     pub status_flip_count: u32,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/persist.rs:72:5
+   |
+72 |     pub seen_fingerprints: Vec<String>,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/persist.rs:73:5
+   |
+73 |     pub last_seen_at: Option<String>,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/persist.rs:79:5
+   |
+79 |     pub from: u32,
+   |     ^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/persist.rs:80:5
+   |
+80 |     pub to: u32,
+   |     ^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/persist.rs:81:5
+   |
+81 |     pub weight: f32,
+   |     ^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/persist.rs:82:5
+   |
+82 |     pub source: String,
+   |     ^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/persist.rs:95:5
+   |
+95 |     pub node_id: u32,
+   |     ^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/persist.rs:96:5
+   |
+96 |     pub sense_id: u32,
+   |     ^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> crates/rsvs-core/src/persist.rs:181:5
+    |
+181 |     pub compositions: Vec<SavedCompositionRef>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> crates/rsvs-core/src/persist.rs:182:5
+    |
+182 |     pub layer: u32,
+    |     ^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> crates/rsvs-core/src/persist.rs:183:5
+    |
+183 |     pub contexts: Vec<Vec<u32>>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> crates/rsvs-core/src/persist.rs:184:5
+    |
+184 |     pub freq_counts: HashMap<u32, usize>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> crates/rsvs-core/src/persist.rs:189:5
+    |
+189 |     pub sum_sim: f64,
+    |     ^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> crates/rsvs-core/src/persist.rs:190:5
+    |
+190 |     pub pair_count: usize,
+    |     ^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> crates/rsvs-core/src/persist.rs:191:5
+    |
+191 |     pub coherence: f32,
+    |     ^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> crates/rsvs-core/src/persist.rs:192:5
+    |
+192 |     pub status: String,
+    |     ^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> crates/rsvs-core/src/persist.rs:193:5
+    |
+193 |     pub inactivity: usize,
+    |     ^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> crates/rsvs-core/src/persist.rs:194:5
+    |
+194 |     pub grounding: SavedGroundingEvidence,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> crates/rsvs-core/src/persist.rs:203:5
+    |
+203 |     pub senses: Vec<SavedSense>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> crates/rsvs-core/src/persist.rs:204:5
+    |
+204 |     pub next_sense_id: u32,
+    |     ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> crates/rsvs-core/src/persist.rs:205:5
+    |
+205 |     pub global_context_count: usize,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> crates/rsvs-core/src/persist.rs:211:5
+    |
+211 |     pub id: u32,
+    |     ^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> crates/rsvs-core/src/persist.rs:212:5
+    |
+212 |     pub confidence: f32,
+    |     ^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> crates/rsvs-core/src/persist.rs:213:5
+    |
+213 |     pub tier: u8,
+    |     ^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> crates/rsvs-core/src/persist.rs:214:5
+    |
+214 |     pub status: String,
+    |     ^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> crates/rsvs-core/src/persist.rs:215:5
+    |
+215 |     pub memory: String,
+    |     ^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> crates/rsvs-core/src/persist.rs:216:5
+    |
+216 |     pub domain_count: usize,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> crates/rsvs-core/src/persist.rs:217:5
+    |
+217 |     pub cooccurring_mature: Vec<u32>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> crates/rsvs-core/src/persist.rs:218:5
+    |
+218 |     pub observation_count: usize,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> crates/rsvs-core/src/persist.rs:219:5
+    |
+219 |     pub is_seed: bool,
+    |     ^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> crates/rsvs-core/src/persist.rs:220:5
+    |
+220 |     pub status_flip_count: u32,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> crates/rsvs-core/src/persist.rs:221:5
+    |
+221 |     pub governance_score: f32,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> crates/rsvs-core/src/persist.rs:222:5
+    |
+222 |     pub candidate_evidence_pool: f32,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> crates/rsvs-core/src/persist.rs:244:5
+    |
+244 |     pub token_count: HashMap<String, usize>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> crates/rsvs-core/src/persist.rs:245:5
+    |
+245 |     pub pair_count: HashMap<String, usize>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> crates/rsvs-core/src/persist.rs:246:5
+    |
+246 |     pub total_tokens: usize,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> crates/rsvs-core/src/persist.rs:247:5
+    |
+247 |     pub total_sentences: usize,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> crates/rsvs-core/src/persist.rs:253:5
+    |
+253 |     pub sentence_count: HashMap<String, usize>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> crates/rsvs-core/src/persist.rs:254:5
+    |
+254 |     pub groundable: HashMap<String, bool>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> crates/rsvs-core/src/persist.rs:260:5
+    |
+260 |     pub version: String,
+    |     ^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> crates/rsvs-core/src/persist.rs:261:5
+    |
+261 |     pub total_contexts: usize,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> crates/rsvs-core/src/persist.rs:262:5
+    |
+262 |     pub token_to_id: HashMap<String, u32>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> crates/rsvs-core/src/persist.rs:263:5
+    |
+263 |     pub next_node_id: u32,
+    |     ^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> crates/rsvs-core/src/persist.rs:264:5
+    |
+264 |     pub nodes: Vec<SavedNode>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> crates/rsvs-core/src/persist.rs:265:5
+    |
+265 |     pub edges: Vec<SavedEdge>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> crates/rsvs-core/src/persist.rs:266:5
+    |
+266 |     pub sense_managers: HashMap<u32, SavedSenseManager>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> crates/rsvs-core/src/persist.rs:267:5
+    |
+267 |     pub atom_records: Vec<SavedAtomRecord>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> crates/rsvs-core/src/persist.rs:268:5
+    |
+268 |     pub cooc_stats: SavedCoocStats,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> crates/rsvs-core/src/persist.rs:269:5
+    |
+269 |     pub entity_detector: SavedEntityDetector,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> crates/rsvs-core/src/persist.rs:270:5
+    |
+270 |     pub entity_promote_n: usize,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> crates/rsvs-core/src/persist.rs:271:5
+    |
+271 |     pub theta_assign: f32,
+    |     ^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> crates/rsvs-core/src/persist.rs:272:5
+    |
+272 |     pub n_warm: usize,
+    |     ^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> crates/rsvs-core/src/persist.rs:273:5
+    |
+273 |     pub eta: f32,
+    |     ^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> crates/rsvs-core/src/persist.rs:274:5
+    |
+274 |     pub current_domain: usize,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> crates/rsvs-core/src/persist.rs:316:5
+    |
+316 |     pub max_depth: usize,
+    |     ^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> crates/rsvs-core/src/persist.rs:317:5
+    |
+317 |     pub gamma: f32,
+    |     ^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> crates/rsvs-core/src/persist.rs:318:5
+    |
+318 |     pub halt_epsilon: f32,
+    |     ^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> crates/rsvs-core/src/persist.rs:319:5
+    |
+319 |     pub halt_confidence: f32,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> crates/rsvs-core/src/persist.rs:320:5
+    |
+320 |     pub tau_relevance: f32,
+    |     ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> crates/rsvs-core/src/persist.rs:322:5
+    |
+322 |     pub epsilon_ig: f32,
+    |     ^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/reflection.rs:42:9
+   |
+42 |         node_id: NodeId,
+   |         ^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/reflection.rs:43:9
+   |
+43 |         sense_idx: usize,
+   |         ^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/reflection.rs:49:9
+   |
+49 |         node_id: NodeId,
+   |         ^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/reflection.rs:50:9
+   |
+50 |         sense_idx: usize,
+   |         ^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/reflection.rs:54:9
+   |
+54 |         node_id: NodeId,
+   |         ^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/reflection.rs:55:9
+   |
+55 |         sense_idx: usize,
+   |         ^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/reflection.rs:96:5
+   |
+96 |     pub config: ReflectionConfig,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> crates/rsvs-core/src/thinking.rs:114:5
+    |
+114 |     pub config: ThinkingToggleConfig,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> crates/rsvs-core/src/types.rs:185:5
+    |
+185 |     Neutral,
+    |     ^^^^^^^
+
+warning: missing documentation for a variant
+   --> crates/rsvs-core/src/types.rs:186:5
+    |
+186 |     Positive,
+    |     ^^^^^^^^
+
+warning: missing documentation for a variant
+   --> crates/rsvs-core/src/types.rs:187:5
+    |
+187 |     Negative,
+    |     ^^^^^^^^
+
+warning: missing documentation for a variant
+   --> crates/rsvs-core/src/types.rs:190:5
+    |
+190 |     ContextDependent,
+    |     ^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> crates/rsvs-core/src/types.rs:387:5
+    |
+387 |     Elaboration,
+    |     ^^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> crates/rsvs-core/src/types.rs:388:5
+    |
+388 |     Background,
+    |     ^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> crates/rsvs-core/src/types.rs:389:5
+    |
+389 |     Cause,
+    |     ^^^^^
+
+warning: missing documentation for a variant
+   --> crates/rsvs-core/src/types.rs:390:5
+    |
+390 |     Result,
+    |     ^^^^^^
+
+warning: missing documentation for a variant
+   --> crates/rsvs-core/src/types.rs:391:5
+    |
+391 |     Concession,
+    |     ^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> crates/rsvs-core/src/types.rs:392:5
+    |
+392 |     Condition,
+    |     ^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> crates/rsvs-core/src/types.rs:393:5
+    |
+393 |     Interpretation,
+    |     ^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> crates/rsvs-core/src/types.rs:394:5
+    |
+394 |     Evaluation,
+    |     ^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> crates/rsvs-core/src/types.rs:395:5
+    |
+395 |     Evidence,
+    |     ^^^^^^^^
+
+warning: missing documentation for a variant
+   --> crates/rsvs-core/src/types.rs:396:5
+    |
+396 |     Motivation,
+    |     ^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> crates/rsvs-core/src/types.rs:398:5
+    |
+398 |     Contrast,
+    |     ^^^^^^^^
+
+warning: missing documentation for a variant
+   --> crates/rsvs-core/src/types.rs:399:5
+    |
+399 |     Conjunction,
+    |     ^^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> crates/rsvs-core/src/types.rs:400:5
+    |
+400 |     Disjunction,
+    |     ^^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> crates/rsvs-core/src/types.rs:401:5
+    |
+401 |     List,
+    |     ^^^^
+
+warning: missing documentation for a variant
+   --> crates/rsvs-core/src/types.rs:402:5
+    |
+402 |     Sequence,
+    |     ^^^^^^^^
+
+warning: missing documentation for a variant
+   --> crates/rsvs-core/src/types.rs:404:5
+    |
+404 |     Unmarked,
+    |     ^^^^^^^^
+
+warning: missing documentation for a variant
+   --> crates/rsvs-core/src/types.rs:427:5
+    |
+427 |     Universal,
+    |     ^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> crates/rsvs-core/src/types.rs:428:5
+    |
+428 |     Existential,
+    |     ^^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> crates/rsvs-core/src/types.rs:429:5
+    |
+429 |     Definite,
+    |     ^^^^^^^^
+
+warning: missing documentation for a variant
+   --> crates/rsvs-core/src/types.rs:430:5
+    |
+430 |     Indefinite,
+    |     ^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> crates/rsvs-core/src/types.rs:431:5
+    |
+431 |     Generic,
+    |     ^^^^^^^
+
+warning: missing documentation for a struct field
+   --> crates/rsvs-core/src/types.rs:449:5
+    |
+449 |     pub source_b: NodeId,
+    |     ^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> crates/rsvs-core/src/types.rs:452:5
+    |
+452 |     pub sense_b: SenseId,
+    |     ^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> crates/rsvs-core/src/paradigm.rs:145:5
+    |
+145 |     pub config: ParadigmRouterConfig,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> crates/rsvs-core/src/spreading.rs:100:5
+    |
+100 |     pub config: SpreadingActivationConfig,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/gap_detection.rs:49:9
+   |
+49 |         seed: NodeId,
+   |         ^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/gap_detection.rs:50:9
+   |
+50 |         activated_area: Vec<NodeId>,
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/gap_detection.rs:51:9
+   |
+51 |         activation_energy: f32,
+   |         ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/gap_detection.rs:55:9
+   |
+55 |         scale: Vec<NodeId>,
+   |         ^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/gap_detection.rs:56:9
+   |
+56 |         used_index: usize,
+   |         ^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/gap_detection.rs:57:9
+   |
+57 |         stronger_unused: Vec<NodeId>,
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/gap_detection.rs:61:9
+   |
+61 |         similar_node: NodeId,
+   |         ^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/gap_detection.rs:62:9
+   |
+62 |         similarity: f32,
+   |         ^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/gap_detection.rs:63:9
+   |
+63 |         missing_composition_target: NodeId,
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/gap_detection.rs:67:9
+   |
+67 |         required_node_label: String,
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/gap_detection.rs:68:9
+   |
+68 |         found: bool,
+   |         ^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/gap_detection.rs:69:9
+   |
+69 |         accommodation_candidate: Option<NodeId>,
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/gap_detection.rs:73:9
+   |
+73 |         predicted_pattern: Vec<CompositionRef>,
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/gap_detection.rs:74:9
+   |
+74 |         actual_pattern: Vec<CompositionRef>,
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/gap_detection.rs:75:9
+   |
+75 |         divergence_score: f32,
+   |         ^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/seed_activation.rs:48:5
+   |
+48 |     pub social_seed_labels: Vec<String>,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/seed_activation.rs:49:5
+   |
+49 |     pub pragmatic_seed_labels: Vec<String>,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/seed_activation.rs:75:5
+   |
+75 |     pub risk_seed_id: Option<NodeId>,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/seed_activation.rs:76:5
+   |
+76 |     pub trust_seed_id: Option<NodeId>,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/seed_activation.rs:77:5
+   |
+77 |     pub identity_seed_id: Option<NodeId>,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/seed_activation.rs:78:5
+   |
+78 |     pub agent_seed_id: Option<NodeId>,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/seed_activation.rs:79:5
+   |
+79 |     pub goal_seed_id: Option<NodeId>,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/seed_activation.rs:80:5
+   |
+80 |     pub feedback_seed_id: Option<NodeId>,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/seed_activation.rs:81:5
+   |
+81 |     pub action_seed_id: Option<NodeId>,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused `Result` that must be used
+   --> crates/rsvs-core/src/discourse_tracking.rs:153:13
+    |
+153 | /             graph.insert_edge(Edge {
+154 | |                 from: node_id,
+155 | |                 to: token_id,
+156 | |                 weight: 1.0,
+...   |
+159 | |                 relation_type: RelationType::Discursive,
+160 | |             });
+    | |______________^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+    = note: `#[warn(unused_must_use)]` (part of `#[warn(unused)]`) on by default
+help: use `let _ = ...` to ignore the resulting value
+    |
+153 |             let _ = graph.insert_edge(Edge {
+    |             +++++++
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/deps.rs:87:25
+   |
+87 |     RemoveComposition { node_id: NodeId, comp_index: usize },
+   |                         ^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/deps.rs:87:42
+   |
+87 |     RemoveComposition { node_id: NodeId, comp_index: usize },
+   |                                          ^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/deps.rs:89:27
+   |
+89 |     TryAlternativeSense { node_id: NodeId, comp: CompositionRef, alt_sense: u32 },
+   |                           ^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/deps.rs:89:44
+   |
+89 |     TryAlternativeSense { node_id: NodeId, comp: CompositionRef, alt_sense: u32 },
+   |                                            ^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/deps.rs:89:66
+   |
+89 |     TryAlternativeSense { node_id: NodeId, comp: CompositionRef, alt_sense: u32 },
+   |                                                                  ^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/deps.rs:91:19
+   |
+91 |     ReduceDepth { new_depth: usize },
+   |                   ^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/deps.rs:95:26
+   |
+95 |     ReviseCompositions { node_id: NodeId },
+   |                          ^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/deps.rs:97:25
+   |
+97 |     MergeWithExisting { node_id: NodeId, target_sense_idx: usize },
+   |                         ^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> crates/rsvs-core/src/deps.rs:97:42
+   |
+97 |     MergeWithExisting { node_id: NodeId, target_sense_idx: usize },
+   |                                          ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `rsvs` (lib) generated 207 warnings (run `cargo fix --lib -p rsvs` to apply 46 suggestions)
+warning: unused imports: `AcquisitionDecision`, `AnchoredDelta`, `CompositionId`, `ContradictionResolution`, `GoalInferenceRule`, `GovernanceUpdate`, `GovernedDelta`, `GraphContextRef`, `GraphDelta`, `KnowledgeGapPlaceholder`, `PatternCategory`, `PolarityConflictRule`, `ProblemSolutionRule`, `PromotionVerdict`, `ProvenanceChain`, `ReExtractionRequest`, `ReasoningContext`, `ReasoningResult`, `ReasoningRule`, and `WeakFrame`
+  --> tests/integration/v12_validation.rs:21:5
+   |
+21 |     AcquisitionDecision, AcquisitionStrategy, DetectGaps, InquiryMemory,
+   |     ^^^^^^^^^^^^^^^^^^^
+...
+29 |     GovernBeliefs, SeedAnchor, GovernanceUpdate, PromotionVerdict,
+   |                                ^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^
+30 |     ContradictionResolution, ResolutionType,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^
+...
+36 |     PatternCategory, AcquisitionSource, SemanticRole,
+   |     ^^^^^^^^^^^^^^^
+37 |     Composition, CompositionId, CompositionType, CompositionMember,
+   |                  ^^^^^^^^^^^^^
+38 |     LifecycleState, EpistemicState, SemanticEdge, Transform, PipelineContext,
+39 |     SeedPrimitive, ProvenanceChain, Contradiction, EpistemicConflictType,
+   |                    ^^^^^^^^^^^^^^^
+40 |     GraphDelta, GovernedDelta, AnchoredDelta,
+   |     ^^^^^^^^^^  ^^^^^^^^^^^^^  ^^^^^^^^^^^^^
+41 |     EnrichmentRequest, EnrichmentSource, ReExtractionRequest,
+   |                                          ^^^^^^^^^^^^^^^^^^^
+42 |     ExtractionQualityTracker, ExtractionQualityStats,
+43 |     GraphNeighborhood, GraphSnapshot, WeakFrame,
+   |                                       ^^^^^^^^^
+44 |     KnowledgeGapPlaceholder,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^
+...
+48 |     ReasonFrame, ReasoningRule, ReasoningContext, ReasoningResult,
+   |                  ^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^
+49 |     GraphContextRef, ProblemSolutionRule, GoalInferenceRule, PolarityConflictRule,
+   |     ^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `ErasedTransform`
+  --> tests/integration/v12_validation.rs:32:32
+   |
+32 |     register_default_pipeline, ErasedTransform, Graph, IngestResult,
+   |                                ^^^^^^^^^^^^^^^
+
+warning: unused import: `Transform`
+  --> tests/integration/v12_validation.rs:38:51
+   |
+38 |     LifecycleState, EpistemicState, SemanticEdge, Transform, PipelineContext,
+   |                                                   ^^^^^^^^^
+
+warning: unused variable: `original_confidence`
+   --> tests/integration/v12_validation.rs:665:13
+    |
+665 |         let original_confidence = comp.confidence;
+    |             ^^^^^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_original_confidence`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: variable does not need to be mutable
+    --> tests/integration/v12_validation.rs:1197:13
+     |
+1197 |         let mut sa = SelectAcquisition::new();
+     |             ----^^
+     |             |
+     |             help: remove this `mut`
+     |
+     = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: variable does not need to be mutable
+    --> tests/integration/v12_validation.rs:1229:13
+     |
+1229 |         let mut sa = SelectAcquisition::new();
+     |             ----^^
+     |             |
+     |             help: remove this `mut`
+
+warning: function `make_hidden_meaning_composition` is never used
+   --> tests/integration/v12_validation.rs:118:4
+    |
+118 | fn make_hidden_meaning_composition(
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `rsvs-integration-tests` (test "v12_validation") generated 7 warnings (run `cargo fix --test "v12_validation" -p rsvs-integration-tests` to apply 4 suggestions)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.19s
+     Running v12_validation.rs (target/debug/deps/v12_validation-27746989f6035ecd)
+
+running 142 tests
+test b1_extract_frame::test_extract_frame_confidence_computation ... ok
+test b1_extract_frame::test_extract_frame_negated ... ok
+test b1_extract_frame::test_extract_frame_active_voice ... ok
+test b1_extract_frame::test_extract_frame_graph_assisted ... ok
+test b1_extract_frame::test_extract_frame_token_input ... ok
+test b1_extract_frame::test_extract_frame_passive_voice ... ok
+test b2_reason_frame::test_reason_frame_goal_inference_rule ... ok
+test b2_reason_frame::test_reason_frame_no_match ... ok
+test b3_governance_e2e::test_governance_contradiction_detection_and_resolution ... ok
+test b2_reason_frame::test_reason_frame_polarity_conflict_rule ... ok
+test b3_governance_e2e::test_governance_epistemic_transitions ... ok
+test b3_governance_e2e::test_governance_initial_states_all_types ... ok
+test b3_governance_e2e::test_governance_promotion_full_lifecycle ... ok
+
+thread 'b3_governance_e2e::test_governance_re_govern_after_enrichment' (6014) panicked at tests/integration/v12_validation.rs:2234:9:
+After enrichment, should promote to Stable
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test b2_reason_frame::test_reason_frame_problem_solution_rule ... ok
+test b4_closed_feedback_loop::test_feedback_loop_gap_to_ask_user ... ok
+test b4_closed_feedback_loop::test_feedback_loop_gap_to_enrichment ... ok
+test b4_closed_feedback_loop::test_feedback_loop_inquiry_memory_prevents_repetition ... ok
+test b4_closed_feedback_loop::test_feedback_loop_process_user_answer_creates_atom ... ok
+test b5_executive_mode_e2e::test_executive_budget_binds_to_mode ... ok
+test b3_governance_e2e::test_governance_re_govern_after_enrichment ... FAILED
+test b5_executive_mode_e2e::test_executive_mode_selection_with_neighborhood ... ok
+test b5_executive_mode_e2e::test_executive_reflective_reflection_findings ... ok
+test b4_closed_feedback_loop::test_feedback_loop_gap_to_reextraction ... ok
+test b6_full_pipeline_e2e::test_full_pipeline_with_contradiction ... ok
+test b5_executive_mode_e2e::test_executive_analytical_enrichment_loop ... ok
+test b6_full_pipeline_e2e::test_full_pipeline_sentence_input ... ok
+test m1_critical_functions::test_age_in_batches ... ok
+test b6_full_pipeline_e2e::test_full_pipeline_passive_voice ... ok
+test m1_critical_functions::test_contradiction_opposing_id_returns_none_when_no_contradiction ... ok
+test m1_critical_functions::test_composition_member_label_returns_cached_label ... ok
+test m1_critical_functions::test_extract_keywords_empty_input ... ok
+test m1_critical_functions::test_contradiction_opposing_id_returns_some_when_contradicted ... ok
+test m1_critical_functions::test_has_member_with_role_and_label_matches ... ok
+test m1_critical_functions::test_extract_keywords_single_word ... ok
+test m1_critical_functions::test_has_member_with_role_and_label_no_match ... ok
+test m1_critical_functions::test_has_member_with_role_false_when_absent ... ok
+test m1_critical_functions::test_has_member_with_role_true_when_present ... ok
+test m1_critical_functions::test_has_recent_contradiction_no_contradictions ... ok
+test m1_critical_functions::test_has_recent_contradiction_outside_window ... ok
+test m1_critical_functions::test_has_recent_contradiction_within_window ... ok
+test m1_critical_functions::test_member_with_role_returns_correct_member ... ok
+test m1_critical_functions::test_member_with_role_returns_none_for_missing_role ... ok
+test m1_critical_functions::test_neighborhood_for_finds_relevant_compositions ... ok
+test m1_critical_functions::test_neighborhood_for_average_confidence ... ok
+test m1_critical_functions::test_neighborhood_for_has_contradictions ... ok
+test m1_critical_functions::test_neighborhood_for_no_match ... ok
+test m1_critical_functions::test_provenance_source_count_dedup_same_source ... ok
+test m1_critical_functions::test_provenance_source_count_single_source ... ok
+test m1_critical_functions::test_provenance_source_count_three_distinct_sources ... ok
+test m1_critical_functions::test_provenance_source_count_two_independent_sources ... ok
+test m2_epistemic_governance::test_contradiction_detection_polarity_conflict ... ok
+test b6_full_pipeline_e2e::test_full_pipeline_with_gap_detection ... ok
+test m2_epistemic_governance::test_contradiction_resolution_voice_confusion ... ok
+test m2_epistemic_governance::test_contradiction_detection_role_reversal ... ok
+test m2_epistemic_governance::test_initial_states_event_frame_compiler ... ok
+test m2_epistemic_governance::test_initial_states_acquisition_recall ... ok
+test m2_epistemic_governance::test_initial_states_human_assertion ... ok
+test m2_epistemic_governance::test_initial_states_hidden_meaning_rule ... ok
+test m2_epistemic_governance::test_initial_states_hypothesis_abductive ... ok
+test m2_epistemic_governance::test_promotion_candidate_to_stable_denied_contradicted ... ok
+test m2_epistemic_governance::test_promotion_candidate_to_stable_denied_low_confidence ... ok
+test m2_epistemic_governance::test_promotion_candidate_to_stable_meets_criteria ... ok
+test m2_epistemic_governance::test_promotion_candidate_to_stable_denied_young_age ... ok
+test m1_critical_functions::test_extract_keywords_simple_sentence ... ok
+test m2_epistemic_governance::test_promotion_inferred_to_grounded_multi_source ... ok
+test m2_epistemic_governance::test_promotion_new_to_candidate_denied_zero_batches ... ok
+test m2_epistemic_governance::test_promotion_new_to_candidate_after_one_batch ... ok
+test m2_epistemic_governance::test_seed_anchor_no_data_preserves_confidence ... ok
+test m2_epistemic_governance::test_sufficiently_complete_event_with_all_roles ... ok
+test m2_epistemic_governance::test_sufficiently_complete_event_missing_agent ... ok
+test m2_epistemic_governance::test_seed_anchor_with_data_adjusts_confidence ... ok
+test m2_epistemic_governance::test_promotion_inferred_to_grounded_denied_low_confidence ... ok
+test m3_executive_cognition::test_cognitive_mode_reactive_when_healthy ... ok
+test m3_executive_cognition::test_compute_budget_analytical_mode ... ok
+test m3_executive_cognition::test_cognitive_mode_reflective_with_deep_contradictions ... ok
+test m3_executive_cognition::test_cognitive_mode_analytical_when_low_confidence ... ok
+test m3_executive_cognition::test_compute_budget_reactive_mode ... ok
+test m3_executive_cognition::test_compute_budget_reflective_mode ... ok
+test m3_executive_cognition::test_reflect_detects_stagnant_inferred ... ok
+test m3_executive_cognition::test_reflect_produces_promotion_candidate_finding ... ok
+test m3_executive_cognition::test_stop_condition_budget_exhausted ... ok
+test m3_executive_cognition::test_stop_condition_goal_met ... ok
+test m3_executive_cognition::test_stop_condition_no_evidence_stagnation ... ok
+test m3_executive_cognition::test_reflect_produces_contradiction_resolvable_finding ... ok
+test m4_closed_feedback_loop::test_detect_gaps_finds_ambiguous_tokens ... ok
+test m4_closed_feedback_loop::test_detect_gaps_finds_missing_roles ... ok
+
+thread 'm3_executive_cognition::test_executive_ingest_reactive_mode' (6078) panicked at tests/integration/v12_validation.rs:874:9:
+assertion `left == right` failed
+  left: Analytical
+ right: Reactive
+test m4_closed_feedback_loop::test_detect_gaps_finds_grounding_gaps ... ok
+test m4_closed_feedback_loop::test_graph_cooccurrence_count ... ok
+test m3_executive_cognition::test_executive_ingest_reactive_mode ... FAILED
+test m4_closed_feedback_loop::test_graph_ensure_node_idempotent ... ok
+test m4_closed_feedback_loop::test_full_pipeline_ingest_creates_compositions ... ok
+test m4_closed_feedback_loop::test_inquiry_memory_records_answers ... ok
+test m4_closed_feedback_loop::test_graph_ensure_node_creates_new ... ok
+test m4_closed_feedback_loop::test_inquiry_memory_prevents_repetition ... ok
+test m4_closed_feedback_loop::test_select_acquisition_defer_sparse_graph ... ok
+test m4_closed_feedback_loop::test_pipeline_with_gap_detection_enabled ... ok
+test m4_closed_feedback_loop::test_select_acquisition_passive_recall ... ok
+test m4_closed_feedback_loop::test_select_acquisition_ask_user_ambiguous_token ... ok
+test m5_acquisition_pipeline::test_acquisition_strategy_all_variants ... ok
+
+thread 'm5_acquisition_pipeline::test_defer_count_increments_for_sparse_graph' (6100) panicked at tests/integration/v12_validation.rs:1224:9:
+assertion `left == right` failed
+  left: 1
+ right: 2
+test m5_acquisition_pipeline::test_detect_all_gaps_integrated ... ok
+test m5_acquisition_pipeline::test_generate_question_for_gap ... ok
+test m5_acquisition_pipeline::test_defer_count_increments_for_sparse_graph ... FAILED
+test m5_acquisition_pipeline::test_graph_find_role_candidate ... ok
+test m5_acquisition_pipeline::test_inquiry_question_construction ... ok
+test m4_closed_feedback_loop::test_pipeline_context_tracks_atoms ... ok
+test m5_acquisition_pipeline::test_select_acquisition_ask_user_for_missing_role ... ok
+test m5_acquisition_pipeline::test_knowledge_gap_type_all_variants ... ok
+test m6_semantic_edge_graph::test_find_weak_frames ... ok
+test m6_semantic_edge_graph::test_graph_find_node_by_label ... ok
+test m6_semantic_edge_graph::test_graph_get_composition ... ok
+test m6_semantic_edge_graph::test_graph_get_edge ... ok
+test m6_semantic_edge_graph::test_graph_recent_compositions ... ok
+test m6_semantic_edge_graph::test_graph_new_is_empty ... ok
+test m6_semantic_edge_graph::test_ingest_result_merge ... ok
+test m6_semantic_edge_graph::test_graph_node_label_lookup ... ok
+test m6_semantic_edge_graph::test_neighborhood_empty_compositions ... ok
+test m6_semantic_edge_graph::test_neighborhood_average_confidence_no_compositions ... ok
+test m6_semantic_edge_graph::test_pipeline_context_has_event_atoms ... ok
+test m6_semantic_edge_graph::test_pipeline_context_record_event_ignores_non_events ... ok
+test m6_semantic_edge_graph::test_pipeline_context_is_sentence_like ... ok
+test m6_semantic_edge_graph::test_pipeline_context_record_event_sliding_window ... ok
+test m6_semantic_edge_graph::test_semantic_edge_default ... ok
+test m7_quality_tracker_dedup::test_atom_type_all_variants ... ok
+test m6_semantic_edge_graph::test_semantic_edge_with_role ... ok
+test m7_quality_tracker_dedup::test_edge_source_v12_variants ... ok
+test m7_quality_tracker_dedup::test_extraction_quality_gap_rate ... ok
+test m7_quality_tracker_dedup::test_extraction_quality_is_weak ... ok
+test m7_quality_tracker_dedup::test_extraction_quality_repair_rate ... ok
+test m7_quality_tracker_dedup::test_extraction_quality_zero_extractions ... ok
+test m7_quality_tracker_dedup::test_epistemic_state_all_variants ... ok
+test m7_quality_tracker_dedup::test_lifecycle_state_all_variants ... ok
+test m7_quality_tracker_dedup::test_seed_primitive_all_variants ... ok
+test m7_quality_tracker_dedup::test_extraction_quality_tracker_serde_roundtrip ... ok
+test m7_quality_tracker_dedup::test_pipeline_context_serde_roundtrip ... ok
+test m7_quality_tracker_dedup::test_composition_serde_roundtrip ... ok
+test m7_quality_tracker_dedup::test_semantic_edge_serde_roundtrip ... ok
+test m7_quality_tracker_dedup::test_tracker_low_confidence_frames ... ok
+test m7_quality_tracker_dedup::test_tracker_multiple_rules_independent ... ok
+test m7_quality_tracker_dedup::test_tracker_record_gap_and_repair ... ok
+test m7_quality_tracker_dedup::test_tracker_record_extraction ... ok
+test m7_quality_tracker_dedup::test_tracker_weak_rules ... ok
+test m7_quality_tracker_dedup::test_semantic_atom_serde_roundtrip ... ok
+
+failures:
+
+failures:
+    b3_governance_e2e::test_governance_re_govern_after_enrichment
+    m3_executive_cognition::test_executive_ingest_reactive_mode
+    m5_acquisition_pipeline::test_defer_count_increments_for_sparse_graph
+
+test result: FAILED. 139 passed; 3 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+error: test failed, to rerun pass `-p rsvs-integration-tests --test v12_validation`
