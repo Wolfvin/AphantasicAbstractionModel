@@ -769,6 +769,11 @@ pub struct Graph {
 
     /// Next available node ID (auto-incrementing).
     pub next_id: NodeId,
+
+    /// Arbitrary metadata key-value store for pipeline state that must
+    /// persist across `execute()` calls (e.g., `govern_batch` counter).
+    #[serde(default)]
+    pub metadata: HashMap<String, String>,
 }
 
 impl Default for Graph {
@@ -786,6 +791,7 @@ impl Graph {
             edges: Vec::new(),
             label_to_id: HashMap::new(),
             next_id: 1, // 0 is reserved/unassigned
+            metadata: HashMap::new(),
         }
     }
 

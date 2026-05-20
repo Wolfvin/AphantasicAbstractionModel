@@ -1840,9 +1840,13 @@ impl Sense {
         self.layer == 0
     }
 
-    /// Is this sense a bridge between layers? (appears in compositions at 2+ different layers)
+    /// Is this sense a bridge between layers? (layer 1 = bridge by definition)
+    ///
+    /// A bridge sense sits at layer 1, connecting primitive (layer 0) seeds
+    /// to derived (layer 2+) concepts. This is distinct from `Graph::is_bridge()`
+    /// which checks whether a *node* has senses at 2+ different layers.
     pub fn is_bridge(&self) -> bool {
-        self.layer >= 1 && self.is_utterance
+        self.layer == 1
     }
 
     /// Is this sense derived from compositions? (layer ≥ 1)

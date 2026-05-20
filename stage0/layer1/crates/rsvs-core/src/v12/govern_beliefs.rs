@@ -1215,6 +1215,10 @@ impl GovernBeliefs {
     /// 4. Increment batch counters
     /// 5. Close grounding loop (Phase M: check_sense_promotions + update_grounding)
     /// 6. Prune fragile senses every 5 batches (Phase O)
+    ///
+    /// Note: Steps that require `&mut Graph` (update_sense_evidence, check_sense_promotions,
+    /// can_deprecate_node, prune_fragile_senses) are called from `ErasedTransform::execute()`
+    /// after `govern()` returns, because `govern()` only has owned `Composition`s, not `&mut Graph`.
     pub fn govern(&mut self, delta: GraphDelta) -> GovernedDelta {
         self.current_batch += 1;
 
@@ -1362,6 +1366,14 @@ impl GovernBeliefs {
     /// When a composition is Stable/Grounded and has high confidence,
     /// the senses of its member nodes should also be upgraded.
     ///
+    /// **Fix 4**: This path now requires `composition_evidence.confirming ≥ 1`
+    /// to avoid false-positive upgrades from coherence alone. A sense must
+    /// have at least one confirming observation before being promoted, even
+    /// if it is coherent. This prevents the double-upgrade issue where
+    /// `check_sense_promotions()` already upgraded the sense based on
+    /// confirming count ≥ 3, and then this method upgrades it again based
+    /// only on coherence.
+    ///
     /// **WIRED**: Called from `GovernBeliefs.execute()` after each batch.
     pub fn update_sense_grounding_from_evidence(&self, graph: &mut Graph) -> usize {
         let mut upgrades = 0;
@@ -1389,8 +1401,11 @@ impl GovernBeliefs {
             for node_id in member_node_ids {
                 if let Some(node) = graph.nodes.get_mut(&node_id) {
                     for sense in &mut node.senses {
+                        // Fix 4: Require at least 1 confirming evidence + coherence ≥ 0.3
+                        // This avoids false-positive upgrades without any evidence backing.
                         if sense.grounding == SenseGrounding::Fragile
                             && sense.coherence >= 0.3
+                            && sense.composition_evidence.confirming >= 1
                         {
                             sense.grounding = SenseGrounding::Tentative;
                             upgrades += 1;
@@ -1523,6 +1538,16 @@ impl ErasedTransform for GovernBeliefs {
     fn execute(&self, _ctx: &mut PipelineContext, graph: &mut Graph) -> IngestResult {
         let mut gb = self.clone();
 
+        // ── Fix 6: Persist batch counter in graph metadata ──
+        // Read current_batch from graph so it doesn't reset on every execute() call.
+        // Fallback to 0 if not yet stored (first call).
+        let stored_batch = graph
+            .metadata
+            .get("govern_batch")
+            .and_then(|v| v.parse::<usize>().ok())
+            .unwrap_or(0);
+        gb.current_batch = stored_batch;
+
         // Build a GraphDelta from the current graph state.
         let delta = GraphDelta {
             new_nodes: Vec::new(),
@@ -1532,10 +1557,43 @@ impl ErasedTransform for GovernBeliefs {
 
         let governed = gb.govern(delta);
 
+        // ── Fix 1 (Critical): Wire update_sense_evidence into production ──
+        // After govern() applies promotions and contradictions to compositions,
+        // we need to propagate that evidence into sense composition_evidence
+        // so that check_sense_promotions() has data to work with.
+
+        // Collect promoted and contradicted composition IDs before applying to graph.
+        let promoted_comp_ids: Vec<CompositionId> = governed
+            .updates
+            .iter()
+            .filter(|u| {
+                u.new_lifecycle == Some(LifecycleState::Stable)
+                    || u.new_lifecycle == Some(LifecycleState::Candidate)
+            })
+            .map(|u| u.composition_id.clone())
+            .collect();
+
+        let contradicted_comp_ids: Vec<CompositionId> = governed
+            .updates
+            .iter()
+            .filter(|u| u.new_epistemic == Some(EpistemicState::Contradicted))
+            .map(|u| u.composition_id.clone())
+            .collect();
+
         // Apply governed compositions back to the graph.
         let transitions = governed.updates.len();
         for comp in &governed.compositions {
             graph.compositions.insert(comp.id.clone(), comp.clone());
+        }
+
+        // Now update sense evidence for promoted compositions (confirming).
+        for comp_id in &promoted_comp_ids {
+            gb.update_sense_evidence(comp_id, true, graph);
+        }
+
+        // Update sense evidence for contradicted compositions (contradicting).
+        for comp_id in &contradicted_comp_ids {
+            gb.update_sense_evidence(comp_id, false, graph);
         }
 
         // ── Phase M: Close grounding loop ──
@@ -1543,10 +1601,41 @@ impl ErasedTransform for GovernBeliefs {
         gb.check_sense_promotions(graph);
         gb.update_sense_grounding_from_evidence(graph);
 
+        // ── Fix 3 (Critical): Wire can_deprecate_node into deprecation guard ──
+        // Check all compositions that were marked as Deprecated and guard
+        // their member nodes from deprecation if they are bridge/Mature/high-connectivity.
+        // Two-pass: first collect which compositions to revert, then apply.
+        let deprecated_comp_ids_to_revert: Vec<CompositionId> = {
+            let mut to_revert = Vec::new();
+            for comp in graph.compositions.values() {
+                if comp.lifecycle == LifecycleState::Deprecated {
+                    let all_deprecable = comp
+                        .members
+                        .iter()
+                        .all(|m| gb.can_deprecate_node(m.node_id, graph));
+                    if !all_deprecable {
+                        to_revert.push(comp.id.clone());
+                    }
+                }
+            }
+            to_revert
+        };
+        for comp_id in &deprecated_comp_ids_to_revert {
+            if let Some(comp) = graph.compositions.get_mut(comp_id) {
+                comp.lifecycle = LifecycleState::Stable;
+            }
+        }
+
         // ── Phase O: Prune fragile senses every 5 batches ──
-        if gb.current_batch % 5 == 0 {
+        // Fix 6: Now uses persisted batch counter, so this correctly fires every 5 batches.
+        if gb.current_batch > 0 && gb.current_batch % 5 == 0 {
             gb.prune_fragile_senses(graph);
         }
+
+        // ── Fix 6: Persist the batch counter back to graph metadata ──
+        graph
+            .metadata
+            .insert("govern_batch".to_string(), gb.current_batch.to_string());
 
         IngestResult {
             atoms_created: 0,
