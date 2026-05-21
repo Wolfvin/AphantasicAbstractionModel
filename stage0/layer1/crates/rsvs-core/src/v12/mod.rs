@@ -144,6 +144,7 @@ pub use pipeline::{
     PipelineError,
     ReExtractFrame,
     // --- Placeholder transforms (STUB:PLACEHOLDER) ---
+    SyncPipelineEngine,
     Tokenize,
 };
 

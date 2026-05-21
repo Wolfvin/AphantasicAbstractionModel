@@ -30,14 +30,19 @@
 //!
 //! ## Templates (Bahasa Indonesia)
 //!
-//! | CompositionType | Template |
-//! |-----------------|----------|
-//! | Event | `[Agent] [Predicate] [Patient], karena [Cause], untuk [Purpose]` |
-//! | HiddenMeaning | `[Solution] digunakan sebagai solusi untuk [Problem]` |
-//! | Pattern | `Ketika [Antecedent], maka [Consequent]` |
-//! | Hypothesis | `Kemungkinan [Patient] [Predicate]` |
-//! | Situation | `Dalam konteks [Arg0Agent], [Predicate] [Arg1Patient]` |
-//! | Acquisition | `Diketahui bahwa [Arg0Agent] [Predicate] [Arg1Patient]` |
+//! **i18n NOTICE**: All verbalization templates are hardcoded in Bahasa Indonesia.
+//! This is a deliberate design choice for the current target audience, NOT an
+//! architectural limitation. A future i18n phase should extract these into a
+//! `VerbalizeDictionary` trait. See `I18N_ROADMAP.md` for the migration plan.
+//!
+//! | CompositionType | Template | English Equivalent |
+//! |-----------------|----------|-------------------|
+//! | Event | `[Agent] [Predicate] [Patient], karena [Cause], untuk [Purpose]` | `because`, `in order to` |
+//! | HiddenMeaning | `[Solution] digunakan sebagai solusi untuk [Problem]` | `is used as a solution for` |
+//! | Pattern | `Ketika [Antecedent], maka [Consequent]` | `When [X], then [Y]` |
+//! | Hypothesis | `Kemungkinan [Patient] [Predicate]` | `Possibly [Patient] [Predicate]` |
+//! | Situation | `Dalam konteks [Arg0Agent], [Predicate] [Arg1Patient]` | `In the context of [Agent]` |
+//! | Acquisition | `Diketahui bahwa [Arg0Agent] [Predicate] [Arg1Patient]` | `It is known that` |
 
 use serde::{Deserialize, Serialize};
 
@@ -88,8 +93,11 @@ impl VerbalizationResult {
     /// Create an "insufficient information" result.
     ///
     /// Returned when the graph has no relevant compositions for the query.
+    ///
+    /// **i18n**: Hardcoded Bahasa Indonesia. See I18N_ROADMAP.md for migration plan.
     pub fn insufficient() -> Self {
         Self {
+            // i18n: Hardcoded Indonesian — "There is not enough information to explain this."
             text: "Tidak ada informasi yang cukup untuk menjelaskan ini.".to_string(),
             path: Vec::new(),
             avg_confidence: 0.0,

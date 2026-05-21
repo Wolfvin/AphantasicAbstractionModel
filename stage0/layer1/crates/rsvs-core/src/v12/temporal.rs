@@ -212,10 +212,12 @@ impl TemporalDecay {
         self.advance_batch();
         let mut results = Vec::new();
 
-        // Increment batch_seen for all compositions.
-        for composition in graph.compositions.values_mut() {
-            composition.batch_seen += 1;
-        }
+        // NOTE: batch_seen is NOT incremented here. The canonical batch tick
+        // happens in GovernBeliefs::execute(), which runs before TemporalDecay
+        // in the pipeline. Previously this was a double-increment bug:
+        // GovernBeliefs incremented for ALL compositions, then TemporalDecay
+        // incremented again. Now batch_seen is incremented exactly once per
+        // ingest cycle by GovernBeliefs::execute().
 
         // Apply decay.
         for composition in graph.compositions.values_mut() {

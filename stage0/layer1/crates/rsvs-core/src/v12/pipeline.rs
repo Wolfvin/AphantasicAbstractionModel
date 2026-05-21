@@ -573,6 +573,87 @@ impl Default for PipelineEngine {
 }
 
 // ========================================================================
+// SyncPipelineEngine — Thread-Safe Wrapper
+// ========================================================================
+
+/// Thread-safe wrapper around [`PipelineEngine`].
+///
+/// `PipelineEngine` is `Send` but not `Sync` (it has mutable state with no
+/// internal synchronization). This wrapper adds a `Mutex`, making the engine
+/// safe to share across threads via `Arc<SyncPipelineEngine>`.
+///
+/// # Thread Safety
+///
+/// - `SyncPipelineEngine` is both `Send` and `Sync`.
+/// - All operations acquire the internal `Mutex` before accessing the engine.
+/// - For high-throughput scenarios, prefer message-passing (e.g., a dedicated
+///   ingest thread with a channel) over shared `SyncPipelineEngine`.
+///
+/// # Usage
+///
+/// ```ignore
+/// use std::sync::Arc;
+/// let engine = Arc::new(SyncPipelineEngine::new());
+///
+/// // Share across threads
+/// let engine_clone = engine.clone();
+/// std::thread::spawn(move || {
+///     let mut guard = engine_clone.lock();
+///     guard.ingest("some text").unwrap();
+/// });
+/// ```
+pub struct SyncPipelineEngine {
+    inner: std::sync::Mutex<PipelineEngine>,
+}
+
+impl SyncPipelineEngine {
+    /// Create a new thread-safe pipeline engine with default transforms.
+    pub fn new() -> Self {
+        Self {
+            inner: std::sync::Mutex::new(PipelineEngine::new()),
+        }
+    }
+
+    /// Create from an existing `PipelineEngine`.
+    pub fn from_engine(engine: PipelineEngine) -> Self {
+        Self {
+            inner: std::sync::Mutex::new(engine),
+        }
+    }
+
+    /// Acquire a lock on the inner engine.
+    ///
+    /// Returns a `MutexGuard` that derefs to `PipelineEngine`.
+    /// The lock is held until the guard is dropped.
+    pub fn lock(&self) -> std::sync::MutexGuard<'_, PipelineEngine> {
+        self.inner.lock().expect("SyncPipelineEngine mutex poisoned")
+    }
+
+    /// Convenience: ingest text through the pipeline.
+    ///
+    /// Acquires the lock, runs `ingest()`, and releases the lock.
+    pub fn ingest_sync(&self, text: &str) -> Result<IngestResult, PipelineError> {
+        self.lock().ingest(text)
+    }
+
+    /// Convenience: get a snapshot of the current graph state.
+    pub fn snapshot_sync(&self) -> GraphSnapshot {
+        self.lock().snapshot()
+    }
+}
+
+impl Default for SyncPipelineEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+// SyncPipelineEngine is Send + Sync because Mutex<PipelineEngine> is Send + Sync
+// (PipelineEngine itself is Send).
+unsafe impl Send for SyncPipelineEngine {}
+unsafe impl Sync for SyncPipelineEngine {}
+
+// ========================================================================
 // Topological Sort — Kahn's Algorithm
 // ========================================================================
 

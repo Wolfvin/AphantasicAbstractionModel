@@ -52,6 +52,9 @@ use crate::types::{EdgeSource, NodeId};
 ///
 /// These are Malay/Indonesian negation words that flip the polarity
 /// of an event from Positive to Negative.
+///
+/// **i18n**: Currently Indonesian-only. A multilingual NLP layer would
+/// need locale-aware marker sets. See I18N_ROADMAP.md.
 const NEGATION_MARKERS: &[&str] = &[
     "tidak",  // not (general negation)
     "bukan",  // not (identity negation)

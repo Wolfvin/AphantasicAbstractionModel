@@ -380,7 +380,10 @@ impl GovernBeliefs {
 
     /// Check if a composition has a Cause role that contains a negation marker.
     /// This is the XOR negation detection for polarity conflict per MD-4.
+    ///
+    /// **i18n**: Hardcoded Indonesian + English negation markers. See I18N_ROADMAP.md.
     fn has_negation_cause(&self, comp: &Composition) -> bool {
+        // i18n: Indonesian + English negation markers — would need locale-aware sets.
         let negation_markers = [
             "tidak", "bukan", "tak", "jangan", "not", "no", "never", "don't", "doesn't", "didn't",
         ];
@@ -1010,8 +1013,11 @@ impl GovernBeliefs {
         };
         composition.confidence = (composition.confidence + completeness).min(1.0);
 
-        // Increment batch_seen.
-        composition.batch_seen += 1;
+        // NOTE: batch_seen is NOT incremented here. The canonical batch tick
+        // happens in GovernBeliefs::execute() (line ~1622). Previously this
+        // was a double-increment bug: execute() incremented for ALL compositions,
+        // then re_govern_composition() incremented again for re-governed ones.
+        // Now batch_seen is incremented exactly once per ingest cycle.
 
         // ── Phase N: Bridge guard for deprecation ──
         // Check if any member nodes are bridge nodes that should not be deprecated.
@@ -1608,17 +1614,12 @@ impl ErasedTransform for GovernBeliefs {
             .unwrap_or(0);
         gb.current_batch = stored_batch;
 
-        // ── Audit v4 fix: Always increment batch_seen for ALL compositions ──
-        // Previously, batch_seen was only incremented inside govern() for
-        // compositions in the delta. But when dirty_compositions is empty,
-        // no compositions go through govern(), so batch_seen never increments.
-        // This breaks promotion checks that rely on batch_seen >= 3.
-        //
-        // Fix: increment batch_seen for ALL compositions directly here,
-        // regardless of whether they go through govern(). The govern() method
-        // still increments batch_seen for compositions it processes, but now
-        // we also do it here as a safety net (idempotent since govern()
-        // creates fresh clones from the delta).
+        // ── Audit v4/v6 fix: Canonical batch_seen tick ──
+        // This is the ONLY place where batch_seen is incremented in the pipeline.
+        // Previously, batch_seen was also incremented in re_govern_composition()
+        // and TemporalDecay::apply_decay_all(), causing double/triple counting
+        // per ingest cycle. Now batch_seen increments exactly once per cycle,
+        // here, making it a reliable age metric for promotion/decay decisions.
         for comp in graph.compositions.values_mut() {
             comp.batch_seen += 1;
         }

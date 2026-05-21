@@ -314,13 +314,39 @@ impl Default for ReflectionFinding {
 /// Input:  ReflectionLoopResult — result of an enrichment pass
 /// Output: Vec<ReflectionFinding> — structured findings
 /// ```
-#[derive(Debug, Clone, Default)]
-pub struct Reflect;
+///
+/// # Performance
+///
+/// The overlap detection step is O(N²) in the number of compositions.
+/// To prevent runaway computation on large graphs, the `max_overlap_pairs`
+/// field caps the number of composition pairs checked per reflection pass.
+/// Default: 500 (matching `ConvergenceConfig::max_pairs_per_run`).
+#[derive(Debug, Clone)]
+pub struct Reflect {
+    /// Maximum number of composition pairs to check for overlap per reflection pass.
+    /// Prevents O(N²) blow-up on large graphs.
+    pub max_overlap_pairs: usize,
+}
+
+impl Default for Reflect {
+    fn default() -> Self {
+        Self {
+            max_overlap_pairs: 500,
+        }
+    }
+}
 
 impl Reflect {
-    /// Create a new Reflect transform.
+    /// Create a new Reflect transform with default throttle (500 pairs).
     pub fn new() -> Self {
-        Self
+        Self::default()
+    }
+
+    /// Create a Reflect transform with a custom overlap throttle.
+    pub fn with_max_overlap_pairs(max: usize) -> Self {
+        Self {
+            max_overlap_pairs: max,
+        }
     }
 
     /// Analyze a reflection loop result and produce findings.
@@ -382,9 +408,16 @@ impl Reflect {
         }
 
         // Check for overlapping compositions.
+        // O(N²) nested loop — throttled by max_overlap_pairs to prevent
+        // runaway computation on large graphs. This mirrors the throttle
+        // pattern used in ConvergenceDetection::detect().
         let comp_list: Vec<_> = graph.compositions.values().collect();
+        let mut checked: usize = 0;
         for i in 0..comp_list.len() {
+            if checked >= self.max_overlap_pairs { break; }
             for j in (i + 1)..comp_list.len() {
+                if checked >= self.max_overlap_pairs { break; }
+                checked += 1;
                 let a = comp_list[i];
                 let b = comp_list[j];
                 if a.composition_type == b.composition_type {
