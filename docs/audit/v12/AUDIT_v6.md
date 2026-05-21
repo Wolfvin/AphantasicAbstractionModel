@@ -480,7 +480,7 @@ SemanticAtom, Composition, SemanticEdge, LifecycleState, EpistemicState, SeedPri
 | 9 | Split `pipeline.rs` (3.103 baris) | Medium | Code organization | ✅ 9 focused modules |
 | 10 | Fix test flakiness (batch_seen pattern) | Small | CI reliability | ✅ fixed comp_cooc_ ID collision |
 | 11 | Standardisasi naming (`ExtractionQuality`, `Sync*`) | Small | Consistency | ✅ backward-compat alias |
-| 12 | Verify FFI usage of "dead" pub functions | Small | Dead code elimination | ⏭️ skipped (requires PyO3 audit) |
+| 12 | Verify FFI usage of "dead" pub functions | Small | Dead code elimination | ✅ audited + annotated + exposed |
 
 ---
 

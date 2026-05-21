@@ -305,6 +305,11 @@ impl SpreadingActivation {
     /// `build_reasoning_path()`. Wiring `attention_score()` into CVE would change
     /// existing scoring behavior and is thus a potential regression. Use this method
     /// for custom attention-based queries from external callers.
+    ///
+    /// **Audit v6 (P3-12)**: Not called by any internal code or PyO3 bindings.
+    /// The Python FFI uses `pipeline.similarity()` instead which blends Jaccard
+    /// with spreading activation internally. Retained for potential future FFI use.
+    /// If unused after 2 releases, remove.
     pub fn attention_score(
         &self,
         target: NodeId,

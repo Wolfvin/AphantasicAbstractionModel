@@ -625,6 +625,38 @@ impl PyV12Pipeline {
             .collect()
     }
 
+    /// Get all current atoms in the pipeline context.
+    ///
+    /// Returns the atoms from the most recent ingest operation.
+    /// Useful for inspecting what the tokenizer and frame extractor produced
+    /// before they were converted into compositions.
+    fn current_atoms(&self) -> Vec<PySemanticAtom> {
+        self.engine
+            .context
+            .current_atoms
+            .iter()
+            .map(PySemanticAtom::from)
+            .collect()
+    }
+
+    /// Get acquisition decisions for all pending gaps.
+    ///
+    /// For each detected gap, returns the recommended acquisition strategy
+    /// (PassiveRecall, ReExtraction, AskUser, or Defer) along with the
+    /// reasoning and expected confidence gain.
+    fn acquisition_decisions(&mut self) -> Vec<PyAcquisitionDecision> {
+        let snapshot = self.engine.snapshot();
+        let mut detector = v12::DetectGaps::new();
+        let gaps = detector.detect_all(&snapshot);
+        let mut sa = v12::SelectAcquisition::new();
+        gaps.iter()
+            .map(|gap| {
+                let decision = sa.select_strategy(&gap, self.engine.graph());
+                PyAcquisitionDecision::from(&decision)
+            })
+            .collect()
+    }
+
     /// Detect gaps in the current graph state.
     fn detect_gaps(&self) -> Vec<PyKnowledgeGap> {
         let snapshot = self.engine.snapshot();

@@ -357,6 +357,10 @@ impl PipelineEngine {
     /// method exists for external callers who want to apply an `AnchoredDelta`
     /// manually (e.g., from Python FFI). It is NOT called by the default
     /// pipeline flow.
+    ///
+    /// **Audit v6 (P3-12)**: Not called by any internal code or PyO3 bindings.
+    /// The Python FFI uses `ingest()` and `context_and_graph_mut()` instead.
+    /// Retained for potential future FFI use. If unused after 2 releases, remove.
     pub fn apply(&mut self, anchored: AnchoredDelta) {
         for composition in anchored.compositions {
             self.graph
@@ -521,6 +525,11 @@ impl PipelineEngine {
     /// This method requires `T: Default + Transform`. The transform's
     /// `transform()` method is called with the provided input and the
     /// engine's context.
+    ///
+    /// **Audit v6 (P3-12)**: Not called by any internal code or PyO3 bindings.
+    /// The pipeline DAG executes transforms via `execute_dag()` instead.
+    /// Retained for potential future single-transform FFI calls.
+    /// If unused after 2 releases, remove.
     pub fn run<T: Transform + Default>(&mut self, input: &T::Input) -> T::Output {
         let transform = T::default();
         transform.transform(input, &mut self.context)
