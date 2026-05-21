@@ -8,7 +8,7 @@ pub use super::super::acquisition::{
 };
 pub use super::super::convergence::ConvergenceDetection;
 pub use super::super::executive::{CognitiveMode, ExecutiveOrchestrator};
-pub use super::super::govern_beliefs::GovernBeliefs;
+pub use super::super::govern_beliefs::{GovernBeliefs, MAX_CONTRADICTION_PAIRS};
 pub use super::super::pipeline::{
     register_default_pipeline, ErasedTransform, Graph, IngestAtoms, PipelineEngine,
 };

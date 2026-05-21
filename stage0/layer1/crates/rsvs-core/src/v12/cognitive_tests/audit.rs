@@ -593,7 +593,7 @@ fn test_audit_v4_detect_contradiction_no_clone() {
     // Audit v4 Fix 5: detect_contradiction should not clone compositions
     // for every pair check. This test just verifies the function still works
     // correctly after the optimization.
-    let gb = GovernBeliefs { current_batch: 1 };
+    let gb = GovernBeliefs { current_batch: 1, max_contradiction_pairs: MAX_CONTRADICTION_PAIRS };
 
     let node_pred = 1u32;
     let node_agent = 2u32;

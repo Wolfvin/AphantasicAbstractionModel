@@ -264,12 +264,9 @@ impl GovernBeliefs {
                     // Audit v6 fix: Construct Contradiction structs directly from the
                     // `conflict` variable instead of reading back from `updates` via
                     // triple-unwrap chain. This eliminates panic risk and is clearer.
-                    let conflict_type_i = conflict.clone();
-                    let conflict_type_j = conflict.clone();
-
                     let mut update_left = GovernanceUpdate::new(compositions[i].id.clone());
                     update_left.contradiction = Some(Contradiction {
-                        conflict_type: conflict_type_i,
+                        conflict_type: conflict.clone(),
                         opposing_composition_id: compositions[j].id.clone(),
                         strength: DEFAULT_CONTRADICTION_STRENGTH,
                     });
@@ -278,7 +275,7 @@ impl GovernBeliefs {
 
                     let mut update_right = GovernanceUpdate::new(compositions[j].id.clone());
                     update_right.contradiction = Some(Contradiction {
-                        conflict_type: conflict_type_j,
+                        conflict_type: conflict.clone(),
                         opposing_composition_id: compositions[i].id.clone(),
                         strength: DEFAULT_CONTRADICTION_STRENGTH,
                     });
@@ -286,11 +283,11 @@ impl GovernBeliefs {
                     updates.push(update_right);
 
                     // Apply contradiction to compositions directly from conflict data.
-                    // Audit v6 fix: Use conflict_type_i / conflict_type_j directly instead
-                    // of the old triple-unwrap chain (updates.last().unwrap().contradiction.as_ref().unwrap()).
+                    // Audit v6 fix: Use conflict.clone() directly instead of the old
+                    // triple-unwrap chain (updates.last().unwrap().contradiction.as_ref().unwrap()).
                     compositions[i].epistemic = EpistemicState::Contradicted;
                     compositions[i].contradiction = Some(Contradiction {
-                        conflict_type: conflict_type_i,
+                        conflict_type: conflict.clone(),
                         opposing_composition_id: compositions[j].id.clone(),
                         strength: DEFAULT_CONTRADICTION_STRENGTH,
                     });
@@ -300,7 +297,7 @@ impl GovernBeliefs {
 
                     compositions[j].epistemic = EpistemicState::Contradicted;
                     compositions[j].contradiction = Some(Contradiction {
-                        conflict_type: conflict_type_j,
+                        conflict_type: conflict.clone(),
                         opposing_composition_id: compositions[i].id.clone(),
                         strength: DEFAULT_CONTRADICTION_STRENGTH,
                     });
