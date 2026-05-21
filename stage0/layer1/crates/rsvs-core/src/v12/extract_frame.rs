@@ -45,6 +45,13 @@ use super::types::*;
 use crate::types::{EdgeSource, NodeId};
 
 // ========================================================================
+// Named Constants — Audit v6 fix
+// ========================================================================
+
+/// Base confidence for a newly extracted frame before role bonuses.
+const BASE_EXTRACTION_CONFIDENCE: f32 = 0.30;
+
+// ========================================================================
 // Negation Markers — Malay/Indonesian
 // ========================================================================
 
@@ -477,7 +484,7 @@ impl ExtractFrame {
         roles: &HashMap<SemanticRole, String>,
         polarity: &Polarity,
     ) -> f32 {
-        let mut confidence = 0.30f32;
+        let mut confidence = BASE_EXTRACTION_CONFIDENCE;
 
         if roles.contains_key(&SemanticRole::Arg0Agent) {
             confidence += 0.15;

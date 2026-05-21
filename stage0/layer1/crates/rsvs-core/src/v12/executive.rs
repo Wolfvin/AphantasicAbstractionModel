@@ -42,6 +42,26 @@ use crate::types::NodeId;
 use serde::{Deserialize, Serialize};
 
 // ========================================================================
+// Named Constants — Audit v6 fix
+// ========================================================================
+
+/// Batch threshold above which an Inferred composition is considered stagnant.
+const STAGNANT_BATCH_THRESHOLD: usize = 10;
+/// Confidence below which a composition is considered decayed.
+const DECAYED_CONFIDENCE_FLOOR: f32 = 0.2;
+/// Batch threshold above which decayed-confidence detection kicks in.
+const DECAYED_BATCH_THRESHOLD: usize = 5;
+/// Number of contradicted compositions that triggers Reflective mode.
+const REFLECTIVE_CONTRADICTION_THRESHOLD: usize = 3;
+/// Confidence threshold below which Analytical mode is triggered.
+const ANALYTICAL_CONFIDENCE_FLOOR: f32 = 0.5;
+/// Confidence threshold for goal-met detection in enrichment loop.
+const GOAL_MET_CONFIDENCE: f32 = 0.8;
+/// Minimum batch_seen and confidence for reflection-driven promotion.
+const REFLECTION_PROMOTION_MIN_AGE: usize = 3;
+const REFLECTION_PROMOTION_MIN_CONFIDENCE: f32 = 0.6;
+
+// ========================================================================
 // CognitiveMode — How the Pipeline Processes Input
 // ========================================================================
 
@@ -377,7 +397,7 @@ impl Reflect {
 
         // Check for stagnant inferred compositions.
         for composition in graph.compositions.values() {
-            if composition.epistemic == EpistemicState::Inferred && composition.batch_seen > 10 {
+            if composition.epistemic == EpistemicState::Inferred && composition.batch_seen > STAGNANT_BATCH_THRESHOLD {
                 findings.push(ReflectionFinding {
                     finding_type: ReflectionFindingType::StagnantInferred,
                     description: format!(
@@ -393,7 +413,7 @@ impl Reflect {
 
         // Check for decayed confidence compositions.
         for composition in graph.compositions.values() {
-            if composition.confidence < 0.2 && composition.batch_seen > 5 {
+            if composition.confidence < DECAYED_CONFIDENCE_FLOOR && composition.batch_seen > DECAYED_BATCH_THRESHOLD {
                 findings.push(ReflectionFinding {
                     finding_type: ReflectionFindingType::DecayedConfidence,
                     description: format!(
@@ -533,12 +553,12 @@ impl ExecutiveOrchestrator {
                 .filter(|c| c.epistemic == EpistemicState::Contradicted)
                 .count();
 
-            if contradicted_count >= 3 {
+            if contradicted_count >= REFLECTIVE_CONTRADICTION_THRESHOLD {
                 self.mode = CognitiveMode::Reflective;
             } else {
                 self.mode = CognitiveMode::Analytical;
             }
-        } else if neighborhood.average_confidence() < 0.5 {
+        } else if neighborhood.average_confidence() < ANALYTICAL_CONFIDENCE_FLOOR {
             self.mode = CognitiveMode::Analytical;
         } else {
             self.mode = CognitiveMode::Reactive;
@@ -703,18 +723,10 @@ impl ExecutiveOrchestrator {
             state.loops_completed = pass + 1;
 
             // Recompute confidence.
+            // Audit v6 fix: Use average_confidence() instead of snapshot2
+            // to avoid a second full graph clone per enrichment pass.
             let prev_confidence = state.confidence;
-            let snapshot2 = engine.snapshot();
-            let new_confidence = if snapshot2.compositions.is_empty() {
-                0.0
-            } else {
-                snapshot2
-                    .compositions
-                    .iter()
-                    .map(|c| c.confidence)
-                    .sum::<f32>()
-                    / snapshot2.compositions.len() as f32
-            };
+            let new_confidence = engine.average_confidence();
             state.confidence = new_confidence;
 
             // Check for new evidence.
@@ -731,7 +743,7 @@ impl ExecutiveOrchestrator {
             }
 
             // Check if goal is met.
-            if state.confidence >= 0.8 && !engine.context.has_gaps() {
+            if state.confidence >= GOAL_MET_CONFIDENCE && !engine.context.has_gaps() {
                 state.goal_met = true;
                 break;
             }
@@ -755,7 +767,7 @@ impl ExecutiveOrchestrator {
                 ReflectionAction::ProposePromotion(comp_id) => {
                     // Try to promote the composition.
                     if let Some(comp) = engine.graph_mut().compositions.get_mut(comp_id) {
-                        if comp.lifecycle == LifecycleState::Candidate && comp.batch_seen >= 3 && comp.confidence >= 0.6 {
+                        if comp.lifecycle == LifecycleState::Candidate && comp.batch_seen >= REFLECTION_PROMOTION_MIN_AGE && comp.confidence >= REFLECTION_PROMOTION_MIN_CONFIDENCE {
                             comp.lifecycle = LifecycleState::Stable;
                         }
                     }

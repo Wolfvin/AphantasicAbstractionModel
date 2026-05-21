@@ -499,6 +499,19 @@ impl PipelineEngine {
         }
     }
 
+    /// Compute the average confidence of all compositions without cloning.
+    ///
+    /// Audit v6 fix: This avoids the expensive `snapshot()` call when only
+    /// the average confidence is needed (e.g., in the enrichment loop).
+    /// Returns 0.0 if there are no compositions.
+    pub fn average_confidence(&self) -> f32 {
+        let comps = &self.graph.compositions;
+        if comps.is_empty() {
+            return 0.0;
+        }
+        comps.values().map(|c| c.confidence).sum::<f32>() / comps.len() as f32
+    }
+
     /// Get a reference to the v12 [`Graph`].
     pub fn graph(&self) -> &Graph {
         &self.graph
@@ -998,6 +1011,22 @@ impl Graph {
     /// Iterate over all compositions in the graph.
     pub fn compositions(&self) -> impl Iterator<Item = &Composition> {
         self.compositions.values()
+    }
+
+    /// Build a reverse index from NodeId to the CompositionIds that contain it.
+    ///
+    /// Audit v6 fix: This replaces O(C) full scans in `SpreadingActivation::spread()`
+    /// with O(1) lookups. The index is computed on demand (not maintained incrementally)
+    /// to avoid complicating the graph mutation API. For hot paths, callers should
+    /// cache the result.
+    pub fn node_to_compositions(&self) -> HashMap<NodeId, Vec<CompositionId>> {
+        let mut index: HashMap<NodeId, Vec<CompositionId>> = HashMap::new();
+        for comp in self.compositions.values() {
+            for member in &comp.members {
+                index.entry(member.node_id).or_default().push(comp.id.clone());
+            }
+        }
+        index
     }
 
     /// Get a node by its ID.

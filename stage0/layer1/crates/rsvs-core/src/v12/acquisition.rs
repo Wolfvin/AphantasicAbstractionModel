@@ -52,6 +52,19 @@ use super::types::*;
 use crate::types::{EdgeSource, NodeId};
 
 // ========================================================================
+// Named Constants — Audit v6 fix
+// ========================================================================
+
+/// Confidence for missing-role gap detection.
+const MISSING_ROLE_GAP_CONFIDENCE: f32 = 0.7;
+/// Confidence for incomplete hidden-meaning gap detection.
+const INCOMPLETE_HM_GAP_CONFIDENCE: f32 = 0.6;
+/// Confidence for sparse/empty graph gap.
+const SPARSE_GRAPH_GAP_CONFIDENCE: f32 = 0.5;
+/// Confidence for isolated composition gap.
+const ISOLATED_COMPOSITION_GAP_CONFIDENCE: f32 = 0.4;
+
+// ========================================================================
 // KnowledgeGapType — Classification of Knowledge Gaps
 // ========================================================================
 
@@ -361,7 +374,7 @@ impl DetectGaps {
                                 source_composition_id: Some(composition.id.clone()),
                                 source_atom_id: None,
                                 missing_role: Some(role.clone()),
-                                confidence: 0.7,
+                                confidence: MISSING_ROLE_GAP_CONFIDENCE,
                             });
                         }
                     }
@@ -394,7 +407,7 @@ impl DetectGaps {
                             } else {
                                 Some(SemanticRole::Solution)
                             },
-                            confidence: 0.6,
+                            confidence: INCOMPLETE_HM_GAP_CONFIDENCE,
                         });
                     }
                 }
@@ -437,7 +450,7 @@ impl DetectGaps {
                 source_composition_id: None,
                 source_atom_id: None,
                 missing_role: None,
-                confidence: 0.5,
+                confidence: SPARSE_GRAPH_GAP_CONFIDENCE,
             });
         }
 
@@ -481,7 +494,7 @@ impl DetectGaps {
                         source_composition_id: Some(comp.id.clone()),
                         source_atom_id: None,
                         missing_role: None,
-                        confidence: 0.4,
+                        confidence: ISOLATED_COMPOSITION_GAP_CONFIDENCE,
                     });
                 }
             }

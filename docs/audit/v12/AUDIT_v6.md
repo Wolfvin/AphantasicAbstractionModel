@@ -1,9 +1,10 @@
 # AAM v12 — Audit v6: Deep Code Quality & Architecture Review
 
 **Tanggal**: 2026-05-21  
-**Scope**: `stage0/layer1/crates/rsvs-core/src/v12/` — 24 file Rust, 20.284 baris  
-**Komit terakhir**: `f01625d` (Phase 2: O(N²) throttle, batch_seen fix, i18n docs, SyncPipelineEngine, split cognitive_tests)  
-**Auditor**: Z.ai (automated static analysis)
+**Scope**: `stage0/layer1/crates/rsvs-core/src/v12/` — 25 file Rust, ~21.000 baris  
+**Komit terakhir**: `ba8454e` (Audit v6 Priority 1 — 4 critical fixes)  
+**Auditor**: Z.ai (automated static analysis)  
+**Status**: Prioritas 1 ✅ selesai · Prioritas 2 & 3 ✅ selesai (commit berikutnya)
 
 ---
 

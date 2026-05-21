@@ -47,6 +47,7 @@ pub mod convergence;
 pub mod executive;
 pub mod extract_frame;
 pub mod govern_beliefs;
+pub mod locale;
 pub mod persistence;
 pub mod pipeline;
 pub mod reason_frame;
@@ -149,9 +150,17 @@ pub use pipeline::{
 };
 
 // Re-export MD-1: ExtractFrame types.
+// Audit v6 fix: Removed confusing alias `ExtractionQuality as ExtractionQualityLevel`.
+// Both names are now exported independently:
+//   - `ExtractionQuality` (from extract_frame) — per-rule quality tracker
+//   - `ExtractionQualityStats` (from types, re-exported above) — aggregate quality stats
 pub use extract_frame::{
-    ExtractFrame, ExtractionQuality as ExtractionQualityLevel, ExtractionQualityTrackerExt,
+    ExtractFrame, ExtractionQuality, ExtractionQualityTrackerExt,
 };
+
+// Audit v6: Backward compat alias — `ExtractionQualityLevel` was the old name.
+// New code should use `ExtractionQuality` directly.
+pub use extract_frame::ExtractionQuality as ExtractionQualityLevel;
 
 // Re-export MD-2: ReasonFrame types.
 pub use reason_frame::{
@@ -194,3 +203,6 @@ pub use persistence::{GraphStats, Persistence, PersistenceError};
 pub use verbalize::{
     CompositionalVerbalize, CompositionalVerbalizeTransform, VerbalizationResult, VerbalizeConfig,
 };
+
+// Re-export i18n Locale types.
+pub use locale::{default_locale, EpistemicQualifiers, EnglishLocale, IndonesianLocale, Locale};

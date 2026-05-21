@@ -36,6 +36,15 @@ use std::collections::{HashMap, HashSet};
 use crate::types::{EdgeSource, HiddenMeaningType, NodeId, RelationType};
 
 // ========================================================================
+// Named Constants — Audit v6 fix
+// ========================================================================
+
+/// Gap rate threshold for a rule to be considered weak (> 30%).
+const WEAK_RULE_GAP_RATE_THRESHOLD: f32 = 0.30;
+/// Repair rate floor for a rule to be considered weak (< 50%).
+const WEAK_RULE_REPAIR_RATE_FLOOR: f32 = 0.50;
+
+// ========================================================================
 // v1.0.0 Node — Minimal Graph Node
 // ========================================================================
 
@@ -964,7 +973,7 @@ impl ExtractionQuality {
 
     /// Is this rule weak? (gap rate > 30% and repair rate < 50%)
     pub fn is_weak(&self) -> bool {
-        self.gap_rate() > 0.30 && self.repair_rate() < 0.50
+        self.gap_rate() > WEAK_RULE_GAP_RATE_THRESHOLD && self.repair_rate() < WEAK_RULE_REPAIR_RATE_FLOOR
     }
 }
 

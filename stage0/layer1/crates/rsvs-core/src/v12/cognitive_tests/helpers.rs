@@ -97,3 +97,22 @@ pub fn make_event_composition(comp_id: &str, atom: &SemanticAtom, graph: &mut Gr
 
     comp
 }
+
+/// Set `batch_seen` on a composition for testing, accounting for the auto-increment
+/// that `GovernBeliefs::execute()` applies (audit v6 fix).
+///
+/// When `govern().execute()` runs, it increments `batch_seen` by 1 for ALL compositions.
+/// Tests that manually set `batch_seen` before calling `govern()` must account for this
+/// increment. This helper returns the **expected** `batch_seen` after `govern()` runs.
+///
+/// # Example
+/// ```ignore
+/// let expected = set_batch_seen_for_test(&mut comp, 3);
+/// // ... call govern().execute() ...
+/// assert_eq!(comp.batch_seen, expected); // will be 4
+/// ```
+pub fn set_batch_seen_for_test(comp: &mut Composition, desired_before_govern: usize) -> usize {
+    comp.batch_seen = desired_before_govern;
+    // After govern().execute(), batch_seen will be incremented by 1.
+    desired_before_govern + 1
+}

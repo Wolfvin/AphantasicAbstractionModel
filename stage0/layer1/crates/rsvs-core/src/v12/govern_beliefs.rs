@@ -59,6 +59,33 @@ pub const MAX_CONTRADICTION_PAIRS: usize = 500;
 /// Default contradiction strength assigned to detected conflicts.
 pub const DEFAULT_CONTRADICTION_STRENGTH: f32 = 0.8;
 
+/// Minimum age (batch_seen) for Candidate → Stable promotion.
+pub const PROMOTION_MIN_AGE: usize = 3;
+
+/// Minimum confidence for Candidate → Stable promotion.
+pub const PROMOTION_MIN_CONFIDENCE: f32 = 0.55;
+
+/// Minimum confirming members for Candidate → Stable promotion.
+pub const PROMOTION_MIN_CONFIRMING_MEMBERS: usize = 2;
+
+/// Minimum confidence for a member to count as "confirming".
+pub const PROMOTION_CONFIRMING_MEMBER_CONFIDENCE: f32 = 0.5;
+
+/// Minimum seed alignment for Candidate → Stable promotion.
+pub const PROMOTION_MIN_SEED_ALIGNMENT: f32 = 0.3;
+
+/// Minimum confidence for Inferred → Grounded promotion.
+pub const GROUNDING_MIN_CONFIDENCE: f32 = 0.7;
+
+/// Number of recent batches to check for contradictions before promotion.
+pub const PROMOTION_CONTRADICTION_WINDOW: usize = 3;
+
+/// Number of recent batches to check for contradictions before grounding.
+pub const GROUNDING_CONTRADICTION_WINDOW: usize = 5;
+
+/// Minimum seed alignment for Inferred → Grounded promotion.
+pub const GROUNDING_MIN_SEED_ALIGNMENT: f32 = 0.5;
+
 /// MD-4: GovernBeliefs transform — assigns lifecycle/epistemic states,
 /// detects contradictions, and manages promotions.
 ///
@@ -828,26 +855,26 @@ impl GovernBeliefs {
     /// - No active contradiction
     /// - Seed alignment ≥ 0.3 (average seed score, or 0.0 if no seed data)
     fn can_promote_to_stable(&self, comp: &Composition) -> Option<PromotionVerdict> {
-        if comp.batch_seen < 3 {
+        if comp.batch_seen < PROMOTION_MIN_AGE {
             return Some(PromotionVerdict::Denied(format!(
-                "age {} < 3 batches required",
-                comp.batch_seen
+                "age {} < {} batches required",
+                comp.batch_seen, PROMOTION_MIN_AGE
             )));
         }
 
-        if comp.confidence < 0.55 {
+        if comp.confidence < PROMOTION_MIN_CONFIDENCE {
             return Some(PromotionVerdict::Denied(format!(
-                "confidence {:.2} < 0.55 required",
-                comp.confidence
+                "confidence {:.2} < {} required",
+                comp.confidence, PROMOTION_MIN_CONFIDENCE
             )));
         }
 
-        // Check for ≥ 2 confirming members (members with confidence ≥ 0.5)
-        let confirming_members = comp.members.iter().filter(|m| m.confidence >= 0.5).count();
-        if confirming_members < 2 {
+        // Check for confirming members (members with confidence ≥ threshold)
+        let confirming_members = comp.members.iter().filter(|m| m.confidence >= PROMOTION_CONFIRMING_MEMBER_CONFIDENCE).count();
+        if confirming_members < PROMOTION_MIN_CONFIRMING_MEMBERS {
             return Some(PromotionVerdict::Denied(format!(
-                "only {} confirming members (need ≥ 2)",
-                confirming_members
+                "only {} confirming members (need ≥ {})",
+                confirming_members, PROMOTION_MIN_CONFIRMING_MEMBERS
             )));
         }
 
@@ -858,9 +885,9 @@ impl GovernBeliefs {
             ));
         }
 
-        if comp.has_recent_contradiction(3) {
+        if comp.has_recent_contradiction(PROMOTION_CONTRADICTION_WINDOW) {
             return Some(PromotionVerdict::Denied(
-                "recent contradiction within last 3 batches".to_string(),
+                format!("recent contradiction within last {} batches", PROMOTION_CONTRADICTION_WINDOW),
             ));
         }
 
@@ -868,10 +895,10 @@ impl GovernBeliefs {
         if !comp.seed_scores.is_empty() {
             let avg_seed: f32 =
                 comp.seed_scores.values().sum::<f32>() / comp.seed_scores.len() as f32;
-            if avg_seed < 0.3 && avg_seed > 0.0 {
+            if avg_seed < PROMOTION_MIN_SEED_ALIGNMENT && avg_seed > 0.0 {
                 return Some(PromotionVerdict::Denied(format!(
-                    "seed alignment {:.2} < 0.3 required",
-                    avg_seed
+                    "seed alignment {:.2} < {} required",
+                    avg_seed, PROMOTION_MIN_SEED_ALIGNMENT
                 )));
             }
         }
@@ -895,16 +922,16 @@ impl GovernBeliefs {
             ));
         }
 
-        if comp.confidence < 0.7 {
+        if comp.confidence < GROUNDING_MIN_CONFIDENCE {
             return Some(PromotionVerdict::Denied(format!(
-                "confidence {:.2} < 0.7 required for grounding",
-                comp.confidence
+                "confidence {:.2} < {} required for grounding",
+                comp.confidence, GROUNDING_MIN_CONFIDENCE
             )));
         }
 
-        if comp.has_recent_contradiction(5) {
+        if comp.has_recent_contradiction(GROUNDING_CONTRADICTION_WINDOW) {
             return Some(PromotionVerdict::Denied(
-                "recent contradiction within last 5 batches".to_string(),
+                format!("recent contradiction within last {} batches", GROUNDING_CONTRADICTION_WINDOW),
             ));
         }
 
@@ -916,10 +943,10 @@ impl GovernBeliefs {
         if !comp.seed_scores.is_empty() {
             let avg_seed: f32 =
                 comp.seed_scores.values().sum::<f32>() / comp.seed_scores.len() as f32;
-            if avg_seed < 0.5 && avg_seed > 0.0 {
+            if avg_seed < GROUNDING_MIN_SEED_ALIGNMENT && avg_seed > 0.0 {
                 return Some(PromotionVerdict::Denied(format!(
-                    "seed alignment {:.2} < 0.5 required for grounding",
-                    avg_seed
+                    "seed alignment {:.2} < {} required for grounding",
+                    avg_seed, GROUNDING_MIN_SEED_ALIGNMENT
                 )));
             }
         }
