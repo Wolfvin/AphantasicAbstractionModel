@@ -120,7 +120,7 @@ These combine to express rich status: `(Candidate, Inferred)` means "rule-derive
 
 ### SemanticEdge
 
-A `SemanticEdge` is a single typed triple with three dimensions: **relation** (what kind: Categorical, Causal, etc.), **role** (optional: if part of a composition), and **source** (provenance: where this edge came from). This replaces the separate RelationType, EdgeSource, SemanticRole, and ProvenanceSource systems from earlier versions with a single edge structure.
+A `SemanticEdge` is a single typed triple with three dimensions: **relation** (what kind: `Categorical` or `Causal`), **role** (optional: if part of a composition), and **source** (provenance: where this edge came from). This replaces the separate RelationType, EdgeSource, SemanticRole, and ProvenanceSource systems from earlier versions with a single edge structure.
 
 ### Transform DAG
 

@@ -253,53 +253,63 @@ pub enum AtomVariant {
 
 /// How a frame was extracted (MD-1, MD-3 §1).
 ///
-/// Phase 1: RuleBased. Phase 2: UdParse/SrlLabel. Phase 3: AmrCompilation.
+/// # Active Variants
+///
+/// - `RuleBased` — Phase 1 deterministic rules (produced by ExtractFrame)
+/// - `GraphAssisted` — frame re-extracted with graph context (produced by ReExtractFrame)
+///
+/// # Removed Variants (Phase 1 cleanup, see ARCHIVED_VARIANTS.md)
+///
+/// `UdParse`, `SrlLabel`, `AmrCompilation` — removed because they had zero
+/// references in the Rust codebase. Reserved for Phase 2/3 parser integration.
 #[non_exhaustive]
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 pub enum FrameSource {
     /// Phase 1: deterministic rules.
     #[default]
     RuleBased,
-    /// Phase 2: dependency parsing.
-    UdParse,
-    /// Phase 2: semantic role labeling.
-    SrlLabel,
-    /// Phase 3: AMR graph compilation.
-    AmrCompilation,
     /// Frame re-extracted with graph context (feedback loop).
     GraphAssisted,
 }
 
 /// Pattern category classification (MD-3 §1).
+///
+/// # Active Variants
+///
+/// - `EventPattern` — recurring event structure (default)
+///
+/// # Removed Variants (Phase 1 cleanup, see ARCHIVED_VARIANTS.md)
+///
+/// `CausalChain`, `GoalAction`, `RoleSubstitution`, `TemporalSequence` —
+/// removed because they had zero references in the Rust codebase.
+/// Never produced by the pipeline.
 #[non_exhaustive]
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 pub enum PatternCategory {
     /// Recurring event structure.
     #[default]
     EventPattern,
-    /// Causal chain (A → B → C).
-    CausalChain,
-    /// Goal-action pair.
-    GoalAction,
-    /// Role substitution pattern.
-    RoleSubstitution,
-    /// Temporal sequence pattern.
-    TemporalSequence,
 }
 
 /// Acquisition source classification (MD-6, MD-3 §1).
+///
+/// # Active Variants
+///
+/// - `PassiveRecall` — knowledge recalled from existing graph (default)
+/// - `UserAnswer` — answer provided by the user (produced by acquisition)
+///
+/// # Removed Variants (Phase 1 cleanup, see ARCHIVED_VARIANTS.md)
+///
+/// `SelfStudy`, `ExternalSource` — removed because they had zero
+/// references in the Rust codebase. Reserved for Phase 2 acquisition.
 #[non_exhaustive]
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 pub enum AcquisitionSource {
     /// Knowledge recalled from existing graph.
     #[default]
     PassiveRecall,
-    /// Self-directed study (Phase 2).
-    SelfStudy,
     /// Answer provided by the user.
     UserAnswer,
-    /// External source (Phase 2).
-    ExternalSource,
 }
 
 // ========================================================================
@@ -1175,6 +1185,20 @@ pub struct Contradiction {
 /// Separate from v11.0's meaning-pathway `ConflictType`.
 /// These conflicts are detected by `GovernBeliefs.detect_contradiction()`
 /// by comparing role fillers across compositions with the same predicate.
+///
+/// # Active Variants
+///
+/// - `PolarityConflict` — same predicate, opposite polarity
+/// - `PurposeConflict` — same predicate, conflicting purpose roles
+/// - `SemanticContradiction` — general semantic contradiction (cross-type, default)
+/// - `RoleReversal` — Agent ↔ Patient swapped across two compositions
+/// - `EquivalenceMismatch` — same structure but different role fillers
+///
+/// # Removed Variants (Phase 1 cleanup, see ARCHIVED_VARIANTS.md)
+///
+/// `AgentConflict`, `PatientConflict`, `CauseConflict`, `TemporalConflict`,
+/// `LocationConflict` — removed because they had zero references in the
+/// Rust codebase. Never produced by detect_contradiction().
 #[non_exhaustive]
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 pub enum EpistemicConflictType {
@@ -1182,16 +1206,6 @@ pub enum EpistemicConflictType {
     PolarityConflict,
     /// Same predicate, conflicting purpose roles.
     PurposeConflict,
-    /// Same predicate, different agent fillers.
-    AgentConflict,
-    /// Same predicate, different patient fillers.
-    PatientConflict,
-    /// Same predicate, different cause fillers.
-    CauseConflict,
-    /// Temporal incompatibility between compositions.
-    TemporalConflict,
-    /// Spatial incompatibility between compositions.
-    LocationConflict,
     /// General semantic contradiction (cross-type).
     #[default]
     SemanticContradiction,
@@ -1293,6 +1307,16 @@ impl Default for EnrichmentRequest {
 }
 
 /// Source of enrichment (MD-3, MD-6).
+///
+/// # Active Variants
+///
+/// - `PassiveRecall` — enrichment from graph-based recall (default)
+/// - `UserAnswerMerge` — enrichment from user answer merge
+///
+/// # Removed Variants (Phase 1 cleanup, see ARCHIVED_VARIANTS.md)
+///
+/// `ReExtraction`, `HumanAssertion` — removed because they had zero
+/// references in the Rust codebase.
 #[non_exhaustive]
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 pub enum EnrichmentSource {
@@ -1301,10 +1325,6 @@ pub enum EnrichmentSource {
     PassiveRecall,
     /// Enrichment from user answer merge.
     UserAnswerMerge,
-    /// Enrichment from re-extraction with graph context.
-    ReExtraction,
-    /// Enrichment from human assertion.
-    HumanAssertion,
 }
 
 /// Request to re-extract a frame with graph context (MD-3, MD-6).

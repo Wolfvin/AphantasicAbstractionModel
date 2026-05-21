@@ -34,20 +34,30 @@ pub type SenseId = u32;
 
 /// Source type for edges.
 ///
-/// # Active vs Reserved Variants
+/// # Active Variants (produced by the v12 pipeline)
 ///
-/// Variants currently produced by the v12 pipeline:
-/// - `Bootstrap`, `FrameCompiler`, `HiddenMeaningRule`, `EpistemicGovernance`,
-///   `ExecutiveControl`, `AcquisitionRecall`, `AcquisitionSelfStudy`,
-///   `AcquisitionUserAnswer`, `HumanAssertion`, `EnrichmentFeedback`, `ExtractionRepair`
+/// - `Bootstrap` — seed bootstrap edges
+/// - `Learned` — token edges from text ingestion
+/// - `FrameCompiler` — MD-1 semantic frame extraction
+/// - `HiddenMeaningRule` — MD-2 pre-ingest reasoning
+/// - `AcquisitionRecall` — MD-6 passive recall
+/// - `AcquisitionSelfStudy` — MD-6 self-study
+/// - `AcquisitionUserAnswer` — MD-6 user answer
+/// - `HumanAssertion` — human override
+/// - `EnrichmentFeedback` — feedback loop (composition enriched after gap detection)
+/// - `ExtractionRepair` — feedback loop (frame re-extracted with graph context)
 ///
-/// Reserved for future pipeline extensions (not yet produced by default pipeline):
-/// - `Learned`, `Composition`, `GapDetection`, `Discourse` (v8.3-era, may be re-activated)
-/// - `Blending`, `Abductive`, `PatternMining`, `Synthesis`, `CompoundDiscovery` (v10.0-era)
+/// # Design-Intent Variants (in match arms, not yet produced by default pipeline)
 ///
-/// These reserved variants are kept for forward compatibility — they may be produced
-/// by future transforms or custom pipeline configurations. They are not "dead code";
-/// they are part of the provenance vocabulary that the system is designed to support.
+/// - `Abductive` — for future `CompositionType::Hypothesis` pipeline output
+/// - `PatternMining` — for future `CompositionType::Pattern` pipeline output
+///
+/// # Removed Variants (Phase 1 cleanup, see ARCHIVED_VARIANTS.md)
+///
+/// `Composition`, `GapDetection`, `Discourse`, `Blending`, `Synthesis`,
+/// `CompoundDiscovery`, `EpistemicGovernance`, `ExecutiveControl` —
+/// removed because they had zero references in the Rust codebase.
+/// See `ARCHIVED_VARIANTS.md` for the full list with documentation.
 #[non_exhaustive]
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 pub enum EdgeSource {
@@ -55,42 +65,20 @@ pub enum EdgeSource {
     #[default]
     Bootstrap,
     /// Created through learning from text ingestion.
-    /// Reserved: not yet produced by v12 default pipeline.
+    /// Used by pipeline.rs for token atoms and persistence.rs for loaded graphs.
     Learned,
-    /// Created by explicit composition (compose API).
-    /// Reserved: not yet produced by v12 default pipeline.
-    Composition,
-    /// Created by gap detection (P1) — predicted but not observed compositions.
-    /// Reserved: not yet produced by v12 default pipeline.
-    GapDetection,
-    /// Created by discourse tracking (P3) — rhetorical/performative edges.
-    /// Reserved: not yet produced by v12 default pipeline.
-    Discourse,
-    /// v10.0: Created by compositional blending — hybrid A∧B edges.
-    /// Reserved for future pipeline extension.
-    Blending,
-    /// v10.0: Created by abductive reasoning — hypothetical X→Y→Z edges.
-    /// Reserved for future pipeline extension.
-    Abductive,
-    /// v10.0: Created by pattern mining — named pattern edges.
-    /// Reserved for future pipeline extension.
-    PatternMining,
-    /// v10.0: Created by cross-pathway synthesis — hidden meaning edges.
-    /// Reserved for future pipeline extension.
-    Synthesis,
-    /// v10.1: Created by compound discovery — multi-word expression edges.
-    /// Reserved for future pipeline extension.
-    CompoundDiscovery,
 
     // Provenance sources from MD-1 through MD-6 (all active in v12)
     /// From MD-1: semantic frame extraction.
     FrameCompiler,
     /// From MD-2: pre-ingest reasoning.
     HiddenMeaningRule,
-    /// From MD-4: belief state transition.
-    EpistemicGovernance,
-    /// From MD-5: executive routing.
-    ExecutiveControl,
+    /// Design-intent: for future CompositionType::Pattern pipeline output.
+    /// Referenced in govern_beliefs.rs match arm.
+    PatternMining,
+    /// Design-intent: for future CompositionType::Hypothesis pipeline output.
+    /// Referenced in govern_beliefs.rs match arm.
+    Abductive,
     /// From MD-6: passive recall.
     AcquisitionRecall,
     /// From MD-6: self-study.
@@ -111,39 +99,39 @@ pub enum EdgeSource {
 /// represents. This information flows from Layer 0 (perceptual abstractors)
 /// through the adapter into Layer 1 (RSVS graph). Default is Categorical
 /// for backward compatibility with existing edges that have no relation type.
+///
+/// # Active Variants
+///
+/// - `Categorical` — "X is a Y" (default, most common)
+/// - `Causal` — "X causes Y" (used by hidden meaning and causal compositions)
+///
+/// # Removed Variants (Phase 1 cleanup, see ARCHIVED_VARIANTS.md)
+///
+/// `Differential`, `Functional`, `Spatial`, `Temporal`, `Discursive` —
+/// removed because they had zero references in the Rust codebase.
 #[non_exhaustive]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub enum RelationType {
     /// "X is a Y" — categorical / taxonomic relation.
     #[default]
     Categorical,
-    /// "X is more/less than Y in dimension D" — comparative relation.
-    Differential,
-    /// "X can do Y" / "X is used for Y" — functional relation.
-    Functional,
-    /// "X is located at Y" — spatial relation.
-    Spatial,
-    /// "X occurs before/after Y" — temporal relation.
-    Temporal,
     /// "X causes Y" / "X is caused by Y" — causal relation.
     Causal,
-    /// Discursive / rhetorical relation between utterances.
-    Discursive,
 }
 
 /// Types of hidden meaning that can be discovered.
+///
+/// # Active Variants
+///
+/// - `Emergent` — general emergent meaning (produced by ReasonFrame)
+///
+/// # Removed Variants (Phase 1 cleanup, see ARCHIVED_VARIANTS.md)
+///
+/// `AffectiveDisguise`, `SocialConcealment`, `PerformativeMask`,
+/// `TraumaPattern`, `PowerDynamic` — removed because they had zero
+/// references in the Rust codebase. Never produced by the pipeline.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum HiddenMeaningType {
-    /// The surface meaning masks a deeper affective truth.
-    AffectiveDisguise,
-    /// A social dynamic is hidden beneath the literal content.
-    SocialConcealment,
-    /// The utterance is a performative act disguised as something else.
-    PerformativeMask,
-    /// A trauma pattern underlies the surface expression.
-    TraumaPattern,
-    /// Power dynamics hidden in the communication.
-    PowerDynamic,
     /// General emergent meaning not fitting other categories.
     Emergent,
 }
