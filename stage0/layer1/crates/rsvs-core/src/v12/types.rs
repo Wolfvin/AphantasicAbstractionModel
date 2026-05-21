@@ -471,7 +471,7 @@ pub struct Composition {
 impl Default for Composition {
     fn default() -> Self {
         Self {
-            id: String::new(),
+            id: CompositionId::new(String::new()),
             composition_type: CompositionType::Event,
             members: Vec::new(),
             lifecycle: LifecycleState::New,
@@ -592,7 +592,63 @@ impl CompositionMember {
 ///
 /// String-based to allow human-readable IDs like "comp_event_42" or
 /// "comp_hm_problem_solution_7".
-pub type CompositionId = String;
+#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct CompositionId(String);
+
+impl CompositionId {
+    /// Create a new CompositionId from a String.
+    pub fn new(id: String) -> Self {
+        Self(id)
+    }
+    /// Get the inner string as a &str.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+    /// Consume this CompositionId and return the inner String.
+    pub fn into_string(self) -> String {
+        self.0
+    }
+    /// Check if this CompositionId is empty.
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
+impl std::fmt::Display for CompositionId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl From<String> for CompositionId {
+    fn from(s: String) -> Self {
+        Self(s)
+    }
+}
+
+impl From<&str> for CompositionId {
+    fn from(s: &str) -> Self {
+        Self(s.to_string())
+    }
+}
+
+impl std::borrow::Borrow<str> for CompositionId {
+    fn borrow(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::borrow::Borrow<String> for CompositionId {
+    fn borrow(&self) -> &String {
+        &self.0
+    }
+}
+
+impl Default for CompositionId {
+    fn default() -> Self {
+        Self(String::new())
+    }
+}
 
 /// What kind of composition this is (MD-3 §2).
 ///
@@ -1092,7 +1148,7 @@ pub struct KnowledgeGapPlaceholder {
     /// The composition that has this gap (if applicable).
     /// Audit v4 fix: previously dropped from KnowledgeGap.
     #[serde(default)]
-    pub source_composition_id: Option<String>,
+    pub source_composition_id: Option<CompositionId>,
 }
 
 impl Default for KnowledgeGapPlaceholder {
@@ -1305,7 +1361,7 @@ pub struct EnrichmentRequest {
 impl Default for EnrichmentRequest {
     fn default() -> Self {
         Self {
-            target_composition_id: String::new(),
+            target_composition_id: CompositionId::default(),
             role_to_fill: SemanticRole::Arg0Agent,
             candidate_node_id: 0,
             candidate_label: String::new(),
@@ -1561,7 +1617,7 @@ pub struct ReflectionLoopResult {
     pub resolved_contradictions: Vec<CompositionId>,
     /// Gaps filled in this loop.
     #[serde(default)]
-    pub filled_gaps: Vec<String>,
+    pub filled_gaps: Vec<CompositionId>,
 }
 
 impl Default for ReflectionLoopResult {
@@ -1680,7 +1736,7 @@ pub enum ReasoningGoal {
     /// Fill a specific knowledge gap.
     FillGap {
         /// The gap to fill.
-        gap_id: String,
+        gap_id: CompositionId,
     },
     /// Answer a user question.
     AnswerQuestion {

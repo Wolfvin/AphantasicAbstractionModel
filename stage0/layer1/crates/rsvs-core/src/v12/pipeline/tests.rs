@@ -122,7 +122,7 @@ fn test_graph_cooccurrence_count() {
     for i in 0..2 {
         let comp_id = format!("comp_{}", i);
         let mut comp = Composition::default();
-        comp.id = comp_id;
+        comp.id = CompositionId::new(comp_id);
         comp.members.push(CompositionMember {
             node_id: a,
             role: SemanticRole::Arg0Agent,
@@ -137,7 +137,10 @@ fn test_graph_cooccurrence_count() {
             label: String::new(),
             source: None,
         });
+        let member_node_ids: Vec<u32> = comp.members.iter().map(|m| m.node_id).collect();
+        let comp_id_clone = comp.id.clone();
         graph.compositions.insert(comp.id.clone(), comp);
+        graph.index_composition(&comp_id_clone, &member_node_ids);
     }
 
     assert_eq!(graph.cooccurrence_count(a, b), 2);
@@ -177,7 +180,7 @@ fn test_find_weak_frames() {
 
     // Create a weak Event composition (low confidence, missing roles).
     let mut comp = Composition::default();
-    comp.id = "comp_weak_1".to_string();
+    comp.id = CompositionId::new("comp_weak_1".to_string());
     comp.composition_type = CompositionType::Event;
     comp.confidence = 0.3;
     comp.members.push(CompositionMember {
@@ -192,7 +195,7 @@ fn test_find_weak_frames() {
 
     // Create a strong Event composition (should NOT be weak).
     let mut comp2 = Composition::default();
-    comp2.id = "comp_strong_1".to_string();
+    comp2.id = CompositionId::new("comp_strong_1".to_string());
     comp2.composition_type = CompositionType::Event;
     comp2.confidence = 0.8;
     comp2.members.push(CompositionMember {
@@ -220,7 +223,7 @@ fn test_find_weak_frames() {
 
     let weak = engine.find_weak_frames();
     assert_eq!(weak.len(), 1);
-    assert_eq!(weak[0].composition_id, "comp_weak_1");
+    assert_eq!(weak[0].composition_id, CompositionId::new("comp_weak_1".to_string()));
 }
 
 // ====================================================================
@@ -338,7 +341,7 @@ fn test_enrich_composition_adds_member() {
 
     // Create a composition
     let pred_id = graph.ensure_node("pergi");
-    let comp_id = "comp_test".to_string();
+    let comp_id = CompositionId::new("comp_test".to_string());
     let mut comp = Composition::default();
     comp.id = comp_id.clone();
     comp.composition_type = CompositionType::Event;
@@ -379,7 +382,7 @@ fn test_enrich_composition_duplicate_role_rejected() {
 
     let pred_id = graph.ensure_node("pergi");
     let agent_id = graph.ensure_node("dia");
-    let comp_id = "comp_dup".to_string();
+    let comp_id = CompositionId::new("comp_dup".to_string());
     let mut comp = Composition::default();
     comp.id = comp_id.clone();
     comp.composition_type = CompositionType::Event;
@@ -430,7 +433,7 @@ fn test_enrich_composition_nonexistent_skipped() {
     let mut graph = Graph::new();
 
     ctx.pending_enrichments.push(EnrichmentRequest {
-        target_composition_id: "nonexistent_comp".to_string(),
+        target_composition_id: CompositionId::new("nonexistent_comp".to_string()),
         role_to_fill: SemanticRole::Arg0Agent,
         candidate_node_id: 0,
         candidate_label: "test".to_string(),
@@ -450,7 +453,7 @@ fn test_re_extract_frame_processes_pending() {
 
     // Create a composition
     let pred_id = graph.ensure_node("makan");
-    let comp_id = "comp_retest".to_string();
+    let comp_id = CompositionId::new("comp_retest".to_string());
     let mut comp = Composition::default();
     comp.id = comp_id.clone();
     comp.composition_type = CompositionType::Event;
@@ -499,7 +502,7 @@ fn test_seed_anchor_adjusts_confidence() {
 
     // Create a composition with seed scores
     let pred_id = graph.ensure_node("pergi");
-    let comp_id = "comp_anchor".to_string();
+    let comp_id = CompositionId::new("comp_anchor".to_string());
     let mut comp = Composition::default();
     comp.id = comp_id.clone();
     comp.composition_type = CompositionType::Event;

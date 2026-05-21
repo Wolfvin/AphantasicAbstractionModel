@@ -180,7 +180,7 @@ fn test_5_tanya_yang_tepat() {
 
     // Simulate user answer — "Hacker dari luar negeri"
     let mut acquisition_comp = Composition::default();
-    acquisition_comp.id = "comp_acq_hacker".to_string();
+    acquisition_comp.id = CompositionId::new("comp_acq_hacker".to_string());
     acquisition_comp.composition_type = CompositionType::Acquisition;
     acquisition_comp.confidence = 0.7;
     acquisition_comp.provenance = ProvenanceChain {
@@ -513,8 +513,8 @@ fn test_6_structural_similarity_tanpa_cooccurrence() {
     );
 
     // Compute structural similarity
-    let comp_a_id: String = "comp_dokter_periksa".to_string();
-    let comp_b_id: String = "comp_tabib_periksa".to_string();
+    let comp_a_id = CompositionId::new("comp_dokter_periksa".to_string());
+    let comp_b_id = CompositionId::new("comp_tabib_periksa".to_string());
     let comp_a = graph.get_composition(&comp_a_id).unwrap();
     let comp_b = graph.get_composition(&comp_b_id).unwrap();
     let similarity = graph.structural_similarity(comp_a, comp_b);
@@ -533,8 +533,8 @@ fn test_6_structural_similarity_tanpa_cooccurrence() {
     let pairs = detector.detect(&graph);
 
     let has_pair = pairs.iter().any(|p| {
-        (p.composition_a == "comp_dokter_periksa" && p.composition_b == "comp_tabib_periksa")
-            || (p.composition_a == "comp_tabib_periksa" && p.composition_b == "comp_dokter_periksa")
+        (p.composition_a.as_str() == "comp_dokter_periksa" && p.composition_b.as_str() == "comp_tabib_periksa")
+            || (p.composition_a.as_str() == "comp_tabib_periksa" && p.composition_b.as_str() == "comp_dokter_periksa")
     });
 
     if has_pair {

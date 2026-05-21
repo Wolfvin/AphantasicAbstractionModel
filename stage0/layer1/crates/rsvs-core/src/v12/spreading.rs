@@ -435,7 +435,7 @@ impl ErasedTransform for SpreadingActivationTransform {
         // so downstream transforms can use it. Previously, the map was
         // computed but discarded.
         let activation_map = self.engine.targeted_spread(&seeds_with_grounding, graph);
-        ctx.last_activation_energies = activation_map.energies.clone();
+        ctx.last_activation_energies = activation_map.energies;
 
         IngestResult {
             atoms_created: seeds_with_grounding.len(),
@@ -487,7 +487,7 @@ mod tests {
 
         // Create a composition connecting all three.
         let mut comp = Composition::default();
-        comp.id = "comp_test".to_string();
+        comp.id = CompositionId::new("comp_test".to_string());
         comp.composition_type = CompositionType::Event;
         comp.members = vec![
             CompositionMember {
@@ -512,7 +512,7 @@ mod tests {
                 source: None,
             },
         ];
-        graph.compositions.insert("comp_test".to_string(), comp);
+        graph.compositions.insert(CompositionId::new("comp_test".to_string()), comp);
 
         // Spread from node_a.
         let result = engine.spread(&[(node_a, 1.0)], &graph);
@@ -575,7 +575,7 @@ mod tests {
         let node_b = graph.ensure_node("b");
 
         let mut comp = Composition::default();
-        comp.id = "comp_ab".to_string();
+        comp.id = CompositionId::new("comp_ab".to_string());
         comp.members = vec![
             CompositionMember {
                 node_id: node_a,
@@ -592,7 +592,7 @@ mod tests {
                 source: None,
             },
         ];
-        graph.compositions.insert("comp_ab".to_string(), comp);
+        graph.compositions.insert(CompositionId::new("comp_ab".to_string()), comp);
 
         let result = engine.spread(&[(node_a, 1.0)], &graph);
 

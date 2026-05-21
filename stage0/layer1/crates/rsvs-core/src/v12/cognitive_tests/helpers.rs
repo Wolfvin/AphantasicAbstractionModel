@@ -63,7 +63,7 @@ pub fn make_event_composition(comp_id: &str, atom: &SemanticAtom, graph: &mut Gr
     let predicate_node_id = graph.ensure_node(&atom.label);
 
     let mut comp = Composition::default();
-    comp.id = comp_id.to_string();
+    comp.id = CompositionId::new(comp_id.to_string());
     comp.composition_type = CompositionType::Event;
     comp.confidence = atom.confidence;
     comp.provenance = ProvenanceChain {

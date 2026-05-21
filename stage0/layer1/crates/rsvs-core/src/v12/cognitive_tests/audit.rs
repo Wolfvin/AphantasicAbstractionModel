@@ -62,7 +62,7 @@ fn test_audit_v2_update_sense_evidence_wired() {
     graph.nodes.get_mut(&node_id).unwrap().senses.push(sense);
 
     let mut comp = Composition::default();
-    comp.id = "comp_confirm".to_string();
+    comp.id = CompositionId::new("comp_confirm".to_string());
     comp.members.push(CompositionMember {
         node_id,
         role: SemanticRole::Predicate,
@@ -75,7 +75,7 @@ fn test_audit_v2_update_sense_evidence_wired() {
     let gb = GovernBeliefs::new();
 
     // Confirming evidence
-    gb.update_sense_evidence(&"comp_confirm".to_string(), true, &mut graph);
+    gb.update_sense_evidence(&CompositionId::new("comp_confirm".to_string()), true, &mut graph);
     let node = graph.nodes.get(&node_id).unwrap();
     assert!(node.senses[0].composition_evidence.confirming >= 1,
         "Sense should have at least 1 confirming evidence after update_sense_evidence(true)");
@@ -83,7 +83,7 @@ fn test_audit_v2_update_sense_evidence_wired() {
         "has_confirming() should return true");
 
     // Contradicting evidence
-    gb.update_sense_evidence(&"comp_confirm".to_string(), false, &mut graph);
+    gb.update_sense_evidence(&CompositionId::new("comp_confirm".to_string()), false, &mut graph);
     let node = graph.nodes.get(&node_id).unwrap();
     assert!(node.senses[0].composition_evidence.contradicting >= 1,
         "Sense should have at least 1 contradicting evidence after update_sense_evidence(false)");
@@ -106,7 +106,7 @@ fn test_audit_v2_no_false_positive_grounding_upgrade() {
 
     // Add a high-confidence composition that references this node
     let mut comp = Composition::default();
-    comp.id = "comp_high_conf".to_string();
+    comp.id = CompositionId::new("comp_high_conf".to_string());
     comp.lifecycle = LifecycleState::Stable;
     comp.confidence = 0.9;
     comp.members.push(CompositionMember {
@@ -222,7 +222,7 @@ fn test_audit_v3_hm_no_source_event_no_false_positive() {
     // cross-type contradictions.
     let gb = GovernBeliefs::new();
     let mut hm = Composition::default();
-    hm.id = "hm_no_source".to_string();
+    hm.id = CompositionId::new("hm_no_source".to_string());
     hm.composition_type = CompositionType::HiddenMeaning;
     hm.members.push(CompositionMember {
         node_id: 1,
@@ -233,7 +233,7 @@ fn test_audit_v3_hm_no_source_event_no_false_positive() {
     });
 
     let mut event = Composition::default();
-    event.id = "event_unrelated".to_string();
+    event.id = CompositionId::new("event_unrelated".to_string());
     event.composition_type = CompositionType::Event;
     event.members.push(CompositionMember {
         node_id: 2,
@@ -343,7 +343,7 @@ fn test_audit_v3_only_stable_evidence_counts() {
     // Create a composition and add it to the graph
     let node_id = graph.ensure_node("test_entity");
     let mut comp = Composition::default();
-    comp.id = "comp_test_stable_evidence".to_string();
+    comp.id = CompositionId::new("comp_test_stable_evidence".to_string());
     comp.composition_type = CompositionType::Event;
     comp.confidence = 0.75;
     comp.provenance.origin = EdgeSource::FrameCompiler;
@@ -395,7 +395,7 @@ fn test_audit_v3_only_stable_evidence_counts() {
             source: None,
         });
     }
-    graph.dirty_compositions.insert("comp_test_stable_evidence".to_string());
+    graph.dirty_compositions.insert(CompositionId::new("comp_test_stable_evidence".to_string()));
 
     // Run execute multiple times to allow promotion
     for _ in 0..5 {
@@ -421,12 +421,12 @@ fn test_audit_v3_provenance_parent_counts_as_multi_source() {
     // Fix 1: A composition with parent_composition_id should be considered
     // multi-source for Inferred → Grounded promotion.
     let mut comp = Composition::default();
-    comp.id = "comp_derived".to_string();
+    comp.id = CompositionId::new("comp_derived".to_string());
     comp.epistemic = EpistemicState::Inferred;
     comp.lifecycle = LifecycleState::Stable;
     comp.confidence = 0.8;
     comp.provenance.origin = EdgeSource::HiddenMeaningRule;
-    comp.provenance.parent_composition_id = Some("comp_original".to_string());
+    comp.provenance.parent_composition_id = Some(CompositionId::new("comp_original".to_string()));
     comp.members.push(CompositionMember {
         node_id: 1,
         role: SemanticRole::Predicate,
@@ -462,7 +462,7 @@ fn test_audit_v4_batch_seen_increments_even_without_dirty() {
 
     // First ingest creates a composition.
     engine.ingest("Raja memimpin kerajaan karena kebijakan").unwrap();
-    let comp_ids: Vec<String> = engine.graph().compositions.keys().cloned().collect();
+    let comp_ids: Vec<CompositionId> = engine.graph().compositions.keys().cloned().collect();
     assert!(!comp_ids.is_empty(), "Should have compositions after ingest");
 
     // Get batch_seen after first ingest.
@@ -529,7 +529,7 @@ fn test_audit_v4_verbalization_stored_in_context() {
     let node_a = graph.ensure_node("alpha");
     let node_b = graph.ensure_node("beta");
     let mut comp = Composition::default();
-    comp.id = "comp_v4_test".to_string();
+    comp.id = CompositionId::new("comp_v4_test".to_string());
     comp.composition_type = CompositionType::Event;
     comp.lifecycle = LifecycleState::Stable;
     comp.epistemic = EpistemicState::Grounded;
@@ -538,7 +538,7 @@ fn test_audit_v4_verbalization_stored_in_context() {
         CompositionMember { node_id: node_a, role: SemanticRole::Arg0Agent, confidence: 0.9, label: "alpha".to_string() , source: None},
         CompositionMember { node_id: node_b, role: SemanticRole::Arg1Patient, confidence: 0.8, label: "beta".to_string() , source: None},
     ];
-    graph.compositions.insert("comp_v4_test".to_string(), comp);
+    graph.compositions.insert(CompositionId::new("comp_v4_test".to_string()), comp);
 
     let transform = CompositionalVerbalizeTransform::new();
     ctx.set_raw_text("alpha beta");
@@ -565,7 +565,7 @@ fn test_audit_v4_spreading_activation_stored_in_context() {
     let node_a = graph.ensure_node("alpha");
     let node_b = graph.ensure_node("beta");
     let mut comp = Composition::default();
-    comp.id = "comp_spread_test".to_string();
+    comp.id = CompositionId::new("comp_spread_test".to_string());
     comp.composition_type = CompositionType::Event;
     comp.lifecycle = LifecycleState::Stable;
     comp.epistemic = EpistemicState::Grounded;
@@ -576,7 +576,7 @@ fn test_audit_v4_spreading_activation_stored_in_context() {
         CompositionMember { node_id: node_a, role: SemanticRole::Arg0Agent, confidence: 0.9, label: "alpha".to_string() , source: None},
         CompositionMember { node_id: node_b, role: SemanticRole::Arg1Patient, confidence: 0.8, label: "beta".to_string() , source: None},
     ];
-    graph.compositions.insert("comp_spread_test".to_string(), comp);
+    graph.compositions.insert(CompositionId::new("comp_spread_test".to_string()), comp);
 
     let transform = SpreadingActivationTransform::new();
     let _result = transform.execute(&mut ctx, &mut graph);
@@ -603,7 +603,7 @@ fn test_audit_v4_detect_contradiction_no_clone() {
 
     // Create two compositions with same predicate + same agent + XOR negation
     let mut comp1 = Composition::default();
-    comp1.id = "comp_left".to_string();
+    comp1.id = CompositionId::new("comp_left".to_string());
     comp1.composition_type = CompositionType::Event;
     comp1.members = vec![
         CompositionMember { node_id: node_pred, role: SemanticRole::Predicate, confidence: 0.9, label: "membuat".to_string() , source: None},
@@ -613,7 +613,7 @@ fn test_audit_v4_detect_contradiction_no_clone() {
     ];
 
     let mut comp2 = Composition::default();
-    comp2.id = "comp_right".to_string();
+    comp2.id = CompositionId::new("comp_right".to_string());
     comp2.composition_type = CompositionType::Event;
     comp2.members = vec![
         CompositionMember { node_id: node_pred, role: SemanticRole::Predicate, confidence: 0.9, label: "membuat".to_string() , source: None},
@@ -655,7 +655,7 @@ fn test_audit_v4_candidate_promoted_without_dirty() {
     // First ingest creates compositions.
     engine.ingest("Raja memimpin kerajaan karena kebijakan").unwrap();
 
-    let comp_ids: Vec<String> = engine.graph().compositions.keys().cloned().collect();
+    let comp_ids: Vec<CompositionId> = engine.graph().compositions.keys().cloned().collect();
     assert!(!comp_ids.is_empty(), "Should have compositions after first ingest");
 
     // Get batch_seen after first ingest.
@@ -717,7 +717,7 @@ fn test_audit_v4_graph_has_relevant_context_returns_true() {
     let node_kerajaan = graph.ensure_node("kerajaan");
 
     let mut comp1 = Composition::default();
-    comp1.id = "comp_memimpin".to_string();
+    comp1.id = CompositionId::new("comp_memimpin".to_string());
     comp1.composition_type = CompositionType::Event;
     comp1.confidence = 0.7;
     comp1.members = vec![
@@ -732,7 +732,7 @@ fn test_audit_v4_graph_has_relevant_context_returns_true() {
     let node_menteri = graph.ensure_node("menteri");
 
     let mut comp2 = Composition::default();
-    comp2.id = "comp_membantu".to_string();
+    comp2.id = CompositionId::new("comp_membantu".to_string());
     comp2.composition_type = CompositionType::Event;
     comp2.confidence = 0.6;
     comp2.members = vec![
@@ -747,7 +747,7 @@ fn test_audit_v4_graph_has_relevant_context_returns_true() {
         gap_id: "gap_test".to_string(),
         gap_type: KnowledgeGapType::MissingRole,
         description: "Event 'comp_membantu' missing Arg1Patient role".to_string(),
-        source_composition_id: Some("comp_membantu".to_string()),
+        source_composition_id: Some(CompositionId::new("comp_membantu".to_string())),
         source_atom_id: None,
         missing_role: Some(SemanticRole::Arg1Patient),
         confidence: 0.7,
@@ -779,7 +779,7 @@ fn test_audit_v4_graph_has_relevant_context_returns_true() {
         gap_id: "gap_agent".to_string(),
         gap_type: KnowledgeGapType::MissingRole,
         description: "Missing Agent".to_string(),
-        source_composition_id: Some("comp_memimpin".to_string()),
+        source_composition_id: Some(CompositionId::new("comp_memimpin".to_string())),
         source_atom_id: None,
         missing_role: Some(SemanticRole::Arg0Agent),
         confidence: 0.7,

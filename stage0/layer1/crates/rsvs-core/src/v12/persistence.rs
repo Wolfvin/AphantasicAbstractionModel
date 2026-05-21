@@ -301,7 +301,7 @@ impl Persistence {
                         if let Some(senses) = node_obj.get("senses").and_then(|v| v.as_array()) {
                             for (sense_idx, sense_val) in senses.iter().enumerate() {
                                 if let Some(sense_obj) = sense_val.as_object() {
-                                    let comp_id = format!("{}_sense_{}", label, sense_idx);
+                                    let comp_id = super::types::CompositionId::new(format!("{}_sense_{}", label, sense_idx));
                                     let mut comp = super::types::Composition::default();
                                     comp.id = comp_id.clone();
                                     comp.composition_type = super::types::CompositionType::Hypothesis;
@@ -403,7 +403,7 @@ impl Persistence {
                         if let Some(senses) = node_obj.get("senses").and_then(|v| v.as_array()) {
                             for (sense_idx, sense_val) in senses.iter().enumerate() {
                                 if let Some(sense_obj) = sense_val.as_object() {
-                                    let comp_id = format!("{}_sense_{}", label, sense_idx);
+                                    let comp_id = super::types::CompositionId::new(format!("{}_sense_{}", label, sense_idx));
                                     let mut comp = super::types::Composition::default();
                                     comp.id = comp_id.clone();
                                     comp.composition_type = super::types::CompositionType::Hypothesis;
@@ -508,7 +508,7 @@ impl Persistence {
 
                     // v8.3 edges are node-to-node; v12 edges are composition-to-node.
                     // Create a synthetic composition for co-occurring nodes.
-                    let comp_id = format!("migrated_edge_{}", result.edges_migrated);
+                    let comp_id = super::types::CompositionId::new(format!("migrated_edge_{}", result.edges_migrated));
                     let mut comp = super::types::Composition::default();
                     comp.id = comp_id.clone();
                     comp.composition_type = super::types::CompositionType::Event;
@@ -556,7 +556,7 @@ impl Persistence {
                         let pair_key = if from_id < to_id { (from_id, to_id) } else { (to_id, from_id) };
                         edge_pairs.entry(pair_key).or_default().push(weight);
 
-                        let comp_id = format!("migrated_edge_{}", result.edges_migrated);
+                        let comp_id = super::types::CompositionId::new(format!("migrated_edge_{}", result.edges_migrated));
                         let mut comp = super::types::Composition::default();
                         comp.id = comp_id.clone();
                         comp.composition_type = super::types::CompositionType::Event;
@@ -596,7 +596,7 @@ impl Persistence {
                 continue; // Only create shared compositions for multi-edge pairs.
             }
             let avg_weight: f32 = weights.iter().sum::<f32>() / weights.len() as f32;
-            let comp_id = format!("migrated_cooc_{}_{}", node_a, node_b);
+            let comp_id = super::types::CompositionId::new(format!("migrated_cooc_{}_{}", node_a, node_b));
             let mut comp = super::types::Composition::default();
             comp.id = comp_id.clone();
             comp.composition_type = super::types::CompositionType::Event;
@@ -667,7 +667,7 @@ mod tests {
         let node_b = graph.ensure_node("beta");
 
         let mut comp = Composition::default();
-        comp.id = "comp_test".to_string();
+        comp.id = CompositionId::new("comp_test".to_string());
         comp.composition_type = CompositionType::Event;
         comp.confidence = 0.8;
         comp.members = vec![
@@ -686,7 +686,7 @@ mod tests {
                 source: None,
             },
         ];
-        graph.compositions.insert("comp_test".to_string(), comp);
+        graph.compositions.insert(CompositionId::new("comp_test".to_string()), comp);
 
         // Save to temp file.
         let temp_dir = std::env::temp_dir();

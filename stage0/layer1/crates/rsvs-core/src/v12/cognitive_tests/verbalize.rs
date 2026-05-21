@@ -21,7 +21,7 @@ fn test_cve_verbalize_graph_driven_explanation() {
     let node_lambat = graph.ensure_node("lambat");
 
     let mut comp_event = Composition::default();
-    comp_event.id = "comp_event_1".to_string();
+    comp_event.id = CompositionId::new("comp_event_1".to_string());
     comp_event.composition_type = CompositionType::Event;
     comp_event.lifecycle = LifecycleState::Stable;
     comp_event.epistemic = EpistemicState::Grounded;
@@ -67,7 +67,7 @@ fn test_cve_verbalize_graph_driven_explanation() {
     // Pattern: "Ketika database_penuh, maka lambat"
     let node_db_full = graph.ensure_node("database_penuh");
     let mut comp_pattern = Composition::default();
-    comp_pattern.id = "comp_pattern_1".to_string();
+    comp_pattern.id = CompositionId::new("comp_pattern_1".to_string());
     comp_pattern.composition_type = CompositionType::Pattern;
     comp_pattern.lifecycle = LifecycleState::Stable;
     comp_pattern.epistemic = EpistemicState::Grounded;
@@ -101,7 +101,7 @@ fn test_cve_verbalize_graph_driven_explanation() {
     // HiddenMeaning: "cache digunakan sebagai solusi untuk lambat"
     let node_cache = graph.ensure_node("cache");
     let mut comp_hm = Composition::default();
-    comp_hm.id = "comp_hm_1".to_string();
+    comp_hm.id = CompositionId::new("comp_hm_1".to_string());
     comp_hm.composition_type = CompositionType::HiddenMeaning;
     comp_hm.lifecycle = LifecycleState::Candidate;
     comp_hm.epistemic = EpistemicState::Inferred;
@@ -155,19 +155,19 @@ fn test_cve_verbalize_graph_driven_explanation() {
 
     // CVE MUST include the Pattern composition ("Ketika database_penuh, maka lambat")
     assert!(
-        result.path.contains(&"comp_pattern_1".to_string()),
+        result.path.contains(&CompositionId::new("comp_pattern_1".to_string())),
         "CVE reasoning path should include the Pattern composition"
     );
 
     // CVE MUST include the Event composition
     assert!(
-        result.path.contains(&"comp_event_1".to_string()),
+        result.path.contains(&CompositionId::new("comp_event_1".to_string())),
         "CVE reasoning path should include the Event composition"
     );
 
     // CVE MUST include the HiddenMeaning composition
     assert!(
-        result.path.contains(&"comp_hm_1".to_string()),
+        result.path.contains(&CompositionId::new("comp_hm_1".to_string())),
         "CVE reasoning path should include the HiddenMeaning composition"
     );
 

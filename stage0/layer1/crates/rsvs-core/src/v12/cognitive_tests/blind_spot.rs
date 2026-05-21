@@ -293,7 +293,7 @@ fn test_blind_spot_3_semua_tipe_kontradiksi() {
 
         // Build HiddenMeaning composition that contradicts the event
         let mut hm_comp = Composition::default();
-        hm_comp.id = "comp_hm_obat_contra".to_string();
+        hm_comp.id = CompositionId::new("comp_hm_obat_contra".to_string());
         hm_comp.composition_type = CompositionType::HiddenMeaning;
         hm_comp.confidence = 0.6;
         hm_comp.provenance = ProvenanceChain {
@@ -355,7 +355,7 @@ fn test_blind_spot_3_semua_tipe_kontradiksi() {
         let mut graph = Graph::new();
 
         let mut hm_a = Composition::default();
-        hm_a.id = "comp_hm_sol_a".to_string();
+        hm_a.id = CompositionId::new("comp_hm_sol_a".to_string());
         hm_a.composition_type = CompositionType::HiddenMeaning;
         hm_a.confidence = 0.6;
         hm_a.provenance = ProvenanceChain {
@@ -382,7 +382,7 @@ fn test_blind_spot_3_semua_tipe_kontradiksi() {
         });
 
         let mut hm_b = Composition::default();
-        hm_b.id = "comp_hm_sol_b".to_string();
+        hm_b.id = CompositionId::new("comp_hm_sol_b".to_string());
         hm_b.composition_type = CompositionType::HiddenMeaning;
         hm_b.confidence = 0.6;
         hm_b.provenance = ProvenanceChain {

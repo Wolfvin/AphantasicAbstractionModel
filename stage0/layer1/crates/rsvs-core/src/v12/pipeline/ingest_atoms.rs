@@ -57,7 +57,7 @@ impl ErasedTransform for IngestAtoms {
         let mut atoms_counted = 0;
 
         // Collect composition IDs to assign back to atoms (can't mutate while iterating).
-        let mut comp_id_assignments: Vec<(usize, String)> = Vec::new();
+        let mut comp_id_assignments: Vec<(usize, CompositionId)> = Vec::new();
         // Collect event atoms for the sliding window.
         let mut event_atoms: Vec<SemanticAtom> = Vec::new();
         // Track sentence -> Vec<NodeId> for Token co-occurrence edges.
@@ -84,7 +84,7 @@ impl ErasedTransform for IngestAtoms {
 
                 // --- Event atoms: create a Composition with Event type ---
                 AtomType::Event => {
-                    let comp_id = format!("comp_{}", atom.id);
+                    let comp_id = CompositionId::new(format!("comp_{}", atom.id));
                     let mut composition = Composition {
                         id: comp_id.clone(),
                         composition_type: CompositionType::Event,
@@ -129,7 +129,9 @@ impl ErasedTransform for IngestAtoms {
                     }
 
                     comp_id_assignments.push((i, comp_id.clone()));
+                    let member_node_ids: Vec<NodeId> = composition.members.iter().map(|m| m.node_id).collect();
                     graph.compositions.insert(comp_id.clone(), composition);
+                    graph.index_composition(&comp_id, &member_node_ids);
                     graph.dirty_compositions.insert(comp_id);
                     compositions_created += 1;
                     event_atoms.push(atom.clone());
@@ -137,7 +139,7 @@ impl ErasedTransform for IngestAtoms {
 
                 // --- HiddenMeaning atoms: create a Composition with HiddenMeaning type ---
                 AtomType::HiddenMeaning => {
-                    let comp_id = format!("comp_{}", atom.id);
+                    let comp_id = CompositionId::new(format!("comp_{}", atom.id));
                     let mut composition = Composition {
                         id: comp_id.clone(),
                         composition_type: CompositionType::HiddenMeaning,
@@ -182,14 +184,16 @@ impl ErasedTransform for IngestAtoms {
                     }
 
                     comp_id_assignments.push((i, comp_id.clone()));
+                    let member_node_ids: Vec<NodeId> = composition.members.iter().map(|m| m.node_id).collect();
                     graph.compositions.insert(comp_id.clone(), composition);
+                    graph.index_composition(&comp_id, &member_node_ids);
                     graph.dirty_compositions.insert(comp_id);
                     compositions_created += 1;
                 }
 
                 // --- Pattern / Hypothesis / Acquisition atoms ---
                 _ => {
-                    let comp_id = format!("comp_{}", atom.id);
+                    let comp_id = CompositionId::new(format!("comp_{}", atom.id));
                     let comp_type = match atom.atom_type {
                         AtomType::Pattern => CompositionType::Pattern,
                         AtomType::Hypothesis => CompositionType::Hypothesis,
@@ -237,7 +241,9 @@ impl ErasedTransform for IngestAtoms {
                     }
 
                     comp_id_assignments.push((i, comp_id.clone()));
+                    let member_node_ids: Vec<NodeId> = composition.members.iter().map(|m| m.node_id).collect();
                     graph.compositions.insert(comp_id.clone(), composition);
+                    graph.index_composition(&comp_id, &member_node_ids);
                     graph.dirty_compositions.insert(comp_id);
                     compositions_created += 1;
                 }
@@ -253,7 +259,7 @@ impl ErasedTransform for IngestAtoms {
             if node_ids.len() < 2 {
                 continue;
             }
-            let comp_id = format!("comp_cooc_{}", graph.next_id);
+            let comp_id = CompositionId::new(format!("comp_cooc_{}", graph.next_id));
             let mut composition = Composition {
                 id: comp_id.clone(),
                 composition_type: CompositionType::Situation,
@@ -288,7 +294,9 @@ impl ErasedTransform for IngestAtoms {
                 edges_created += 1;
             }
 
+            let member_node_ids: Vec<NodeId> = composition.members.iter().map(|m| m.node_id).collect();
             graph.compositions.insert(comp_id.clone(), composition);
+            graph.index_composition(&comp_id, &member_node_ids);
             graph.dirty_compositions.insert(comp_id);
             compositions_created += 1;
         }

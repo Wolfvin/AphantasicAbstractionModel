@@ -738,7 +738,7 @@ mod tests {
         let node_lambat = graph.ensure_node("lambat");
 
         let mut comp_event = Composition::default();
-        comp_event.id = "comp_event_1".to_string();
+        comp_event.id = CompositionId::new("comp_event_1".to_string());
         comp_event.composition_type = CompositionType::Event;
         comp_event.lifecycle = LifecycleState::Stable;
         comp_event.epistemic = EpistemicState::Grounded;
@@ -778,7 +778,7 @@ mod tests {
         // HiddenMeaning: "cache digunakan sebagai solusi untuk lambat"
         let node_cache = graph.ensure_node("cache");
         let mut comp_hm = Composition::default();
-        comp_hm.id = "comp_hm_1".to_string();
+        comp_hm.id = CompositionId::new("comp_hm_1".to_string());
         comp_hm.composition_type = CompositionType::HiddenMeaning;
         comp_hm.lifecycle = LifecycleState::Candidate;
         comp_hm.epistemic = EpistemicState::Inferred;
@@ -804,7 +804,7 @@ mod tests {
         // Pattern: "Ketika database_penuh, maka lambat"
         let node_db_full = graph.ensure_node("database_penuh");
         let mut comp_pattern = Composition::default();
-        comp_pattern.id = "comp_pattern_1".to_string();
+        comp_pattern.id = CompositionId::new("comp_pattern_1".to_string());
         comp_pattern.composition_type = CompositionType::Pattern;
         comp_pattern.lifecycle = LifecycleState::Stable;
         comp_pattern.epistemic = EpistemicState::Grounded;
@@ -836,7 +836,7 @@ mod tests {
     fn test_verbalize_event_composition() {
         let graph = make_test_graph();
         let cve = CompositionalVerbalize::new();
-        let comp = graph.get_composition(&"comp_event_1".to_string()).unwrap();
+        let comp = graph.get_composition(&CompositionId::new("comp_event_1".to_string())).unwrap();
         let sentence = cve.verbalize_composition(comp);
         assert!(
             sentence.contains("Raymond"),
@@ -865,7 +865,7 @@ mod tests {
     fn test_verbalize_hidden_meaning_composition() {
         let graph = make_test_graph();
         let cve = CompositionalVerbalize::new();
-        let comp = graph.get_composition(&"comp_hm_1".to_string()).unwrap();
+        let comp = graph.get_composition(&CompositionId::new("comp_hm_1".to_string())).unwrap();
         let sentence = cve.verbalize_composition(comp);
         assert!(
             sentence.contains("cache"),
@@ -890,7 +890,7 @@ mod tests {
         let graph = make_test_graph();
         let cve = CompositionalVerbalize::new();
         let comp = graph
-            .get_composition(&"comp_pattern_1".to_string())
+            .get_composition(&CompositionId::new("comp_pattern_1".to_string()))
             .unwrap();
         let sentence = cve.verbalize_composition(comp);
         assert!(
@@ -915,7 +915,7 @@ mod tests {
     fn test_epistemic_qualifier_stable_grounded() {
         let graph = make_test_graph();
         let cve = CompositionalVerbalize::new();
-        let comp = graph.get_composition(&"comp_event_1".to_string()).unwrap();
+        let comp = graph.get_composition(&CompositionId::new("comp_event_1".to_string())).unwrap();
         // Stable + Grounded + confidence 0.85 > 0.8 → no qualifier
         let qualified = cve.qualify("Test sentence.", comp);
         assert_eq!(
@@ -929,7 +929,7 @@ mod tests {
     fn test_epistemic_qualifier_candidate_inferred() {
         let graph = make_test_graph();
         let cve = CompositionalVerbalize::new();
-        let comp = graph.get_composition(&"comp_hm_1".to_string()).unwrap();
+        let comp = graph.get_composition(&CompositionId::new("comp_hm_1".to_string())).unwrap();
         // Candidate + Inferred → "Berdasarkan analisis, "
         let qualified = cve.qualify("Test sentence.", comp);
         assert!(
@@ -1011,7 +1011,7 @@ mod tests {
     fn test_verbalize_single() {
         let graph = make_test_graph();
         let cve = CompositionalVerbalize::new();
-        let comp = graph.get_composition(&"comp_event_1".to_string()).unwrap();
+        let comp = graph.get_composition(&CompositionId::new("comp_event_1".to_string())).unwrap();
         let sentence = cve.verbalize_single(comp);
 
         assert!(
@@ -1032,7 +1032,7 @@ mod tests {
         let node_pred = graph.ensure_node("mengalami_kegagalan");
 
         let mut comp = Composition::default();
-        comp.id = "comp_hypo_1".to_string();
+        comp.id = CompositionId::new("comp_hypo_1".to_string());
         comp.composition_type = CompositionType::Hypothesis;
         comp.lifecycle = LifecycleState::Quarantine;
         comp.epistemic = EpistemicState::Hypothesis;
@@ -1080,7 +1080,7 @@ mod tests {
         let node_patient = graph.ensure_node("fitur_baru");
 
         let mut comp = Composition::default();
-        comp.id = "comp_sit_1".to_string();
+        comp.id = CompositionId::new("comp_sit_1".to_string());
         comp.composition_type = CompositionType::Situation;
         comp.lifecycle = LifecycleState::Stable;
         comp.epistemic = EpistemicState::Observed;
@@ -1131,7 +1131,7 @@ mod tests {
         let node_patient = graph.ensure_node("pelanggaran");
 
         let mut comp = Composition::default();
-        comp.id = "comp_acq_1".to_string();
+        comp.id = CompositionId::new("comp_acq_1".to_string());
         comp.composition_type = CompositionType::Acquisition;
         comp.lifecycle = LifecycleState::New;
         comp.epistemic = EpistemicState::Observed;
@@ -1221,7 +1221,7 @@ mod tests {
         let node_instrument = graph.ensure_node("tool_monitoring");
 
         let mut comp = Composition::default();
-        comp.id = "comp_full_event".to_string();
+        comp.id = CompositionId::new("comp_full_event".to_string());
         comp.composition_type = CompositionType::Event;
         comp.lifecycle = LifecycleState::Stable;
         comp.epistemic = EpistemicState::Grounded;

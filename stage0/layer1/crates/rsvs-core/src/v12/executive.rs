@@ -656,7 +656,7 @@ impl ExecutiveOrchestrator {
                                 source: EnrichmentSource::PassiveRecall,
                             });
                             enrichments_queued += 1;
-                            filled_gaps.push(gap.gap_id.clone());
+                            filled_gaps.push(CompositionId::new(gap.gap_id.clone()));
                         }
                     }
                     AcquisitionStrategy::AskUser { .. }
@@ -986,10 +986,10 @@ mod tests {
             current_confidence: 0.9,
             elapsed_ms: 0,
             evidence_count: 2,
-            modified_compositions: vec!["comp1".to_string()],
+            modified_compositions: vec!["comp1".into()],
             has_gaps: false,
-            resolved_contradictions: vec!["comp_contra".to_string()],
-            filled_gaps: vec!["comp_gap".to_string()],
+            resolved_contradictions: vec!["comp_contra".into()],
+            filled_gaps: vec!["comp_gap".into()],
         };
         let graph = Graph::new();
         let findings = reflect.reflect(&result, &graph);

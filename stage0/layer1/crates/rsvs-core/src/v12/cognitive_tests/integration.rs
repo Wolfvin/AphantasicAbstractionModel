@@ -209,7 +209,7 @@ fn test_p0_process_user_answer_semantic() {
     // ── Proof 2: process_user_answer_merge creates correct EnrichmentRequest ──
     // We need a question with target_composition_id and target_role set
     let mut merge_question = question.clone();
-    merge_question.target_composition_id = Some("comp_target".to_string());
+    merge_question.target_composition_id = Some(CompositionId::new("comp_target".to_string()));
     merge_question.target_role = Some(SemanticRole::Arg0Agent);
 
     let enrichment = sa.process_user_answer_merge(&merge_question, "Raymond", &mut graph);
@@ -228,7 +228,7 @@ fn test_p0_process_user_answer_semantic() {
         "candidate_label harus sama dengan jawaban user"
     );
     assert_eq!(
-        req.target_composition_id, "comp_target",
+        req.target_composition_id, CompositionId::new("comp_target".to_string()),
         "target_composition_id harus menunjuk ke composition yang punya gap"
     );
     eprintln!("  ✓ Proof 2: process_user_answer_merge creates correct EnrichmentRequest");
@@ -571,7 +571,7 @@ fn test_passive_recall_excludes_self_referent() {
         gap_id: "gap_agent".to_string(),
         gap_type: KnowledgeGapType::MissingRole,
         description: "Missing Agent role".to_string(),
-        source_composition_id: Some("comp_buat".to_string()),
+        source_composition_id: Some(CompositionId::new("comp_buat".to_string())),
         source_atom_id: None,
         missing_role: Some(SemanticRole::Arg0Agent),
         confidence: 0.7,
@@ -723,7 +723,7 @@ fn test_role_weighted_similarity_captures_structural_equivalence() {
     let mut graph = Graph::new();
 
     let mut comp_a = Composition::default();
-    comp_a.id = "comp_a".to_string();
+    comp_a.id = CompositionId::new("comp_a".to_string());
     comp_a.composition_type = CompositionType::Event;
     comp_a.confidence = 0.7;
 
@@ -753,7 +753,7 @@ fn test_role_weighted_similarity_captures_structural_equivalence() {
     });
 
     let mut comp_b = Composition::default();
-    comp_b.id = "comp_b".to_string();
+    comp_b.id = CompositionId::new("comp_b".to_string());
     comp_b.composition_type = CompositionType::Event;
     comp_b.confidence = 0.7;
 

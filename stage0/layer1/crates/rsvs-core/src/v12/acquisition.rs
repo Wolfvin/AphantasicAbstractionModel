@@ -1200,7 +1200,7 @@ impl SelectAcquisition {
                         // Try to find the source composition from the gap ID.
                         // Simplified: use the gap_id as a key.
                         enrichments.push(EnrichmentRequest {
-                            target_composition_id: decision.gap_id.clone(),
+                            target_composition_id: CompositionId::new(decision.gap_id.clone()),
                             role_to_fill: SemanticRole::Arg0Agent, // Default; should be from gap
                             candidate_node_id: *candidate_node_id,
                             candidate_label: candidate_label.clone(),
@@ -1325,7 +1325,7 @@ mod tests {
     fn test_detect_atom_gaps_missing_agent() {
         let mut dg = DetectGaps::new();
         let comp = Composition {
-            id: "comp_1".to_string(),
+            id: CompositionId::new("comp_1".to_string()),
             composition_type: CompositionType::Event,
             members: vec![
                 CompositionMember {
@@ -1387,7 +1387,7 @@ mod tests {
     fn test_detect_grounding_gaps() {
         let mut dg = DetectGaps::new();
         let comp = Composition {
-            id: "comp_1".to_string(),
+            id: CompositionId::new("comp_1".to_string()),
             composition_type: CompositionType::Event,
             epistemic: EpistemicState::Inferred,
             confidence: 0.3,
@@ -1413,7 +1413,7 @@ mod tests {
         // Add a node and composition with an Agent role.
         let node_id = graph.ensure_node("Raymond");
         let mut comp = Composition {
-            id: "comp_other".to_string(),
+            id: CompositionId::new("comp_other".to_string()),
             composition_type: CompositionType::Event,
             ..Composition::default()
         };
@@ -1424,13 +1424,13 @@ mod tests {
             label: String::new(),
             source: None,
         });
-        graph.compositions.insert("comp_other".to_string(), comp);
+        graph.compositions.insert(CompositionId::new("comp_other".to_string()), comp);
 
         let gap = KnowledgeGap {
             gap_id: "gap_1".to_string(),
             gap_type: KnowledgeGapType::MissingRole,
             description: "Missing Agent".to_string(),
-            source_composition_id: Some("comp_1".to_string()),
+            source_composition_id: Some(CompositionId::new("comp_1".to_string())),
             missing_role: Some(SemanticRole::Arg0Agent),
             confidence: 0.7,
             ..KnowledgeGap::default()
@@ -1478,7 +1478,7 @@ mod tests {
 
         let node_id = graph.ensure_node("Raymond");
         let mut comp = Composition {
-            id: "comp_1".to_string(),
+            id: CompositionId::new("comp_1".to_string()),
             composition_type: CompositionType::Event,
             ..Composition::default()
         };
@@ -1489,13 +1489,13 @@ mod tests {
             label: String::new(),
             source: None,
         });
-        graph.compositions.insert("comp_1".to_string(), comp);
+        graph.compositions.insert(CompositionId::new("comp_1".to_string()), comp);
 
         let gap = KnowledgeGap {
             gap_id: "gap_1".to_string(),
             gap_type: KnowledgeGapType::MissingRole,
             missing_role: Some(SemanticRole::Arg0Agent),
-            source_composition_id: Some("comp_2".to_string()),
+            source_composition_id: Some(CompositionId::new("comp_2".to_string())),
             ..KnowledgeGap::default()
         };
 

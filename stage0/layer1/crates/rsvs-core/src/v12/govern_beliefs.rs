@@ -380,7 +380,7 @@ impl GovernBeliefs {
             right.member_with_role(&SemanticRole::Predicate),
         ) {
             (Some(l), Some(r)) => l.node_id == r.node_id,
-            _ => left.id.split('_').next_back() == right.id.split('_').next_back(), // Fallback: ID comparison
+            _ => left.id.as_str().split('_').next_back() == right.id.as_str().split('_').next_back(), // Fallback: ID comparison
         }
     }
 
@@ -587,7 +587,7 @@ impl GovernBeliefs {
         let is_source = match source_event_member {
             Some(m) => {
                 // Primary: match against provenance.origin_id or event id
-                if m.label == event.provenance.origin_id || m.label == event.id {
+                if m.label == event.provenance.origin_id || m.label == event.id.as_str() {
                     true
                 }
                 // Extended: match against Event's Predicate member label
@@ -2182,7 +2182,7 @@ mod tests {
         confidence: f32,
     ) -> Composition {
         Composition {
-            id: id.to_string(),
+            id: CompositionId::new(id.to_string()),
             composition_type: comp_type,
             members: members
                 .into_iter()

@@ -35,7 +35,7 @@ fn test_phase_j_build_freq_map() {
 
     // Create two compositions referencing "bank"
     let mut comp1 = Composition::default();
-    comp1.id = "comp_financial".to_string();
+    comp1.id = CompositionId::new("comp_financial".to_string());
     comp1.confidence = 0.8;
     comp1.members.push(CompositionMember {
         node_id,
@@ -47,7 +47,7 @@ fn test_phase_j_build_freq_map() {
     graph.compositions.insert(comp1.id.clone(), comp1);
 
     let mut comp2 = Composition::default();
-    comp2.id = "comp_river".to_string();
+    comp2.id = CompositionId::new("comp_river".to_string());
     comp2.confidence = 0.5;
     comp2.members.push(CompositionMember {
         node_id,
@@ -98,7 +98,7 @@ fn test_phase_k_coherence_penalty_low_coherence() {
     graph.nodes.get_mut(&node_id).unwrap().senses.push(sense);
 
     let mut comp = Composition::default();
-    comp.id = "comp_test".to_string();
+    comp.id = CompositionId::new("comp_test".to_string());
     comp.members.push(CompositionMember {
         node_id,
         role: SemanticRole::Arg0Agent,
@@ -129,7 +129,7 @@ fn test_phase_k_coherence_penalty_high_coherence() {
     graph.nodes.get_mut(&node_id).unwrap().senses.push(sense);
 
     let mut comp = Composition::default();
-    comp.id = "comp_test".to_string();
+    comp.id = CompositionId::new("comp_test".to_string());
     comp.members.push(CompositionMember {
         node_id,
         role: SemanticRole::Arg0Agent,
@@ -224,7 +224,7 @@ fn test_phase_l_extract_properties_from_composition() {
     let patient_id = graph.ensure_node("aplikasi");
 
     let mut comp = Composition::default();
-    comp.id = "comp_membuat".to_string();
+    comp.id = CompositionId::new("comp_membuat".to_string());
     comp.members.push(CompositionMember {
         node_id: pred_id,
         role: SemanticRole::Predicate,
@@ -276,7 +276,7 @@ fn test_phase_m_update_sense_evidence_confirming() {
     graph.nodes.get_mut(&node_id).unwrap().senses.push(sense);
 
     let mut comp = Composition::default();
-    comp.id = "comp_optimize".to_string();
+    comp.id = CompositionId::new("comp_optimize".to_string());
     comp.members.push(CompositionMember {
         node_id,
         role: SemanticRole::Arg1Patient,
@@ -287,7 +287,7 @@ fn test_phase_m_update_sense_evidence_confirming() {
     graph.compositions.insert(comp.id.clone(), comp);
 
     let gb = GovernBeliefs::new();
-    let comp_id = "comp_optimize".to_string();
+    let comp_id = CompositionId::new("comp_optimize".to_string());
     gb.update_sense_evidence(&comp_id, true, &mut graph);
 
     let node = graph.nodes.get(&node_id).unwrap();
@@ -306,7 +306,7 @@ fn test_phase_m_update_sense_evidence_contradicting() {
     graph.nodes.get_mut(&node_id).unwrap().senses.push(sense);
 
     let mut comp = Composition::default();
-    comp.id = "comp_contradict".to_string();
+    comp.id = CompositionId::new("comp_contradict".to_string());
     comp.members.push(CompositionMember {
         node_id,
         role: SemanticRole::Arg0Agent,
@@ -317,7 +317,7 @@ fn test_phase_m_update_sense_evidence_contradicting() {
     graph.compositions.insert(comp.id.clone(), comp);
 
     let gb = GovernBeliefs::new();
-    let comp_id = "comp_contradict".to_string();
+    let comp_id = CompositionId::new("comp_contradict".to_string());
     gb.update_sense_evidence(&comp_id, false, &mut graph);
 
     let node = graph.nodes.get(&node_id).unwrap();
@@ -422,7 +422,7 @@ fn test_phase_n_utterance_context() {
     let comp_id = graph.ensure_node("test_comp");
 
     let mut comp = Composition::default();
-    comp.id = "comp_utterance_test".to_string();
+    comp.id = CompositionId::new("comp_utterance_test".to_string());
     comp.composition_type = CompositionType::Event;
     comp.members.push(CompositionMember {
         node_id: comp_id,
@@ -436,7 +436,7 @@ fn test_phase_n_utterance_context() {
     // Add a situational composition to verify situational_composition_count
     let sit_node_id = graph.ensure_node("sit_context");
     let mut sit_comp = Composition::default();
-    sit_comp.id = "comp_sit_1".to_string();
+    sit_comp.id = CompositionId::new("comp_sit_1".to_string());
     sit_comp.composition_type = CompositionType::Situation;
     sit_comp.members.push(CompositionMember {
         node_id: sit_node_id,
@@ -453,7 +453,7 @@ fn test_phase_n_utterance_context() {
     node.senses.push(Sense::new_primitive("base_sense"));
     node.senses.push(Sense::new_derived("cross_layer", 2));
 
-    let comp_id = "comp_utterance_test".to_string();
+    let comp_id = CompositionId::new("comp_utterance_test".to_string());
     let ctx = graph.get_utterance_context(&comp_id);
     assert!(
         (ctx.current_weight - 0.55).abs() < 0.01,
@@ -494,7 +494,7 @@ fn test_phase_o_connectivity_score() {
     // Add 5 compositions referencing this node
     for i in 0..5 {
         let mut comp = Composition::default();
-        comp.id = format!("comp_hub_{}", i);
+        comp.id = CompositionId::new(format!("comp_hub_{}", i));
         comp.members.push(CompositionMember {
             node_id,
             role: SemanticRole::Predicate,
@@ -524,7 +524,7 @@ fn test_phase_o_connectivity_saturates() {
     // Add 20 compositions referencing this node (should saturate at 1.0)
     for i in 0..20 {
         let mut comp = Composition::default();
-        comp.id = format!("comp_mega_{}", i);
+        comp.id = CompositionId::new(format!("comp_mega_{}", i));
         comp.members.push(CompositionMember {
             node_id,
             role: SemanticRole::Predicate,
@@ -709,7 +709,7 @@ fn test_phase_m_integration_grounding_loop_wired() {
 
     // Add a high-confidence composition
     let mut comp = Composition::default();
-    comp.id = "comp_tim_works".to_string();
+    comp.id = CompositionId::new("comp_tim_works".to_string());
     comp.confidence = 0.8;
     comp.lifecycle = LifecycleState::Stable;
     comp.members.push(CompositionMember {

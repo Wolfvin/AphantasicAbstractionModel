@@ -491,7 +491,7 @@ mod tests {
 
     fn make_composition(id: &str, node_ids: &[NodeId], comp_type: CompositionType) -> Composition {
         let mut comp = Composition::default();
-        comp.id = id.to_string();
+        comp.id = id.into();
         comp.composition_type = comp_type;
         comp.confidence = 0.7;
         comp.members = node_ids
@@ -542,7 +542,7 @@ mod tests {
     #[test]
     fn test_role_aware_similarity() {
         let mut a = Composition::default();
-        a.id = "a".to_string();
+        a.id = "a".into();
         a.composition_type = CompositionType::Event;
         a.members = vec![
             CompositionMember {
@@ -562,7 +562,7 @@ mod tests {
         ];
 
         let mut b = Composition::default();
-        b.id = "b".to_string();
+        b.id = "b".into();
         b.composition_type = CompositionType::Event;
         b.members = vec![
             CompositionMember {
