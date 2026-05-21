@@ -51,6 +51,14 @@ use crate::types::{EdgeSource, NodeId};
 // GovernBeliefs — The Transform
 // ========================================================================
 
+/// Maximum number of composition pairs to check for contradiction per call.
+/// Prevents O(N²) runaway on large graphs. Mirrors the throttle pattern
+/// used in `ConvergenceDetection::detect()` and `Reflect::reflect()`.
+pub const MAX_CONTRADICTION_PAIRS: usize = 500;
+
+/// Default contradiction strength assigned to detected conflicts.
+pub const DEFAULT_CONTRADICTION_STRENGTH: f32 = 0.8;
+
 /// MD-4: GovernBeliefs transform — assigns lifecycle/epistemic states,
 /// detects contradictions, and manages promotions.
 ///
@@ -64,6 +72,10 @@ use crate::types::{EdgeSource, NodeId};
 pub struct GovernBeliefs {
     /// Current batch number (incremented each ingest cycle).
     pub current_batch: usize,
+
+    /// Maximum number of pairs to check for contradiction per `detect_contradiction()` call.
+    /// Prevents O(N²) runaway on large graphs. Default: [`MAX_CONTRADICTION_PAIRS`].
+    pub max_contradiction_pairs: usize,
 }
 
 impl Default for GovernBeliefs {
@@ -75,7 +87,10 @@ impl Default for GovernBeliefs {
 impl GovernBeliefs {
     /// Create a new GovernBeliefs transform.
     pub fn new() -> Self {
-        Self { current_batch: 0 }
+        Self {
+            current_batch: 0,
+            max_contradiction_pairs: MAX_CONTRADICTION_PAIRS,
+        }
     }
 
     // ====================================================================
@@ -181,12 +196,35 @@ impl GovernBeliefs {
     /// - Purpose conflict
     /// - Cross-type contradiction (HiddenMeaning vs Event)
     /// - Equivalence mismatch (non-Event types)
+    ///
+    /// # Throttle
+    ///
+    /// The O(N²) nested loop is throttled by `max_contradiction_pairs` (default 500)
+    /// to prevent runaway computation on large graphs. This mirrors the throttle
+    /// pattern used in `ConvergenceDetection::detect()` and `Reflect::reflect()`.
+    ///
+    /// # Audit v6 fix
+    ///
+    /// Previously, this function had two critical issues:
+    /// 1. No throttle — O(N²) unbounded on large graphs
+    /// 2. Triple-unwrap chain reading back `conflict_type` from `updates` instead
+    ///    of using the `conflict` variable directly. Fixed by constructing
+    ///    `Contradiction` structs directly from the `conflict` variable.
     pub fn detect_contradiction(&self, compositions: &mut [Composition]) -> Vec<GovernanceUpdate> {
         let mut updates = Vec::new();
         let len = compositions.len();
+        let mut checked: usize = 0;
 
         for i in 0..len {
+            if checked >= self.max_contradiction_pairs {
+                break;
+            }
             for j in (i + 1)..len {
+                if checked >= self.max_contradiction_pairs {
+                    break;
+                }
+                checked += 1;
+
                 // Audit v4 fix: Avoid cloning entire Composition structs for each pair.
                 // Instead, borrow both compositions immutably for the conflict check.
                 // We only need mutable access when applying a detected contradiction.
@@ -196,37 +234,38 @@ impl GovernBeliefs {
                 };
 
                 if let Some(conflict) = conflict {
+                    // Audit v6 fix: Construct Contradiction structs directly from the
+                    // `conflict` variable instead of reading back from `updates` via
+                    // triple-unwrap chain. This eliminates panic risk and is clearer.
+                    let conflict_type_i = conflict.clone();
+                    let conflict_type_j = conflict.clone();
+
                     let mut update_left = GovernanceUpdate::new(compositions[i].id.clone());
                     update_left.contradiction = Some(Contradiction {
-                        conflict_type: conflict.clone(),
+                        conflict_type: conflict_type_i,
                         opposing_composition_id: compositions[j].id.clone(),
-                        strength: 0.8,
+                        strength: DEFAULT_CONTRADICTION_STRENGTH,
                     });
                     update_left.new_epistemic = Some(EpistemicState::Contradicted);
                     updates.push(update_left);
 
                     let mut update_right = GovernanceUpdate::new(compositions[j].id.clone());
                     update_right.contradiction = Some(Contradiction {
-                        conflict_type: conflict,
+                        conflict_type: conflict_type_j,
                         opposing_composition_id: compositions[i].id.clone(),
-                        strength: 0.8,
+                        strength: DEFAULT_CONTRADICTION_STRENGTH,
                     });
                     update_right.new_epistemic = Some(EpistemicState::Contradicted);
                     updates.push(update_right);
 
-                    // Apply contradiction to compositions.
+                    // Apply contradiction to compositions directly from conflict data.
+                    // Audit v6 fix: Use conflict_type_i / conflict_type_j directly instead
+                    // of the old triple-unwrap chain (updates.last().unwrap().contradiction.as_ref().unwrap()).
                     compositions[i].epistemic = EpistemicState::Contradicted;
                     compositions[i].contradiction = Some(Contradiction {
-                        conflict_type: updates
-                            .last()
-                            .unwrap()
-                            .contradiction
-                            .as_ref()
-                            .unwrap()
-                            .conflict_type
-                            .clone(),
+                        conflict_type: conflict_type_i,
                         opposing_composition_id: compositions[j].id.clone(),
-                        strength: 0.8,
+                        strength: DEFAULT_CONTRADICTION_STRENGTH,
                     });
                     compositions[i]
                         .contradiction_batches
@@ -234,14 +273,9 @@ impl GovernBeliefs {
 
                     compositions[j].epistemic = EpistemicState::Contradicted;
                     compositions[j].contradiction = Some(Contradiction {
-                        conflict_type: updates[updates.len() - 2]
-                            .contradiction
-                            .as_ref()
-                            .unwrap()
-                            .conflict_type
-                            .clone(),
+                        conflict_type: conflict_type_j,
                         opposing_composition_id: compositions[i].id.clone(),
-                        strength: 0.8,
+                        strength: DEFAULT_CONTRADICTION_STRENGTH,
                     });
                     compositions[j]
                         .contradiction_batches
@@ -1038,7 +1072,7 @@ impl GovernBeliefs {
                 update.contradiction = Some(Contradiction {
                     conflict_type: conflict,
                     opposing_composition_id: other.id.clone(),
-                    strength: 0.8,
+                    strength: DEFAULT_CONTRADICTION_STRENGTH,
                 });
                 update.new_epistemic = Some(EpistemicState::Contradicted);
                 updates.push(update);

@@ -442,26 +442,35 @@ impl DetectGaps {
         }
 
         // Check for compositions that are isolated (no shared nodes with other compositions).
+        // Audit v6 fix: Pre-compute HashSet<NodeId> once per composition instead of
+        // allocating inside the inner loop. Reduces allocations from O(N²) to O(N).
         let composition_count = snapshot.compositions.len();
         if composition_count > 1 {
-            for comp in &snapshot.compositions {
-                let node_ids: std::collections::HashSet<NodeId> =
-                    comp.members.iter().map(|m| m.node_id).collect();
+            // Pre-compute node sets for all compositions — O(N × M) total.
+            let node_sets: Vec<(&Composition, std::collections::HashSet<NodeId>)> = snapshot
+                .compositions
+                .iter()
+                .map(|comp| {
+                    let ids: std::collections::HashSet<NodeId> =
+                        comp.members.iter().map(|m| m.node_id).collect();
+                    (comp, ids)
+                })
+                .collect();
 
+            for (i, (_, node_ids)) in node_sets.iter().enumerate() {
                 let mut has_neighbor = false;
-                for other in &snapshot.compositions {
-                    if other.id == comp.id {
+                for (j, (_, other_nodes)) in node_sets.iter().enumerate() {
+                    if i == j {
                         continue;
                     }
-                    let other_nodes: std::collections::HashSet<NodeId> =
-                        other.members.iter().map(|m| m.node_id).collect();
-                    if !node_ids.is_disjoint(&other_nodes) {
+                    if !node_ids.is_disjoint(other_nodes) {
                         has_neighbor = true;
                         break;
                     }
                 }
 
                 if !has_neighbor {
+                    let comp = &node_sets[i].0;
                     gaps.push(KnowledgeGap {
                         gap_id: self.next_gap_id(),
                         gap_type: KnowledgeGapType::SparseGraph,

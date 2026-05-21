@@ -648,10 +648,11 @@ impl Default for SyncPipelineEngine {
     }
 }
 
-// SyncPipelineEngine is Send + Sync because Mutex<PipelineEngine> is Send + Sync
-// (PipelineEngine itself is Send).
-unsafe impl Send for SyncPipelineEngine {}
-unsafe impl Sync for SyncPipelineEngine {}
+// Audit v6 fix: Removed `unsafe impl Send/Sync for SyncPipelineEngine`.
+// The compiler auto-derives Send + Sync for Mutex<T> when T: Send.
+// PipelineEngine is Send (all fields are Send-safe: HashMap, Vec, Graph, PipelineContext).
+// If PipelineEngine ever gains a non-Send field, the compiler will now correctly
+// reject the auto-impl instead of silently allowing UB via the old unsafe impl.
 
 // ========================================================================
 // Topological Sort — Kahn's Algorithm
