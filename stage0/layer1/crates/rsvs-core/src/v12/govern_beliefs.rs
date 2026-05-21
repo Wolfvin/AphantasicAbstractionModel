@@ -1162,6 +1162,11 @@ impl GovernBeliefs {
             CompositionType::Hypothesis => comp.members.len() >= 2,
             CompositionType::Situation => comp.members.len() >= 2,
             CompositionType::Acquisition => !comp.members.is_empty(),
+            CompositionType::Morphology => {
+                // A morphology composition is complete if it has a root and a derived form.
+                comp.has_member_with_role(SemanticRole::MorphRoot)
+                    && comp.has_member_with_role(SemanticRole::MorphDerivedForm)
+            }
         }
     }
 

@@ -91,6 +91,8 @@ pub enum EdgeSource {
     EnrichmentFeedback,
     /// Feedback loop — frame re-extracted with graph context.
     ExtractionRepair,
+    /// From morphological analysis (Morphological Sense Graph).
+    MorphologicalAnalysis,
 }
 
 /// L0-02: Relation type for edges — mirrors Python Layer 0 RelationType.

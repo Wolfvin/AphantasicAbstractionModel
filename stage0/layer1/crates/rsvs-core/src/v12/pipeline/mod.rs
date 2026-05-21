@@ -45,6 +45,7 @@ pub mod engine;
 pub mod enrich;
 pub mod graph;
 pub mod ingest_atoms;
+pub mod morphological_analysis;
 pub mod re_extract;
 pub mod registry;
 pub mod tokenize;
@@ -61,6 +62,7 @@ pub use engine::{
 pub use enrich::EnrichComposition;
 pub use graph::{Graph, UtteranceContext};
 pub use ingest_atoms::IngestAtoms;
+pub use morphological_analysis::MorphologicalAnalysis;
 pub use re_extract::ReExtractFrame;
 pub use registry::register_default_pipeline;
 pub use tokenize::Tokenize;

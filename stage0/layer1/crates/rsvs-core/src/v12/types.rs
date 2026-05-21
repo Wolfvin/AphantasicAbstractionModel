@@ -399,6 +399,20 @@ pub enum SemanticRole {
     /// can access the morphological lemma. If the token is already a root
     /// form (e.g., "raja"), this role is not set.
     RootForm,
+
+    // === Morphological roles (extended for Morphological Sense Graph) ===
+    /// Morphological prefix (awalan) of a derived word.
+    MorphPrefix,
+    /// Morphological suffix (akhiran) of a derived word.
+    MorphSuffix,
+    /// Morphological root (akar) in a morphology composition.
+    MorphRoot,
+    /// Morphological archimorpheme (arkhimorfem) underlying allomorphs.
+    MorphArchimorpheme,
+    /// Morphological allomorph (alomorf) — surface variant of an archimorpheme.
+    MorphAllomorph,
+    /// Morphological derived form — the surface word produced by derivation.
+    MorphDerivedForm,
 }
 
 // ========================================================================
@@ -659,6 +673,96 @@ impl Default for CompositionId {
     }
 }
 
+// ========================================================================
+// Morphological Decomposition — Morphological Sense Graph Support
+// ========================================================================
+
+/// Position of an affix relative to the root.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
+pub enum AffixPosition {
+    #[default]
+    Prefix,
+    Suffix,
+}
+
+/// Information about one affix found during morphological decomposition.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AffixInfo {
+    /// Surface form of the affix (e.g., "mem").
+    pub surface: String,
+    /// The archimorpheme underlying this affix (e.g., "meN"), if any.
+    pub archimorpheme: Option<String>,
+    /// Position: prefix or suffix.
+    pub position: AffixPosition,
+}
+
+impl Default for AffixInfo {
+    fn default() -> Self {
+        Self {
+            surface: String::new(),
+            archimorpheme: None,
+            position: AffixPosition::Prefix,
+        }
+    }
+}
+
+/// Information about nasal assimilation applied during stemming.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AssimilationInfo {
+    /// The archimorpheme that was assimilated (e.g., "meN").
+    pub archimorpheme: String,
+    /// The allomorph produced (e.g., "mem").
+    pub allomorph: String,
+    /// The phonological condition that triggered the assimilation.
+    pub condition: String,
+}
+
+impl Default for AssimilationInfo {
+    fn default() -> Self {
+        Self {
+            archimorpheme: String::new(),
+            allomorph: String::new(),
+            condition: String::new(),
+        }
+    }
+}
+
+/// Complete morphological decomposition of a word.
+///
+/// Produced by `GraphAwareStemmer::stem_detailed()` and used to create
+/// `CompositionType::Morphology` compositions in the graph.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MorphologicalDecomposition {
+    /// The original surface form (e.g., "membuat").
+    pub surface_form: String,
+    /// The root after all affix stripping (e.g., "buat").
+    pub root: String,
+    /// Prefixes found, with archimorpheme links.
+    pub prefixes: Vec<AffixInfo>,
+    /// Suffixes found.
+    pub suffixes: Vec<AffixInfo>,
+    /// Nasal assimilation info, if applicable.
+    pub assimilation: Option<AssimilationInfo>,
+    /// Whether this word is a reduplication.
+    pub is_reduplication: bool,
+    /// Confidence score for this decomposition (0.0–1.0).
+    pub confidence: f32,
+}
+
+impl Default for MorphologicalDecomposition {
+    fn default() -> Self {
+        Self {
+            surface_form: String::new(),
+            root: String::new(),
+            prefixes: Vec::new(),
+            suffixes: Vec::new(),
+            assimilation: None,
+            is_reduplication: false,
+            confidence: 0.0,
+        }
+    }
+}
+
 /// What kind of composition this is (MD-3 §2).
 ///
 /// Replaces the separate EventFrame, HiddenMeaningCandidate, Pattern,
@@ -679,6 +783,9 @@ pub enum CompositionType {
     Hypothesis,
     /// Externally acquired knowledge.
     Acquisition,
+    /// Morphological decomposition — internal structure of a derived word.
+    /// Members: {MorphDerivedForm, MorphPrefix*, MorphRoot, MorphSuffix*, MorphArchimorpheme*, MorphAllomorph*}
+    Morphology,
 }
 
 // ========================================================================

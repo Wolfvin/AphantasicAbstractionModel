@@ -394,11 +394,369 @@ impl IndonesianStemmer {
 }
 
 // ========================================================================
+// Graph-Aware Stemmer — reads morphology knowledge from graph
+// ========================================================================
+
+/// A stemmer that reads morphological knowledge from the AAM sense graph
+/// instead of hardcoded constants.
+///
+/// On first use, it caches prefix/suffix/root data from the graph.
+/// If the graph has not been bootstrapped, it falls back to built-in data
+/// (same as `IndonesianStemmer`).
+///
+/// This is the core of the Morphological Sense Graph: stemming is driven by
+/// graph relations, not procedural if-else. Every decomposition can be traced
+/// through the graph and explained via `explain_morphology()`.
+#[derive(Debug, Clone, Default)]
+pub struct GraphAwareStemmer {
+    /// Cached prefixes, sorted longest-first.
+    cached_prefixes: Vec<String>,
+    /// Cached suffixes, sorted longest-first.
+    cached_suffixes: Vec<String>,
+    /// Cached root exceptions.
+    cached_roots: std::collections::HashSet<String>,
+    /// Allomorph → (archimorpheme, condition, restore_char).
+    allomorph_map: std::collections::HashMap<String, AllomorphCacheEntry>,
+    /// Whether cache has been initialized from graph.
+    cache_initialized: bool,
+}
+
+/// Cache entry for an allomorph.
+#[derive(Debug, Clone)]
+struct AllomorphCacheEntry {
+    archimorpheme: String,
+    condition: String,
+    restore_char: Option<char>,
+}
+
+impl GraphAwareStemmer {
+    /// Create a new graph-aware stemmer.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Ensure the cache is populated from the graph.
+    fn ensure_cache(&mut self, graph: &super::pipeline::Graph) {
+        if self.cache_initialized {
+            return;
+        }
+
+        // Try to read from graph
+        let graph_prefixes = super::morphology::get_all_prefixes(graph);
+        let graph_suffixes = super::morphology::get_all_suffixes(graph);
+
+        if !graph_prefixes.is_empty() || !graph_suffixes.is_empty() {
+            // Graph has been bootstrapped — use graph data
+            self.cached_prefixes = graph_prefixes;
+            self.cached_suffixes = graph_suffixes;
+
+            // Build root set from Stable nodes
+            for (_, node) in &graph.nodes {
+                if node.lifecycle == super::types::LifecycleState::Stable {
+                    self.cached_roots.insert(node.label.clone());
+                }
+            }
+
+            // Build allomorph map from assimilation compositions
+            for comp in graph.compositions.values() {
+                if comp.composition_type != super::types::CompositionType::Morphology {
+                    continue;
+                }
+                let archi = comp.member_with_role(&super::types::SemanticRole::MorphArchimorpheme);
+                let allo = comp.member_with_role(&super::types::SemanticRole::MorphAllomorph);
+                if let (Some(a), Some(al)) = (archi, allo) {
+                    let condition = comp.source_text.clone().unwrap_or_default();
+                    let restore_char = if al.label == "meny" || al.label == "peny" {
+                        Some('s')
+                    } else {
+                        None
+                    };
+                    self.allomorph_map.insert(al.label.clone(), AllomorphCacheEntry {
+                        archimorpheme: a.label.clone(),
+                        condition,
+                        restore_char,
+                    });
+                }
+            }
+        } else {
+            // Graph not bootstrapped — fallback to built-in data
+            self.cached_prefixes = PREFIXES_ORDERED.iter().map(|s| s.to_string()).collect();
+            self.cached_suffixes = SUFFIXES_ORDERED.iter().map(|s| s.to_string()).collect();
+            self.cached_roots = ROOT_EXCEPTIONS.iter().map(|s| s.to_string()).collect();
+
+            // Build allomorph map from built-in data
+            for &(allo, archi, cond) in ME_N_ALLOMORPHS_DATA {
+                let restore = if allo == "meny" { Some('s') } else { None };
+                self.allomorph_map.insert(allo.to_string(), AllomorphCacheEntry {
+                    archimorpheme: archi.to_string(),
+                    condition: cond.to_string(),
+                    restore_char: restore,
+                });
+            }
+            for &(allo, archi, cond) in PE_N_ALLOMORPHS_DATA {
+                let restore = if allo == "peny" { Some('s') } else { None };
+                self.allomorph_map.insert(allo.to_string(), AllomorphCacheEntry {
+                    archimorpheme: archi.to_string(),
+                    condition: cond.to_string(),
+                    restore_char: restore,
+                });
+            }
+        }
+
+        self.cache_initialized = true;
+    }
+
+    /// Check if a word is a known root.
+    fn is_root(&self, word: &str) -> bool {
+        self.cached_roots.contains(word)
+    }
+
+    /// Stem a word, returning only the root.
+    /// Backward-compatible with `IndonesianStemmer::stem()`.
+    pub fn stem(&mut self, word: &str, graph: &super::pipeline::Graph) -> Option<String> {
+        self.stem_detailed(word, graph).map(|d| d.root)
+    }
+
+    /// Stem a word with full morphological decomposition.
+    pub fn stem_detailed(
+        &mut self,
+        word: &str,
+        graph: &super::pipeline::Graph,
+    ) -> Option<super::types::MorphologicalDecomposition> {
+        self.ensure_cache(graph);
+        let lower = word.to_lowercase();
+
+        // Already a root?
+        if self.is_root(&lower) {
+            return None;
+        }
+
+        // Try reduplication
+        if let Some(mut decomp) = self.stem_reduplication_detailed(&lower) {
+            if decomp.root != lower {
+                return Some(decomp);
+            }
+        }
+
+        // Multi-strategy stemming
+        let candidates = self.stem_strategies_detailed(&lower);
+
+        // Pick best candidate
+        let original = lower.as_str();
+
+        // First pass: known root
+        for candidate in &candidates {
+            if !candidate.root.is_empty() && candidate.root != original {
+                if self.is_root(&candidate.root) {
+                    return Some(candidate.clone());
+                }
+            }
+        }
+
+        // Second pass: shortest meaningful
+        let mut best: Option<super::types::MorphologicalDecomposition> = None;
+        for candidate in candidates {
+            if candidate.root.is_empty() || candidate.root == original || candidate.root.len() < 2 {
+                continue;
+            }
+            match &best {
+                None => best = Some(candidate),
+                Some(current) if candidate.root.len() < current.root.len() => best = Some(candidate),
+                _ => {}
+            }
+        }
+
+        best
+    }
+
+    /// Stem reduplication with detailed output.
+    fn stem_reduplication_detailed(&self, word: &str) -> Option<super::types::MorphologicalDecomposition> {
+        if let Some((left, right)) = word.split_once('-') {
+            if left == right && !left.is_empty() {
+                return Some(super::types::MorphologicalDecomposition {
+                    surface_form: word.to_string(),
+                    root: left.to_string(),
+                    prefixes: vec![],
+                    suffixes: vec![],
+                    assimilation: None,
+                    is_reduplication: true,
+                    confidence: 0.95,
+                });
+            }
+        }
+        None
+    }
+
+    /// Apply all stemming strategies and collect detailed candidates.
+    fn stem_strategies_detailed(&self, word: &str) -> Vec<super::types::MorphologicalDecomposition> {
+        let mut candidates = Vec::new();
+
+        // Strategy 1: Suffix then prefix
+        if let Some(sans_suffix) = self.strip_suffix(word) {
+            let sfx = &word[word.len() - sans_suffix.suffix.len()..];
+            let mut decomp = self.make_decomposition(word, &sans_suffix.stem, &[], &[sfx.to_string()]);
+            if let Some(sans_both) = self.strip_prefix(&sans_suffix.stem) {
+                let mut deep = self.make_decomposition(word, &sans_both.root, &sans_both.prefixes, &[sfx.to_string()]);
+                deep.assimilation = sans_both.assimilation;
+                candidates.push(deep);
+            }
+            candidates.push(decomp);
+        }
+
+        // Strategy 2: Prefix then suffix
+        if let Some(sans_prefix) = self.strip_prefix(word) {
+            let assim_clone = sans_prefix.assimilation.clone();
+            let mut decomp = self.make_decomposition(word, &sans_prefix.root, &sans_prefix.prefixes, &[]);
+            decomp.assimilation = sans_prefix.assimilation;
+            if let Some(sans_both) = self.strip_suffix(&sans_prefix.root) {
+                let mut deep = self.make_decomposition(word, &sans_both.stem, &sans_prefix.prefixes, &[sans_both.suffix.clone()]);
+                deep.assimilation = assim_clone;
+                candidates.push(deep);
+            }
+            candidates.push(decomp);
+        }
+
+        candidates
+    }
+
+    fn make_decomposition(
+        &self,
+        surface: &str,
+        root: &str,
+        prefixes: &[String],
+        suffixes: &[String],
+    ) -> super::types::MorphologicalDecomposition {
+        let pfx_infos: Vec<super::types::AffixInfo> = prefixes.iter().map(|p| {
+            let archi = self.allomorph_map.get(p)
+                .map(|e| e.archimorpheme.clone());
+            super::types::AffixInfo {
+                surface: p.clone(),
+                archimorpheme: archi,
+                position: super::types::AffixPosition::Prefix,
+            }
+        }).collect();
+
+        let sfx_infos: Vec<super::types::AffixInfo> = suffixes.iter().map(|s| {
+            super::types::AffixInfo {
+                surface: s.clone(),
+                archimorpheme: None,
+                position: super::types::AffixPosition::Suffix,
+            }
+        }).collect();
+
+        // Build assimilation info from allomorph map
+        let assimilation = prefixes.iter()
+            .filter_map(|p| self.allomorph_map.get(p))
+            .next()
+            .map(|entry| super::types::AssimilationInfo {
+                archimorpheme: entry.archimorpheme.clone(),
+                allomorph: String::new(), // Will be filled by prefix
+                condition: entry.condition.clone(),
+            });
+
+        super::types::MorphologicalDecomposition {
+            surface_form: surface.to_string(),
+            root: root.to_string(),
+            prefixes: pfx_infos,
+            suffixes: sfx_infos,
+            assimilation,
+            is_reduplication: false,
+            confidence: 0.85,
+        }
+    }
+
+    /// Strip a known suffix from the word.
+    fn strip_suffix(&self, word: &str) -> Option<SuffixStripResult> {
+        for suffix in &self.cached_suffixes {
+            if word.ends_with(suffix.as_str()) && word.len() > suffix.len() + 1 {
+                let stem = &word[..word.len() - suffix.len()];
+                if self.is_root(stem) || stem.len() >= 2 {
+                    return Some(SuffixStripResult {
+                        stem: stem.to_string(),
+                        suffix: suffix.clone(),
+                    });
+                }
+            }
+        }
+        None
+    }
+
+    /// Strip a known prefix from the word, handling nasal assimilation.
+    fn strip_prefix(&self, word: &str) -> Option<PrefixStripResult> {
+        for prefix in &self.cached_prefixes {
+            if word.starts_with(prefix.as_str()) && word.len() > prefix.len() + 1 {
+                let rest = &word[prefix.len()..];
+
+                // Check if this prefix is an allomorph
+                if let Some(entry) = self.allomorph_map.get(prefix) {
+                    // meN-/peN- assimilation handling
+                    let root = if entry.restore_char == Some('s') {
+                        // meny- → restore 's'
+                        format!("s{}", rest)
+                    } else {
+                        rest.to_string()
+                    };
+
+                    return Some(PrefixStripResult {
+                        root,
+                        prefixes: vec![prefix.clone()],
+                        assimilation: Some(super::types::AssimilationInfo {
+                            archimorpheme: entry.archimorpheme.clone(),
+                            allomorph: prefix.clone(),
+                            condition: entry.condition.clone(),
+                        }),
+                    });
+                }
+
+                // Simple prefix — just strip
+                return Some(PrefixStripResult {
+                    root: rest.to_string(),
+                    prefixes: vec![prefix.clone()],
+                    assimilation: None,
+                });
+            }
+        }
+        None
+    }
+}
+
+/// Result of suffix stripping.
+struct SuffixStripResult {
+    stem: String,
+    suffix: String,
+}
+
+/// Result of prefix stripping.
+struct PrefixStripResult {
+    root: String,
+    prefixes: Vec<String>,
+    assimilation: Option<super::types::AssimilationInfo>,
+}
+
+/// Built-in allomorph data for fallback (when graph is not bootstrapped).
+const ME_N_ALLOMORPHS_DATA: &[(&str, &str, &str)] = &[
+    ("meng", "meN", "sebelum vokal, k, g, h"),
+    ("meny", "meN", "sebelum s (restore 's')"),
+    ("mem",  "meN", "sebelum b, p, f"),
+    ("men",  "meN", "sebelum c, d, j, t"),
+    ("me",   "meN", "sebelum konsonan lain"),
+];
+
+/// Built-in peN- allomorph data for fallback.
+const PE_N_ALLOMORPHS_DATA: &[(&str, &str, &str)] = &[
+    ("peng", "peN", "sebelum vokal, k, g, h"),
+    ("peny", "peN", "sebelum s (restore 's')"),
+    ("pem",  "peN", "sebelum b, p, f"),
+    ("pen",  "peN", "sebelum c, d, j, t"),
+    ("pe",   "peN", "sebelum konsonan lain"),
+];
+
+// ========================================================================
 // Unit Tests
 // ========================================================================
 
 #[cfg(test)]
-mod tests {
+mod tests_legacy {
     use super::*;
 
     #[test]
@@ -497,5 +855,74 @@ mod tests {
         assert!(IndonesianStemmer::detect_reduplication("buku-buku").is_some());
         assert!(IndonesianStemmer::detect_reduplication("makan-makan").is_some());
         assert!(IndonesianStemmer::detect_reduplication("makan").is_none());
+    }
+}
+
+#[cfg(test)]
+mod tests_graph_aware {
+    use super::GraphAwareStemmer;
+    use crate::v12::pipeline::Graph;
+    use crate::v12::morphology::bootstrap_morphology;
+
+    #[test]
+    fn test_graph_aware_stemmer_basic() {
+        let mut graph = Graph::new();
+        bootstrap_morphology(&mut graph);
+
+        let mut stemmer = GraphAwareStemmer::new();
+        assert_eq!(stemmer.stem("membuat", &graph), Some("buat".to_string()));
+        assert_eq!(stemmer.stem("menggambar", &graph), Some("gambar".to_string()));
+        assert_eq!(stemmer.stem("menyapu", &graph), Some("sapu".to_string()));
+        assert_eq!(stemmer.stem("berjalan", &graph), Some("jalan".to_string()));
+        assert_eq!(stemmer.stem("dilihat", &graph), Some("lihat".to_string()));
+    }
+
+    #[test]
+    fn test_graph_aware_stemmer_root_exceptions() {
+        let mut graph = Graph::new();
+        bootstrap_morphology(&mut graph);
+
+        let mut stemmer = GraphAwareStemmer::new();
+        assert_eq!(stemmer.stem("makan", &graph), None);
+        assert_eq!(stemmer.stem("raja", &graph), None);
+    }
+
+    #[test]
+    fn test_graph_aware_stemmer_detailed() {
+        let mut graph = Graph::new();
+        bootstrap_morphology(&mut graph);
+
+        let mut stemmer = GraphAwareStemmer::new();
+        let decomp = stemmer.stem_detailed("membuat", &graph);
+
+        assert!(decomp.is_some());
+        let d = decomp.unwrap();
+        assert_eq!(d.root, "buat");
+        assert_eq!(d.surface_form, "membuat");
+        assert!(d.prefixes.iter().any(|p| p.surface == "mem"));
+        assert!(d.assimilation.is_some());
+        let assim = d.assimilation.unwrap();
+        assert_eq!(assim.archimorpheme, "meN");
+        assert_eq!(assim.allomorph, "mem");
+    }
+
+    #[test]
+    fn test_graph_aware_stemmer_reduplication() {
+        let mut graph = Graph::new();
+        bootstrap_morphology(&mut graph);
+
+        let mut stemmer = GraphAwareStemmer::new();
+        assert_eq!(stemmer.stem("kata-kata", &graph), Some("kata".to_string()));
+    }
+
+    #[test]
+    fn test_graph_aware_stemmer_fallback() {
+        // Test that stemmer works even without bootstrapping the graph
+        use super::GraphAwareStemmer;
+        use crate::v12::pipeline::Graph;
+
+        let graph = Graph::new(); // Empty graph — no bootstrap
+        let mut stemmer = GraphAwareStemmer::new();
+        assert_eq!(stemmer.stem("membuat", &graph), Some("buat".to_string()));
     }
 }

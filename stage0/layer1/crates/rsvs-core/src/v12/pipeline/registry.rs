@@ -1,6 +1,7 @@
 use super::engine::PipelineEngine;
 use super::enrich::EnrichComposition;
 use super::ingest_atoms::IngestAtoms;
+use super::morphological_analysis::MorphologicalAnalysis;
 use super::re_extract::ReExtractFrame;
 use super::super::types::*;
 use super::tokenize::Tokenize;
@@ -20,7 +21,7 @@ use super::super::verbalize::CompositionalVerbalizeTransform;
 
 /// Register all core v1.0.0 transforms in dependency order.
 ///
-/// This wires up the complete default pipeline with 14 transforms:
+/// This wires up the complete default pipeline with 15 transforms:
 ///
 /// | # | Transform | Dependencies | Condition |
 /// |---|-----------|-------------|------------|
@@ -28,6 +29,7 @@ use super::super::verbalize::CompositionalVerbalizeTransform;
 /// | 2 | ExtractFrame | Tokenize | is_sentence_like |
 /// | 3 | ReasonFrame | ExtractFrame | has_event_atoms |
 /// | 4 | IngestAtoms | Tokenize, ReasonFrame | always |
+/// | 4b | MorphologicalAnalysis | Tokenize | always |
 /// | 5 | GovernBeliefs | IngestAtoms | always |
 /// | 6 | SeedAnchor | GovernBeliefs | always |
 /// | 7 | DetectGaps | SeedAnchor | gap_detection_enabled |
@@ -60,6 +62,15 @@ pub fn register_default_pipeline(engine: &mut PipelineEngine) {
     engine.register(
         IngestAtoms::new(),
         vec!["Tokenize".to_string(), "ReasonFrame".to_string()],
+        None,
+    );
+
+    // 4b. MorphologicalAnalysis — decomposes stemmed tokens into graph structures.
+    //     Depends on Tokenize (needs atoms with RootForm role).
+    //     Always runs: even non-sentence input may have stemmed tokens.
+    engine.register(
+        MorphologicalAnalysis::new(),
+        vec!["Tokenize".to_string()],
         None,
     );
 

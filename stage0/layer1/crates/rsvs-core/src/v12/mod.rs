@@ -48,6 +48,7 @@ pub mod executive;
 pub mod extract_frame;
 pub mod govern_beliefs;
 pub mod locale;
+pub mod morphology;
 pub mod persistence;
 pub mod pipeline;
 pub mod reason_frame;
@@ -66,7 +67,10 @@ pub use types::{
     // --- Utility functions ---
     extract_keywords,
     AcquisitionSource,
+    AffixInfo,
+    AffixPosition,
     AnchoredDelta,
+    AssimilationInfo,
     AtomType,
     AtomVariant,
     // --- Abstraction 2: Composition ---
@@ -99,6 +103,7 @@ pub use types::{
     LifecycleState,
     // --- v1.0.0 Node ---
     Node,
+    MorphologicalDecomposition,
     PatternCategory,
     PipelineContext,
     Polarity,
@@ -207,3 +212,11 @@ pub use verbalize::{
 
 // Re-export i18n Locale types.
 pub use locale::{default_locale, EpistemicQualifiers, EnglishLocale, IndonesianLocale, Locale};
+
+// Re-export Morphological Sense Graph types.
+pub use morphology::{
+    bootstrap_morphology, create_morphology_composition, explain_morphology,
+    apply_stemming_correction, is_known_prefix, is_known_root,
+    get_allomorphs, get_all_prefixes, get_all_suffixes, get_assimilation_condition,
+    MorphologicalExplanation, AssimilationExplanation,
+};

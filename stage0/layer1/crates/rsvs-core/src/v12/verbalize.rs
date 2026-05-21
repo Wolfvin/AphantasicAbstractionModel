@@ -320,6 +320,7 @@ impl CompositionalVerbalize {
             CompositionType::Hypothesis => self.verbalize_hypothesis(comp),
             CompositionType::Situation => self.verbalize_situation(comp),
             CompositionType::Acquisition => self.verbalize_acquisition(comp),
+            CompositionType::Morphology => self.verbalize_morphology(comp),
         }
     }
 
@@ -476,6 +477,51 @@ impl CompositionalVerbalize {
             .unwrap_or_default();
 
         format!("Diketahui bahwa {} {}{}{}.", agent, pred, patient, tool)
+    }
+
+    /// Morphology template: "Kata SURFACE terbentuk dari PREFIX- + ROOT + -SUFFIX (asimilasi: ARCHI → ALLO karena KONDISI)"
+    ///
+    /// Falls back to Bahasa Indonesia with graph-traceable explanation.
+    fn verbalize_morphology(&self, comp: &Composition) -> String {
+        let surface = comp
+            .member_with_role(&SemanticRole::MorphDerivedForm)
+            .map(|m| m.label.as_str())
+            .unwrap_or("?");
+        let root = comp
+            .member_with_role(&SemanticRole::MorphRoot)
+            .map(|m| m.label.as_str())
+            .unwrap_or("?");
+        let prefixes: Vec<&str> = comp.members.iter()
+            .filter(|m| m.role == SemanticRole::MorphPrefix)
+            .map(|m| m.label.as_str())
+            .collect();
+        let suffixes: Vec<&str> = comp.members.iter()
+            .filter(|m| m.role == SemanticRole::MorphSuffix)
+            .map(|m| m.label.as_str())
+            .collect();
+        let allomorph = comp.members.iter()
+            .find(|m| m.role == SemanticRole::MorphAllomorph)
+            .map(|m| m.label.as_str());
+        let archi = comp.members.iter()
+            .find(|m| m.role == SemanticRole::MorphArchimorpheme)
+            .map(|m| m.label.as_str());
+
+        let mut parts = Vec::new();
+        for pfx in &prefixes {
+            parts.push(format!("{}-", pfx));
+        }
+        parts.push(root.to_string());
+        for sfx in &suffixes {
+            parts.push(format!("-{}", sfx));
+        }
+        let decomp = parts.join(" + ");
+
+        let assimilation_note = match (archi, allomorph) {
+            (Some(a), Some(al)) => format!(" (asimilasi: {} → {})", a, al),
+            _ => String::new(),
+        };
+
+        format!("Kata {} terbentuk dari {}{}.", surface, decomp, assimilation_note)
     }
 
     // ================================================================

@@ -36,6 +36,13 @@ fn parse_semantic_role(name: &str) -> Option<SemanticRole> {
         "SourceAtom" | "source_atom" => Some(SemanticRole::SourceAtom),
         "SourceEvent" | "source_event" => Some(SemanticRole::SourceEvent),
         "EquivalentOf" | "equivalent_of" => Some(SemanticRole::EquivalentOf),
+        "RootForm" | "root_form" => Some(SemanticRole::RootForm),
+        "MorphPrefix" | "morph_prefix" => Some(SemanticRole::MorphPrefix),
+        "MorphSuffix" | "morph_suffix" => Some(SemanticRole::MorphSuffix),
+        "MorphRoot" | "morph_root" => Some(SemanticRole::MorphRoot),
+        "MorphArchimorpheme" | "morph_archimorpheme" => Some(SemanticRole::MorphArchimorpheme),
+        "MorphAllomorph" | "morph_allomorph" => Some(SemanticRole::MorphAllomorph),
+        "MorphDerivedForm" | "morph_derived_form" => Some(SemanticRole::MorphDerivedForm),
         _ => None,
     }
 }
