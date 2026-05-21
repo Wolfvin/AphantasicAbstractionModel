@@ -208,8 +208,7 @@ impl TemporalDecay {
     /// Apply decay to all compositions in the graph.
     ///
     /// Returns results for each composition that was affected.
-    pub fn apply_decay_all(&mut self, graph: &mut Graph) -> Vec<DecayResult> {
-        self.advance_batch();
+    pub fn apply_decay_all(&self, graph: &mut Graph) -> Vec<DecayResult> {
         let mut results = Vec::new();
 
         // NOTE: batch_seen is NOT incremented here. The canonical batch tick
@@ -260,8 +259,7 @@ impl ErasedTransform for TemporalDecayTransform {
     }
 
     fn execute(&self, ctx: &mut PipelineContext, graph: &mut Graph) -> IngestResult {
-        let mut engine = self.engine.clone();
-        let results = engine.apply_decay_all(graph);
+        let results = self.engine.apply_decay_all(graph);
 
         let demoted = results.iter().filter(|r| r.demoted).count();
         let deprecated = results.iter().filter(|r| r.deprecated).count();

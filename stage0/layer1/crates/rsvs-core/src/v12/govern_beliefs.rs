@@ -43,6 +43,8 @@
 //!
 //! This module is only compiled when the `v12` feature is enabled.
 
+use std::sync::atomic::{AtomicUsize, Ordering};
+
 use super::pipeline::{ErasedTransform, Graph, IngestResult};
 use super::types::*;
 use crate::types::{EdgeSource, NodeId};
@@ -95,14 +97,32 @@ pub const GROUNDING_MIN_SEED_ALIGNMENT: f32 = 0.5;
 /// Input:  GraphDelta — new compositions from IngestAtoms
 /// Output: GovernedDelta — compositions with governance applied
 /// ```
-#[derive(Debug, Clone)]
 pub struct GovernBeliefs {
     /// Current batch number (incremented each ingest cycle).
-    pub current_batch: usize,
+    /// Uses AtomicUsize so that `&self` methods can read/write it without `&mut self`.
+    pub current_batch: AtomicUsize,
 
     /// Maximum number of pairs to check for contradiction per `detect_contradiction()` call.
     /// Prevents O(N²) runaway on large graphs. Default: [`MAX_CONTRADICTION_PAIRS`].
     pub max_contradiction_pairs: usize,
+}
+
+impl Clone for GovernBeliefs {
+    fn clone(&self) -> Self {
+        Self {
+            current_batch: AtomicUsize::new(self.current_batch.load(Ordering::Relaxed)),
+            max_contradiction_pairs: self.max_contradiction_pairs,
+        }
+    }
+}
+
+impl std::fmt::Debug for GovernBeliefs {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("GovernBeliefs")
+            .field("current_batch", &self.current_batch.load(Ordering::Relaxed))
+            .field("max_contradiction_pairs", &self.max_contradiction_pairs)
+            .finish()
+    }
 }
 
 impl Default for GovernBeliefs {
@@ -115,7 +135,7 @@ impl GovernBeliefs {
     /// Create a new GovernBeliefs transform.
     pub fn new() -> Self {
         Self {
-            current_batch: 0,
+            current_batch: AtomicUsize::new(0),
             max_contradiction_pairs: MAX_CONTRADICTION_PAIRS,
         }
     }
@@ -293,8 +313,7 @@ impl GovernBeliefs {
                     });
                     compositions[i]
                         .contradiction_batches
-                        .push(self.current_batch);
-
+                        .push(self.current_batch.load(Ordering::Relaxed));
                     compositions[j].epistemic = EpistemicState::Contradicted;
                     compositions[j].contradiction = Some(Contradiction {
                         conflict_type: conflict.clone(),
@@ -303,7 +322,7 @@ impl GovernBeliefs {
                     });
                     compositions[j]
                         .contradiction_batches
-                        .push(self.current_batch);
+                        .push(self.current_batch.load(Ordering::Relaxed));
                 }
             }
         }
@@ -1102,7 +1121,7 @@ impl GovernBeliefs {
                 updates.push(update);
 
                 composition.epistemic = EpistemicState::Contradicted;
-                composition.contradiction_batches.push(self.current_batch);
+                composition.contradiction_batches.push(self.current_batch.load(Ordering::Relaxed));
                 break;
             }
         }
@@ -1342,8 +1361,8 @@ impl GovernBeliefs {
     /// Note: Steps that require `&mut Graph` (update_sense_evidence, check_sense_promotions,
     /// can_deprecate_node, prune_fragile_senses) are called from `ErasedTransform::execute()`
     /// after `govern()` returns, because `govern()` only has owned `Composition`s, not `&mut Graph`.
-    pub fn govern(&mut self, delta: GraphDelta) -> GovernedDelta {
-        self.current_batch += 1;
+    pub fn govern(&self, delta: GraphDelta) -> GovernedDelta {
+        self.current_batch.fetch_add(1, Ordering::Relaxed);
 
         let mut compositions: Vec<Composition> = delta.new_compositions;
         let mut all_updates = Vec::new();
@@ -1648,8 +1667,7 @@ impl Transform for GovernBeliefs {
     }
 
     fn transform(&self, input: &Self::Input, _ctx: &mut PipelineContext) -> Self::Output {
-        let mut gb = self.clone();
-        gb.govern(input.clone())
+        self.govern(input.clone())
     }
 }
 
@@ -1660,8 +1678,6 @@ impl ErasedTransform for GovernBeliefs {
     }
 
     fn execute(&self, _ctx: &mut PipelineContext, graph: &mut Graph) -> IngestResult {
-        let mut gb = self.clone();
-
         // ── Fix 6: Persist batch counter in graph metadata ──
         // Read current_batch from graph so it doesn't reset on every execute() call.
         // Fallback to 0 if not yet stored (first call).
@@ -1670,7 +1686,7 @@ impl ErasedTransform for GovernBeliefs {
             .get("govern_batch")
             .and_then(|v| v.parse::<usize>().ok())
             .unwrap_or(0);
-        gb.current_batch = stored_batch;
+        self.current_batch.store(stored_batch, Ordering::Relaxed);
 
         // ── Audit v4/v6 fix: Canonical batch_seen tick ──
         // This is the ONLY place where batch_seen is incremented in the pipeline.
@@ -1743,7 +1759,7 @@ impl ErasedTransform for GovernBeliefs {
             new_edges: Vec::new(),
         };
 
-        let governed = gb.govern(delta);
+        let governed = self.govern(delta);
 
         // ── Clear dirty set after governing ──
         // All dirty compositions have been governed, so clear the set.
@@ -1789,18 +1805,18 @@ impl ErasedTransform for GovernBeliefs {
 
         // Now update sense evidence for promoted compositions (confirming).
         for comp_id in &promoted_comp_ids {
-            gb.update_sense_evidence(comp_id, true, graph);
+            self.update_sense_evidence(comp_id, true, graph);
         }
 
         // Update sense evidence for contradicted compositions (contradicting).
         for comp_id in &contradicted_comp_ids {
-            gb.update_sense_evidence(comp_id, false, graph);
+            self.update_sense_evidence(comp_id, false, graph);
         }
 
         // ── Phase M: Close grounding loop ──
         // After each batch, check for sense promotions and update grounding.
-        gb.check_sense_promotions(graph);
-        gb.update_sense_grounding_from_evidence(graph);
+        self.check_sense_promotions(graph);
+        self.update_sense_grounding_from_evidence(graph);
 
         // ── Audit v5 fix (PW2): Wire contradiction resolution ──
         // Previously, check_contradiction_resolution() and resolve_contradiction()
@@ -1833,7 +1849,7 @@ impl ErasedTransform for GovernBeliefs {
             let comp_clone = graph.compositions.get(comp_id).cloned();
             let opposing_clone = graph.compositions.get(opposing_id).cloned();
             if let (Some(comp), Some(opposing)) = (comp_clone, opposing_clone) {
-                if let Some(resolution) = gb.check_contradiction_resolution_pair(&comp, &opposing) {
+                if let Some(resolution) = self.check_contradiction_resolution_pair(&comp, &opposing) {
                     // Apply resolution: un-contradict or deprecate.
                     match resolution.resolution_type {
                         ResolutionType::Misinterpretation | ResolutionType::ScopedValidity => {
@@ -1888,7 +1904,7 @@ impl ErasedTransform for GovernBeliefs {
                     let all_deprecable = comp
                         .members
                         .iter()
-                        .all(|m| gb.can_deprecate_node(m.node_id, graph));
+                        .all(|m| self.can_deprecate_node(m.node_id, graph));
                     if !all_deprecable {
                         to_revert.push(comp.id.clone());
                     }
@@ -1904,14 +1920,14 @@ impl ErasedTransform for GovernBeliefs {
 
         // ── Phase O: Prune fragile senses every 5 batches ──
         // Fix 6: Now uses persisted batch counter, so this correctly fires every 5 batches.
-        if gb.current_batch > 0 && gb.current_batch.is_multiple_of(5) {
-            gb.prune_fragile_senses(graph);
+        if self.current_batch.load(Ordering::Relaxed) > 0 && self.current_batch.load(Ordering::Relaxed).is_multiple_of(5) {
+            self.prune_fragile_senses(graph);
         }
 
         // ── Fix 6: Persist the batch counter back to graph metadata ──
         graph
             .metadata
-            .insert("govern_batch".to_string(), gb.current_batch.to_string());
+            .insert("govern_batch".to_string(), self.current_batch.load(Ordering::Relaxed).to_string());
 
         // Store resolution count in metadata for observability.
         graph.metadata.insert(

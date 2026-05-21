@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use super::engine::{ErasedTransform, IngestResult};
 use super::graph::Graph;
+use super::super::stemmer::IndonesianStemmer;
 use super::super::types::*;
 
 // ========================================================================
@@ -15,6 +16,11 @@ use super::super::types::*;
 /// boundaries (period followed by uppercase). Tokens within the same
 /// sentence are grouped together for downstream co-occurrence edges.
 ///
+/// Also performs morphological analysis using `IndonesianStemmer`:
+/// - Detects reduplication (kata-kata, buku-buku) before punctuation splitting
+/// - Stems each token and stores the root form if different from surface form
+/// - Root form is attached to the atom via `SemanticRole::RootForm`
+///
 /// # Transform Signature
 ///
 /// ```text
@@ -24,6 +30,8 @@ use super::super::types::*;
 pub struct Tokenize {
     /// Punctuation characters to split on and strip.
     punct_chars: &'static [char],
+    /// Indonesian morphological stemmer.
+    stemmer: IndonesianStemmer,
 }
 
 impl Tokenize {
@@ -31,23 +39,46 @@ impl Tokenize {
     pub fn new() -> Self {
         Self {
             punct_chars: &['.', '!', '?', ';', ':', ',', '"', '\'', '(', ')', '[', ']', '{', '}', '—', '–', '-', '/'],
+            stemmer: IndonesianStemmer::new(),
         }
     }
 
-    /// Split text into (sentence_index, cleaned_token) pairs.
+    /// Split text into (sentence_index, cleaned_token, morphological_root) triples.
     ///
     /// Handles:
+    /// - Reduplication detection BEFORE splitting on punctuation
     /// - Splitting on whitespace and punctuation
     /// - Stripping punctuation from tokens
     /// - Sentence boundary detection (period followed by uppercase)
     /// - Skipping empty tokens after stripping
-    fn tokenize_with_sentences(&self, text: &str) -> Vec<(usize, String)> {
+    /// - Morphological stemming for each token
+    fn tokenize_with_sentences(&self, text: &str) -> Vec<(usize, String, Option<String>)> {
         let mut results = Vec::new();
         let mut sentence_idx = 0usize;
-        let mut current_sentence_tokens: Vec<String> = Vec::new();
+        let mut current_sentence_tokens: Vec<(String, Option<String>)> = Vec::new();
+
+        // Pre-scan for reduplication patterns (e.g., "kata-kata", "buku-buku").
+        // We detect these before splitting on punctuation so that
+        // "kata-kata" is treated as a single token with root "kata",
+        // rather than two separate tokens "kata" and "kata".
+        let reduplication_roots: HashMap<String, String> = self.detect_reduplications(text);
 
         // Split on whitespace first, then further split each chunk on punctuation.
         for chunk in text.split_whitespace() {
+            // Check if this entire chunk is a reduplication.
+            let lower = chunk.to_lowercase();
+            if let Some((left, _right)) = IndonesianStemmer::detect_reduplication(&lower) {
+                // Emit as a single token with the root form.
+                let token_label = lower.clone();
+                let root_form = if left != token_label {
+                    Some(left.to_string())
+                } else {
+                    None
+                };
+                current_sentence_tokens.push((token_label, root_form));
+                continue;
+            }
+
             let mut sub_tokens = Vec::new();
             let mut buffer = String::new();
 
@@ -80,10 +111,9 @@ impl Tokenize {
                 let is_sentence_end = tok == "." || tok == "?" || tok == "!";
                 if is_sentence_end {
                     // Emit all accumulated tokens for this sentence.
-                    for t in &current_sentence_tokens {
-                        let cleaned = t.to_lowercase();
-                        if !cleaned.is_empty() {
-                            results.push((sentence_idx, cleaned));
+                    for (t, root) in &current_sentence_tokens {
+                        if !t.is_empty() {
+                            results.push((sentence_idx, t.clone(), root.clone()));
                         }
                     }
                     sentence_idx += 1;
@@ -91,21 +121,37 @@ impl Tokenize {
                 } else {
                     let cleaned = tok.to_lowercase();
                     if !cleaned.is_empty() {
-                        current_sentence_tokens.push(tok.clone());
+                        // Stem the token.
+                        let root_form = self.stemmer.stem(&cleaned);
+                        current_sentence_tokens.push((cleaned, root_form));
                     }
                 }
             }
         }
 
         // Emit any remaining tokens in the last sentence.
-        for t in &current_sentence_tokens {
-            let cleaned = t.to_lowercase();
-            if !cleaned.is_empty() {
-                results.push((sentence_idx, cleaned));
+        for (t, root) in &current_sentence_tokens {
+            if !t.is_empty() {
+                results.push((sentence_idx, t.clone(), root.clone()));
             }
         }
 
         results
+    }
+
+    /// Detect reduplication patterns in the text.
+    ///
+    /// Returns a map from the lowercase reduplicated form (e.g., "kata-kata")
+    /// to its root form (e.g., "kata").
+    fn detect_reduplications(&self, text: &str) -> HashMap<String, String> {
+        let mut redups = HashMap::new();
+        for chunk in text.split_whitespace() {
+            let lower = chunk.to_lowercase();
+            if let Some((left, _right)) = IndonesianStemmer::detect_reduplication(&lower) {
+                redups.insert(lower.clone(), left.to_string());
+            }
+        }
+        redups
     }
 }
 
@@ -132,9 +178,9 @@ impl ErasedTransform for Tokenize {
         // Track sentence memberships for co-occurrence: sentence_idx -> Vec<atom_index>
         let mut sentence_atoms: HashMap<usize, Vec<usize>> = HashMap::new();
 
-        for (sentence_idx, token_label) in &tokenized {
+        for (sentence_idx, token_label, root_form) in &tokenized {
             let atom_id = format!("atom_{}", ctx.next_atom_id());
-            let atom = SemanticAtom {
+            let mut atom = SemanticAtom {
                 id: atom_id,
                 label: token_label.clone(),
                 atom_type: AtomType::Token,
@@ -142,6 +188,12 @@ impl ErasedTransform for Tokenize {
                 source: crate::types::EdgeSource::Learned,
                 ..SemanticAtom::default()
             };
+
+            // Store morphological root if different from surface form.
+            if let Some(root) = root_form {
+                atom.roles.insert(SemanticRole::RootForm, root.clone());
+            }
+
             let atom_idx = ctx.current_atoms.len();
             sentence_atoms.entry(*sentence_idx).or_default().push(atom_idx);
             ctx.current_atoms.push(atom);
@@ -149,13 +201,7 @@ impl ErasedTransform for Tokenize {
         }
 
         // Store sentence groupings in PipelineContext for downstream use.
-        // We encode this as a simple string in the raw_text metadata.
-        // Downstream transforms (IngestAtoms) can use sentence co-occurrence
-        // to create edges between tokens in the same sentence.
-        // For now, we store sentence info as a separate field on context.
-        // Since PipelineContext doesn't have a dedicated field, we use
-        // a convention: each atom's roles map carries a SentenceIdx key
-        // with the sentence number as the value.
+        // Each atom's roles map carries a SourceAtom key with the sentence label.
         for (sentence_idx, atom_indices) in &sentence_atoms {
             let sent_label = format!("sent_{}", sentence_idx);
             for &atom_idx in atom_indices {
@@ -189,7 +235,7 @@ impl Transform for Tokenize {
     fn transform(&self, input: &Self::Input, ctx: &mut PipelineContext) -> Self::Output {
         let tokenized = self.tokenize_with_sentences(input);
         let mut atoms = Vec::new();
-        for (sentence_idx, token_label) in &tokenized {
+        for (sentence_idx, token_label, root_form) in &tokenized {
             let atom_id = format!("atom_{}", ctx.next_atom_id());
             let mut atom = SemanticAtom {
                 id: atom_id,
@@ -203,6 +249,9 @@ impl Transform for Tokenize {
                 SemanticRole::SourceAtom,
                 format!("sent_{}", sentence_idx),
             );
+            if let Some(root) = root_form {
+                atom.roles.insert(SemanticRole::RootForm, root.clone());
+            }
             atoms.push(atom);
         }
         atoms

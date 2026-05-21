@@ -259,7 +259,7 @@ impl ErasedTransform for IngestAtoms {
             if node_ids.len() < 2 {
                 continue;
             }
-            let comp_id = CompositionId::new(format!("comp_cooc_{}", graph.next_id));
+            let comp_id = CompositionId::new(format!("comp_cooc_{}", ctx.next_atom_id()));
             let mut composition = Composition {
                 id: comp_id.clone(),
                 composition_type: CompositionType::Situation,

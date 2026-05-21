@@ -390,6 +390,15 @@ pub enum SemanticRole {
     SourceEvent,
     /// Semantic equivalence link.
     EquivalentOf,
+
+    // === Morphological roles ===
+    /// Morphological root form of a token.
+    ///
+    /// When the Tokenize transform stems a token (e.g., "membuat" → "buat"),
+    /// the root form is stored in this role so that downstream transforms
+    /// can access the morphological lemma. If the token is already a root
+    /// form (e.g., "raja"), this role is not set.
+    RootForm,
 }
 
 // ========================================================================

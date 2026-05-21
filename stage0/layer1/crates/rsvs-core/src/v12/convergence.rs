@@ -28,10 +28,38 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
+use std::sync::RwLock;
 
 use super::pipeline::{ErasedTransform, Graph, IngestResult};
 use super::types::*;
 use crate::types::NodeId;
+
+// ========================================================================
+// Serde helpers for RwLock
+// ========================================================================
+
+mod serde_rwlock {
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+    use std::sync::RwLock;
+
+    pub fn serialize<S, T>(lock: &RwLock<T>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+        T: Serialize,
+    {
+        let guard = lock.read().unwrap();
+        Serialize::serialize(&*guard, serializer)
+    }
+
+    pub fn deserialize<'de, D, T>(deserializer: D) -> Result<RwLock<T>, D::Error>
+    where
+        D: Deserializer<'de>,
+        T: Deserialize<'de>,
+    {
+        let val = T::deserialize(deserializer)?;
+        Ok(RwLock::new(val))
+    }
+}
 
 // ========================================================================
 // ConvergencePair — A Detected Structural Equivalence
@@ -102,12 +130,33 @@ impl Default for ConvergenceConfig {
 ///   → likely same concept expressed differently
 /// - Useful for cross-linguistic detection (e.g., "merah" ≡ "red")
 /// - Creates `EquivalentOf` links between converged compositions
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct ConvergenceDetection {
     /// Configuration.
     pub config: ConvergenceConfig,
     /// Previously detected pairs (to avoid re-detection).
-    pub detected_pairs: HashSet<(CompositionId, CompositionId)>,
+    /// Uses RwLock so that `detect()` can take `&self` instead of `&mut self`.
+    #[serde(with = "serde_rwlock")]
+    pub detected_pairs: RwLock<HashSet<(CompositionId, CompositionId)>>,
+}
+
+impl Clone for ConvergenceDetection {
+    fn clone(&self) -> Self {
+        let pairs = self.detected_pairs.read().unwrap().clone();
+        Self {
+            config: self.config.clone(),
+            detected_pairs: RwLock::new(pairs),
+        }
+    }
+}
+
+impl std::fmt::Debug for ConvergenceDetection {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ConvergenceDetection")
+            .field("config", &self.config)
+            .field("detected_pairs_count", &self.detected_pairs.read().unwrap().len())
+            .finish()
+    }
 }
 
 impl Default for ConvergenceDetection {
@@ -121,7 +170,7 @@ impl ConvergenceDetection {
     pub fn new() -> Self {
         Self {
             config: ConvergenceConfig::default(),
-            detected_pairs: HashSet::new(),
+            detected_pairs: RwLock::new(HashSet::new()),
         }
     }
 
@@ -129,7 +178,7 @@ impl ConvergenceDetection {
     pub fn with_config(config: ConvergenceConfig) -> Self {
         Self {
             config,
-            detected_pairs: HashSet::new(),
+            detected_pairs: RwLock::new(HashSet::new()),
         }
     }
 
@@ -139,7 +188,7 @@ impl ConvergenceDetection {
     /// two compositions that are structurally equivalent but have low
     /// co-occurrence — suggesting they may represent the same underlying
     /// concept expressed differently.
-    pub fn detect(&mut self, graph: &Graph) -> Vec<ConvergencePair> {
+    pub fn detect(&self, graph: &Graph) -> Vec<ConvergencePair> {
         // Collect eligible compositions.
         let eligible: Vec<&Composition> = graph
             .compositions
@@ -175,7 +224,7 @@ impl ConvergenceDetection {
                 } else {
                     (comp_b.id.clone(), comp_a.id.clone())
                 };
-                if self.detected_pairs.contains(&pair_key) {
+                if self.detected_pairs.read().unwrap().contains(&pair_key) {
                     continue;
                 }
 
@@ -205,7 +254,7 @@ impl ConvergenceDetection {
                         confidence,
                     });
 
-                    self.detected_pairs.insert(pair_key);
+                    self.detected_pairs.write().unwrap().insert(pair_key);
                 }
             }
         }
@@ -380,8 +429,7 @@ impl ErasedTransform for ConvergenceDetectionTransform {
     }
 
     fn execute(&self, ctx: &mut PipelineContext, graph: &mut Graph) -> IngestResult {
-        let mut engine = self.engine.clone();
-        let pairs = engine.detect(graph);
+        let pairs = self.engine.detect(graph);
 
         // Store converged pairs in PipelineContext.
         ctx.last_converged_pairs = pairs.iter()
@@ -604,7 +652,7 @@ mod tests {
 
     #[test]
     fn test_detect_no_convergence() {
-        let mut detector = ConvergenceDetection::new();
+        let detector = ConvergenceDetection::new();
         let graph = Graph::new();
         let pairs = detector.detect(&graph);
         assert!(pairs.is_empty());

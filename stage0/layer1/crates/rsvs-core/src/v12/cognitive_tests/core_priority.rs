@@ -529,7 +529,7 @@ fn test_6_structural_similarity_tanpa_cooccurrence() {
     eprintln!("  → Role structures ARE identical: {:?}", roles_a);
 
     // ConvergenceDetection — detect structurally equivalent pairs
-    let mut detector = ConvergenceDetection::new();
+    let detector = ConvergenceDetection::new();
     let pairs = detector.detect(&graph);
 
     let has_pair = pairs.iter().any(|p| {

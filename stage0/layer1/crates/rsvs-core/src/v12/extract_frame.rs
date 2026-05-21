@@ -99,7 +99,7 @@ const PURPOSE_MARKERS: &[&str] = &["untuk", "supaya", "agar"];
 const CONDITION_MARKERS: &[&str] = &["jika", "apabila", "kalau", "bila", "jikalau", "bilamana"];
 
 /// Known verb prefixes in Malay/Indonesian for predicate detection.
-const VERB_PREFIXES: &[&str] = &["me", "ber", "di", "ter", "ke", "pe"];
+const VERB_PREFIXES: &[&str] = &["me", "ber", "di", "ter", "memper", "diper"];
 
 // ========================================================================
 // ExtractionQuality — Quality Tracking
@@ -278,13 +278,7 @@ impl ExtractFrame {
     /// (the Malay/Indonesian passive prefix), otherwise `Some(Voice::Active)`.
     pub fn detect_voice(tokens: &[&str]) -> Voice {
         let has_passive = tokens.iter().any(|t| {
-            let lower = t.to_lowercase();
-            lower.starts_with("di")
-                && lower.len() > 2
-                && lower
-                    .chars()
-                    .nth(2)
-                    .is_some_and(|c| c.is_ascii_alphabetic())
+            super::stemmer::IndonesianStemmer::is_passive_verb(t)
         });
 
         if has_passive {

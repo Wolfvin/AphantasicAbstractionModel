@@ -52,6 +52,7 @@ pub mod persistence;
 pub mod pipeline;
 pub mod reason_frame;
 pub mod spreading;
+pub mod stemmer;
 pub mod temporal;
 pub mod types;
 pub mod verbalize;
