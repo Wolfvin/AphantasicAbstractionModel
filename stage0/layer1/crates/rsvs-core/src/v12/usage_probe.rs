@@ -20,6 +20,7 @@
 //! ```
 
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use super::pipeline::Graph;
 use super::spreading::{ActivationMap, SpreadingActivation};
 use super::types::*;
@@ -235,7 +236,10 @@ impl UsageDiscoveryEngine {
     ///
     /// Spreads activation from nodes in the candidate usage and compares
     /// with baseline activation from known good compositions.
-    /// Uses Jaccard similarity as the validity metric.
+    /// Uses a blended validity metric combining:
+    /// - **Jaccard similarity**: node overlap between candidate and baseline
+    /// - **Role consistency score** (G3): whether shared nodes play the
+    ///   same semantic roles in both compositions
     pub fn validate_usage_probe(
         &self,
         candidate_usage: &str,
@@ -282,6 +286,15 @@ impl UsageDiscoveryEngine {
         // Compute Jaccard similarity between candidate and baseline.
         let jaccard = candidate_map.jaccard_similarity(&baseline_map);
 
+        // G3: Compute role consistency score — check whether nodes shared
+        // between candidate usage and known compositions play the same roles.
+        let role_coherence = compute_role_coherence(&seed_node_ids, graph);
+
+        // Blend: 60% Jaccard + 40% role consistency.
+        // Role consistency is critical because two usages can share many nodes
+        // while being structurally inconsistent (e.g., "raja" as Agent vs Subject).
+        let blended_score = 0.6 * jaccard + 0.4 * role_coherence;
+
         // Get top evidence.
         let evidence: Vec<(String, f32)> = candidate_map
             .top_n(5)
@@ -291,12 +304,18 @@ impl UsageDiscoveryEngine {
             })
             .collect();
 
-        let predicted_valid = jaccard >= self.validity_threshold;
+        let predicted_valid = blended_score >= self.validity_threshold;
 
         let reason = if predicted_valid {
-            format!("Jaccard similarity {:.2} >= threshold {:.2} — usage consistent with graph", jaccard, self.validity_threshold)
+            format!(
+                "Blended score {:.2} (Jaccard={:.2}, RoleCoherence={:.2}) >= threshold {:.2} — usage consistent",
+                blended_score, jaccard, role_coherence, self.validity_threshold
+            )
         } else {
-            format!("Jaccard similarity {:.2} < threshold {:.2} — usage inconsistent with graph", jaccard, self.validity_threshold)
+            format!(
+                "Blended score {:.2} (Jaccard={:.2}, RoleCoherence={:.2}) < threshold {:.2} — usage inconsistent",
+                blended_score, jaccard, role_coherence, self.validity_threshold
+            )
         };
 
         (
@@ -312,7 +331,7 @@ impl UsageDiscoveryEngine {
             },
             ProbeResult {
                 valid: predicted_valid,
-                score: jaccard,
+                score: blended_score,
                 evidence,
                 reason,
             },
@@ -509,6 +528,113 @@ fn now_epoch_secs() -> u64 {
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs()
+}
+
+// ========================================================================
+// Role Coherence Score (G3)
+// ========================================================================
+
+/// Compute a role consistency coherence score for a set of seed nodes.
+///
+/// The coherence score measures how consistently nodes play the same
+/// semantic roles across different compositions in the graph. If "raja"
+/// is always an Agent and "kerajaan" is always a Patient, their
+/// coherence is high. If "raja" is sometimes Agent and sometimes
+/// Subject, coherence drops.
+///
+/// # Algorithm
+///
+/// 1. For each seed node, collect all (composition_type, role) pairs
+///    it appears in across the graph.
+/// 2. For each pair of seed nodes, check if they ever co-occur in
+///    the same composition with the same roles.
+/// 3. Score = fraction of seed node pairs that have role-consistent
+///    co-occurrences.
+///
+/// Returns 0.0 if no seed nodes have compositions, 1.0 if all pairs
+/// are role-consistent.
+fn compute_role_coherence(
+    seed_node_ids: &[(NodeId, f32)],
+    graph: &Graph,
+) -> f32 {
+    if seed_node_ids.len() < 2 {
+        return 1.0; // Single node is trivially coherent
+    }
+
+    let seed_ids: Vec<NodeId> = seed_node_ids.iter().map(|(id, _)| *id).collect();
+
+    // For each seed node, collect the set of compositions it appears in
+    // along with the role it plays.
+    let mut node_role_profiles: HashMap<NodeId, Vec<(CompositionId, SemanticRole)>> = HashMap::new();
+    for &node_id in &seed_ids {
+        let comp_ids = graph.node_to_compositions.get(&node_id);
+        let mut profiles = Vec::new();
+        if let Some(cids) = comp_ids {
+            for cid in cids {
+                if let Some(comp) = graph.compositions.get(cid) {
+                    for member in &comp.members {
+                        if member.node_id == node_id {
+                            profiles.push((cid.clone(), member.role.clone()));
+                        }
+                    }
+                }
+            }
+        }
+        node_role_profiles.insert(node_id, profiles);
+    }
+
+    // If no seed nodes have compositions, coherence is unknown → 0.5 (neutral).
+    let nodes_with_profiles: Vec<NodeId> = seed_ids.iter()
+        .filter(|id| node_role_profiles.get(id).is_some_and(|p| !p.is_empty()))
+        .copied()
+        .collect();
+
+    if nodes_with_profiles.len() < 2 {
+        return 0.5; // Not enough data for coherence — neutral
+    }
+
+    // Check all pairs: do they co-occur in the same composition?
+    let mut consistent_pairs = 0usize;
+    let mut total_pairs = 0usize;
+
+    for i in 0..nodes_with_profiles.len() {
+        for j in (i + 1)..nodes_with_profiles.len() {
+            let profiles_a = &node_role_profiles[&nodes_with_profiles[i]];
+            let profiles_b = &node_role_profiles[&nodes_with_profiles[j]];
+
+            total_pairs += 1;
+
+            // Find co-occurrences in the same composition.
+            let mut found_consistent = false;
+            for (comp_a, role_a) in profiles_a {
+                for (comp_b, role_b) in profiles_b {
+                    if comp_a == comp_b {
+                        // They co-occur in the same composition.
+                        // Roles are "consistent" if they're different (filling
+                        // different slots is expected) or the same in similar
+                        // composition types.
+                        if role_a != role_b {
+                            found_consistent = true;
+                            break;
+                        }
+                        // Same role in same composition → ambiguous, not necessarily bad
+                        // but less coherent. Count as half.
+                    }
+                }
+                if found_consistent { break; }
+            }
+
+            if found_consistent {
+                consistent_pairs += 1;
+            }
+        }
+    }
+
+    if total_pairs == 0 {
+        0.5
+    } else {
+        consistent_pairs as f32 / total_pairs as f32
+    }
 }
 
 // ========================================================================

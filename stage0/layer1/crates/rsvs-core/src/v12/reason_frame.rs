@@ -28,6 +28,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use super::pipeline::{ErasedTransform, Graph, IngestResult};
 use super::types::*;
@@ -699,9 +700,17 @@ impl ReasoningRule for ConditionConsequenceRule {
 /// Input:  SemanticAtom (Event) — read from ctx.current_atoms
 /// Output: Vec<SemanticAtom> (HiddenMeaning) — appended to ctx.current_atoms
 /// ```
+///
+/// # Rule Sharing (G4)
+///
+/// The rules are stored in an `Arc<Vec<Box<dyn ReasoningRule>>>` so that
+/// `ReReasonFrame` can share the same rule set without duplicating the
+/// 4 rule constructions. Rules are stateless and deterministic, so sharing
+/// is safe.
 pub struct ReasonFrame {
     /// The reasoning rules to apply, in order.
-    rules: Vec<Box<dyn ReasoningRule>>,
+    /// Wrapped in Arc for sharing with ReReasonFrame (G4).
+    rules: Arc<Vec<Box<dyn ReasoningRule>>>,
 }
 
 impl std::fmt::Debug for ReasonFrame {
@@ -714,8 +723,8 @@ impl std::fmt::Debug for ReasonFrame {
 
 impl Clone for ReasonFrame {
     fn clone(&self) -> Self {
-        // Rules are stateless deterministic — recreate them with the same default set.
-        Self::new()
+        // Arc clone is O(1) — no rule duplication.
+        Self { rules: Arc::clone(&self.rules) }
     }
 }
 
@@ -729,18 +738,23 @@ impl ReasonFrame {
     /// Create a ReasonFrame with all default rules.
     pub fn new() -> Self {
         Self {
-            rules: vec![
+            rules: Arc::new(vec![
                 Box::new(ProblemSolutionRule::new()),
                 Box::new(GoalInferenceRule::new()),
                 Box::new(PolarityConflictRule::new()),
                 Box::new(ConditionConsequenceRule::new()),
-            ],
+            ]),
         }
     }
 
     /// Create with custom rules.
     pub fn with_rules(rules: Vec<Box<dyn ReasoningRule>>) -> Self {
-        Self { rules }
+        Self { rules: Arc::new(rules) }
+    }
+
+    /// Get a reference-counted handle to the rules (for sharing with ReReasonFrame).
+    pub fn shared_rules(&self) -> Arc<Vec<Box<dyn ReasoningRule>>> {
+        Arc::clone(&self.rules)
     }
 
     /// Apply all rules to an event atom.
@@ -758,7 +772,7 @@ impl ReasonFrame {
         let context = ReasoningContext::new(event, recent_events);
         let mut results = Vec::new();
 
-        for rule in &self.rules {
+        for rule in self.rules.iter() {
             if rule.applies(&context) {
                 results.extend(rule.generate(&context));
             }
@@ -785,7 +799,7 @@ impl ReasonFrame {
         let context = ReasoningContext::with_graph(event, recent_events, graph_ref.clone());
         let mut results = Vec::new();
 
-        for rule in &self.rules {
+        for rule in self.rules.iter() {
             if rule.applies(&context) {
                 let mut rule_results = rule.generate(&context);
                 apply_confidence_modulation(&mut rule_results, &graph_ref);
@@ -979,8 +993,13 @@ impl ErasedTransform for ReasonFrame {
 ///
 /// When `ambiguity_score > 0.3`, it generates an `InquiryQuestion` to surface
 /// the ambiguity to the user.
+///
+/// # Rule Sharing (G4)
+///
+/// Shares the same `Arc<Vec<Box<dyn ReasoningRule>>>` as `ReasonFrame`.
+/// This eliminates the duplication of constructing 4 identical rule objects.
 pub struct ReReasonFrame {
-    rules: Vec<Box<dyn ReasoningRule>>,
+    rules: Arc<Vec<Box<dyn ReasoningRule>>>,
 }
 
 impl std::fmt::Debug for ReReasonFrame {
@@ -993,7 +1012,7 @@ impl std::fmt::Debug for ReReasonFrame {
 
 impl Clone for ReReasonFrame {
     fn clone(&self) -> Self {
-        Self::new()
+        Self { rules: Arc::clone(&self.rules) }
     }
 }
 
@@ -1005,15 +1024,16 @@ impl Default for ReReasonFrame {
 
 impl ReReasonFrame {
     /// Create a new ReReasonFrame with the standard rule set.
+    /// Shares rules with ReasonFrame (G4).
     pub fn new() -> Self {
         Self {
-            rules: vec![
-                Box::new(ProblemSolutionRule::new()),
-                Box::new(GoalInferenceRule::new()),
-                Box::new(PolarityConflictRule::new()),
-                Box::new(ConditionConsequenceRule::new()),
-            ],
+            rules: ReasonFrame::new().shared_rules(),
         }
+    }
+
+    /// Create with custom shared rules.
+    pub fn with_shared_rules(rules: Arc<Vec<Box<dyn ReasoningRule>>>) -> Self {
+        Self { rules }
     }
 }
 
@@ -1051,7 +1071,7 @@ impl ErasedTransform for ReReasonFrame {
                 event, &recent, graph_ref.clone(),
             );
 
-            for rule in &self.rules {
+            for rule in self.rules.iter() {
                 if rule.applies(&context) {
                     let mut rule_results = rule.generate(&context);
 

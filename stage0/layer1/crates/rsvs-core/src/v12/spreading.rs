@@ -199,6 +199,13 @@ impl SpreadingActivation {
     /// # Returns
     ///
     /// An [`ActivationMap`] with energy levels for all activated nodes.
+    ///
+    /// # Performance
+    ///
+    /// Uses the `node_to_compositions` reverse index for O(K) lookup per active
+    /// node (where K = compositions containing that node), instead of O(C) full
+    /// scan of all compositions. For a graph with 1000 compositions and a node
+    /// in 5 compositions, this is a 200× speedup per hop per node.
     pub fn spread(&self, seeds: &[(NodeId, f32)], graph: &Graph) -> ActivationMap {
         let mut energies: HashMap<NodeId, f32> = HashMap::new();
         let seed_ids: Vec<NodeId> = seeds.iter().map(|(id, _)| *id).collect();
@@ -220,14 +227,28 @@ impl SpreadingActivation {
                     continue;
                 }
 
-                // Find all compositions this node participates in.
-                for composition in graph.compositions.values() {
-                    let is_member = composition.members.iter().any(|m| m.node_id == active_node);
-                    if !is_member {
-                        continue;
-                    }
+                // G2 FIX: Use the node_to_compositions reverse index for O(K)
+                // lookup instead of scanning ALL compositions (O(C)).
+                // If the reverse index is empty (legacy graph), fall back to
+                // the O(C) scan for correctness.
+                let neighbor_compositions: Vec<&Composition> = if let Some(comp_ids) =
+                    graph.node_to_compositions.get(&active_node)
+                {
+                    comp_ids.iter()
+                        .filter_map(|cid| graph.compositions.get(cid))
+                        .collect()
+                } else if !graph.node_to_compositions.is_empty() {
+                    // Index exists but this node isn't in any composition.
+                    continue;
+                } else {
+                    // Legacy: no reverse index built yet — fall back to O(C) scan.
+                    graph.compositions.values()
+                        .filter(|comp| comp.members.iter().any(|m| m.node_id == active_node))
+                        .collect()
+                };
 
-                    // Spread to all other members of this composition.
+                // Spread to all other members of each composition.
+                for composition in neighbor_compositions {
                     for member in &composition.members {
                         if member.node_id == active_node {
                             continue;

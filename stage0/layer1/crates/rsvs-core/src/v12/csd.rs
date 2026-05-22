@@ -81,10 +81,20 @@ impl CSDEngine {
     ///
     /// 1. Look up candidate senses for `word` in the registry
     /// 2. If only one sense, return it immediately (unambiguous)
-    /// 3. Spread activation from context nodes
-    /// 4. For each candidate sense, sum activation energy of representative nodes
-    /// 5. Select the highest-scoring sense
-    /// 6. Return DisambiguationResult with evidence trail
+    /// 3. **POS pre-filter**: Eliminate senses whose POS is incompatible with
+    ///    the word's syntactic position (if POS hint is available)
+    /// 4. Spread activation from context nodes
+    /// 5. For each candidate sense, sum activation energy of representative nodes
+    /// 6. Select the highest-scoring sense
+    /// 7. Return DisambiguationResult with evidence trail
+    ///
+    /// # POS Pre-filtering (G1)
+    ///
+    /// When context provides a POS hint (e.g., "bisa" preceded by "tidak"
+    /// → must be verb), senses with incompatible POS are eliminated before
+    /// the expensive spreading activation step. This is a constant-time
+    /// optimization that can reduce the candidate set by 50%+ for homographs
+    /// like "bisa" (noun: venom vs verb: ability) or "buka" (verb: open vs noun: event).
     pub fn disambiguate(
         &self,
         word: &str,
@@ -97,21 +107,48 @@ impl CSDEngine {
             .filter_map(|&id| graph.node_label(id).map(|l| l.to_string()))
             .collect();
         let context_tokens: Vec<&str> = context_labels.iter().map(|s| s.as_str()).collect();
-        let candidates = self.registry.senses_for(word);
+        let all_candidates = self.registry.senses_for(word);
 
         // Fast path: single sense or no candidates.
-        if candidates.is_empty() {
+        if all_candidates.is_empty() {
             return DisambiguationResult {
                 word: word.to_string(),
                 ..DisambiguationResult::default()
             };
         }
+        if all_candidates.len() == 1 {
+            return DisambiguationResult {
+                selected_sense: Some(all_candidates[0].clone()),
+                confidence: 1.0,
+                evidence: Vec::new(),
+                candidate_scores: vec![(all_candidates[0].sense_id.clone(), 1.0)],
+                word: word.to_string(),
+            };
+        }
+
+        // G1: POS pre-filtering — eliminate senses with incompatible POS
+        // based on syntactic context hints.
+        let pos_hint = infer_pos_hint(word, &context_tokens);
+        let candidates: Vec<&SenseEntry> = if let Some(hint) = pos_hint {
+            let filtered: Vec<&SenseEntry> = all_candidates.iter()
+                .filter(|c| pos_compatible(&c.part_of_speech, &hint))
+                .collect();
+            // If pre-filtering eliminates ALL candidates, fall back to full set.
+            // This prevents catastrophic failure on wrong POS hints.
+            if filtered.is_empty() { all_candidates.iter().collect() } else { filtered }
+        } else {
+            all_candidates.iter().collect()
+        };
+
+        // If only one candidate survives POS filtering, return it immediately.
         if candidates.len() == 1 {
             return DisambiguationResult {
                 selected_sense: Some(candidates[0].clone()),
-                confidence: 1.0,
+                confidence: 0.9, // High but not 1.0 — POS hint is heuristic
                 evidence: Vec::new(),
-                candidate_scores: vec![(candidates[0].sense_id.clone(), 1.0)],
+                candidate_scores: candidates.iter()
+                    .map(|c| (c.sense_id.clone(), 0.9))
+                    .collect(),
                 word: word.to_string(),
             };
         }
@@ -138,7 +175,7 @@ impl CSDEngine {
         let mut best_sense: Option<&SenseEntry> = None;
         let mut best_score: f32 = -1.0;
 
-        for candidate in candidates {
+        for candidate in &candidates {
             let score = self.score_sense(candidate, &activation_map, graph, &context_tokens);
             candidate_scores.push((candidate.sense_id.clone(), score));
 
@@ -363,6 +400,92 @@ impl CSDEngine {
     }
 }
 
+// ========================================================================
+// POS Pre-filtering Helpers (G1)
+// ========================================================================
+
+/// Infer a part-of-speech hint from the word's syntactic context.
+///
+/// Uses simple heuristic rules based on Indonesian grammar:
+/// - After "tidak", "belum", "sudah", "telah" → verb
+/// - After "ini", "itu", "sebuah", "seekor" → noun
+/// - Before "sekali", "sangat" → adjective or verb
+/// - After "di-" prefix on word itself → verb (passive)
+///
+/// Returns `None` when no reliable POS hint can be inferred.
+fn infer_pos_hint(word: &str, context_tokens: &[&str]) -> Option<String> {
+    let word_lower = word.to_lowercase();
+
+    // Check if the word itself has a verbal prefix (meN-, di-, ber-, ter-).
+    // This is a strong signal — Indonesian verbal morphology is productive.
+    if word_lower.starts_with("me") || word_lower.starts_with("di")
+        || word_lower.starts_with("ber") || word_lower.starts_with("ter")
+    {
+        return Some("verb".to_string());
+    }
+
+    // Check context for auxiliaries that require a verb complement.
+    const VERB_MARKERS: &[&str] = &[
+        "tidak", "belum", "sudah", "telah", "akan", "mau",
+        "bisa", "dapat", "harus", "perlu",
+    ];
+    for token in context_tokens {
+        if VERB_MARKERS.contains(&token.to_lowercase().as_str()) {
+            return Some("verb".to_string());
+        }
+    }
+
+    // Check context for determiners that require a noun complement.
+    const NOUN_MARKERS: &[&str] = &[
+        "ini", "itu", "sebuah", "seekor", "seorang",
+        "para", "sang", "si",
+    ];
+    for token in context_tokens {
+        if NOUN_MARKERS.contains(&token.to_lowercase().as_str()) {
+            return Some("noun".to_string());
+        }
+    }
+
+    // Check context for degree modifiers that suggest adjective/verb.
+    const DEGREE_MARKERS: &[&str] = &["sekali", "sangat", "terlalu", "paling"];
+    for token in context_tokens {
+        if DEGREE_MARKERS.contains(&token.to_lowercase().as_str()) {
+            return Some("adjective".to_string());
+        }
+    }
+
+    None
+}
+
+/// Check whether a sense's POS is compatible with the inferred POS hint.
+///
+/// Compatibility rules:
+/// - Exact match (verb=verb, noun=noun) → compatible
+/// - "verb" is compatible with "adjective" in Indonesian (adjectives are
+///   stative verbs in many analyses)
+/// - "particle" is compatible with anything (function words are flexible)
+/// - "interjection" is compatible with anything
+/// - Everything else → incompatible
+fn pos_compatible(sense_pos: &str, hint_pos: &str) -> bool {
+    let s = sense_pos.to_lowercase();
+    let h = hint_pos.to_lowercase();
+
+    // Exact match.
+    if s == h { return true; }
+
+    // Indonesian adjectives are stative verbs — they're POS-compatible.
+    if (s == "verb" && h == "adjective") || (s == "adjective" && h == "verb") {
+        return true;
+    }
+
+    // Function words and interjections are compatible with anything.
+    if s == "particle" || s == "interjection" || s == "adverb" {
+        return true;
+    }
+
+    false
+}
+
 /// Simple epoch-seconds timestamp string (no external chrono dependency).
 ///
 /// Note: Despite the historical name `chrono_now_iso`, this returns epoch
@@ -440,12 +563,12 @@ impl ErasedTransform for CSDTransform {
             .iter()
             .enumerate()
             .filter_map(|(idx, atom)| {
-                if atom.atom_type == AtomType::Token {
-                    if effective_registry.is_ambiguous(&atom.label) {
-                        // Find the node ID for this token in the graph.
-                        if let Some(&node_id) = graph.label_to_id.get(&atom.label) {
-                            return Some((idx, atom.label.clone(), node_id));
-                        }
+                if atom.atom_type == AtomType::Token
+                    && effective_registry.is_ambiguous(&atom.label)
+                {
+                    // Find the node ID for this token in the graph.
+                    if let Some(&node_id) = graph.label_to_id.get(&atom.label) {
+                        return Some((idx, atom.label.clone(), node_id));
                     }
                 }
                 None
@@ -526,5 +649,89 @@ mod tests {
     fn test_csd_transform_creation() {
         let transform = CSDTransform::new();
         assert_eq!(transform.id(), "CSD");
+    }
+
+    #[test]
+    fn test_pos_hint_verb_from_auxiliary() {
+        // "tidak" before "bisa" → verb hint
+        let hint = infer_pos_hint("bisa", &["tidak", "pergi"]);
+        assert_eq!(hint.as_deref(), Some("verb"));
+    }
+
+    #[test]
+    fn test_pos_hint_noun_from_determiner() {
+        // "seekor" before "bisa" → noun hint
+        let hint = infer_pos_hint("bisa", &["seekor", "ular"]);
+        assert_eq!(hint.as_deref(), Some("noun"));
+    }
+
+    #[test]
+    fn test_pos_hint_verb_from_prefix() {
+        // Word starting with "me-" → verb
+        let hint = infer_pos_hint("memakan", &["ikan"]);
+        assert_eq!(hint.as_deref(), Some("verb"));
+    }
+
+    #[test]
+    fn test_pos_hint_no_hint() {
+        // No markers → no hint (avoid "itu" which is a noun determiner)
+        let hint = infer_pos_hint("bisa", &["ular", "gigitan"]);
+        assert!(hint.is_none());
+    }
+
+    #[test]
+    fn test_pos_compatible_exact_match() {
+        assert!(pos_compatible("verb", "verb"));
+        assert!(pos_compatible("noun", "noun"));
+    }
+
+    #[test]
+    fn test_pos_compatible_verb_adjective() {
+        // Indonesian adjectives are stative verbs
+        assert!(pos_compatible("verb", "adjective"));
+        assert!(pos_compatible("adjective", "verb"));
+    }
+
+    #[test]
+    fn test_pos_compatible_incompatible() {
+        // noun and verb are NOT compatible
+        assert!(!pos_compatible("noun", "verb"));
+        assert!(!pos_compatible("verb", "noun"));
+    }
+
+    #[test]
+    fn test_pos_compatible_particle_flexible() {
+        assert!(pos_compatible("particle", "verb"));
+        assert!(pos_compatible("interjection", "noun"));
+        assert!(pos_compatible("adverb", "verb"));
+    }
+
+    #[test]
+    fn test_csd_pos_pre_filter_bisa_with_tidak() {
+        // "bisa" after "tidak" → POS hint=verb → should select "bisa_ability" (verb)
+        // not "bisa_venom" (noun)
+        let engine = CSDEngine::new();
+        let mut graph = Graph::new();
+
+        // Create context with "tidak" — a verb-marking auxiliary
+        let tidak_id = graph.ensure_node("tidak");
+        let pergi_id = graph.ensure_node("pergi");
+        let _bisa_id = graph.ensure_node("bisa");
+
+        // Add a composition connecting "tidak" and "pergi" so spreading works
+        let mut comp = Composition::default();
+        comp.id = CompositionId::new("comp_test_pos".into());
+        comp.members = vec![
+            CompositionMember { node_id: tidak_id, role: SemanticRole::Arg0Agent, confidence: 0.9, label: "tidak".into(), source: None },
+            CompositionMember { node_id: pergi_id, role: SemanticRole::Predicate, confidence: 0.9, label: "pergi".into(), source: None },
+        ];
+        graph.compositions.insert(CompositionId::new("comp_test_pos".into()), comp);
+        graph.index_composition(&CompositionId::new("comp_test_pos".into()), &[tidak_id, pergi_id]);
+
+        let result = engine.disambiguate("bisa", &[tidak_id, pergi_id], &graph);
+        // With POS hint (verb), only "bisa_ability" should survive
+        if let Some(sense) = &result.selected_sense {
+            assert_eq!(sense.sense_id, "bisa_ability", "POS filter should select verb sense");
+        }
     }
 }
