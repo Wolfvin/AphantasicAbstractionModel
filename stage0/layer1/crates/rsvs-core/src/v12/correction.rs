@@ -6,6 +6,7 @@
 
 use serde::{Deserialize, Serialize};
 use super::pipeline::Graph;
+use super::sense_registry::SenseRegistry;
 use super::types::*;
 use crate::types::EdgeSource;
 
@@ -306,6 +307,47 @@ fn apply_spurious_correction(
             ..CorrectionResult::default()
         }
     }
+}
+
+/// Apply a correction and update the sense registry for future learning.
+///
+/// This connects Phase R (Correction Loop) to Phase 5 (Sense Registry):
+/// when a user corrects a disambiguation, the registry learns from it.
+///
+/// Phase 7: Incremental Learning from Corrections.
+pub fn apply_correction_with_learning(
+    correction: &UserCorrection,
+    graph: &mut Graph,
+    registry: &mut SenseRegistry,
+) -> CorrectionResult {
+    let result = apply_correction(correction, graph);
+
+    if result.applied {
+        // If this was a role correction involving a sense, update registry.
+        if let Some(comp) = graph.compositions.get(&correction.target_composition_id) {
+            if comp.composition_type == CompositionType::DisambiguatedSense {
+                let target_label = comp.member_with_role(&SemanticRole::SenseTarget)
+                    .map(|m| m.label.clone());
+                let selected_label = comp.member_with_role(&SemanticRole::SelectedSense)
+                    .map(|m| m.label.clone());
+
+                if let (Some(word), Some(sense_label)) = (target_label, selected_label) {
+                    // Find context words from SenseContext members.
+                    let context_words: Vec<String> = comp.members.iter()
+                        .filter(|m| m.role == SemanticRole::SenseContext)
+                        .map(|m| m.label.clone())
+                        .collect();
+
+                    // Add each context word as evidence for the corrected sense.
+                    for ctx_word in &context_words {
+                        registry.add_evidence(&word, &sense_label, ctx_word);
+                    }
+                }
+            }
+        }
+    }
+
+    result
 }
 
 // ========================================================================

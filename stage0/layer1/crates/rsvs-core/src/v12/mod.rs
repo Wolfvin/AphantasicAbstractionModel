@@ -239,7 +239,7 @@ pub use csd::{CSDEngine, CSDTransform};
 pub use sense_registry::{DisambiguationResult, SenseEntry, SenseRegistry};
 
 // Re-export RAB Phase R: Correction Loop types.
-pub use correction::{UserCorrection, CorrectionType, CorrectionResult, apply_correction};
+pub use correction::{UserCorrection, CorrectionType, CorrectionResult, apply_correction, apply_correction_with_learning};
 
 // Re-export RAB Phase S: Usage Discovery types.
 pub use usage_probe::{UsageProbe, ProbeType, ProbeResult, UsageDiscoveryEngine};

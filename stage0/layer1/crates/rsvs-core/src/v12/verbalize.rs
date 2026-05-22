@@ -312,28 +312,28 @@ impl CompositionalVerbalize {
     ///
     /// Uses deterministic templates per `CompositionType` in Bahasa Indonesia.
     /// Missing roles are handled gracefully with default fillers.
-    fn verbalize_composition(&self, comp: &Composition) -> String {
+    fn verbalize_composition(&self, comp: &Composition, graph: &Graph) -> String {
         match comp.composition_type {
-            CompositionType::Event => self.verbalize_event(comp),
-            CompositionType::HiddenMeaning => self.verbalize_hidden_meaning(comp),
-            CompositionType::Pattern => self.verbalize_pattern(comp),
-            CompositionType::Hypothesis => self.verbalize_hypothesis(comp),
-            CompositionType::Situation => self.verbalize_situation(comp),
-            CompositionType::Acquisition => self.verbalize_acquisition(comp),
-            CompositionType::Morphology => self.verbalize_morphology(comp),
+            CompositionType::Event => self.verbalize_event(comp, graph),
+            CompositionType::HiddenMeaning => self.verbalize_hidden_meaning(comp, graph),
+            CompositionType::Pattern => self.verbalize_pattern(comp, graph),
+            CompositionType::Hypothesis => self.verbalize_hypothesis(comp, graph),
+            CompositionType::Situation => self.verbalize_situation(comp, graph),
+            CompositionType::Acquisition => self.verbalize_acquisition(comp, graph),
+            CompositionType::Morphology => self.verbalize_morphology(comp, graph),
             // RAB Phase 1/2: new composition types
-            CompositionType::EquativeBinding => self.verbalize_equative_binding(comp),
-            CompositionType::PossessiveBinding => self.verbalize_possessive_binding(comp),
-            CompositionType::DisambiguatedSense => self.verbalize_disambiguated_sense(comp),
-            CompositionType::UsageProbe => self.verbalize_usage_probe(comp),
-            CompositionType::Correction => self.verbalize_correction(comp),
+            CompositionType::EquativeBinding => self.verbalize_equative_binding(comp, graph),
+            CompositionType::PossessiveBinding => self.verbalize_possessive_binding(comp, graph),
+            CompositionType::DisambiguatedSense => self.verbalize_disambiguated_sense(comp, graph),
+            CompositionType::UsageProbe => self.verbalize_usage_probe(comp, graph),
+            CompositionType::Correction => self.verbalize_correction(comp, graph),
         }
     }
 
     /// Event template: "AGENT did ACTION to PATIENT because CAUSE"
     ///
     /// Falls back to Bahasa Indonesia: "[Agent] [Predicate] [Patient], karena [Cause]"
-    fn verbalize_event(&self, comp: &Composition) -> String {
+    fn verbalize_event(&self, comp: &Composition, _graph: &Graph) -> String {
         let agent = comp
             .member_with_role(&SemanticRole::Arg0Agent)
             .map(|m| m.label.as_str())
@@ -376,7 +376,7 @@ impl CompositionalVerbalize {
     /// HiddenMeaning template: "PROBLEM led to SOLUTION by AGENT"
     ///
     /// Falls back to Bahasa: "[Solution] digunakan sebagai solusi untuk [Problem]"
-    fn verbalize_hidden_meaning(&self, comp: &Composition) -> String {
+    fn verbalize_hidden_meaning(&self, comp: &Composition, _graph: &Graph) -> String {
         let problem = comp
             .member_with_role(&SemanticRole::Problem)
             .map(|m| m.label.as_str())
@@ -405,7 +405,7 @@ impl CompositionalVerbalize {
     }
 
     /// Pattern template: "When ANTECEDENT then CONSEQUENT"
-    fn verbalize_pattern(&self, comp: &Composition) -> String {
+    fn verbalize_pattern(&self, comp: &Composition, _graph: &Graph) -> String {
         let ante = comp
             .member_with_role(&SemanticRole::Antecedent)
             .map(|m| m.label.as_str())
@@ -428,7 +428,7 @@ impl CompositionalVerbalize {
     }
 
     /// Hypothesis template: "Kemungkinan [Patient] [Predicate]"
-    fn verbalize_hypothesis(&self, comp: &Composition) -> String {
+    fn verbalize_hypothesis(&self, comp: &Composition, _graph: &Graph) -> String {
         let pred = comp
             .member_with_role(&SemanticRole::Predicate)
             .map(|m| m.label.as_str())
@@ -446,7 +446,7 @@ impl CompositionalVerbalize {
     }
 
     /// Situation template: "Dalam konteks [Agent], [Predicate] [Patient]"
-    fn verbalize_situation(&self, comp: &Composition) -> String {
+    fn verbalize_situation(&self, comp: &Composition, _graph: &Graph) -> String {
         let agent = comp
             .member_with_role(&SemanticRole::Arg0Agent)
             .map(|m| m.label.as_str())
@@ -464,7 +464,7 @@ impl CompositionalVerbalize {
     }
 
     /// Acquisition template: "Diketahui bahwa [Agent] [Predicate] [Patient]"
-    fn verbalize_acquisition(&self, comp: &Composition) -> String {
+    fn verbalize_acquisition(&self, comp: &Composition, _graph: &Graph) -> String {
         let agent = comp
             .member_with_role(&SemanticRole::Arg0Agent)
             .map(|m| m.label.as_str())
@@ -488,7 +488,7 @@ impl CompositionalVerbalize {
     /// Morphology template: "Kata SURFACE terbentuk dari PREFIX- + ROOT + -SUFFIX (asimilasi: ARCHI → ALLO karena KONDISI)"
     ///
     /// Falls back to Bahasa Indonesia with graph-traceable explanation.
-    fn verbalize_morphology(&self, comp: &Composition) -> String {
+    fn verbalize_morphology(&self, comp: &Composition, _graph: &Graph) -> String {
         let surface = comp
             .member_with_role(&SemanticRole::MorphDerivedForm)
             .map(|m| m.label.as_str())
@@ -530,55 +530,120 @@ impl CompositionalVerbalize {
         format!("Kata {} terbentuk dari {}{}.", surface, decomp, assimilation_note)
     }
 
-    /// EquativeBinding template: "SUBJECT adalah COMPLEMENT"
-    fn verbalize_equative_binding(&self, comp: &Composition) -> String {
+    /// EquativeBinding template: WHY explanation with graph-trace.
+    ///
+    /// Phase 6: Explains WHY the equative binding was created,
+    /// tracing through the predicate type and confidence.
+    fn verbalize_equative_binding(&self, comp: &Composition, _graph: &Graph) -> String {
         let subject = comp
             .member_with_role(&SemanticRole::Subject)
             .map(|m| m.label.as_str())
-            .unwrap_or("Sesuatu");
+            .unwrap_or("?");
         let complement = comp
             .member_with_role(&SemanticRole::Complement)
             .map(|m| m.label.as_str())
-            .unwrap_or("sesuatu");
-        format!("{} adalah {}.", subject, complement)
+            .unwrap_or("?");
+        let predicate = comp.members.iter()
+            .find(|m| m.role == SemanticRole::Predicate)
+            .map(|m| m.label.as_str())
+            .unwrap_or("adalah");
+
+        format!(
+            "'{}' adalah {} yang menghubungkan Subject '{}' ke Complement '{}' melalui EquativeBinding ({}). Confidence: {:.0}%. {}",
+            predicate,
+            self.trigger_type_label(predicate),
+            subject,
+            complement,
+            comp.id,
+            comp.confidence * 100.0,
+            if comp.correction_count > 0 { format!("(Dikoreksi {} kali)", comp.correction_count) } else { String::new() }
+        )
     }
 
-    /// PossessiveBinding template: "POSSESSOR punya POSSESSION"
-    fn verbalize_possessive_binding(&self, comp: &Composition) -> String {
+    /// PossessiveBinding template: WHY explanation with graph-trace.
+    ///
+    /// Phase 6: Explains WHY the possessive binding was created,
+    /// tracing through the predicate type and confidence.
+    fn verbalize_possessive_binding(&self, comp: &Composition, _graph: &Graph) -> String {
         let possessor = comp
             .member_with_role(&SemanticRole::Possessor)
             .map(|m| m.label.as_str())
-            .unwrap_or("Seseorang");
+            .unwrap_or("?");
         let possession = comp
             .member_with_role(&SemanticRole::Possession)
             .map(|m| m.label.as_str())
-            .unwrap_or("sesuatu");
-        format!("{} punya {}.", possessor, possession)
+            .unwrap_or("?");
+        let predicate = comp.members.iter()
+            .find(|m| m.role == SemanticRole::Predicate)
+            .map(|m| m.label.as_str())
+            .unwrap_or("punya");
+
+        format!(
+            "'{}' adalah {} yang menghubungkan Possessor '{}' ke Possession '{}' melalui PossessiveBinding ({}). Confidence: {:.0}%.",
+            predicate,
+            self.trigger_type_label(predicate),
+            possessor,
+            possession,
+            comp.id,
+            comp.confidence * 100.0
+        )
     }
 
-    /// DisambiguatedSense template: "SENSE_TARGET dalam konteks ini berarti SELECTED_SENSE"
-    fn verbalize_disambiguated_sense(&self, comp: &Composition) -> String {
+    /// DisambiguatedSense template: WHY explanation with context trace.
+    ///
+    /// Phase 6: Explains WHY a sense was selected by tracing
+    /// the SpreadingActivation context that resolved the ambiguity.
+    fn verbalize_disambiguated_sense(&self, comp: &Composition, _graph: &Graph) -> String {
         let target = comp
             .member_with_role(&SemanticRole::SenseTarget)
             .map(|m| m.label.as_str())
-            .unwrap_or("Kata ini");
-        let sense = comp
+            .unwrap_or("?");
+        let selected = comp
             .member_with_role(&SemanticRole::SelectedSense)
             .map(|m| m.label.as_str())
-            .unwrap_or("makna tertentu");
-        format!("{} dalam konteks ini berarti {}.", target, sense)
+            .unwrap_or("?");
+
+        let context_labels: Vec<String> = comp.members.iter()
+            .filter(|m| m.role == SemanticRole::SenseContext)
+            .map(|m| m.label.clone())
+            .collect();
+
+        let context_str = if context_labels.is_empty() {
+            "tanpa konteks".to_string()
+        } else {
+            format!("dengan konteks [{}]", context_labels.join(", "))
+        };
+
+        format!(
+            "'{}' di-disambiguasi sebagai '{}' {} melalui SpreadingActivation ({}). Confidence: {:.0}%.",
+            target,
+            selected,
+            context_str,
+            comp.id,
+            comp.confidence * 100.0
+        )
     }
 
-    /// UsageProbe template: "Penggunaan: ..."
-    fn verbalize_usage_probe(&self, comp: &Composition) -> String {
-        let labels: Vec<&str> = comp.members.iter().map(|m| m.label.as_str()).collect();
-        format!("Penggunaan probe: {}.", labels.join(", "))
+    /// UsageProbe template: WHY explanation with confidence.
+    ///
+    /// Phase 6: Explains the usage probe with its target and confidence.
+    fn verbalize_usage_probe(&self, comp: &Composition, _graph: &Graph) -> String {
+        format!("UsageProbe untuk '{}' ({}). Confidence: {:.0}%.",
+            comp.members.first().map(|m| m.label.as_str()).unwrap_or("?"),
+            comp.id,
+            comp.confidence * 100.0
+        )
     }
 
-    /// Correction template: "Koreksi: ..."
-    fn verbalize_correction(&self, comp: &Composition) -> String {
-        let labels: Vec<&str> = comp.members.iter().map(|m| m.label.as_str()).collect();
-        format!("Koreksi: {}.", labels.join(", "))
+    /// Correction template: WHY explanation with correction trace.
+    ///
+    /// Phase 6: Explains what correction was applied and how many times.
+    fn verbalize_correction(&self, comp: &Composition, _graph: &Graph) -> String {
+        format!("Koreksi pengguna diterapkan pada composition {}. Correction count: {}. {}",
+            comp.id,
+            comp.correction_count,
+            comp.last_correction_type.as_ref().map(|t| format!("Tipe koreksi terakhir: {}", t)).unwrap_or_default()
+        )
     }
 
     // ================================================================
@@ -643,7 +708,7 @@ impl CompositionalVerbalize {
 
         for ca in path {
             if let Some(comp) = graph.get_composition(&ca.comp_id) {
-                let raw_sentence = self.verbalize_composition(comp);
+                let raw_sentence = self.verbalize_composition(comp, graph);
                 let qualified = self.qualify(&raw_sentence, comp);
                 sentences.push(qualified);
 
@@ -753,9 +818,25 @@ impl CompositionalVerbalize {
     ///
     /// Useful for debugging and for generating explanations of specific
     /// compositions that are already known to be relevant.
-    pub fn verbalize_single(&self, comp: &Composition) -> String {
-        let raw = self.verbalize_composition(comp);
+    pub fn verbalize_single(&self, comp: &Composition, graph: &Graph) -> String {
+        let raw = self.verbalize_composition(comp, graph);
         self.qualify(&raw, comp)
+    }
+
+    /// Determine what type of trigger a predicate word is.
+    ///
+    /// Phase 6: Used by verbalization templates to explain WHY
+    /// a particular binding type was selected based on the predicate.
+    fn trigger_type_label(&self, predicate: &str) -> &'static str {
+        let lower = predicate.to_lowercase();
+        match lower.as_str() {
+            "adalah" | "ialah" | "merupakan" => "copula",
+            "punya" | "miliki" | "mempunyai" => "possessive marker",
+            "yaitu" | "yakni" => "equative marker",
+            "ada" => "existential marker",
+            "di" | "ke" | "dari" => "locative marker",
+            _ => "predikat",
+        }
     }
 }
 
@@ -940,7 +1021,7 @@ mod tests {
         let graph = make_test_graph();
         let cve = CompositionalVerbalize::new();
         let comp = graph.get_composition(&CompositionId::new("comp_event_1".to_string())).unwrap();
-        let sentence = cve.verbalize_composition(comp);
+        let sentence = cve.verbalize_composition(comp, &graph);
         assert!(
             sentence.contains("Raymond"),
             "Event verbalization should contain agent 'Raymond': got '{}'",
@@ -969,7 +1050,7 @@ mod tests {
         let graph = make_test_graph();
         let cve = CompositionalVerbalize::new();
         let comp = graph.get_composition(&CompositionId::new("comp_hm_1".to_string())).unwrap();
-        let sentence = cve.verbalize_composition(comp);
+        let sentence = cve.verbalize_composition(comp, &graph);
         assert!(
             sentence.contains("cache"),
             "HiddenMeaning verbalization should contain 'cache': got '{}'",
@@ -995,7 +1076,7 @@ mod tests {
         let comp = graph
             .get_composition(&CompositionId::new("comp_pattern_1".to_string()))
             .unwrap();
-        let sentence = cve.verbalize_composition(comp);
+        let sentence = cve.verbalize_composition(comp, &graph);
         assert!(
             sentence.contains("Ketika"),
             "Pattern verbalization should start with 'Ketika': got '{}'",
@@ -1115,7 +1196,7 @@ mod tests {
         let graph = make_test_graph();
         let cve = CompositionalVerbalize::new();
         let comp = graph.get_composition(&CompositionId::new("comp_event_1".to_string())).unwrap();
-        let sentence = cve.verbalize_single(comp);
+        let sentence = cve.verbalize_single(comp, &graph);
 
         assert!(
             sentence.contains("Raymond"),
@@ -1158,7 +1239,7 @@ mod tests {
         ];
 
         let cve = CompositionalVerbalize::new();
-        let sentence = cve.verbalize_single(&comp);
+        let sentence = cve.verbalize_single(&comp, &graph);
 
         assert!(
             sentence.contains("server"),
@@ -1213,7 +1294,7 @@ mod tests {
         ];
 
         let cve = CompositionalVerbalize::new();
-        let sentence = cve.verbalize_single(&comp);
+        let sentence = cve.verbalize_single(&comp, &graph);
 
         assert!(
             sentence.contains("Dalam konteks"),
@@ -1264,7 +1345,7 @@ mod tests {
         ];
 
         let cve = CompositionalVerbalize::new();
-        let sentence = cve.verbalize_single(&comp);
+        let sentence = cve.verbalize_single(&comp, &graph);
 
         assert!(
             sentence.contains("Diketahui bahwa"),
@@ -1389,7 +1470,7 @@ mod tests {
         ];
 
         let cve = CompositionalVerbalize::new();
-        let sentence = cve.verbalize_single(&comp);
+        let sentence = cve.verbalize_single(&comp, &graph);
 
         assert!(sentence.contains("tim"), "Should contain agent");
         assert!(

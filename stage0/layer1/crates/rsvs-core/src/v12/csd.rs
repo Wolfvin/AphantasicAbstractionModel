@@ -198,6 +198,51 @@ impl CSDEngine {
         score
     }
 
+    /// Explain WHY a particular sense was selected for a word.
+    ///
+    /// Produces a human-readable explanation with graph trace.
+    /// Phase 6: Explainable WHY — traces inference paths through the graph.
+    pub fn explain_disambiguation(
+        &self,
+        word: &str,
+        context_node_ids: &[NodeId],
+        graph: &Graph,
+    ) -> String {
+        let result = self.disambiguate(word, context_node_ids, graph);
+
+        if let Some(sense) = &result.selected_sense {
+            let context_labels: Vec<String> = context_node_ids.iter()
+                .filter_map(|&id| graph.node_label(id).map(|l| l.to_string()))
+                .collect();
+
+            let evidence_labels: Vec<String> = result.evidence.iter()
+                .filter_map(|(node_id, energy)| {
+                    graph.node_label(*node_id).map(|l| format!("{} ({:.2})", l, energy))
+                })
+                .collect();
+
+            format!(
+                "'{}' di-context [{}] mengaktifkan {{{}}} yang align dengan sense '{}' ({}). Confidence: {:.0}%.{}",
+                word,
+                context_labels.join(", "),
+                evidence_labels.join(", "),
+                sense.label,
+                sense.sense_id,
+                result.confidence * 100.0,
+                if result.candidate_scores.len() > 1 {
+                    let scores: Vec<String> = result.candidate_scores.iter()
+                        .map(|(id, score)| format!("{}={:.2}", id, score))
+                        .collect();
+                    format!(" Kandidat: {}", scores.join(", "))
+                } else {
+                    String::new()
+                }
+            )
+        } else {
+            format!("Tidak dapat men-disambiguasi '{}' — confidence terlalu rendah.", word)
+        }
+    }
+
     /// Create a DisambiguatedSense composition from a disambiguation result.
     ///
     /// This is called after disambiguation succeeds to create the graph composition.
