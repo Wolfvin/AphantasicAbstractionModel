@@ -60,6 +60,7 @@ pub mod spreading;
 pub mod stemmer;
 pub mod temporal;
 pub mod types;
+pub mod usage_probe;
 pub mod verbalize;
 
 #[cfg(test)]
@@ -238,3 +239,6 @@ pub use sense_registry::{DisambiguationResult, SenseEntry, SenseRegistry};
 
 // Re-export RAB Phase R: Correction Loop types.
 pub use correction::{UserCorrection, CorrectionType, CorrectionResult, apply_correction};
+
+// Re-export RAB Phase S: Usage Discovery types.
+pub use usage_probe::{UsageProbe, ProbeType, ProbeResult, UsageDiscoveryEngine};
