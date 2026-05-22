@@ -328,19 +328,24 @@ pub fn apply_correction_with_learning(
             if comp.composition_type == CompositionType::DisambiguatedSense {
                 let target_label = comp.member_with_role(&SemanticRole::SenseTarget)
                     .map(|m| m.label.clone());
-                let selected_label = comp.member_with_role(&SemanticRole::SelectedSense)
-                    .map(|m| m.label.clone());
+                // FIX: Use provenance.origin_id which stores the sense_id
+                // (e.g., "bisa_venom"), NOT the SelectedSense member label
+                // (e.g., "bisa_racun") which is a display label, not a lookup key.
+                // add_evidence() matches by sense_id, so using the label was a bug.
+                let sense_id = comp.provenance.origin_id.clone();
 
-                if let (Some(word), Some(sense_label)) = (target_label, selected_label) {
-                    // Find context words from SenseContext members.
-                    let context_words: Vec<String> = comp.members.iter()
-                        .filter(|m| m.role == SemanticRole::SenseContext)
-                        .map(|m| m.label.clone())
-                        .collect();
+                if let (Some(word), sense_id) = (target_label, sense_id) {
+                    if !sense_id.is_empty() {
+                        // Find context words from SenseContext members.
+                        let context_words: Vec<String> = comp.members.iter()
+                            .filter(|m| m.role == SemanticRole::SenseContext)
+                            .map(|m| m.label.clone())
+                            .collect();
 
-                    // Add each context word as evidence for the corrected sense.
-                    for ctx_word in &context_words {
-                        registry.add_evidence(&word, &sense_label, ctx_word);
+                        // Add each context word as evidence for the corrected sense.
+                        for ctx_word in &context_words {
+                            registry.add_evidence(&word, &sense_id, ctx_word);
+                        }
                     }
                 }
             }

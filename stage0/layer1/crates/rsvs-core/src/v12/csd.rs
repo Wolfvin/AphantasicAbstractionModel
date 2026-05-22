@@ -91,6 +91,12 @@ impl CSDEngine {
         context_node_ids: &[NodeId],
         graph: &Graph,
     ) -> DisambiguationResult {
+        // Collect context labels for lexical fallback scoring.
+        let context_labels: Vec<String> = context_node_ids
+            .iter()
+            .filter_map(|&id| graph.node_label(id).map(|l| l.to_string()))
+            .collect();
+        let context_tokens: Vec<&str> = context_labels.iter().map(|s| s.as_str()).collect();
         let candidates = self.registry.senses_for(word);
 
         // Fast path: single sense or no candidates.
@@ -133,7 +139,7 @@ impl CSDEngine {
         let mut best_score: f32 = -1.0;
 
         for candidate in candidates {
-            let score = self.score_sense(candidate, &activation_map, graph);
+            let score = self.score_sense(candidate, &activation_map, graph, &context_tokens);
             candidate_scores.push((candidate.sense_id.clone(), score));
 
             if score > best_score {
@@ -180,18 +186,50 @@ impl CSDEngine {
     }
 
     /// Score a sense entry by summing activation of its representative nodes.
+    ///
+    /// Uses two strategies:
+    /// 1. **Graph-based**: Sum activation energies of representative nodes in graph.
+    /// 2. **Lexical fallback**: When graph is sparse/empty, compute Jaccard
+    ///    overlap between context tokens and representative_labels.
+    ///
+    /// The fallback ensures CSD works even before the graph has matured
+    /// with enough nodes — a critical bootstrap path.
     fn score_sense(
         &self,
         sense: &SenseEntry,
         activation_map: &ActivationMap,
         graph: &Graph,
+        context_tokens: &[&str],
     ) -> f32 {
         let mut score = 0.0f32;
+        let mut graph_hits = 0usize;
 
+        // Strategy 1: Graph-based scoring (primary).
         for label in &sense.representative_labels {
-            // Look up the node by label.
             if let Some(node_id) = graph.label_to_id.get(label) {
                 score += activation_map.energy(*node_id);
+                graph_hits += 1;
+            }
+        }
+
+        // Strategy 2: Lexical fallback (when graph is sparse).
+        // If fewer than half of representative labels exist in the graph,
+        // supplement with direct Jaccard overlap between context and labels.
+        if graph_hits < (sense.representative_labels.len() / 2).max(1) {
+            let context_lower: std::collections::HashSet<String> = context_tokens
+                .iter()
+                .map(|t| t.to_lowercase())
+                .collect();
+            let labels_lower: std::collections::HashSet<String> = sense
+                .representative_labels
+                .iter()
+                .map(|l| l.to_lowercase())
+                .collect();
+            let intersection = context_lower.intersection(&labels_lower).count();
+            let union = context_lower.union(&labels_lower).count();
+            if union > 0 {
+                let jaccard = intersection as f32 / union as f32;
+                score += jaccard * 0.5; // Weighted: graph energy > lexical overlap
             }
         }
 
@@ -307,7 +345,7 @@ impl CSDEngine {
                 origin: EdgeSource::SenseDisambiguation,
                 origin_id: sense.sense_id.clone(),
                 parent_composition_id: None,
-                timestamp: chrono_now_iso(),
+                timestamp: now_epoch_string(),
             },
             seed_scores: HashMap::new(),
             source_text: None,
@@ -316,8 +354,8 @@ impl CSDEngine {
             contradiction: None,
             correction_count: 0,
             last_correction_type: None,
-            created_at: chrono_now_iso(),
-            updated_at: chrono_now_iso(),
+            created_at: now_epoch_string(),
+            updated_at: now_epoch_string(),
         };
 
         graph.compositions.insert(comp_id.clone(), composition);
@@ -325,9 +363,12 @@ impl CSDEngine {
     }
 }
 
-/// Simple ISO 8601 timestamp (no external chrono dependency).
-fn chrono_now_iso() -> String {
-    // Use a simple format — no external dependency needed.
+/// Simple epoch-seconds timestamp string (no external chrono dependency).
+///
+/// Note: Despite the historical name `chrono_now_iso`, this returns epoch
+/// seconds, NOT ISO 8601. Renamed for accuracy. All Composition timestamps
+/// use this format consistently.
+fn now_epoch_string() -> String {
     format!("{}", std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
@@ -383,6 +424,16 @@ impl ErasedTransform for CSDTransform {
         let mut compositions_created = 0;
         let atoms_created = 0;
 
+        // FIX (W7): Use the sense registry from PipelineContext when available,
+        // so that corrections from Phase R (correction loop) and evidence from
+        // Phase 7 (incremental learning) are visible to CSD. Previously,
+        // CSDTransform always created a fresh CSDEngine with only bootstrap
+        // entries, making it blind to any runtime learning.
+        let effective_registry = ctx.sense_registry
+            .as_ref()
+            .cloned()
+            .unwrap_or_else(|| self.engine.registry().clone());
+
         // Check all token atoms for ambiguous words.
         let ambiguous_atoms: Vec<(usize, String, NodeId)> = ctx
             .current_atoms
@@ -390,7 +441,7 @@ impl ErasedTransform for CSDTransform {
             .enumerate()
             .filter_map(|(idx, atom)| {
                 if atom.atom_type == AtomType::Token {
-                    if self.engine.registry().is_ambiguous(&atom.label) {
+                    if effective_registry.is_ambiguous(&atom.label) {
                         // Find the node ID for this token in the graph.
                         if let Some(&node_id) = graph.label_to_id.get(&atom.label) {
                             return Some((idx, atom.label.clone(), node_id));
@@ -401,6 +452,9 @@ impl ErasedTransform for CSDTransform {
             })
             .collect();
 
+        // Build a temporary CSD engine with the effective registry for disambiguation.
+        let engine = CSDEngine::with_registry(effective_registry);
+
         for (_atom_idx, word, target_node_id) in ambiguous_atoms {
             // Collect context nodes from other atoms in the same ingest.
             let context_node_ids: Vec<NodeId> = ctx
@@ -410,10 +464,10 @@ impl ErasedTransform for CSDTransform {
                 .filter_map(|a| graph.label_to_id.get(&a.label).copied())
                 .collect();
 
-            let result = self.engine.disambiguate(&word, &context_node_ids, graph);
+            let result = engine.disambiguate(&word, &context_node_ids, graph);
 
             if result.is_resolved() {
-                if let Some(_comp_id) = self.engine.create_disambiguated_composition(
+                if let Some(_comp_id) = engine.create_disambiguated_composition(
                     &result,
                     target_node_id,
                     &context_node_ids,

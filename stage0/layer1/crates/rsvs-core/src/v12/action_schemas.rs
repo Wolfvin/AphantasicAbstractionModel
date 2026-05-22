@@ -13,6 +13,7 @@
 
 use serde::{Deserialize, Serialize};
 use super::types::{CompositionType, SemanticRole};
+use super::spreading::ActivationMap;
 
 // ========================================================================
 // ActionSchema — Declarative Template for Graph Actions
@@ -174,6 +175,31 @@ impl ActionSchema {
         tokens: &[&str],
         trigger_index: usize,
     ) -> Vec<(SemanticRole, String)> {
+        self.resolve_roles_inner(tokens, trigger_index, None)
+    }
+
+    /// Resolve role bindings with activation map for GraphActivation sources.
+    ///
+    /// Phase T integration: When a `RoleSource::GraphActivation` binding
+    /// exists and an ActivationMap is provided, the most-activated node
+    /// label is used instead of falling back to TokenBefore.
+    pub fn resolve_roles_with_activation(
+        &self,
+        tokens: &[&str],
+        trigger_index: usize,
+        activation_map: &ActivationMap,
+        graph: &super::pipeline::Graph,
+    ) -> Vec<(SemanticRole, String)> {
+        self.resolve_roles_inner(tokens, trigger_index, Some((activation_map, graph)))
+    }
+
+    /// Inner implementation shared by both resolve_roles variants.
+    fn resolve_roles_inner(
+        &self,
+        tokens: &[&str],
+        trigger_index: usize,
+        activation: Option<(&ActivationMap, &super::pipeline::Graph)>,
+    ) -> Vec<(SemanticRole, String)> {
         let mut resolved = Vec::new();
 
         for binding in &self.role_bindings {
@@ -210,12 +236,52 @@ impl ActionSchema {
                     found
                 }
                 RoleSource::GraphActivation => {
-                    // STUB: Will be implemented in Phase T (System 1/2 Bridge).
-                    // For now, fall back to TokenBefore behavior.
-                    if trigger_index > 0 {
-                        Some(tokens[trigger_index - 1].to_string())
+                    // Phase T: Use activation map to find the most-activated
+                    // node as the role value. Falls back to TokenBefore if
+                    // no activation data is available.
+                    if let Some((amap, graph)) = activation {
+                        // Find the most-activated node that's not the trigger itself.
+                        let top = amap.top_n(5);
+                        let best = top.iter()
+                            .filter(|(nid, _)| Some(*nid) != graph.label_to_id.get(
+                                tokens.get(trigger_index).map(|t| *t).unwrap_or("")
+                            ).copied())
+                            .filter_map(|(nid, energy)| {
+                                graph.node_label(*nid).map(|l| (l.to_string(), energy))
+                            })
+                            .find(|(label, _)| {
+                                // Skip function words and the trigger token.
+                                let lower = label.to_lowercase();
+                                !COPULA_MARKERS.contains(&lower.as_str())
+                                    && !POSSESSIVE_MARKERS.contains(&lower.as_str())
+                                    && !LOCATIVE_MARKERS.contains(&lower.as_str())
+                            });
+                        if let Some((label, energy)) = best {
+                            if *energy > 0.1 {
+                                Some(label)
+                            } else {
+                                // Energy too low — fall back.
+                                if trigger_index > 0 {
+                                    Some(tokens[trigger_index - 1].to_string())
+                                } else {
+                                    None
+                                }
+                            }
+                        } else {
+                            // No activated node found — fall back.
+                            if trigger_index > 0 {
+                                Some(tokens[trigger_index - 1].to_string())
+                            } else {
+                                None
+                            }
+                        }
                     } else {
-                        None
+                        // No activation map provided — fall back to TokenBefore.
+                        if trigger_index > 0 {
+                            Some(tokens[trigger_index - 1].to_string())
+                        } else {
+                            None
+                        }
                     }
                 }
             };

@@ -885,13 +885,16 @@ impl ReasonFrame {
         let top_activated_neighbors = energy_pairs;
 
         // NEW: Compute ambiguity score.
-        // How close are the top 2 energies for role nodes?
+        // Ambiguity is HIGH when top-2 role energies are SIMILAR (gap is small).
+        // Previous version was inverted — it reported the gap, not the similarity.
+        // Fix: ambiguity = 1 - gap, so similar energies → high ambiguity.
         let mut role_energies: Vec<f32> = activation_energy_for_roles.values().copied().collect();
         role_energies.sort_by(|a, b| b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal));
         let ambiguity_score = if role_energies.len() >= 2 {
-            (role_energies[0] - role_energies[1]).min(1.0)
+            let gap = (role_energies[0] - role_energies[1]).min(1.0);
+            1.0 - gap // Inverted: small gap → high ambiguity
         } else {
-            0.0
+            0.0 // Single role → no ambiguity
         };
 
         GraphContextRef {
