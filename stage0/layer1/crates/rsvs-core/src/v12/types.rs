@@ -1795,6 +1795,9 @@ pub struct ReflectionLoopResult {
     /// Gaps filled in this loop.
     #[serde(default)]
     pub filled_gaps: Vec<CompositionId>,
+    /// Questions generated during the enrichment loop (Phase Q).
+    #[serde(default)]
+    pub pending_questions: Vec<super::acquisition::InquiryQuestion>,
 }
 
 impl Default for ReflectionLoopResult {
@@ -1807,6 +1810,7 @@ impl Default for ReflectionLoopResult {
             has_gaps: false,
             resolved_contradictions: Vec::new(),
             filled_gaps: Vec::new(),
+            pending_questions: Vec::new(),
         }
     }
 }

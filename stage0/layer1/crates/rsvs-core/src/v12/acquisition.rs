@@ -98,6 +98,24 @@ pub enum KnowledgeGapType {
 }
 
 // ========================================================================
+// QuestionType — Classification of Generated Questions (Phase Q)
+// ========================================================================
+
+/// Type of question AAM generates for the user (Phase Q).
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
+pub enum QuestionType {
+    /// "Apa yang dimaksud X di sini?"
+    #[default]
+    Clarification,
+    /// "Apakah benar bahwa X adalah Y?"
+    Verification,
+    /// "X di sini berarti A atau B?"
+    ChoiceBetween,
+    /// "Siapa/apa yang berperan sebagai [role] dalam kejadian ini?"
+    SemanticRole,
+}
+
+// ========================================================================
 // KnowledgeGap — A Detected Gap in Knowledge
 // ========================================================================
 
@@ -199,7 +217,7 @@ pub enum AcquisitionStrategy {
     Defer,
 }
 
-/// A question to ask the user (MD-6).
+/// A question to ask the user (MD-6, Phase Q).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct InquiryQuestion {
     /// Unique question identifier.
@@ -214,6 +232,54 @@ pub struct InquiryQuestion {
     /// The composition the answer should enrich.
     #[serde(default)]
     pub target_composition_id: Option<CompositionId>,
+    /// What type of question this is.
+    #[serde(default)]
+    pub question_type: QuestionType,
+}
+
+// ========================================================================
+// CompositionSnapshot — Lightweight Snapshot for User Display (Phase Q)
+// ========================================================================
+
+/// Lightweight snapshot of a confusing composition for user display (Phase Q).
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct CompositionSnapshot {
+    /// The composition ID.
+    #[serde(default)]
+    pub composition_id: CompositionId,
+    /// Human-readable type label (e.g., "Event", "EquativeBinding").
+    #[serde(default)]
+    pub composition_type_label: String,
+    /// (role_name, node_label) pairs showing composition members.
+    #[serde(default)]
+    pub member_labels: Vec<(String, String)>,
+    /// Confidence of this composition.
+    #[serde(default)]
+    pub confidence: f32,
+    /// Why this composition is confusing (one sentence).
+    #[serde(default)]
+    pub why_confusing: String,
+}
+
+// ========================================================================
+// ActiveQuestioningResult — Output from Enrichment Loop (Phase Q)
+// ========================================================================
+
+/// Result of active questioning — output from enrichment loop when AAM has questions (Phase Q).
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ActiveQuestioningResult {
+    /// Questions that need user answers.
+    #[serde(default)]
+    pub questions: Vec<InquiryQuestion>,
+    /// Gap IDs that still need answers.
+    #[serde(default)]
+    pub unanswered_gap_ids: Vec<String>,
+    /// Confidence of the graph before questions were generated.
+    #[serde(default)]
+    pub confidence_before: f32,
+    /// Snapshots of confusing compositions for context display.
+    #[serde(default)]
+    pub composition_snapshots: Vec<CompositionSnapshot>,
 }
 
 /// A decision about how to fill a knowledge gap (MD-6).
@@ -623,6 +689,119 @@ impl ErasedTransform for DetectGaps {
             governance_transitions: 0,
         }
     }
+}
+
+// ========================================================================
+// generate_question_id — Bahasa Indonesia Question Generation (Phase Q)
+// ========================================================================
+
+/// Generate a contextual Bahasa Indonesia question from a gap (Phase Q).
+///
+/// Produces questions that mention specific tokens and composition context,
+/// not generic English templates. When `graph` is `Some`, the question
+/// includes composition context (other member labels).
+fn generate_question_id(
+    gap: &KnowledgeGap,
+    graph: Option<&Graph>,
+) -> InquiryQuestion {
+    let question_text = match &gap.gap_type {
+        KnowledgeGapType::MissingRole => {
+            let role_label = format_role_label_id(gap.missing_role.as_ref());
+
+            // Try to include composition context if graph is available.
+            let comp_context = graph
+                .and_then(|g| gap.source_composition_id.as_ref().and_then(|cid| g.compositions.get(cid)))
+                .map(|comp| {
+                    comp.members.iter()
+                        .filter_map(|m| {
+                            if gap.missing_role.as_ref().map_or(true, |r| m.role != *r) {
+                                Some(m.label.clone())
+                            } else {
+                                None
+                            }
+                        })
+                        .filter(|l| !l.is_empty())
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                })
+                .unwrap_or_default();
+
+            if comp_context.is_empty() {
+                format!("Siapa/apa yang berperan sebagai {} di sini?", role_label)
+            } else {
+                format!("Dalam '{}', siapa/apa yang berperan sebagai {}?", comp_context, role_label)
+            }
+        }
+        KnowledgeGapType::AmbiguousToken => {
+            // Use description to extract token label; description format is
+            // "Ambiguous token 'X' needs disambiguation" — extract X.
+            let token_label = extract_token_label_from_description(&gap.description);
+            format!("Kata '{}' di sini memiliki beberapa makna. Makna mana yang dimaksud?", token_label)
+        }
+        KnowledgeGapType::UnresolvedContradiction => {
+            "Ada kontradiksi dalam pengetahuan yang belum terselesaikan. Manakah yang benar?".to_string()
+        }
+        KnowledgeGapType::IncompleteHiddenMeaning => {
+            "Makna tersembunyi ini belum lengkap. Apa yang kurang?".to_string()
+        }
+        KnowledgeGapType::MissingCause => {
+            "Apa penyebab kejadian ini?".to_string()
+        }
+        KnowledgeGapType::MissingPurpose => {
+            "Apa tujuan dari tindakan ini?".to_string()
+        }
+        KnowledgeGapType::SparseGraph => {
+            "Informasi tentang topik ini masih sedikit. Bisa ceritakan lebih banyak?".to_string()
+        }
+        KnowledgeGapType::LowGrounding => {
+            "Informasi ini belum terverifikasi. Bisakah mengonfirmasi?".to_string()
+        }
+    };
+
+    let question_type = match &gap.gap_type {
+        KnowledgeGapType::MissingRole | KnowledgeGapType::MissingCause | KnowledgeGapType::MissingPurpose => QuestionType::SemanticRole,
+        KnowledgeGapType::AmbiguousToken => QuestionType::ChoiceBetween,
+        KnowledgeGapType::UnresolvedContradiction | KnowledgeGapType::IncompleteHiddenMeaning => QuestionType::Clarification,
+        KnowledgeGapType::SparseGraph | KnowledgeGapType::LowGrounding => QuestionType::Clarification,
+    };
+
+    InquiryQuestion {
+        question_id: format!("q_{}", gap.gap_id),
+        question_text,
+        gap_id: gap.gap_id.clone(),
+        target_role: gap.missing_role.clone(),
+        target_composition_id: gap.source_composition_id.clone(),
+        question_type,
+    }
+}
+
+/// Format a SemanticRole into a Bahasa Indonesia label for question text.
+fn format_role_label_id(role: Option<&SemanticRole>) -> String {
+    match role {
+        Some(SemanticRole::Arg0Agent) => "pelaku".to_string(),
+        Some(SemanticRole::Arg1Patient) => "objek".to_string(),
+        Some(SemanticRole::Cause) => "penyebab".to_string(),
+        Some(SemanticRole::Purpose) => "tujuan".to_string(),
+        Some(SemanticRole::Location) => "lokasi".to_string(),
+        Some(SemanticRole::Subject) => "subjek".to_string(),
+        Some(SemanticRole::Complement) => "pelengkap".to_string(),
+        Some(SemanticRole::Possessor) => "pemilik".to_string(),
+        Some(SemanticRole::Possession) => "milikan".to_string(),
+        Some(r) => format!("{:?}", r).trim_start_matches("SemanticRole::").to_lowercase(),
+        None => "peran tidak diketahui".to_string(),
+    }
+}
+
+/// Extract a token label from a gap description like "Ambiguous token 'X' needs disambiguation".
+fn extract_token_label_from_description(desc: &str) -> String {
+    // Try to extract content between single quotes.
+    if let Some(start) = desc.find('\'') {
+        if let Some(end) = desc[start + 1..].find('\'') {
+            return desc[start + 1..start + 1 + end].to_string();
+        }
+    }
+    // Fallback: use the whole description.
+    desc.to_string()
 }
 
 // ========================================================================
@@ -1070,43 +1249,24 @@ impl SelectAcquisition {
         context
     }
 
-    /// Generate a question to ask the user about a gap.
+    /// Generate a question to ask the user about a gap (Phase Q: Bahasa Indonesia).
+    ///
+    /// Produces contextual Bahasa Indonesia questions that mention specific tokens
+    /// and composition context, not generic English templates.
     pub fn generate_question(&self, gap: &KnowledgeGap) -> InquiryQuestion {
-        let question_text = match &gap.gap_type {
-            KnowledgeGapType::MissingRole => {
-                let role_name = gap
-                    .missing_role
-                    .as_ref()
-                    .map(|r| {
-                        format!("{:?}", r)
-                            .trim_start_matches("SemanticRole::")
-                            .to_lowercase()
-                    })
-                    .unwrap_or_else(|| "unknown role".to_string());
-                format!("Who or what is the {} in this event?", role_name)
-            }
-            KnowledgeGapType::AmbiguousToken => {
-                format!("What does '{}' refer to?", gap.description)
-            }
-            KnowledgeGapType::SparseGraph => "Can you tell me more about this topic?".to_string(),
-            KnowledgeGapType::LowGrounding => "Can you confirm this information?".to_string(),
-            KnowledgeGapType::UnresolvedContradiction => {
-                "There seems to be conflicting information. Which is correct?".to_string()
-            }
-            KnowledgeGapType::IncompleteHiddenMeaning => {
-                "What problem does this solve?".to_string()
-            }
-            KnowledgeGapType::MissingCause => "Why did this happen?".to_string(),
-            KnowledgeGapType::MissingPurpose => "What was the purpose of this action?".to_string(),
-        };
+        generate_question_id(gap, None)
+    }
 
-        InquiryQuestion {
-            question_id: format!("q_{}", gap.gap_id),
-            question_text,
-            gap_id: gap.gap_id.clone(),
-            target_role: gap.missing_role.clone(),
-            target_composition_id: gap.source_composition_id.clone(),
-        }
+    /// Generate a contextual Bahasa Indonesia question from a gap with graph context.
+    ///
+    /// When a graph is available, questions include composition context (other member
+    /// labels). Without a graph, falls back to context-free questions.
+    pub fn generate_question_with_graph(
+        &self,
+        gap: &KnowledgeGap,
+        graph: &Graph,
+    ) -> InquiryQuestion {
+        generate_question_id(gap, Some(graph))
     }
 
     /// Process a user's answer by merging it into the composition.
@@ -1468,7 +1628,7 @@ mod tests {
         };
 
         let question = sa.generate_question(&gap);
-        assert!(question.question_text.contains("Why"));
+        assert!(question.question_text.contains("penyebab"), "Expected Bahasa Indonesia question about cause, got: {}", question.question_text);
     }
 
     #[test]

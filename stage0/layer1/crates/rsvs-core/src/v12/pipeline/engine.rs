@@ -408,6 +408,7 @@ impl PipelineEngine {
             has_gaps,
             resolved_contradictions: Vec::new(),
             filled_gaps: Vec::new(),
+            pending_questions: Vec::new(),
         }
     }
 

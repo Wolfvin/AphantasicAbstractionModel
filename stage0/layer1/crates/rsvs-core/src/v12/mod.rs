@@ -188,8 +188,9 @@ pub use executive::{
 
 // Re-export MD-6: Acquisition types.
 pub use acquisition::{
-    AcquisitionDecision, AcquisitionStrategy, DetectGaps, InquiryMemory, InquiryQuestion,
-    KnowledgeGap, KnowledgeGapType, SelectAcquisition,
+    AcquisitionDecision, AcquisitionStrategy, ActiveQuestioningResult, CompositionSnapshot,
+    DetectGaps, InquiryMemory, InquiryQuestion, KnowledgeGap, KnowledgeGapType, QuestionType,
+    SelectAcquisition,
 };
 
 // Re-export Spreading Activation types.

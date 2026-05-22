@@ -34,7 +34,7 @@
 //!
 //! This module is only compiled when the `v12` feature is enabled.
 
-use super::acquisition::{AcquisitionStrategy, DetectGaps, SelectAcquisition};
+use super::acquisition::{AcquisitionStrategy, DetectGaps, InquiryQuestion, SelectAcquisition};
 use super::govern_beliefs::GovernBeliefs;
 use super::pipeline::{EnrichComposition, ErasedTransform, Graph, IngestResult, PipelineEngine};
 use super::types::*;
@@ -597,6 +597,7 @@ impl ExecutiveOrchestrator {
         let mut modified_compositions = Vec::new();
         let resolved_contradictions = Vec::new();
         let mut filled_gaps = Vec::new();
+        let mut pending_questions: Vec<InquiryQuestion> = Vec::new();
 
         // Compute initial confidence.
         let snapshot = engine.snapshot();
@@ -659,8 +660,10 @@ impl ExecutiveOrchestrator {
                             filled_gaps.push(CompositionId::new(gap.gap_id.clone()));
                         }
                     }
-                    AcquisitionStrategy::AskUser { .. }
-                    | AcquisitionStrategy::ReExtraction { .. }
+                    AcquisitionStrategy::AskUser { question } => {
+                        pending_questions.push(question.clone());
+                    }
+                    AcquisitionStrategy::ReExtraction { .. }
                     | AcquisitionStrategy::Defer => {
                         // These require external input or are deferred — skip for now.
                     }
@@ -757,6 +760,7 @@ impl ExecutiveOrchestrator {
             has_gaps: engine.context.has_gaps(),
             resolved_contradictions,
             filled_gaps,
+            pending_questions,
         }
     }
 
@@ -990,6 +994,7 @@ mod tests {
             has_gaps: false,
             resolved_contradictions: vec!["comp_contra".into()],
             filled_gaps: vec!["comp_gap".into()],
+            pending_questions: Vec::new(),
         };
         let graph = Graph::new();
         let findings = reflect.reflect(&result, &graph);
