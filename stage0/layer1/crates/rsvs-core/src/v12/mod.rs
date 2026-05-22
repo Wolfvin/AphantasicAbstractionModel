@@ -45,6 +45,7 @@
 pub mod acquisition;
 pub mod action_schemas;
 pub mod convergence;
+pub mod correction;
 pub mod csd;
 pub mod executive;
 pub mod extract_frame;
@@ -234,3 +235,6 @@ pub use morphology::{
 pub use csd::{CSDEngine, CSDTransform};
 // Re-export RAB Phase 5: Sense Registry types.
 pub use sense_registry::{DisambiguationResult, SenseEntry, SenseRegistry};
+
+// Re-export RAB Phase R: Correction Loop types.
+pub use correction::{UserCorrection, CorrectionType, CorrectionResult, apply_correction};
