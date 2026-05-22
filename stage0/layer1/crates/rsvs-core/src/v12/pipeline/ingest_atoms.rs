@@ -84,10 +84,36 @@ impl ErasedTransform for IngestAtoms {
 
                 // --- Event atoms: create a Composition with Event type ---
                 AtomType::Event => {
+                    // Determine composition type from the PatternType role hint.
+                    // When ExtractFrame uses an Action Schema, it stores the intended
+                    // composition type (e.g., "EquativeBinding") in the PatternType role.
+                    // IngestAtoms reads this hint to create the correct composition type,
+                    // then removes the PatternType role (it's metadata, not a real semantic role).
+                    let composition_type = atom.roles.get(&SemanticRole::PatternType)
+                        .and_then(|type_str| match type_str.as_str() {
+                            "EquativeBinding" => Some(CompositionType::EquativeBinding),
+                            "PossessiveBinding" => Some(CompositionType::PossessiveBinding),
+                            "DisambiguatedSense" => Some(CompositionType::DisambiguatedSense),
+                            "UsageProbe" => Some(CompositionType::UsageProbe),
+                            "Correction" => Some(CompositionType::Correction),
+                            "Event" => Some(CompositionType::Event),
+                            "HiddenMeaning" => Some(CompositionType::HiddenMeaning),
+                            "Pattern" => Some(CompositionType::Pattern),
+                            "Situation" => Some(CompositionType::Situation),
+                            "Hypothesis" => Some(CompositionType::Hypothesis),
+                            "Acquisition" => Some(CompositionType::Acquisition),
+                            "Morphology" => Some(CompositionType::Morphology),
+                            _ => None,
+                        })
+                        .unwrap_or(CompositionType::Event);
+
+                    // Collect the PatternType role so we can skip it when creating members.
+                    let has_pattern_type = atom.roles.contains_key(&SemanticRole::PatternType);
+
                     let comp_id = CompositionId::new(format!("comp_{}", atom.id));
                     let mut composition = Composition {
                         id: comp_id.clone(),
-                        composition_type: CompositionType::Event,
+                        composition_type,
                         confidence: atom.confidence,
                         source_text: ctx.raw_text.clone(),
                         ..Default::default()
@@ -103,7 +129,11 @@ impl ErasedTransform for IngestAtoms {
                     });
 
                     // Add role members from the atom's roles map.
+                    // Skip the PatternType role — it's metadata, not a real semantic role.
                     for (role, label) in &atom.roles {
+                        if has_pattern_type && *role == SemanticRole::PatternType {
+                            continue;
+                        }
                         let role_node_id = graph.ensure_node(label);
                         composition.members.push(CompositionMember {
                             node_id: role_node_id,

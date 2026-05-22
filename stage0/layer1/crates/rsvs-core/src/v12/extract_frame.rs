@@ -527,6 +527,90 @@ impl ExtractFrame {
         }
     }
 
+    /// Extract a semantic frame using Action Schemas when available.
+    ///
+    /// This method checks Action Schemas (Phase 1) before falling back to
+    /// generic Event extraction. When a schema's trigger matches, the
+    /// composition type and role bindings come from the schema — producing
+    /// EquativeBinding, PossessiveBinding, etc. instead of generic Event.
+    ///
+    /// # Algorithm
+    ///
+    /// 1. Tokenize input
+    /// 2. Try schemas in priority order (highest first)
+    /// 3. If a schema matches, create atom with schema's composition type + roles
+    /// 4. If no schema matches, fall back to generic Event extraction
+    pub fn extract_with_schemas(
+        &self,
+        text: &str,
+        schemas: &[super::action_schemas::ActionSchema],
+    ) -> Option<SemanticAtom> {
+        if !Self::is_sentence_like(text) {
+            return None;
+        }
+
+        let tokens: Vec<&str> = text.split_whitespace().collect();
+
+        // Try schemas in priority order (highest first).
+        let mut sorted_schemas: Vec<_> = schemas.iter().collect();
+        sorted_schemas.sort_by(|a, b| b.priority.cmp(&a.priority));
+
+        for schema in sorted_schemas {
+            if let Some(trigger_idx) = schema.matches_tokens(&tokens) {
+                let roles = schema.resolve_roles(&tokens, trigger_idx);
+                if !roles.is_empty() {
+                    let trigger_token = tokens[trigger_idx];
+
+                    // Compute confidence based on role coverage.
+                    let mut confidence = 0.35; // Base for schema-driven extraction
+                    confidence += 0.15 * roles.len() as f32; // Bonus per resolved role
+                    confidence = confidence.clamp(0.0, 1.0);
+
+                    let roles_map: HashMap<SemanticRole, String> = roles.into_iter().collect();
+
+                    // Determine if we need the Predicate role.
+                    // For non-Event types, the trigger token is the binding marker,
+                    // not a predicate in the traditional sense.
+                    let atom_label = trigger_token.to_lowercase();
+
+                    let atom_type = if schema.composition_type == CompositionType::Event {
+                        AtomType::Event
+                    } else {
+                        // EquativeBinding, PossessiveBinding, etc. are still Event atoms
+                        // in the pipeline (they carry roles), but their composition_type
+                        // determines the final composition type.
+                        AtomType::Event
+                    };
+
+                    let mut atom = SemanticAtom {
+                        id: String::new(),
+                        label: atom_label,
+                        atom_type,
+                        roles: roles_map,
+                        polarity: Some(Polarity::Positive),
+                        voice: Some(Voice::Active),
+                        variant: Some(AtomVariant::FrameVariant(FrameSource::RuleBased)),
+                        confidence,
+                        source: EdgeSource::ActionSchemaExtraction,
+                        composition_id: None,
+                    };
+
+                    // Store the intended composition type in a special role
+                    // so IngestAtoms can create the correct composition type.
+                    atom.roles.insert(
+                        SemanticRole::PatternType,
+                        format!("{:?}", schema.composition_type),
+                    );
+
+                    return Some(atom);
+                }
+            }
+        }
+
+        // No schema matched — fall back to generic Event extraction.
+        self.extract(text)
+    }
+
     /// Extract a semantic frame from raw text.
     ///
     /// This is the core extraction method. Returns `Some(SemanticAtom)` if
@@ -633,22 +717,24 @@ impl ErasedTransform for ExtractFrame {
             return IngestResult::new();
         }
 
-        if let Some(mut atom) = self.extract(&text) {
-            // Assign atom ID.
-            atom.id = format!("atom_{}", ctx.next_atom_id());
+        // Try schema-driven extraction first, then fall back to generic.
+        let atom_result = if !ctx.active_schemas.is_empty() {
+            self.extract_with_schemas(&text, &ctx.active_schemas)
+        } else {
+            self.extract(&text)
+        };
 
-            // Record in current_atoms.
+        if let Some(mut atom) = atom_result {
+            atom.id = format!("atom_{}", ctx.next_atom_id());
             ctx.current_atoms.push(atom.clone());
             atoms_created += 1;
 
-            // Update quality tracker.
             ctx.extraction_quality.frames_extracted += 1;
             ctx.extraction_quality.average_confidence = (ctx.extraction_quality.average_confidence
                 * (ctx.extraction_quality.frames_extracted - 1) as f32
                 + atom.confidence)
                 / ctx.extraction_quality.frames_extracted as f32;
 
-            // Audit v5 fix (D14): Also update the per-quality-level tracker.
             let quality = Self::classify_quality(&atom.roles, atom.confidence);
             ctx.extraction_quality_ext.record(&quality, atom.confidence);
 
@@ -842,5 +928,68 @@ mod tests {
             ExtractFrame::classify_quality(&roles, 0.35),
             ExtractionQuality::LowQuality
         );
+    }
+
+    #[test]
+    fn test_extract_with_schemas_copula() {
+        let ef = ExtractFrame::new();
+        let schemas = super::super::action_schemas::bootstrap_schemas();
+        let result = ef.extract_with_schemas("ini adalah makanan", &schemas);
+
+        assert!(result.is_some());
+        let atom = result.unwrap();
+        // Should have Subject and Complement roles from the copula schema
+        assert!(atom.roles.contains_key(&SemanticRole::Subject));
+        assert!(atom.roles.contains_key(&SemanticRole::Complement));
+        assert_eq!(atom.source, EdgeSource::ActionSchemaExtraction);
+        // Should have PatternType role hinting at EquativeBinding
+        assert_eq!(
+            atom.roles.get(&SemanticRole::PatternType).map(|s| s.as_str()),
+            Some("EquativeBinding")
+        );
+    }
+
+    #[test]
+    fn test_extract_with_schemas_possessive() {
+        let ef = ExtractFrame::new();
+        let schemas = super::super::action_schemas::bootstrap_schemas();
+        let result = ef.extract_with_schemas("raja punya kerajaan", &schemas);
+
+        assert!(result.is_some());
+        let atom = result.unwrap();
+        assert!(atom.roles.contains_key(&SemanticRole::Possessor));
+        assert!(atom.roles.contains_key(&SemanticRole::Possession));
+        assert_eq!(atom.source, EdgeSource::ActionSchemaExtraction);
+        // Should have PatternType role hinting at PossessiveBinding
+        assert_eq!(
+            atom.roles.get(&SemanticRole::PatternType).map(|s| s.as_str()),
+            Some("PossessiveBinding")
+        );
+    }
+
+    #[test]
+    fn test_extract_with_schemas_fallback() {
+        let ef = ExtractFrame::new();
+        let schemas = super::super::action_schemas::bootstrap_schemas();
+        // No schema matches "Raymond membuat aplikasi karena lambat"
+        let result = ef.extract_with_schemas("Raymond membuat aplikasi karena lambat", &schemas);
+
+        assert!(result.is_some());
+        let atom = result.unwrap();
+        // Should fall back to generic Event extraction
+        assert_eq!(atom.source, EdgeSource::FrameCompiler);
+        assert!(atom.roles.contains_key(&SemanticRole::Arg0Agent));
+        // Should NOT have a PatternType role (it's not schema-driven)
+        assert!(!atom.roles.contains_key(&SemanticRole::PatternType));
+    }
+
+    #[test]
+    fn test_extract_with_schemas_empty() {
+        let ef = ExtractFrame::new();
+        // Empty schemas should fall back to generic extraction
+        let result = ef.extract_with_schemas("Raymond membuat aplikasi karena lambat", &[]);
+        assert!(result.is_some());
+        let atom = result.unwrap();
+        assert_eq!(atom.source, EdgeSource::FrameCompiler);
     }
 }

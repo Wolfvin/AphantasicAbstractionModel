@@ -220,11 +220,17 @@ pub struct PipelineEngine {
 impl PipelineEngine {
     /// Create a new empty pipeline engine with default [`PipelineContext`]
     /// and an empty [`Graph`].
+    ///
+    /// The context is initialized with bootstrap Action Schemas from
+    /// RAB Phase 1, enabling schema-driven extraction for copula ("adalah"),
+    /// possessive ("punya"), and other linguistic patterns.
     pub fn new() -> Self {
+        let mut context = PipelineContext::default();
+        context.active_schemas = super::super::action_schemas::bootstrap_schemas();
         Self {
             transforms: HashMap::new(),
             dag: Vec::new(),
-            context: PipelineContext::default(),
+            context,
             graph: Graph::new(),
         }
     }

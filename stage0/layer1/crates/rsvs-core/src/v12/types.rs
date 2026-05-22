@@ -1081,6 +1081,12 @@ pub struct PipelineContext {
     /// Number of reflection findings from last Reflective cycle.
     #[serde(default)]
     pub last_reflection_findings_count: usize,
+
+    /// Active Action Schemas for RAB Phase 1.
+    /// When non-empty, ExtractFrame will try schema-driven extraction
+    /// before falling back to generic Event extraction.
+    #[serde(default)]
+    pub active_schemas: Vec<super::action_schemas::ActionSchema>,
 }
 
 /// Maximum recent events to keep in the sliding window.
