@@ -10,7 +10,7 @@ use super::super::acquisition::{DetectGaps, SelectAcquisition};
 use super::super::convergence::ConvergenceDetectionTransform;
 use super::super::extract_frame::ExtractFrame;
 use super::super::govern_beliefs::{GovernBeliefs, SeedAnchor};
-use super::super::reason_frame::ReasonFrame;
+use super::super::reason_frame::{ReasonFrame, ReReasonFrame};
 use super::super::spreading::SpreadingActivationTransform;
 use super::super::temporal::TemporalDecayTransform;
 use super::super::verbalize::CompositionalVerbalizeTransform;
@@ -22,7 +22,7 @@ use super::super::csd::CSDTransform;
 
 /// Register all core v1.0.0 transforms in dependency order.
 ///
-/// This wires up the complete default pipeline with 15 transforms:
+/// This wires up the complete default pipeline with 17 transforms:
 ///
 /// | # | Transform | Dependencies | Condition |
 /// |---|-----------|-------------|------------|
@@ -39,6 +39,8 @@ use super::super::csd::CSDTransform;
 /// | 10 | ReExtractFrame | SelectAcquisition | has_reextraction_requests |
 /// | 11 | TemporalDecay | EnrichComposition | always |
 /// | 12 | SpreadingActivation | GovernBeliefs | has_event_atoms |
+/// | 12b | CSD | SpreadingActivation | has_event_atoms |
+/// | 12c | ReReasonFrame | SpreadingActivation | has_event_atoms |
 /// | 13 | ConvergenceDetection | EnrichComposition, TemporalDecay | always |
 /// | 14 | CompositionalVerbalize | ConvergenceDetection | always |
 pub fn register_default_pipeline(engine: &mut PipelineEngine) {
@@ -139,6 +141,14 @@ pub fn register_default_pipeline(engine: &mut PipelineEngine) {
     //      Depends on SpreadingActivation (needs activation energies).
     engine.register(
         CSDTransform::new(),
+        vec!["SpreadingActivation".to_string()],
+        Some(Box::new(|ctx: &PipelineContext| ctx.has_event_atoms())),
+    );
+
+    // 12c. ReReasonFrame — post-spreading re-evaluation (Phase T).
+    //      Uses activation energies for enriched reasoning.
+    engine.register(
+        ReReasonFrame::new(),
         vec!["SpreadingActivation".to_string()],
         Some(Box::new(|ctx: &PipelineContext| ctx.has_event_atoms())),
     );

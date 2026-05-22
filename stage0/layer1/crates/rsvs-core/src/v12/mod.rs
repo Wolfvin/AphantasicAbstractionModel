@@ -175,8 +175,9 @@ pub use extract_frame::ExtractionQuality as ExtractionQualityLevel;
 
 // Re-export MD-2: ReasonFrame types.
 pub use reason_frame::{
-    GoalInferenceRule, GraphContextRef, PolarityConflictRule, ProblemSolutionRule, ReasonFrame,
-    ReasoningContext, ReasoningResult, ReasoningRule,
+    ConditionConsequenceRule, GoalInferenceRule, GraphContextRef, PolarityConflictRule,
+    ProblemSolutionRule, ReasonFrame, ReReasonFrame, ReasoningContext, ReasoningResult,
+    ReasoningRule,
 };
 
 // Re-export MD-4: GovernBeliefs & SeedAnchor types.

@@ -293,6 +293,7 @@ impl PipelineEngine {
         self.context.pending_gaps.clear();
         self.context.pending_enrichments.clear();
         self.context.pending_reextractions.clear();
+        self.context.pending_questions.clear();
 
         // Topological sort the DAG.
         let sorted_ids = match topological_sort(&self.dag) {

@@ -31,7 +31,7 @@ use std::collections::HashMap;
 
 use super::pipeline::{ErasedTransform, Graph, IngestResult};
 use super::types::*;
-use crate::types::EdgeSource;
+use crate::types::{EdgeSource, NodeId};
 
 // ========================================================================
 // ReasoningRule — Trait for Deriving Hidden Meanings
@@ -130,10 +130,11 @@ impl<'a> ReasoningContext<'a> {
 
 /// Lightweight graph context reference for reasoning rules.
 ///
-/// Provides just enough information for rules to adjust confidence
-/// based on graph structure, without requiring a full `Graph` reference.
+/// Provides structural and activation information for rules to adjust
+/// confidence based on graph structure and spreading activation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GraphContextRef {
+    // === Existing fields ===
     /// Number of compositions with the same predicate.
     #[serde(default)]
     pub same_predicate_count: usize,
@@ -143,6 +144,23 @@ pub struct GraphContextRef {
     /// Average confidence of compositions with the same predicate.
     #[serde(default)]
     pub avg_confidence: f32,
+
+    // === NEW: Activation data from SpreadingActivation (Phase T) ===
+    /// Activation energy of the predicate node.
+    /// Higher = more connected in the graph = more confident.
+    #[serde(default)]
+    pub activation_energy_for_predicate: f32,
+    /// Activation energy per role node.
+    /// Maps role → energy of the node filling that role.
+    #[serde(default)]
+    pub activation_energy_for_roles: HashMap<SemanticRole, f32>,
+    /// Top N most-activated neighbor nodes.
+    #[serde(default)]
+    pub top_activated_neighbors: Vec<(NodeId, f32)>,
+    /// Ambiguity score: how close are the top 2 interpretation candidates.
+    /// > 0.3 means two interpretations are too close — flag for questioning.
+    #[serde(default)]
+    pub ambiguity_score: f32,
 }
 
 impl Default for GraphContextRef {
@@ -151,6 +169,10 @@ impl Default for GraphContextRef {
             same_predicate_count: 0,
             has_contradiction: false,
             avg_confidence: 0.0,
+            activation_energy_for_predicate: 0.0,
+            activation_energy_for_roles: HashMap::new(),
+            top_activated_neighbors: Vec::new(),
+            ambiguity_score: 0.0,
         }
     }
 }
@@ -715,17 +737,30 @@ impl ReasonFrame {
             if rule.applies(&context) {
                 let mut rule_results = rule.generate(&context);
 
-                // STUB:MINIMAL — Graph-guided confidence adjustment.
-                // If the graph has many compositions with the same predicate,
-                // boost confidence slightly. If there's a contradiction,
-                // reduce confidence.
+                // Phase T: Activation-aware confidence modulation.
+
+                // If predicate is well-connected in the graph, boost confidence.
                 for result in &mut rule_results {
-                    if graph_ref.same_predicate_count > 0 {
-                        let boost = (graph_ref.same_predicate_count as f32 * 0.02).min(0.10);
-                        result.derivation_confidence =
-                            (result.derivation_confidence + boost).min(1.0);
+                    if graph_ref.activation_energy_for_predicate > 0.5 {
+                        let boost = graph_ref.activation_energy_for_predicate * 0.15;
+                        result.derivation_confidence = (result.derivation_confidence + boost).min(1.0);
                         result.atom.confidence = result.derivation_confidence;
                     }
+
+                    // If two interpretations are too close, reduce confidence.
+                    if graph_ref.ambiguity_score > 0.3 {
+                        result.derivation_confidence *= 1.0 - graph_ref.ambiguity_score * 0.5;
+                        result.atom.confidence = result.derivation_confidence;
+                    }
+
+                    // Existing logic: predicate count boost.
+                    if graph_ref.same_predicate_count > 0 {
+                        let boost = (graph_ref.same_predicate_count as f32 * 0.02).min(0.10);
+                        result.derivation_confidence = (result.derivation_confidence + boost).min(1.0);
+                        result.atom.confidence = result.derivation_confidence;
+                    }
+
+                    // Existing logic: contradiction reduction.
                     if graph_ref.has_contradiction {
                         result.derivation_confidence *= 0.85;
                         result.atom.confidence = result.derivation_confidence;
@@ -740,6 +775,9 @@ impl ReasonFrame {
     }
 
     /// Build a GraphContextRef from the graph for the given event.
+    ///
+    /// This method does NOT have access to activation energies; use
+    /// [`build_graph_context_with_activation`] when activation data is available.
     fn build_graph_context(event: &SemanticAtom, graph: &Graph) -> GraphContextRef {
         let mut same_predicate_count = 0usize;
         let mut has_contradiction = false;
@@ -763,6 +801,85 @@ impl ReasonFrame {
             same_predicate_count,
             has_contradiction,
             avg_confidence: if count > 0 { total_confidence / count as f32 } else { 0.0 },
+            // Activation fields default to zero — no activation data available.
+            activation_energy_for_predicate: 0.0,
+            activation_energy_for_roles: HashMap::new(),
+            top_activated_neighbors: Vec::new(),
+            ambiguity_score: 0.0,
+        }
+    }
+
+    /// Build enriched GraphContextRef with activation data (Phase T).
+    ///
+    /// After SpreadingActivation runs, `ctx.last_activation_energies` contains
+    /// the activation energy for each node in the graph. This method enriches
+    /// the `GraphContextRef` with that data, enabling activation-aware
+    /// confidence modulation in reasoning rules.
+    pub fn build_graph_context_with_activation(
+        event: &SemanticAtom,
+        graph: &Graph,
+        activation_energies: &HashMap<NodeId, f32>,
+    ) -> GraphContextRef {
+        let mut same_predicate_count = 0usize;
+        let mut has_contradiction = false;
+        let mut total_confidence = 0.0f32;
+        let mut count = 0usize;
+
+        // Existing logic: scan compositions for predicate stats.
+        for comp in graph.compositions.values() {
+            if let Some(pred) = comp.member_with_role(&SemanticRole::Predicate) {
+                if pred.label == event.label {
+                    same_predicate_count += 1;
+                    total_confidence += comp.confidence;
+                    count += 1;
+                }
+            }
+            if comp.epistemic == EpistemicState::Contradicted {
+                has_contradiction = true;
+            }
+        }
+
+        // NEW: Populate activation energy for predicate node.
+        let mut activation_energy_for_predicate = 0.0f32;
+        if let Some(&pred_node_id) = graph.label_to_id.get(&event.label) {
+            activation_energy_for_predicate = activation_energies.get(&pred_node_id).copied().unwrap_or(0.0);
+        }
+
+        // NEW: Populate activation energy for role nodes.
+        let mut activation_energy_for_roles = HashMap::new();
+        for (role, label) in &event.roles {
+            if let Some(&node_id) = graph.label_to_id.get(label) {
+                let energy = activation_energies.get(&node_id).copied().unwrap_or(0.0);
+                activation_energy_for_roles.insert(role.clone(), energy);
+            }
+        }
+
+        // NEW: Get top activated neighbors.
+        let mut energy_pairs: Vec<(NodeId, f32)> = activation_energies.iter()
+            .map(|(&id, &e)| (id, e))
+            .collect();
+        energy_pairs.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        energy_pairs.truncate(5);
+        let top_activated_neighbors = energy_pairs;
+
+        // NEW: Compute ambiguity score.
+        // How close are the top 2 energies for role nodes?
+        let mut role_energies: Vec<f32> = activation_energy_for_roles.values().copied().collect();
+        role_energies.sort_by(|a, b| b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal));
+        let ambiguity_score = if role_energies.len() >= 2 {
+            (role_energies[0] - role_energies[1]).min(1.0)
+        } else {
+            0.0
+        };
+
+        GraphContextRef {
+            same_predicate_count,
+            has_contradiction,
+            avg_confidence: if count > 0 { total_confidence / count as f32 } else { 0.0 },
+            activation_energy_for_predicate,
+            activation_energy_for_roles,
+            top_activated_neighbors,
+            ambiguity_score,
         }
     }
 }
@@ -811,6 +928,160 @@ impl ErasedTransform for ReasonFrame {
                 atom.id = format!("atom_{}", ctx.next_atom_id());
                 ctx.current_atoms.push(atom);
                 atoms_created += 1;
+            }
+        }
+
+        IngestResult {
+            atoms_created,
+            compositions_created: 0,
+            edges_created: 0,
+            gaps_detected: 0,
+            enrichments_applied: 0,
+            governance_transitions: 0,
+        }
+    }
+}
+
+// ========================================================================
+// ReReasonFrame — Post-Spreading Re-Evaluation (Phase T)
+// ========================================================================
+
+/// Post-spreading re-evaluation transform (Phase T).
+///
+/// After SpreadingActivation runs and populates `ctx.last_activation_energies`,
+/// this transform re-evaluates event atoms with the enriched `GraphContextRef`.
+/// This is the "System 2" deliberate reasoning that uses graph-based attention.
+///
+/// When `ambiguity_score > 0.3`, it generates an `InquiryQuestion` to surface
+/// the ambiguity to the user.
+pub struct ReReasonFrame {
+    rules: Vec<Box<dyn ReasoningRule>>,
+}
+
+impl std::fmt::Debug for ReReasonFrame {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ReReasonFrame")
+            .field("rules_count", &self.rules.len())
+            .finish()
+    }
+}
+
+impl Clone for ReReasonFrame {
+    fn clone(&self) -> Self {
+        Self::new()
+    }
+}
+
+impl Default for ReReasonFrame {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ReReasonFrame {
+    /// Create a new ReReasonFrame with the standard rule set.
+    pub fn new() -> Self {
+        Self {
+            rules: vec![
+                Box::new(ProblemSolutionRule::new()),
+                Box::new(GoalInferenceRule::new()),
+                Box::new(PolarityConflictRule::new()),
+                Box::new(ConditionConsequenceRule::new()),
+            ],
+        }
+    }
+}
+
+impl ErasedTransform for ReReasonFrame {
+    fn id(&self) -> &'static str {
+        "ReReasonFrame"
+    }
+
+    fn execute(&self, ctx: &mut PipelineContext, graph: &mut Graph) -> IngestResult {
+        let mut atoms_created = 0;
+        let activation_energies = ctx.last_activation_energies.clone();
+
+        if activation_energies.is_empty() {
+            // No activation data yet — skip.
+            return IngestResult::new();
+        }
+
+        let event_atoms: Vec<SemanticAtom> = ctx
+            .current_atoms
+            .iter()
+            .filter(|a| a.atom_type == AtomType::Event)
+            .cloned()
+            .collect();
+
+        let recent = ctx.recent_events().clone();
+
+        for event in &event_atoms {
+            // Build enriched GraphContextRef with activation data.
+            let graph_ref = ReasonFrame::build_graph_context_with_activation(
+                event, graph, &activation_energies,
+            );
+
+            // Apply rules with enriched context.
+            let context = ReasoningContext::with_graph(
+                event, &recent, graph_ref.clone(),
+            );
+
+            for rule in &self.rules {
+                if rule.applies(&context) {
+                    let mut rule_results = rule.generate(&context);
+
+                    // Phase T: Activation-aware confidence modulation.
+                    for result in &mut rule_results {
+                        // Predicate connectivity boost.
+                        if graph_ref.activation_energy_for_predicate > 0.5 {
+                            let boost = graph_ref.activation_energy_for_predicate * 0.15;
+                            result.derivation_confidence = (result.derivation_confidence + boost).min(1.0);
+                            result.atom.confidence = result.derivation_confidence;
+                        }
+
+                        // Ambiguity penalty.
+                        if graph_ref.ambiguity_score > 0.3 {
+                            result.derivation_confidence *= 1.0 - graph_ref.ambiguity_score * 0.5;
+                            result.atom.confidence = result.derivation_confidence;
+
+                            // Generate clarification question for high ambiguity.
+                            if graph_ref.ambiguity_score > 0.5 {
+                                let question = super::acquisition::InquiryQuestion {
+                                    question_id: format!("q_amb_{}", event.id),
+                                    question_text: format!(
+                                        "'{}' di sini memiliki beberapa interpretasi. Mana yang dimaksud?",
+                                        event.label
+                                    ),
+                                    gap_id: format!("amb_{}", event.id),
+                                    target_role: None,
+                                    target_composition_id: None,
+                                    question_type: super::acquisition::QuestionType::ChoiceBetween,
+                                };
+                                ctx.pending_questions.push(question);
+                            }
+                        }
+
+                        // Predicate count boost.
+                        if graph_ref.same_predicate_count > 0 {
+                            let boost = (graph_ref.same_predicate_count as f32 * 0.02).min(0.10);
+                            result.derivation_confidence = (result.derivation_confidence + boost).min(1.0);
+                            result.atom.confidence = result.derivation_confidence;
+                        }
+
+                        // Contradiction penalty.
+                        if graph_ref.has_contradiction {
+                            result.derivation_confidence *= 0.85;
+                            result.atom.confidence = result.derivation_confidence;
+                        }
+                    }
+
+                    for result in rule_results {
+                        let mut atom = result.into_atom();
+                        atom.id = format!("atom_{}", ctx.next_atom_id());
+                        ctx.current_atoms.push(atom);
+                        atoms_created += 1;
+                    }
+                }
             }
         }
 

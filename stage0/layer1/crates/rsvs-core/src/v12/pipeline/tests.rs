@@ -83,8 +83,8 @@ fn test_pipeline_engine_new() {
 fn test_register_default_pipeline() {
     let mut engine = PipelineEngine::new();
     register_default_pipeline(&mut engine);
-    assert_eq!(engine.transforms.len(), 16); // 14 original + MorphologicalAnalysis + CSD
-    assert_eq!(engine.dag.len(), 16);
+    assert_eq!(engine.transforms.len(), 17); // 14 original + MorphologicalAnalysis + CSD + ReReasonFrame
+    assert_eq!(engine.dag.len(), 17);
 }
 
 #[test]
