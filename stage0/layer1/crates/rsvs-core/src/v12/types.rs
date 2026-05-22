@@ -1087,6 +1087,12 @@ pub struct PipelineContext {
     /// before falling back to generic Event extraction.
     #[serde(default)]
     pub active_schemas: Vec<super::action_schemas::ActionSchema>,
+
+    /// Sense registry for contextual disambiguation (RAB Phase 4/5).
+    /// Optional because it doesn't need to be serialized with every
+    /// pipeline context — it's a shared reference used by the CSD engine.
+    #[serde(default)]
+    pub sense_registry: Option<super::sense_registry::SenseRegistry>,
 }
 
 /// Maximum recent events to keep in the sliding window.

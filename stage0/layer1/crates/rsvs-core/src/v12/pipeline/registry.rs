@@ -14,6 +14,7 @@ use super::super::reason_frame::ReasonFrame;
 use super::super::spreading::SpreadingActivationTransform;
 use super::super::temporal::TemporalDecayTransform;
 use super::super::verbalize::CompositionalVerbalizeTransform;
+use super::super::csd::CSDTransform;
 
 // ========================================================================
 // register_default_pipeline — Wire All Core Transforms
@@ -131,6 +132,14 @@ pub fn register_default_pipeline(engine: &mut PipelineEngine) {
     engine.register(
         SpreadingActivationTransform::new(),
         vec!["GovernBeliefs".to_string()],
+        Some(Box::new(|ctx: &PipelineContext| ctx.has_event_atoms())),
+    );
+
+    // 12b. CSD — contextual sense disambiguation using spreading activation.
+    //      Depends on SpreadingActivation (needs activation energies).
+    engine.register(
+        CSDTransform::new(),
+        vec!["SpreadingActivation".to_string()],
         Some(Box::new(|ctx: &PipelineContext| ctx.has_event_atoms())),
     );
 

@@ -45,6 +45,7 @@
 pub mod acquisition;
 pub mod action_schemas;
 pub mod convergence;
+pub mod csd;
 pub mod executive;
 pub mod extract_frame;
 pub mod govern_beliefs;
@@ -53,6 +54,7 @@ pub mod morphology;
 pub mod persistence;
 pub mod pipeline;
 pub mod reason_frame;
+pub mod sense_registry;
 pub mod spreading;
 pub mod stemmer;
 pub mod temporal;
@@ -226,3 +228,8 @@ pub use morphology::{
     get_allomorphs, get_all_prefixes, get_all_suffixes, get_assimilation_condition,
     MorphologicalExplanation, AssimilationExplanation,
 };
+
+// Re-export RAB Phase 4: CSD Engine types.
+pub use csd::{CSDEngine, CSDTransform};
+// Re-export RAB Phase 5: Sense Registry types.
+pub use sense_registry::{DisambiguationResult, SenseEntry, SenseRegistry};
