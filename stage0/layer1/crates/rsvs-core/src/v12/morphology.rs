@@ -209,6 +209,8 @@ fn create_assimilation_composition(
         batch_seen: 0,
         contradiction_batches: Vec::new(),
         contradiction: None,
+        correction_count: 0,
+        last_correction_type: None,
         created_at: now.clone(),
         updated_at: now,
     };
@@ -258,6 +260,8 @@ fn create_simple_prefix_composition(graph: &mut Graph, prefix: &str, prefix_id: 
         batch_seen: 0,
         contradiction_batches: Vec::new(),
         contradiction: None,
+        correction_count: 0,
+        last_correction_type: None,
         created_at: now.clone(),
         updated_at: now,
     };
@@ -306,6 +310,8 @@ fn create_suffix_composition(graph: &mut Graph, suffix: &str, suffix_id: NodeId)
         batch_seen: 0,
         contradiction_batches: Vec::new(),
         contradiction: None,
+        correction_count: 0,
+        last_correction_type: None,
         created_at: now.clone(),
         updated_at: now,
     };
@@ -421,6 +427,8 @@ pub fn create_morphology_composition(
         batch_seen: 0,
         contradiction_batches: Vec::new(),
         contradiction: None,
+        correction_count: 0,
+        last_correction_type: None,
         created_at: now.clone(),
         updated_at: now,
     };

@@ -1167,6 +1167,21 @@ impl GovernBeliefs {
                 comp.has_member_with_role(SemanticRole::MorphRoot)
                     && comp.has_member_with_role(SemanticRole::MorphDerivedForm)
             }
+            // RAB Phase 1/2: new composition types require minimal members.
+            CompositionType::EquativeBinding => {
+                comp.has_member_with_role(SemanticRole::Subject)
+                    && comp.has_member_with_role(SemanticRole::Complement)
+            }
+            CompositionType::PossessiveBinding => {
+                comp.has_member_with_role(SemanticRole::Possessor)
+                    && comp.has_member_with_role(SemanticRole::Possession)
+            }
+            CompositionType::DisambiguatedSense => {
+                comp.has_member_with_role(SemanticRole::SenseTarget)
+                    && comp.has_member_with_role(SemanticRole::SelectedSense)
+            }
+            CompositionType::UsageProbe => !comp.members.is_empty(),
+            CompositionType::Correction => !comp.members.is_empty(),
         }
     }
 
@@ -2227,6 +2242,8 @@ mod tests {
             batch_seen: 0,
             contradiction_batches: Vec::new(),
             contradiction: None,
+            correction_count: 0,
+            last_correction_type: None,
             created_at: String::new(),
             updated_at: String::new(),
         }

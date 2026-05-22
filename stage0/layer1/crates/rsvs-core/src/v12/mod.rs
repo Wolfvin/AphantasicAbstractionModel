@@ -43,6 +43,7 @@
 //!   forward-compatible deserialization.
 
 pub mod acquisition;
+pub mod action_schemas;
 pub mod convergence;
 pub mod executive;
 pub mod extract_frame;
@@ -212,6 +213,11 @@ pub use verbalize::{
 
 // Re-export i18n Locale types.
 pub use locale::{default_locale, EpistemicQualifiers, EnglishLocale, IndonesianLocale, Locale};
+
+// Re-export RAB Phase 1: Action Schema types.
+pub use action_schemas::{
+    ActionSchema, RoleBinding, RoleSource, SchemaTrigger, bootstrap_schemas,
+};
 
 // Re-export Morphological Sense Graph types.
 pub use morphology::{

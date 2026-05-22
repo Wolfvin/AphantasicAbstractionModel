@@ -413,6 +413,22 @@ pub enum SemanticRole {
     MorphAllomorph,
     /// Morphological derived form — the surface word produced by derivation.
     MorphDerivedForm,
+
+    // === RAB Phase 2: Relational Argument Binding roles ===
+    /// Subject in an EquativeBinding composition.
+    Subject,
+    /// Complement in an EquativeBinding composition.
+    Complement,
+    /// Possessor in a PossessiveBinding composition.
+    Possessor,
+    /// Possession in a PossessiveBinding composition.
+    Possession,
+    /// The word being disambiguated (for DisambiguatedSense compositions).
+    SenseTarget,
+    /// Surrounding context nodes (for DisambiguatedSense compositions).
+    SenseContext,
+    /// The chosen sense (for DisambiguatedSense compositions).
+    SelectedSense,
 }
 
 // ========================================================================
@@ -485,6 +501,15 @@ pub struct Composition {
     #[serde(default)]
     pub contradiction: Option<Contradiction>,
 
+    /// How many times this composition has been corrected by the user.
+    /// Compositions with correction_count > 0 need more evidence before promotion.
+    #[serde(default)]
+    pub correction_count: u32,
+    /// The type of the most recent correction applied to this composition.
+    /// Used to prevent the same correction from being applied twice.
+    #[serde(default)]
+    pub last_correction_type: Option<String>,
+
     /// ISO 8601 timestamp when this composition was created.
     pub created_at: String,
     /// ISO 8601 timestamp when this composition was last updated.
@@ -506,6 +531,8 @@ impl Default for Composition {
             batch_seen: 0,
             contradiction_batches: Vec::new(),
             contradiction: None,
+            correction_count: 0,
+            last_correction_type: None,
             created_at: String::new(),
             updated_at: String::new(),
         }
@@ -786,6 +813,21 @@ pub enum CompositionType {
     /// Morphological decomposition — internal structure of a derived word.
     /// Members: {MorphDerivedForm, MorphPrefix*, MorphRoot, MorphSuffix*, MorphArchimorpheme*, MorphAllomorph*}
     Morphology,
+    /// Equative binding — Subject = Complement (copula: "adalah", "ialah").
+    /// RAB Phase 1: Action Schema for copula sentences.
+    EquativeBinding,
+    /// Possessive binding — Possessor has Possession ("punya", "miliki").
+    /// RAB Phase 1: Action Schema for possessive sentences.
+    PossessiveBinding,
+    /// Disambiguated sense — homograph sense selected by CSD.
+    /// RAB Phase 4: contextual sense disambiguation result.
+    DisambiguatedSense,
+    /// Usage probe — AAM's trial usage of knowledge.
+    /// RAB Phase S: usage discovery result.
+    UsageProbe,
+    /// Correction — user correction applied to graph.
+    /// RAB Phase R: correction loop result.
+    Correction,
 }
 
 // ========================================================================
@@ -1010,6 +1052,13 @@ pub struct PipelineContext {
     /// (convergence, gap detection, attention).
     #[serde(default)]
     pub last_activation_energies: HashMap<NodeId, f32>,
+
+    /// Full activation map from SpreadingActivation transform.
+    /// Stored as Option<ActivationMap> for Jaccard similarity comparisons
+    /// in usage validation (Phase S). The HashMap version above is kept for
+    /// backward compatibility with existing downstream consumers.
+    #[serde(default)]
+    pub last_activation_map: Option<super::spreading::ActivationMap>,
 
     /// Audit v5 fix (DD5): Decay summary from TemporalDecay transform.
     #[serde(default)]
@@ -2132,6 +2181,10 @@ pub struct CompositionEvidence {
     /// IDs of compositions that contributed contradicting evidence.
     #[serde(default)]
     pub contradicting_sources: Vec<CompositionId>,
+    /// Number of corrections applied to compositions using this sense.
+    /// If corrections > confirming, the sense cannot advance to Grounded.
+    #[serde(default)]
+    pub corrections: u32,
 }
 
 impl CompositionEvidence {

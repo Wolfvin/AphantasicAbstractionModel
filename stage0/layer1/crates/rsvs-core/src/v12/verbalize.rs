@@ -321,6 +321,12 @@ impl CompositionalVerbalize {
             CompositionType::Situation => self.verbalize_situation(comp),
             CompositionType::Acquisition => self.verbalize_acquisition(comp),
             CompositionType::Morphology => self.verbalize_morphology(comp),
+            // RAB Phase 1/2: new composition types
+            CompositionType::EquativeBinding => self.verbalize_equative_binding(comp),
+            CompositionType::PossessiveBinding => self.verbalize_possessive_binding(comp),
+            CompositionType::DisambiguatedSense => self.verbalize_disambiguated_sense(comp),
+            CompositionType::UsageProbe => self.verbalize_usage_probe(comp),
+            CompositionType::Correction => self.verbalize_correction(comp),
         }
     }
 
@@ -522,6 +528,57 @@ impl CompositionalVerbalize {
         };
 
         format!("Kata {} terbentuk dari {}{}.", surface, decomp, assimilation_note)
+    }
+
+    /// EquativeBinding template: "SUBJECT adalah COMPLEMENT"
+    fn verbalize_equative_binding(&self, comp: &Composition) -> String {
+        let subject = comp
+            .member_with_role(&SemanticRole::Subject)
+            .map(|m| m.label.as_str())
+            .unwrap_or("Sesuatu");
+        let complement = comp
+            .member_with_role(&SemanticRole::Complement)
+            .map(|m| m.label.as_str())
+            .unwrap_or("sesuatu");
+        format!("{} adalah {}.", subject, complement)
+    }
+
+    /// PossessiveBinding template: "POSSESSOR punya POSSESSION"
+    fn verbalize_possessive_binding(&self, comp: &Composition) -> String {
+        let possessor = comp
+            .member_with_role(&SemanticRole::Possessor)
+            .map(|m| m.label.as_str())
+            .unwrap_or("Seseorang");
+        let possession = comp
+            .member_with_role(&SemanticRole::Possession)
+            .map(|m| m.label.as_str())
+            .unwrap_or("sesuatu");
+        format!("{} punya {}.", possessor, possession)
+    }
+
+    /// DisambiguatedSense template: "SENSE_TARGET dalam konteks ini berarti SELECTED_SENSE"
+    fn verbalize_disambiguated_sense(&self, comp: &Composition) -> String {
+        let target = comp
+            .member_with_role(&SemanticRole::SenseTarget)
+            .map(|m| m.label.as_str())
+            .unwrap_or("Kata ini");
+        let sense = comp
+            .member_with_role(&SemanticRole::SelectedSense)
+            .map(|m| m.label.as_str())
+            .unwrap_or("makna tertentu");
+        format!("{} dalam konteks ini berarti {}.", target, sense)
+    }
+
+    /// UsageProbe template: "Penggunaan: ..."
+    fn verbalize_usage_probe(&self, comp: &Composition) -> String {
+        let labels: Vec<&str> = comp.members.iter().map(|m| m.label.as_str()).collect();
+        format!("Penggunaan probe: {}.", labels.join(", "))
+    }
+
+    /// Correction template: "Koreksi: ..."
+    fn verbalize_correction(&self, comp: &Composition) -> String {
+        let labels: Vec<&str> = comp.members.iter().map(|m| m.label.as_str()).collect();
+        format!("Koreksi: {}.", labels.join(", "))
     }
 
     // ================================================================

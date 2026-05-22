@@ -93,6 +93,14 @@ pub enum EdgeSource {
     ExtractionRepair,
     /// From morphological analysis (Morphological Sense Graph).
     MorphologicalAnalysis,
+    /// From Action Schema driven extraction (RAB Phase 1).
+    ActionSchemaExtraction,
+    /// From Contextual Sense Disambiguation (RAB Phase 4).
+    SenseDisambiguation,
+    /// From user correction (RAB Phase R).
+    UserCorrection,
+    /// From usage probe validation (RAB Phase S).
+    UsageProbeValidation,
 }
 
 /// L0-02: Relation type for edges — mirrors Python Layer 0 RelationType.
