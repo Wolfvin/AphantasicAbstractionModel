@@ -32,7 +32,7 @@ impl ErasedTransform for MorphologicalAnalysis {
 
     fn execute(&self, ctx: &mut PipelineContext, graph: &mut Graph) -> IngestResult {
         // Ensure graph is bootstrapped with morphological knowledge
-        bootstrap_morphology(graph);
+        bootstrap_morphology(graph, &ctx.knowledge_base);
 
         let mut stemmer = GraphAwareStemmer::new();
         let mut compositions_created = 0;

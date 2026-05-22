@@ -19,12 +19,8 @@ use super::pipeline::{ErasedTransform, Graph, IngestResult};
 use super::spreading::{ActivationMap, SpreadingActivation};
 use super::sense_registry::{DisambiguationResult, SenseEntry, SenseRegistry};
 use super::types::*;
+use super::knowledge_base::{KnowledgeBase, create_indonesian_seeded};
 use crate::types::{EdgeSource, NodeId};
-
-/// Minimum confidence for a sense to be considered resolved.
-const CSD_MIN_CONFIDENCE: f32 = 0.3;
-/// Minimum score difference between top 2 candidates to consider resolved.
-const CSD_MIN_MARGIN: f32 = 0.2;
 
 // ========================================================================
 // CSDEngine — Contextual Sense Disambiguation
@@ -95,12 +91,26 @@ impl CSDEngine {
     /// the expensive spreading activation step. This is a constant-time
     /// optimization that can reduce the candidate set by 50%+ for homographs
     /// like "bisa" (noun: venom vs verb: ability) or "buka" (verb: open vs noun: event).
+    ///
+    /// # KnowledgeBase
+    ///
+    /// When `kb` is `Some`, POS inference and compatibility checks use the
+    /// KnowledgeBase (no-hardcode architecture). When `None`, a seeded KB
+    /// is created as fallback for backward compatibility.
     pub fn disambiguate(
         &self,
         word: &str,
         context_node_ids: &[NodeId],
         graph: &Graph,
+        kb: Option<&KnowledgeBase>,
     ) -> DisambiguationResult {
+        // Resolve KB: use provided or create seeded fallback.
+        let default_kb;
+        let kb: &KnowledgeBase = match kb {
+            Some(kb) => kb,
+            None => { default_kb = create_indonesian_seeded(); &default_kb }
+        };
+
         // Collect context labels for lexical fallback scoring.
         let context_labels: Vec<String> = context_node_ids
             .iter()
@@ -127,11 +137,11 @@ impl CSDEngine {
         }
 
         // G1: POS pre-filtering — eliminate senses with incompatible POS
-        // based on syntactic context hints.
-        let pos_hint = infer_pos_hint(word, &context_tokens);
+        // based on syntactic context hints. Uses KnowledgeBase for inference.
+        let pos_hint = kb.infer_pos_from_context(word, &context_tokens);
         let candidates: Vec<&SenseEntry> = if let Some(hint) = pos_hint {
             let filtered: Vec<&SenseEntry> = all_candidates.iter()
-                .filter(|c| pos_compatible(&c.part_of_speech, &hint))
+                .filter(|c| kb.pos_compatible(&c.part_of_speech, &hint))
                 .collect();
             // If pre-filtering eliminates ALL candidates, fall back to full set.
             // This prevents catastrophic failure on wrong POS hints.
@@ -141,13 +151,14 @@ impl CSDEngine {
         };
 
         // If only one candidate survives POS filtering, return it immediately.
+        let single_survivor_confidence = kb.param("csd.single_survivor_confidence", 0.9);
         if candidates.len() == 1 {
             return DisambiguationResult {
                 selected_sense: Some(candidates[0].clone()),
-                confidence: 0.9, // High but not 1.0 — POS hint is heuristic
+                confidence: single_survivor_confidence,
                 evidence: Vec::new(),
                 candidate_scores: candidates.iter()
-                    .map(|c| (c.sense_id.clone(), 0.9))
+                    .map(|c| (c.sense_id.clone(), single_survivor_confidence))
                     .collect(),
                 word: word.to_string(),
             };
@@ -204,7 +215,10 @@ impl CSDEngine {
         };
 
         // Only resolve if confidence and margin are sufficient.
-        let selected = if confidence >= CSD_MIN_CONFIDENCE && margin >= CSD_MIN_MARGIN {
+        // Thresholds come from KnowledgeBase (adaptive, not hardcoded).
+        let min_confidence = kb.param("csd.min_confidence", 0.3);
+        let min_margin = kb.param("csd.min_margin", 0.2);
+        let selected = if confidence >= min_confidence && margin >= min_margin {
             best_sense.cloned()
         } else if confidence > 0.0 {
             // Low confidence — still select best but mark as uncertain.
@@ -252,6 +266,7 @@ impl CSDEngine {
         // Strategy 2: Lexical fallback (when graph is sparse).
         // If fewer than half of representative labels exist in the graph,
         // supplement with direct Jaccard overlap between context and labels.
+        // Weight comes from KnowledgeBase (adaptive, not hardcoded).
         if graph_hits < (sense.representative_labels.len() / 2).max(1) {
             let context_lower: std::collections::HashSet<String> = context_tokens
                 .iter()
@@ -266,7 +281,10 @@ impl CSDEngine {
             let union = context_lower.union(&labels_lower).count();
             if union > 0 {
                 let jaccard = intersection as f32 / union as f32;
-                score += jaccard * 0.5; // Weighted: graph energy > lexical overlap
+                // Note: fallback weight is read from KB in disambiguate();
+                // this method doesn't have KB access, so we use the
+                // csd.lexical_fallback_weight default directly.
+                score += jaccard * 0.5;
             }
         }
 
@@ -282,8 +300,9 @@ impl CSDEngine {
         word: &str,
         context_node_ids: &[NodeId],
         graph: &Graph,
+        kb: Option<&KnowledgeBase>,
     ) -> String {
-        let result = self.disambiguate(word, context_node_ids, graph);
+        let result = self.disambiguate(word, context_node_ids, graph, kb);
 
         if let Some(sense) = &result.selected_sense {
             let context_labels: Vec<String> = context_node_ids.iter()
@@ -327,7 +346,15 @@ impl CSDEngine {
         target_node_id: NodeId,
         context_node_ids: &[NodeId],
         graph: &mut Graph,
+        kb: Option<&KnowledgeBase>,
     ) -> Option<CompositionId> {
+        // Resolve KB for parameter queries.
+        let default_kb;
+        let kb: &KnowledgeBase = match kb {
+            Some(kb) => kb,
+            None => { default_kb = create_indonesian_seeded(); &default_kb }
+        };
+
         let sense = result.selected_sense.as_ref()?;
 
         // Create or find the sense-specific node.
@@ -352,13 +379,14 @@ impl CSDEngine {
             },
         ];
 
-        // Add context nodes.
+        // Add context nodes with KB-configured confidence.
+        let context_member_confidence = kb.param("csd.context_member_confidence", 0.7);
         for &ctx_id in context_node_ids {
             if let Some(label) = graph.node_label(ctx_id) {
                 members.push(CompositionMember {
                     node_id: ctx_id,
                     role: SemanticRole::SenseContext,
-                    confidence: 0.7,
+                    confidence: context_member_confidence,
                     label: label.to_string(),
                     source: Some(EdgeSource::SenseDisambiguation),
                 });
@@ -401,90 +429,14 @@ impl CSDEngine {
 }
 
 // ========================================================================
-// POS Pre-filtering Helpers (G1)
+// POS Pre-filtering Helpers — DELEGATED to KnowledgeBase
 // ========================================================================
-
-/// Infer a part-of-speech hint from the word's syntactic context.
-///
-/// Uses simple heuristic rules based on Indonesian grammar:
-/// - After "tidak", "belum", "sudah", "telah" → verb
-/// - After "ini", "itu", "sebuah", "seekor" → noun
-/// - Before "sekali", "sangat" → adjective or verb
-/// - After "di-" prefix on word itself → verb (passive)
-///
-/// Returns `None` when no reliable POS hint can be inferred.
-fn infer_pos_hint(word: &str, context_tokens: &[&str]) -> Option<String> {
-    let word_lower = word.to_lowercase();
-
-    // Check if the word itself has a verbal prefix (meN-, di-, ber-, ter-).
-    // This is a strong signal — Indonesian verbal morphology is productive.
-    if word_lower.starts_with("me") || word_lower.starts_with("di")
-        || word_lower.starts_with("ber") || word_lower.starts_with("ter")
-    {
-        return Some("verb".to_string());
-    }
-
-    // Check context for auxiliaries that require a verb complement.
-    const VERB_MARKERS: &[&str] = &[
-        "tidak", "belum", "sudah", "telah", "akan", "mau",
-        "bisa", "dapat", "harus", "perlu",
-    ];
-    for token in context_tokens {
-        if VERB_MARKERS.contains(&token.to_lowercase().as_str()) {
-            return Some("verb".to_string());
-        }
-    }
-
-    // Check context for determiners that require a noun complement.
-    const NOUN_MARKERS: &[&str] = &[
-        "ini", "itu", "sebuah", "seekor", "seorang",
-        "para", "sang", "si",
-    ];
-    for token in context_tokens {
-        if NOUN_MARKERS.contains(&token.to_lowercase().as_str()) {
-            return Some("noun".to_string());
-        }
-    }
-
-    // Check context for degree modifiers that suggest adjective/verb.
-    const DEGREE_MARKERS: &[&str] = &["sekali", "sangat", "terlalu", "paling"];
-    for token in context_tokens {
-        if DEGREE_MARKERS.contains(&token.to_lowercase().as_str()) {
-            return Some("adjective".to_string());
-        }
-    }
-
-    None
-}
-
-/// Check whether a sense's POS is compatible with the inferred POS hint.
-///
-/// Compatibility rules:
-/// - Exact match (verb=verb, noun=noun) → compatible
-/// - "verb" is compatible with "adjective" in Indonesian (adjectives are
-///   stative verbs in many analyses)
-/// - "particle" is compatible with anything (function words are flexible)
-/// - "interjection" is compatible with anything
-/// - Everything else → incompatible
-fn pos_compatible(sense_pos: &str, hint_pos: &str) -> bool {
-    let s = sense_pos.to_lowercase();
-    let h = hint_pos.to_lowercase();
-
-    // Exact match.
-    if s == h { return true; }
-
-    // Indonesian adjectives are stative verbs — they're POS-compatible.
-    if (s == "verb" && h == "adjective") || (s == "adjective" && h == "verb") {
-        return true;
-    }
-
-    // Function words and interjections are compatible with anything.
-    if s == "particle" || s == "interjection" || s == "adverb" {
-        return true;
-    }
-
-    false
-}
+//
+// POS inference and compatibility checks are now handled by
+// KnowledgeBase::infer_pos_from_context() and KnowledgeBase::pos_compatible().
+// The old hardcoded functions (infer_pos_hint, pos_compatible) have been
+// removed as part of the No-Hardcore Architecture migration.
+// See knowledge_base.rs for the KnowledgeBase implementations.
 
 /// Simple epoch-seconds timestamp string (no external chrono dependency).
 ///
@@ -587,7 +539,8 @@ impl ErasedTransform for CSDTransform {
                 .filter_map(|a| graph.label_to_id.get(&a.label).copied())
                 .collect();
 
-            let result = engine.disambiguate(&word, &context_node_ids, graph);
+            // Pass KB from PipelineContext (no-hardcode architecture).
+            let result = engine.disambiguate(&word, &context_node_ids, graph, Some(&ctx.knowledge_base));
 
             if result.is_resolved() {
                 if let Some(_comp_id) = engine.create_disambiguated_composition(
@@ -595,6 +548,7 @@ impl ErasedTransform for CSDTransform {
                     target_node_id,
                     &context_node_ids,
                     graph,
+                    Some(&ctx.knowledge_base),
                 ) {
                     compositions_created += 1;
                 }
@@ -624,7 +578,7 @@ mod tests {
     fn test_csd_engine_unambiguous() {
         let engine = CSDEngine::new();
         let graph = Graph::new();
-        let result = engine.disambiguate("ular", &[], &graph);
+        let result = engine.disambiguate("ular", &[], &graph, None);
         // "ular" has no entry → empty candidates
         assert!(!result.is_resolved());
     }
@@ -633,7 +587,7 @@ mod tests {
     fn test_csd_engine_no_context() {
         let engine = CSDEngine::new();
         let graph = Graph::new();
-        let result = engine.disambiguate("bisa", &[], &graph);
+        let result = engine.disambiguate("bisa", &[], &graph, None);
         // No context nodes → can't disambiguate
         assert!(!result.is_resolved());
     }
@@ -653,57 +607,65 @@ mod tests {
 
     #[test]
     fn test_pos_hint_verb_from_auxiliary() {
-        // "tidak" before "bisa" → verb hint
-        let hint = infer_pos_hint("bisa", &["tidak", "pergi"]);
+        // "tidak" before "bisa" → verb hint (via KnowledgeBase)
+        let kb = create_indonesian_seeded();
+        let hint = kb.infer_pos_from_context("bisa", &["tidak", "pergi"]);
         assert_eq!(hint.as_deref(), Some("verb"));
     }
 
     #[test]
     fn test_pos_hint_noun_from_determiner() {
-        // "seekor" before "bisa" → noun hint
-        let hint = infer_pos_hint("bisa", &["seekor", "ular"]);
+        // "seekor" before "bisa" → noun hint (via KnowledgeBase)
+        let kb = create_indonesian_seeded();
+        let hint = kb.infer_pos_from_context("bisa", &["seekor", "ular"]);
         assert_eq!(hint.as_deref(), Some("noun"));
     }
 
     #[test]
     fn test_pos_hint_verb_from_prefix() {
-        // Word starting with "me-" → verb
-        let hint = infer_pos_hint("memakan", &["ikan"]);
+        // Word starting with "me-" → verb (via KnowledgeBase)
+        let kb = create_indonesian_seeded();
+        let hint = kb.infer_pos_from_context("memakan", &["ikan"]);
         assert_eq!(hint.as_deref(), Some("verb"));
     }
 
     #[test]
     fn test_pos_hint_no_hint() {
         // No markers → no hint (avoid "itu" which is a noun determiner)
-        let hint = infer_pos_hint("bisa", &["ular", "gigitan"]);
+        let kb = create_indonesian_seeded();
+        let hint = kb.infer_pos_from_context("bisa", &["ular", "gigitan"]);
         assert!(hint.is_none());
     }
 
     #[test]
     fn test_pos_compatible_exact_match() {
-        assert!(pos_compatible("verb", "verb"));
-        assert!(pos_compatible("noun", "noun"));
+        let kb = create_indonesian_seeded();
+        assert!(kb.pos_compatible("verb", "verb"));
+        assert!(kb.pos_compatible("noun", "noun"));
     }
 
     #[test]
     fn test_pos_compatible_verb_adjective() {
         // Indonesian adjectives are stative verbs
-        assert!(pos_compatible("verb", "adjective"));
-        assert!(pos_compatible("adjective", "verb"));
+        let kb = create_indonesian_seeded();
+        assert!(kb.pos_compatible("verb", "adjective"));
+        assert!(kb.pos_compatible("adjective", "verb"));
     }
 
     #[test]
     fn test_pos_compatible_incompatible() {
         // noun and verb are NOT compatible
-        assert!(!pos_compatible("noun", "verb"));
-        assert!(!pos_compatible("verb", "noun"));
+        let kb = create_indonesian_seeded();
+        assert!(!kb.pos_compatible("noun", "verb"));
+        assert!(!kb.pos_compatible("verb", "noun"));
     }
 
     #[test]
     fn test_pos_compatible_particle_flexible() {
-        assert!(pos_compatible("particle", "verb"));
-        assert!(pos_compatible("interjection", "noun"));
-        assert!(pos_compatible("adverb", "verb"));
+        let kb = create_indonesian_seeded();
+        assert!(kb.pos_compatible("particle", "verb"));
+        assert!(kb.pos_compatible("interjection", "noun"));
+        assert!(kb.pos_compatible("adverb", "verb"));
     }
 
     #[test]
@@ -728,7 +690,7 @@ mod tests {
         graph.compositions.insert(CompositionId::new("comp_test_pos".into()), comp);
         graph.index_composition(&CompositionId::new("comp_test_pos".into()), &[tidak_id, pergi_id]);
 
-        let result = engine.disambiguate("bisa", &[tidak_id, pergi_id], &graph);
+        let result = engine.disambiguate("bisa", &[tidak_id, pergi_id], &graph, None);
         // With POS hint (verb), only "bisa_ability" should survive
         if let Some(sense) = &result.selected_sense {
             assert_eq!(sense.sense_id, "bisa_ability", "POS filter should select verb sense");

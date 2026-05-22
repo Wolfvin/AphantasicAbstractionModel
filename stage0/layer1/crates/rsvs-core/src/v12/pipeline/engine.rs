@@ -221,12 +221,20 @@ impl PipelineEngine {
     /// Create a new empty pipeline engine with default [`PipelineContext`]
     /// and an empty [`Graph`].
     ///
-    /// The context is initialized with bootstrap Action Schemas from
-    /// RAB Phase 1, enabling schema-driven extraction for copula ("adalah"),
-    /// possessive ("punya"), and other linguistic patterns.
+    /// The context is initialized with:
+    /// - Bootstrap Action Schemas from RAB Phase 1
+    /// - **No-Hardcore Architecture**: KnowledgeBase seeded with Indonesian
+    ///   linguistic knowledge via `seed_indonesian()`. All marker words,
+    ///   morphology rules, and parameters are stored in the KnowledgeBase
+    ///   with `KnowledgeOrigin::Bootstrapped` provenance — not hardcoded.
     pub fn new() -> Self {
         let mut context = PipelineContext::default();
         context.active_schemas = super::super::action_schemas::bootstrap_schemas();
+        // No-Hardcore: Seed KnowledgeBase with Indonesian linguistic knowledge.
+        // All previously-hardcoded const arrays are now in the KnowledgeBase
+        // with provenance tracking. They can be replaced by teaching or
+        // observation at runtime.
+        super::super::knowledge_base::seed_indonesian(&mut context.knowledge_base);
         Self {
             transforms: HashMap::new(),
             dag: Vec::new(),

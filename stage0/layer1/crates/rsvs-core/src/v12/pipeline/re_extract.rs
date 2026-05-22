@@ -86,7 +86,7 @@ impl ErasedTransform for ReExtractFrame {
 
             // Re-extract using the enhanced context.
             let extractor = super::super::extract_frame::ExtractFrame::new();
-            let re_result = extractor.re_extract_with_context(&source_text, &context_hints, graph);
+            let re_result = extractor.re_extract_with_context_and_kb(&source_text, &context_hints, graph, &ctx.knowledge_base);
 
             match re_result {
                 Some(re_atom) => {

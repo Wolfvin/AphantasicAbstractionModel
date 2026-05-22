@@ -1099,6 +1099,20 @@ pub struct PipelineContext {
     /// pushes InquiryQuestions here for downstream processing.
     #[serde(default)]
     pub pending_questions: Vec<super::acquisition::InquiryQuestion>,
+
+    /// No-Hardcore Architecture: The Knowledge Base.
+    ///
+    /// This is the SINGLE source of truth for ALL linguistic knowledge.
+    /// Instead of hardcoded const arrays (COPULA_MARKERS, NEGATION_MARKERS,
+    /// etc.), all markers, senses, morphology, and parameters are stored
+    /// here with `KnowledgeOrigin` provenance tracking.
+    ///
+    /// When empty (blank slate), transforms will function but won't detect
+    /// any linguistic patterns — because AAM knows nothing until taught.
+    /// Use `seed_indonesian()` or `create_indonesian_seeded()` to populate
+    /// with backward-compatible bootstrap data.
+    #[serde(default)]
+    pub knowledge_base: super::knowledge_base::KnowledgeBase,
 }
 
 /// Maximum recent events to keep in the sliding window.
@@ -2306,24 +2320,21 @@ impl SenseCandidate {
 /// tokens as keywords. Used by `Graph::neighborhood_for()` to find compositions
 /// relevant to the current input.
 pub fn extract_keywords(input: &str) -> Vec<String> {
-    let stop_words = [
-        // Indonesian
-        "yang", "dan", "di", "ke", "dari", "ini", "itu", "dengan", "untuk", "pada", "adalah",
-        "akan", "telah", "sebuah", "seorang", "tidak", "bukan", "juga", "sudah", "oleh", "karena",
-        "supaya", "agar", "sebab", // English
-        "the", "a", "an", "is", "are", "was", "were", "be", "been", "being", "have", "has", "had",
-        "do", "does", "did", "will", "would", "could", "should", "may", "might", "shall", "can",
-        "to", "of", "in", "for", "on", "with", "at", "by", "from", "as", "into", "through",
-        "during", "before", "after", "above", "below", "between", "out", "off", "over", "under",
-        "again", "further", "then", "once", "and", "but", "or", "nor", "not", "so", "yet", "both",
-        "either", "neither", "each", "every", "all", "any", "few", "more", "most", "other", "some",
-        "such", "no", "only", "own", "same", "than", "too", "very",
-    ];
+    // Use seeded KB (backward compat) — callers should use extract_keywords_with_kb() instead.
+    let kb = crate::v12::knowledge_base::create_indonesian_seeded();
+    extract_keywords_with_kb(input, &kb)
+}
 
+/// Extract keywords from input text using a KnowledgeBase for stopword filtering.
+///
+/// This is the no-hardcode version of `extract_keywords()` — instead of
+/// a hardcoded bilingual stopword list, it uses `kb.is_stopword()` to
+/// filter stopwords from the KnowledgeBase.
+pub fn extract_keywords_with_kb(input: &str, kb: &crate::v12::knowledge_base::KnowledgeBase) -> Vec<String> {
     input
         .split_whitespace()
         .map(|t| t.to_lowercase())
         .filter(|t| t.len() > 2)
-        .filter(|t| !stop_words.contains(&t.as_str()))
+        .filter(|t| !kb.is_stopword(t))
         .collect()
 }

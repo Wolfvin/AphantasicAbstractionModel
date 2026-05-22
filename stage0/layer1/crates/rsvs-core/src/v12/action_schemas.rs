@@ -14,6 +14,7 @@
 use serde::{Deserialize, Serialize};
 use super::types::{CompositionType, SemanticRole};
 use super::spreading::ActivationMap;
+use super::knowledge_base::{KnowledgeBase, MarkerCategory};
 
 // ========================================================================
 // ActionSchema — Declarative Template for Graph Actions
@@ -118,40 +119,32 @@ impl Default for RoleSource {
 // Trigger Matching
 // ========================================================================
 
-/// Indonesian copula markers that trigger EquativeBinding.
-const COPULA_MARKERS: &[&str] = &["adalah", "ialah", "merupakan", "yaitu", "yakni"];
-
-/// Indonesian possessive markers that trigger PossessiveBinding.
-const POSSESSIVE_MARKERS: &[&str] = &["punya", "miliki", "mempunyai", "punyai"];
-
-/// Indonesian existential markers.
-const EXISTENTIAL_MARKERS: &[&str] = &["ada"];
-
-/// Indonesian locative prepositions.
-const LOCATIVE_MARKERS: &[&str] = &["di", "ke", "dari"];
+// NOTE: The former hardcoded const arrays (COPULA_MARKERS, POSSESSIVE_MARKERS,
+// EXISTENTIAL_MARKERS, LOCATIVE_MARKERS) have been removed. All marker
+// lookups now go through the KnowledgeBase.
 
 impl SchemaTrigger {
-    /// Check if this trigger matches any of the given tokens.
+    /// Check if this trigger matches any of the given tokens, using
+    /// the supplied KnowledgeBase for marker lookups.
     ///
     /// Returns the index of the matching token, or None.
-    pub fn matches(&self, tokens: &[&str]) -> Option<usize> {
+    pub fn matches_with_knowledge(&self, tokens: &[&str], kb: &KnowledgeBase) -> Option<usize> {
         match self {
             SchemaTrigger::CopulaMarker => {
-                tokens.iter().position(|t| COPULA_MARKERS.contains(&t.to_lowercase().as_str()))
+                tokens.iter().position(|t| kb.is_marker(&MarkerCategory::Copula, t))
             }
             SchemaTrigger::PossessiveMarker => {
-                tokens.iter().position(|t| POSSESSIVE_MARKERS.contains(&t.to_lowercase().as_str()))
+                tokens.iter().position(|t| kb.is_marker(&MarkerCategory::Possessive, t))
             }
             SchemaTrigger::EquativeMarker => {
-                tokens.iter().position(|t| COPULA_MARKERS.contains(&t.to_lowercase().as_str()))
-                    .or_else(|| tokens.iter().position(|t| t.eq_ignore_ascii_case("yaitu") || t.eq_ignore_ascii_case("yakni")))
+                tokens.iter().position(|t| kb.is_marker(&MarkerCategory::Copula, t))
+                    .or_else(|| tokens.iter().position(|t| kb.is_marker(&MarkerCategory::Equative, t)))
             }
             SchemaTrigger::ExistentialMarker => {
-                tokens.iter().position(|t| EXISTENTIAL_MARKERS.contains(&t.to_lowercase().as_str()))
+                tokens.iter().position(|t| kb.is_marker(&MarkerCategory::Existential, t))
             }
             SchemaTrigger::LocativeMarker => {
-                // Locative requires marker followed by a potential place word
-                tokens.iter().position(|t| LOCATIVE_MARKERS.contains(&t.to_lowercase().as_str()))
+                tokens.iter().position(|t| kb.is_marker(&MarkerCategory::Locative, t))
             }
             SchemaTrigger::PredicatePattern(pattern) => {
                 // Simple substring match for custom patterns
@@ -159,30 +152,79 @@ impl SchemaTrigger {
             }
         }
     }
+
+    /// Legacy method — use `matches_with_knowledge()` instead.
+    /// Falls back to seeded Indonesian KnowledgeBase.
+    #[deprecated(note = "Use matches_with_knowledge() which queries the KnowledgeBase")]
+    pub fn matches(&self, tokens: &[&str]) -> Option<usize> {
+        let kb = crate::v12::knowledge_base::create_indonesian_seeded();
+        self.matches_with_knowledge(tokens, &kb)
+    }
 }
 
 impl ActionSchema {
+    /// Check if this schema's trigger matches the given tokens, using
+    /// the supplied KnowledgeBase for marker lookups.
+    pub fn matches_tokens_with_knowledge(&self, tokens: &[&str], kb: &KnowledgeBase) -> Option<usize> {
+        self.trigger.matches_with_knowledge(tokens, kb)
+    }
+
     /// Check if this schema's trigger matches the given tokens.
+    ///
+    /// Legacy method — use `matches_tokens_with_knowledge()` instead.
+    #[deprecated(note = "Use matches_tokens_with_knowledge() which queries the KnowledgeBase")]
     pub fn matches_tokens(&self, tokens: &[&str]) -> Option<usize> {
-        self.trigger.matches(tokens)
+        let kb = crate::v12::knowledge_base::create_indonesian_seeded();
+        self.trigger.matches_with_knowledge(tokens, &kb)
+    }
+
+    /// Resolve role bindings against the given tokens and trigger position,
+    /// using the supplied KnowledgeBase for marker lookups.
+    ///
+    /// Returns a map of SemanticRole → label string.
+    pub fn resolve_roles_with_knowledge(
+        &self,
+        tokens: &[&str],
+        trigger_index: usize,
+        kb: &KnowledgeBase,
+    ) -> Vec<(SemanticRole, String)> {
+        self.resolve_roles_inner(tokens, trigger_index, None, kb)
     }
 
     /// Resolve role bindings against the given tokens and trigger position.
     ///
-    /// Returns a map of SemanticRole → label string.
+    /// Legacy method — use `resolve_roles_with_knowledge()` instead.
+    #[deprecated(note = "Use resolve_roles_with_knowledge() which queries the KnowledgeBase")]
     pub fn resolve_roles(
         &self,
         tokens: &[&str],
         trigger_index: usize,
     ) -> Vec<(SemanticRole, String)> {
-        self.resolve_roles_inner(tokens, trigger_index, None)
+        let kb = crate::v12::knowledge_base::create_indonesian_seeded();
+        self.resolve_roles_inner(tokens, trigger_index, None, &kb)
     }
 
-    /// Resolve role bindings with activation map for GraphActivation sources.
+    /// Resolve role bindings with activation map for GraphActivation sources,
+    /// using the supplied KnowledgeBase for marker lookups.
     ///
     /// Phase T integration: When a `RoleSource::GraphActivation` binding
     /// exists and an ActivationMap is provided, the most-activated node
     /// label is used instead of falling back to TokenBefore.
+    pub fn resolve_roles_with_activation_and_knowledge(
+        &self,
+        tokens: &[&str],
+        trigger_index: usize,
+        activation_map: &ActivationMap,
+        graph: &super::pipeline::Graph,
+        kb: &KnowledgeBase,
+    ) -> Vec<(SemanticRole, String)> {
+        self.resolve_roles_inner(tokens, trigger_index, Some((activation_map, graph)), kb)
+    }
+
+    /// Resolve role bindings with activation map for GraphActivation sources.
+    ///
+    /// Legacy method — use `resolve_roles_with_activation_and_knowledge()` instead.
+    #[deprecated(note = "Use resolve_roles_with_activation_and_knowledge() which queries the KnowledgeBase")]
     pub fn resolve_roles_with_activation(
         &self,
         tokens: &[&str],
@@ -190,15 +232,17 @@ impl ActionSchema {
         activation_map: &ActivationMap,
         graph: &super::pipeline::Graph,
     ) -> Vec<(SemanticRole, String)> {
-        self.resolve_roles_inner(tokens, trigger_index, Some((activation_map, graph)))
+        let kb = crate::v12::knowledge_base::create_indonesian_seeded();
+        self.resolve_roles_inner(tokens, trigger_index, Some((activation_map, graph)), &kb)
     }
 
-    /// Inner implementation shared by both resolve_roles variants.
+    /// Inner implementation shared by all resolve_roles variants.
     fn resolve_roles_inner(
         &self,
         tokens: &[&str],
         trigger_index: usize,
         activation: Option<(&ActivationMap, &super::pipeline::Graph)>,
+        kb: &KnowledgeBase,
     ) -> Vec<(SemanticRole, String)> {
         let mut resolved = Vec::new();
 
@@ -224,10 +268,10 @@ impl ActionSchema {
                     let mut found = None;
                     // Search backward first
                     for i in (0..trigger_index).rev() {
-                        let t = tokens[i].to_lowercase();
-                        if !COPULA_MARKERS.contains(&t.as_str())
-                            && !POSSESSIVE_MARKERS.contains(&t.as_str())
-                            && !LOCATIVE_MARKERS.contains(&t.as_str())
+                        let t = tokens[i];
+                        if !kb.is_marker(&MarkerCategory::Copula, t)
+                            && !kb.is_marker(&MarkerCategory::Possessive, t)
+                            && !kb.is_marker(&MarkerCategory::Locative, t)
                         {
                             found = Some(tokens[i].to_string());
                             break;
@@ -251,10 +295,9 @@ impl ActionSchema {
                             })
                             .find(|(label, _)| {
                                 // Skip function words and the trigger token.
-                                let lower = label.to_lowercase();
-                                !COPULA_MARKERS.contains(&lower.as_str())
-                                    && !POSSESSIVE_MARKERS.contains(&lower.as_str())
-                                    && !LOCATIVE_MARKERS.contains(&lower.as_str())
+                                !kb.is_marker(&MarkerCategory::Copula, label)
+                                    && !kb.is_marker(&MarkerCategory::Possessive, label)
+                                    && !kb.is_marker(&MarkerCategory::Locative, label)
                             });
                         if let Some((label, energy)) = best {
                             if *energy > 0.1 {
@@ -405,38 +448,46 @@ mod tests {
         assert_eq!(copula.role_bindings.len(), 2);
     }
 
+    fn seeded_kb() -> KnowledgeBase {
+        crate::v12::knowledge_base::create_indonesian_seeded()
+    }
+
     #[test]
     fn test_copula_trigger_matches() {
+        let kb = seeded_kb();
         let trigger = SchemaTrigger::CopulaMarker;
         let tokens: Vec<&str> = vec!["ini", "adalah", "makanan"];
-        let idx = trigger.matches(&tokens);
+        let idx = trigger.matches_with_knowledge(&tokens, &kb);
         assert_eq!(idx, Some(1));
     }
 
     #[test]
     fn test_copula_trigger_no_match() {
+        let kb = seeded_kb();
         let trigger = SchemaTrigger::CopulaMarker;
         let tokens: Vec<&str> = vec!["raja", "memerintah", "kerajaan"];
-        let idx = trigger.matches(&tokens);
+        let idx = trigger.matches_with_knowledge(&tokens, &kb);
         assert_eq!(idx, None);
     }
 
     #[test]
     fn test_possessive_trigger_matches() {
+        let kb = seeded_kb();
         let trigger = SchemaTrigger::PossessiveMarker;
         let tokens: Vec<&str> = vec!["raja", "punya", "kerajaan"];
-        let idx = trigger.matches(&tokens);
+        let idx = trigger.matches_with_knowledge(&tokens, &kb);
         assert_eq!(idx, Some(1));
     }
 
     #[test]
     fn test_resolve_roles_copula() {
+        let kb = seeded_kb();
         let schemas = bootstrap_schemas();
         let copula = schemas.iter().find(|s| s.id == "schema_copula").unwrap();
         let tokens: Vec<&str> = vec!["ini", "adalah", "makanan"];
         let trigger_idx = 1;
 
-        let roles = copula.resolve_roles(&tokens, trigger_idx);
+        let roles = copula.resolve_roles_with_knowledge(&tokens, trigger_idx, &kb);
         assert_eq!(roles.len(), 2);
 
         // Should have Subject = "ini" and Complement = "makanan"
@@ -450,12 +501,13 @@ mod tests {
 
     #[test]
     fn test_resolve_roles_possessive() {
+        let kb = seeded_kb();
         let schemas = bootstrap_schemas();
         let possessive = schemas.iter().find(|s| s.id == "schema_possessive").unwrap();
         let tokens: Vec<&str> = vec!["raja", "punya", "kerajaan"];
         let trigger_idx = 1;
 
-        let roles = possessive.resolve_roles(&tokens, trigger_idx);
+        let roles = possessive.resolve_roles_with_knowledge(&tokens, trigger_idx, &kb);
         assert_eq!(roles.len(), 2);
 
         let possessor = roles.iter().find(|(r, _)| *r == SemanticRole::Possessor);

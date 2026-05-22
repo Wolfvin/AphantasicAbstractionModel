@@ -50,6 +50,7 @@ pub mod csd;
 pub mod executive;
 pub mod extract_frame;
 pub mod govern_beliefs;
+pub mod knowledge_base;
 pub mod locale;
 pub mod morphology;
 pub mod persistence;
@@ -70,7 +71,7 @@ mod cognitive_tests;
 // Users can import from `rsvs::v12::SemanticAtom` instead of `rsvs::v12::types::SemanticAtom`.
 pub use types::{
     // --- Utility functions ---
-    extract_keywords,
+    extract_keywords, extract_keywords_with_kb,
     AcquisitionSource,
     AffixInfo,
     AffixPosition,
@@ -243,3 +244,11 @@ pub use correction::{UserCorrection, CorrectionType, CorrectionResult, apply_cor
 
 // Re-export RAB Phase S: Usage Discovery types.
 pub use usage_probe::{UsageProbe, ProbeType, ProbeResult, UsageDiscoveryEngine};
+
+// Re-export No-Hardcore Architecture types.
+pub use knowledge_base::{
+    KnowledgeBase, KnowledgeOrigin, KnowledgeEntry, MarkerCategory,
+    MorphologyRule, MorphologyRuleType, AdaptiveParams,
+    TeachingProtocol, SymbolicObserver, ObservationResult,
+    seed_indonesian, create_indonesian_seeded,
+};

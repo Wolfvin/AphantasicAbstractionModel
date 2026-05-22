@@ -864,11 +864,17 @@ mod tests_graph_aware {
     use super::GraphAwareStemmer;
     use crate::v12::pipeline::Graph;
     use crate::v12::morphology::bootstrap_morphology;
+    use crate::v12::knowledge_base::create_indonesian_seeded;
+
+    fn make_kb() -> crate::v12::knowledge_base::KnowledgeBase {
+        create_indonesian_seeded()
+    }
 
     #[test]
     fn test_graph_aware_stemmer_basic() {
         let mut graph = Graph::new();
-        bootstrap_morphology(&mut graph);
+        let kb = make_kb();
+        bootstrap_morphology(&mut graph, &kb);
 
         let mut stemmer = GraphAwareStemmer::new();
         assert_eq!(stemmer.stem("membuat", &graph), Some("buat".to_string()));
@@ -881,7 +887,8 @@ mod tests_graph_aware {
     #[test]
     fn test_graph_aware_stemmer_root_exceptions() {
         let mut graph = Graph::new();
-        bootstrap_morphology(&mut graph);
+        let kb = make_kb();
+        bootstrap_morphology(&mut graph, &kb);
 
         let mut stemmer = GraphAwareStemmer::new();
         assert_eq!(stemmer.stem("makan", &graph), None);
@@ -891,7 +898,8 @@ mod tests_graph_aware {
     #[test]
     fn test_graph_aware_stemmer_detailed() {
         let mut graph = Graph::new();
-        bootstrap_morphology(&mut graph);
+        let kb = make_kb();
+        bootstrap_morphology(&mut graph, &kb);
 
         let mut stemmer = GraphAwareStemmer::new();
         let decomp = stemmer.stem_detailed("membuat", &graph);
@@ -910,7 +918,8 @@ mod tests_graph_aware {
     #[test]
     fn test_graph_aware_stemmer_reduplication() {
         let mut graph = Graph::new();
-        bootstrap_morphology(&mut graph);
+        let kb = make_kb();
+        bootstrap_morphology(&mut graph, &kb);
 
         let mut stemmer = GraphAwareStemmer::new();
         assert_eq!(stemmer.stem("kata-kata", &graph), Some("kata".to_string()));

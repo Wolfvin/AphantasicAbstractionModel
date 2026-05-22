@@ -16,54 +16,17 @@
 use crate::types::{EdgeSource, NodeId};
 use super::types::*;
 use super::pipeline::Graph;
+use super::knowledge_base::{KnowledgeBase, MorphologyRuleType};
 
 // ========================================================================
-// Declarative Seed Data
+// Declarative Seed Data — MOVED to KnowledgeBase
 // ========================================================================
-
-/// meN- allomorphs: (allomorph, archimorpheme, assimilation_condition)
-const ME_N_ALLOMORPHS: &[(&str, &str, &str)] = &[
-    ("meng", "meN", "sebelum vokal, k, g, h"),
-    ("meny", "meN", "sebelum s (restore 's')"),
-    ("mem",  "meN", "sebelum b, p, f"),
-    ("men",  "meN", "sebelum c, d, j, t"),
-    ("me",   "meN", "sebelum konsonan lain"),
-];
-
-/// peN- allomorphs: (allomorph, archimorpheme, assimilation_condition)
-const PE_N_ALLOMORPHS: &[(&str, &str, &str)] = &[
-    ("peng", "peN", "sebelum vokal, k, g, h"),
-    ("peny", "peN", "sebelum s (restore 's')"),
-    ("pem",  "peN", "sebelum b, p, f"),
-    ("pen",  "peN", "sebelum c, d, j, t"),
-    ("pe",   "peN", "sebelum konsonan lain"),
-];
-
-/// Simple prefixes (no nasal assimilation).
-const SIMPLE_PREFIXES: &[&str] = &[
-    "memper", "diper", "ber", "di", "ter", "per", "ke", "se",
-];
-
-/// Known suffixes.
-const SUFFIXES: &[&str] = &[
-    "kan", "an", "i", "lah", "kah", "tah", "pun",
-];
-
-/// Known root words that should not be further stemmed.
-const ROOT_EXCEPTIONS: &[&str] = &[
-    "makan", "minum", "tahu", "kerja", "lari", "jalan", "tulis", "baca",
-    "dengar", "lihat", "ambil", "beri", "buat", "cari", "duduk", "hidup",
-    "ikan", "pulang", "sampai", "taruh", "tinggal", "tukar", "pukul",
-    "main", "pilih", "bayar", "jual", "beli", "datang", "pergi", "masuk",
-    "keluar", "naik", "turun", "buka", "tutup", "pakai", "lepas",
-    "suka", "benci", "cinta", "sayang", "harus", "boleh", "bisa",
-    "kata", "ada", "ialah", "adalah", "punya", "mahu", "hendak",
-    "perlu", "mesti", "orang", "rumah", "air", "api", "tanah",
-    "mata", "tangan", "kaki", "kepala", "hati", "badan",
-    "raja", "rakyat", "negara", "kerajaan", "hukum", "adat",
-    "mental", "modal", "sosial", "formal", "normal", "original",
-    "total", "vital", "real", "ideal", "local", "kriminal",
-];
+//
+// The meN allomorphs, peN allomorphs, simple prefixes, suffixes, and
+// root exceptions are now stored in KnowledgeBase via seed_indonesian().
+// bootstrap_morphology() reads from KB instead of hardcoded const arrays.
+//
+// See knowledge_base.rs:seed_indonesian() for the seed data.
 
 // ========================================================================
 // Bootstrap
@@ -75,6 +38,13 @@ const ROOT_EXCEPTIONS: &[&str] = &[
 /// archimorphemes, allomorphs, prefixes, suffixes, and root exceptions.
 /// After bootstrap, the graph becomes the source of truth — the stemmer
 /// queries the graph instead of using hardcoded constants.
+///
+/// # Knowledge Source
+///
+/// Instead of reading from hardcoded const arrays, this function now reads
+/// morphological rules from the `KnowledgeBase`. The KB is typically seeded
+/// via `seed_indonesian()`, which populates the same data that was previously
+/// hardcoded, but with `KnowledgeOrigin::Bootstrapped` provenance.
 ///
 /// # Idempotency
 ///
@@ -93,41 +63,53 @@ const ROOT_EXCEPTIONS: &[&str] = &[
 /// Nodes (layer 1): meN, peN (archimorphemes)
 /// Compositions (Morphology): meN→meng before vowel/k/g/h, etc.
 /// ```
-pub fn bootstrap_morphology(graph: &mut Graph) {
+pub fn bootstrap_morphology(graph: &mut Graph, kb: &KnowledgeBase) {
     // 1. Create archimorpheme nodes (layer 1) with sense
-    let men_id = graph.ensure_node("meN");
-    let pen_id = graph.ensure_node("peN");
-    set_archimorpheme_sense(graph, men_id, 1, "awalan aktif verba");
-    set_archimorpheme_sense(graph, pen_id, 1, "awalan nomina pembentuk pelaku");
-
-    // 2. Create meN- allomorph nodes + assimilation compositions
-    for &(allomorph, archi, condition) in ME_N_ALLOMORPHS {
-        let allo_id = graph.ensure_node(allomorph);
-        create_assimilation_composition(graph, archi, allomorph, condition);
-        let _ = allo_id; // used by composition
+    //    Read archimorphemes from KB instead of hardcoded list.
+    let archimorphemes = kb.morphology_rules_of(&MorphologyRuleType::Archimorpheme);
+    for archi in &archimorphemes {
+        let archi_id = graph.ensure_node(&archi.value);
+        let sense_label = if archi.value == "meN" {
+            "awalan aktif verba"
+        } else if archi.value == "peN" {
+            "awalan nomina pembentuk pelaku"
+        } else {
+            "archimorpheme"
+        };
+        set_archimorpheme_sense(graph, archi_id, 1, sense_label);
     }
 
-    // 3. Create peN- allomorph nodes + assimilation compositions
-    for &(allomorph, archi, condition) in PE_N_ALLOMORPHS {
-        let allo_id = graph.ensure_node(allomorph);
-        create_assimilation_composition(graph, archi, allomorph, condition);
+    // 2. Create allomorph nodes + assimilation compositions
+    //    Read allomorphs from KB instead of hardcoded ME_N/PE_N arrays.
+    let allomorphs = kb.morphology_rules_of(&MorphologyRuleType::Allomorph);
+    for allo in &allomorphs {
+        let allo_id = graph.ensure_node(&allo.value);
+        let archi = allo.archimorpheme.as_deref().unwrap_or("");
+        let condition = allo.condition.as_deref().unwrap_or("");
+        create_assimilation_composition(graph, archi, &allo.value, condition);
         let _ = allo_id;
     }
 
-    // 4. Create simple prefix nodes + prefix compositions
-    for prefix in SIMPLE_PREFIXES {
-        let pfx_id = graph.ensure_node(prefix);
-        create_simple_prefix_composition(graph, prefix, pfx_id);
+    // 3. Create simple prefix nodes + prefix compositions
+    //    Read prefixes from KB instead of hardcoded SIMPLE_PREFIXES.
+    let simple_prefixes = kb.morphology_rules_of(&MorphologyRuleType::SimplePrefix);
+    for prefix in &simple_prefixes {
+        let pfx_id = graph.ensure_node(&prefix.value);
+        create_simple_prefix_composition(graph, &prefix.value, pfx_id);
     }
 
-    // 5. Create suffix nodes + suffix compositions
-    for suffix in SUFFIXES {
-        let sfx_id = graph.ensure_node(suffix);
-        create_suffix_composition(graph, suffix, sfx_id);
+    // 4. Create suffix nodes + suffix compositions
+    //    Read suffixes from KB instead of hardcoded SUFFIXES.
+    let suffixes = kb.morphology_rules_of(&MorphologyRuleType::Suffix);
+    for suffix in &suffixes {
+        let sfx_id = graph.ensure_node(&suffix.value);
+        create_suffix_composition(graph, &suffix.value, sfx_id);
     }
 
-    // 6. Create root exception nodes (lifecycle=Stable)
-    for root in ROOT_EXCEPTIONS {
+    // 5. Create root exception nodes (lifecycle=Stable)
+    //    Read root exceptions from KB instead of hardcoded ROOT_EXCEPTIONS.
+    let root_exceptions = kb.root_exceptions();
+    for root in &root_exceptions {
         let root_id = graph.ensure_node(root);
         if let Some(node) = graph.nodes.get_mut(&root_id) {
             node.lifecycle = LifecycleState::Stable;
@@ -741,15 +723,20 @@ mod tests {
     use super::*;
     use crate::v12::pipeline::Graph;
 
+    fn seeded_kb() -> KnowledgeBase {
+        crate::v12::knowledge_base::create_indonesian_seeded()
+    }
+
     #[test]
     fn test_bootstrap_idempotent() {
         let mut graph = Graph::new();
-        bootstrap_morphology(&mut graph);
+        let kb = seeded_kb();
+        bootstrap_morphology(&mut graph, &kb);
         let node_count = graph.node_count();
         let comp_count = graph.composition_count();
 
         // Bootstrap again — should not add duplicates
-        bootstrap_morphology(&mut graph);
+        bootstrap_morphology(&mut graph, &kb);
         assert_eq!(graph.node_count(), node_count);
         // Composition count may increase slightly due to create_assimilation_composition
         // but nodes should be idempotent
@@ -759,7 +746,8 @@ mod tests {
     #[test]
     fn test_bootstrap_creates_archimorphemes() {
         let mut graph = Graph::new();
-        bootstrap_morphology(&mut graph);
+        let kb = seeded_kb();
+        bootstrap_morphology(&mut graph, &kb);
 
         let men_id = graph.find_node_by_label("meN");
         let pen_id = graph.find_node_by_label("peN");
@@ -776,43 +764,50 @@ mod tests {
     #[test]
     fn test_bootstrap_creates_allomorphs() {
         let mut graph = Graph::new();
-        bootstrap_morphology(&mut graph);
+        let kb = seeded_kb();
+        bootstrap_morphology(&mut graph, &kb);
 
-        // Check all meN allomorphs exist
-        for &(allo, _, _) in ME_N_ALLOMORPHS {
-            assert!(graph.find_node_by_label(allo).is_some(),
-                "allomorph '{}' should exist", allo);
+        // Check all meN allomorphs exist (read from KB)
+        for rule in kb.morphology_rules_of(&MorphologyRuleType::Allomorph) {
+            if rule.archimorpheme.as_deref() == Some("meN") {
+                assert!(graph.find_node_by_label(&rule.value).is_some(),
+                    "allomorph '{}' should exist", rule.value);
+            }
         }
     }
 
     #[test]
     fn test_bootstrap_creates_prefixes() {
         let mut graph = Graph::new();
-        bootstrap_morphology(&mut graph);
+        let kb = seeded_kb();
+        bootstrap_morphology(&mut graph, &kb);
 
-        for prefix in SIMPLE_PREFIXES {
-            assert!(graph.find_node_by_label(prefix).is_some(),
-                "prefix '{}' should exist", prefix);
+        for rule in kb.morphology_rules_of(&MorphologyRuleType::SimplePrefix) {
+            assert!(graph.find_node_by_label(&rule.value).is_some(),
+                "prefix '{}' should exist", rule.value);
         }
     }
 
     #[test]
     fn test_bootstrap_creates_suffixes() {
         let mut graph = Graph::new();
-        bootstrap_morphology(&mut graph);
+        let kb = seeded_kb();
+        bootstrap_morphology(&mut graph, &kb);
 
-        for suffix in SUFFIXES {
-            assert!(graph.find_node_by_label(suffix).is_some(),
-                "suffix '{}' should exist", suffix);
+        for rule in kb.morphology_rules_of(&MorphologyRuleType::Suffix) {
+            assert!(graph.find_node_by_label(&rule.value).is_some(),
+                "suffix '{}' should exist", rule.value);
         }
     }
 
     #[test]
     fn test_bootstrap_root_exceptions_stable() {
         let mut graph = Graph::new();
-        bootstrap_morphology(&mut graph);
+        let kb = seeded_kb();
+        bootstrap_morphology(&mut graph, &kb);
 
-        for root in &ROOT_EXCEPTIONS[..5] { // Check first 5
+        // Check first 5 root exceptions from KB
+        for root in kb.root_exceptions().iter().take(5) {
             let id = graph.find_node_by_label(root).unwrap();
             let node = graph.get_node(id).unwrap();
             assert_eq!(node.lifecycle, LifecycleState::Stable,
@@ -823,7 +818,8 @@ mod tests {
     #[test]
     fn test_is_known_root() {
         let mut graph = Graph::new();
-        bootstrap_morphology(&mut graph);
+        let kb = seeded_kb();
+        bootstrap_morphology(&mut graph, &kb);
 
         assert!(is_known_root(&graph, "raja"));
         assert!(is_known_root(&graph, "makan"));
@@ -833,7 +829,8 @@ mod tests {
     #[test]
     fn test_get_allomorphs() {
         let mut graph = Graph::new();
-        bootstrap_morphology(&mut graph);
+        let kb = seeded_kb();
+        bootstrap_morphology(&mut graph, &kb);
 
         let allomorphs = get_allomorphs(&graph, "meN");
         assert!(allomorphs.contains(&"me".to_string()));
@@ -846,7 +843,8 @@ mod tests {
     #[test]
     fn test_create_morphology_composition() {
         let mut graph = Graph::new();
-        bootstrap_morphology(&mut graph);
+        let kb = seeded_kb();
+        bootstrap_morphology(&mut graph, &kb);
 
         let decomp = MorphologicalDecomposition {
             surface_form: "membuat".to_string(),
@@ -882,7 +880,8 @@ mod tests {
     #[test]
     fn test_explain_morphology() {
         let mut graph = Graph::new();
-        bootstrap_morphology(&mut graph);
+        let kb = seeded_kb();
+        bootstrap_morphology(&mut graph, &kb);
 
         // First create a morphology composition
         let decomp = MorphologicalDecomposition {
@@ -925,7 +924,8 @@ mod tests {
     #[test]
     fn test_apply_stemming_correction() {
         let mut graph = Graph::new();
-        bootstrap_morphology(&mut graph);
+        let kb = seeded_kb();
+        bootstrap_morphology(&mut graph, &kb);
 
         // Create initial composition
         let original = MorphologicalDecomposition {

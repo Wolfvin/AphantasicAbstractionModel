@@ -40,6 +40,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+use super::knowledge_base::{KnowledgeBase, MarkerCategory};
 use super::pipeline::{ErasedTransform, Graph, IngestResult};
 use super::types::*;
 use crate::types::{EdgeSource, NodeId};
@@ -47,59 +48,8 @@ use crate::types::{EdgeSource, NodeId};
 // ========================================================================
 // Named Constants — Audit v6 fix
 // ========================================================================
-
-/// Base confidence for a newly extracted frame before role bonuses.
-const BASE_EXTRACTION_CONFIDENCE: f32 = 0.30;
-
-// ========================================================================
-// Negation Markers — Malay/Indonesian
-// ========================================================================
-
-/// Known negation markers for polarity detection.
-///
-/// These are Malay/Indonesian negation words that flip the polarity
-/// of an event from Positive to Negative.
-///
-/// **i18n**: Currently Indonesian-only. A multilingual NLP layer would
-/// need locale-aware marker sets. See I18N_ROADMAP.md.
-const NEGATION_MARKERS: &[&str] = &[
-    "tidak",  // not (general negation)
-    "bukan",  // not (identity negation)
-    "belum",  // not yet
-    "jangan", // don't (prohibitive)
-    "tak",    // not (short form)
-    "nggak",  // not (colloquial)
-    "enggak", // not (colloquial variant)
-    "ga",     // not (very colloquial)
-    "gak",    // not (very colloquial variant)
-];
-
-/// Known causal/purpose markers for role extraction.
-///
-/// These markers signal Cause or Purpose roles in Malay/Indonesian:
-/// - "karena" → Cause (because)
-/// - "sebab" → Cause (because, more formal)
-/// - "untuk" → Purpose (for/in order to)
-/// - "supaya" → Purpose (so that)
-/// - "agar" → Purpose (so that, more formal)
-const CAUSE_MARKERS: &[&str] = &["karena", "sebab"];
-const PURPOSE_MARKERS: &[&str] = &["untuk", "supaya", "agar"];
-
-/// Conditional markers in Indonesian — trigger ConditionConsequence extraction.
-///
-/// When one of these markers appears, the text before it is the Antecedent
-/// (condition) and the text after it is the Consequent (consequence).
-///
-/// - "jika" → if
-/// - "apabila" → if/when (formal)
-/// - "kalau" → if (informal)
-/// - "bila" → if/when
-/// - "jikalau" → if (archaic/formal)
-/// - "bilamana" → whenever (formal)
-const CONDITION_MARKERS: &[&str] = &["jika", "apabila", "kalau", "bila", "jikalau", "bilamana"];
-
-/// Known verb prefixes in Malay/Indonesian for predicate detection.
-const VERB_PREFIXES: &[&str] = &["me", "ber", "di", "ter", "memper", "diper"];
+// NOTE: BASE_EXTRACTION_CONFIDENCE and all marker/prefix const arrays have
+// been migrated to KnowledgeBase. Use kb.param() and kb.is_marker() instead.
 
 // ========================================================================
 // ExtractionQuality — Quality Tracking
@@ -240,7 +190,7 @@ impl ExtractFrame {
         }
     }
 
-    /// Heuristic: is the input text sentence-like?
+    /// Heuristic: is the input text sentence-like? (KB-based)
     ///
     /// A text is sentence-like if:
     /// - It has >= 3 whitespace-separated tokens
@@ -249,7 +199,7 @@ impl ExtractFrame {
     ///
     /// This is a more thorough check than `PipelineContext::is_sentence_like()`,
     /// which only checks for whitespace and minimum length.
-    pub fn is_sentence_like(text: &str) -> bool {
+    pub fn is_sentence_like_with_kb(text: &str, kb: &KnowledgeBase) -> bool {
         let tokens: Vec<&str> = text.split_whitespace().collect();
 
         // Must have at least 3 tokens.
@@ -264,12 +214,19 @@ impl ExtractFrame {
         }
 
         // Must have at least one verb-like token.
-        let has_verb = tokens.iter().any(|t| is_verb_like(t));
+        let has_verb = tokens.iter().any(|t| is_verb_like_with_kb(t, kb));
         if !has_verb {
             return false;
         }
 
         true
+    }
+
+    /// Backward-compatible wrapper using bootstrapped KB.
+    #[deprecated(note = "Use is_sentence_like_with_kb instead")]
+    pub fn is_sentence_like(text: &str) -> bool {
+        let kb = crate::v12::knowledge_base::create_indonesian_seeded();
+        Self::is_sentence_like_with_kb(text, &kb)
     }
 
     /// Detect voice from the tokens.
@@ -288,14 +245,10 @@ impl ExtractFrame {
         }
     }
 
-    /// Detect polarity from the tokens.
-    ///
-    /// Returns `Some(Polarity::Negative)` if any token is a negation marker,
-    /// otherwise `Some(Polarity::Positive)`.
-    pub fn detect_polarity(tokens: &[&str]) -> Polarity {
+    /// Detect polarity from the tokens using KnowledgeBase.
+    pub fn detect_polarity_with_kb(tokens: &[&str], kb: &KnowledgeBase) -> Polarity {
         let has_negation = tokens.iter().any(|t| {
-            let lower = t.to_lowercase();
-            NEGATION_MARKERS.contains(&lower.as_str())
+            kb.is_marker(&MarkerCategory::Negation, t)
         });
 
         if has_negation {
@@ -305,12 +258,15 @@ impl ExtractFrame {
         }
     }
 
-    /// Extract the predicate (verb-like token) from the tokens.
-    ///
-    /// Strategy: find the first verb-like token. In passive voice,
-    /// the "di-" prefixed token is the predicate. In active voice,
-    /// the "me-" prefixed token is preferred.
-    pub fn extract_predicate<'a>(tokens: &'a [&str], voice: &Voice) -> Option<&'a str> {
+    /// Backward-compatible wrapper using bootstrapped KB.
+    #[deprecated(note = "Use detect_polarity_with_kb instead")]
+    pub fn detect_polarity(tokens: &[&str]) -> Polarity {
+        let kb = crate::v12::knowledge_base::create_indonesian_seeded();
+        Self::detect_polarity_with_kb(tokens, &kb)
+    }
+
+    /// Extract the predicate (verb-like token) from the tokens using KnowledgeBase.
+    pub fn extract_predicate_with_kb<'a>(tokens: &'a [&str], voice: &Voice, kb: &KnowledgeBase) -> Option<&'a str> {
         match voice {
             Voice::Passive => {
                 // In passive, prefer "di-" prefixed token.
@@ -332,24 +288,24 @@ impl ExtractFrame {
                     return Some(v);
                 }
                 // Fall back to any verb-like token.
-                tokens.iter().find(|t| is_verb_like(t)).copied()
+                tokens.iter().find(|t| is_verb_like_with_kb(t, kb)).copied()
             }
         }
     }
 
-    /// Extract semantic roles from the tokens.
-    ///
-    /// Uses positional heuristics and marker detection:
-    /// - **Agent**: In active voice, the token before the predicate.
-    ///   In passive voice, the token after "oleh" (by).
-    /// - **Patient**: In active voice, the token after the predicate.
-    ///   In passive voice, the first non-predicate token before "oleh".
-    /// - **Cause**: The token(s) after a cause marker ("karena", "sebab").
-    /// - **Purpose**: The token(s) after a purpose marker ("untuk", "supaya", "agar").
-    pub fn extract_roles(
+    /// Backward-compatible wrapper using bootstrapped KB.
+    #[deprecated(note = "Use extract_predicate_with_kb instead")]
+    pub fn extract_predicate<'a>(tokens: &'a [&str], voice: &Voice) -> Option<&'a str> {
+        let kb = crate::v12::knowledge_base::create_indonesian_seeded();
+        Self::extract_predicate_with_kb(tokens, voice, &kb)
+    }
+
+    /// Extract semantic roles from the tokens using KnowledgeBase.
+    pub fn extract_roles_with_kb(
         tokens: &[&str],
         predicate: &str,
         voice: &Voice,
+        kb: &KnowledgeBase,
     ) -> HashMap<SemanticRole, String> {
         let mut roles = HashMap::new();
         let pred_idx = tokens.iter().position(|t| *t == predicate);
@@ -360,7 +316,7 @@ impl ExtractFrame {
                     // Agent: token before predicate (if exists and not a marker).
                     if idx > 0 {
                         let agent_candidate = tokens[idx - 1];
-                        if !is_marker(agent_candidate) {
+                        if !is_marker_with_kb(agent_candidate, kb) {
                             roles.insert(SemanticRole::Arg0Agent, agent_candidate.to_lowercase());
                         }
                     }
@@ -368,9 +324,9 @@ impl ExtractFrame {
                     // Patient: token after predicate (if exists and not a marker).
                     if idx + 1 < tokens.len() {
                         let patient_candidate = tokens[idx + 1];
-                        if !is_marker(patient_candidate)
-                            && !is_cause_marker(patient_candidate)
-                            && !is_purpose_marker(patient_candidate)
+                        if !is_marker_with_kb(patient_candidate, kb)
+                            && !is_cause_marker_with_kb(patient_candidate, kb)
+                            && !is_purpose_marker_with_kb(patient_candidate, kb)
                         {
                             roles.insert(
                                 SemanticRole::Arg1Patient,
@@ -384,7 +340,7 @@ impl ExtractFrame {
                     // Find the first non-negation token before the predicate.
                     for i in (0..idx).rev() {
                         let candidate = tokens[i];
-                        if !is_negation_marker(candidate) && !is_verb_like(candidate) {
+                        if !is_negation_marker_with_kb(candidate, kb) && !is_verb_like_with_kb(candidate, kb) {
                             roles.insert(SemanticRole::Arg1Patient, candidate.to_lowercase());
                             break;
                         }
@@ -404,7 +360,7 @@ impl ExtractFrame {
 
             // Cause: token(s) after cause markers.
             for (i, token) in tokens.iter().enumerate() {
-                if is_cause_marker(token) && i + 1 < tokens.len() {
+                if is_cause_marker_with_kb(token, kb) && i + 1 < tokens.len() {
                     // Collect remaining tokens after the marker as the cause.
                     let cause_tokens: Vec<&str> = tokens[i + 1..].to_vec();
                     if !cause_tokens.is_empty() {
@@ -416,7 +372,7 @@ impl ExtractFrame {
 
             // Purpose: token(s) after purpose markers.
             for (i, token) in tokens.iter().enumerate() {
-                if is_purpose_marker(token) && i + 1 < tokens.len() {
+                if is_purpose_marker_with_kb(token, kb) && i + 1 < tokens.len() {
                     let purpose_tokens: Vec<&str> = tokens[i + 1..].to_vec();
                     if !purpose_tokens.is_empty() {
                         roles.insert(
@@ -431,7 +387,7 @@ impl ExtractFrame {
             // Condition/Consequence: detect conditional patterns.
             // When a condition marker is found, split into Antecedent/Consequent.
             for (i, token) in tokens.iter().enumerate() {
-                if is_condition_marker(token) {
+                if is_condition_marker_with_kb(token, kb) {
                     // Antecedent: tokens before the condition marker.
                     if i > 0 {
                         let ante_tokens: Vec<&str> = tokens[..i].to_vec();
@@ -460,37 +416,41 @@ impl ExtractFrame {
         roles
     }
 
-    /// Compute frame confidence based on role coverage.
+    /// Backward-compatible wrapper using bootstrapped KB.
+    #[deprecated(note = "Use extract_roles_with_kb instead")]
+    pub fn extract_roles(
+        tokens: &[&str],
+        predicate: &str,
+        voice: &Voice,
+    ) -> HashMap<SemanticRole, String> {
+        let kb = crate::v12::knowledge_base::create_indonesian_seeded();
+        Self::extract_roles_with_kb(tokens, predicate, voice, &kb)
+    }
+
+    /// Compute frame confidence based on role coverage using KnowledgeBase.
     ///
-    /// ```text
-    /// base = 0.30
-    /// + 0.15 if Agent present
-    /// + 0.15 if Patient present
-    /// + 0.10 if Cause present
-    /// + 0.10 if Purpose present
-    /// + 0.10 if Antecedent present (conditional pattern)
-    /// + 0.10 if Consequent present (conditional pattern)
-    /// - 0.05 if Negative polarity
-    /// ```
+    /// All bonuses and penalties are read from the KnowledgeBase's adaptive
+    /// parameters, enabling self-calibration over time.
     ///
     /// The result is clamped to [0.0, 1.0].
-    pub fn compute_frame_confidence(
+    pub fn compute_frame_confidence_with_kb(
         roles: &HashMap<SemanticRole, String>,
         polarity: &Polarity,
+        kb: &KnowledgeBase,
     ) -> f32 {
-        let mut confidence = BASE_EXTRACTION_CONFIDENCE;
+        let mut confidence = kb.param("extract.base_confidence", 0.30);
 
         if roles.contains_key(&SemanticRole::Arg0Agent) {
-            confidence += 0.15;
+            confidence += kb.param("extract.agent_bonus", 0.15);
         }
         if roles.contains_key(&SemanticRole::Arg1Patient) {
-            confidence += 0.15;
+            confidence += kb.param("extract.patient_bonus", 0.15);
         }
         if roles.contains_key(&SemanticRole::Cause) {
-            confidence += 0.10;
+            confidence += kb.param("extract.cause_bonus", 0.10);
         }
         if roles.contains_key(&SemanticRole::Purpose) {
-            confidence += 0.10;
+            confidence += kb.param("extract.purpose_bonus", 0.10);
         }
         if roles.contains_key(&SemanticRole::Antecedent) {
             confidence += 0.10;
@@ -499,10 +459,20 @@ impl ExtractFrame {
             confidence += 0.10;
         }
         if *polarity == Polarity::Negative {
-            confidence -= 0.05;
+            confidence -= kb.param("extract.negation_penalty", 0.05);
         }
 
         confidence.clamp(0.0, 1.0)
+    }
+
+    /// Backward-compatible wrapper using bootstrapped KB.
+    #[deprecated(note = "Use compute_frame_confidence_with_kb instead")]
+    pub fn compute_frame_confidence(
+        roles: &HashMap<SemanticRole, String>,
+        polarity: &Polarity,
+    ) -> f32 {
+        let kb = crate::v12::knowledge_base::create_indonesian_seeded();
+        Self::compute_frame_confidence_with_kb(roles, polarity, &kb)
     }
 
     /// Classify extraction quality based on roles and confidence.
@@ -527,7 +497,7 @@ impl ExtractFrame {
         }
     }
 
-    /// Extract a semantic frame using Action Schemas when available.
+    /// Extract a semantic frame using Action Schemas when available (KB-based).
     ///
     /// This method checks Action Schemas (Phase 1) before falling back to
     /// generic Event extraction. When a schema's trigger matches, the
@@ -540,12 +510,13 @@ impl ExtractFrame {
     /// 2. Try schemas in priority order (highest first)
     /// 3. If a schema matches, create atom with schema's composition type + roles
     /// 4. If no schema matches, fall back to generic Event extraction
-    pub fn extract_with_schemas(
+    pub fn extract_with_schemas_and_kb(
         &self,
         text: &str,
         schemas: &[super::action_schemas::ActionSchema],
+        kb: &KnowledgeBase,
     ) -> Option<SemanticAtom> {
-        if !Self::is_sentence_like(text) {
+        if !Self::is_sentence_like_with_kb(text, kb) {
             return None;
         }
 
@@ -556,14 +527,14 @@ impl ExtractFrame {
         sorted_schemas.sort_by(|a, b| b.priority.cmp(&a.priority));
 
         for schema in sorted_schemas {
-            if let Some(trigger_idx) = schema.matches_tokens(&tokens) {
-                let roles = schema.resolve_roles(&tokens, trigger_idx);
+            if let Some(trigger_idx) = schema.matches_tokens_with_knowledge(&tokens, kb) {
+                let roles = schema.resolve_roles_with_knowledge(&tokens, trigger_idx, kb);
                 if !roles.is_empty() {
                     let trigger_token = tokens[trigger_idx];
 
-                    // Compute confidence based on role coverage.
-                    let mut confidence = 0.35; // Base for schema-driven extraction
-                    confidence += 0.15 * roles.len() as f32; // Bonus per resolved role
+                    // Compute confidence based on role coverage using KB params.
+                    let mut confidence = kb.param("extract.schema_base_confidence", 0.35);
+                    confidence += kb.param("extract.schema_role_bonus", 0.15) * roles.len() as f32;
                     confidence = confidence.clamp(0.0, 1.0);
 
                     let roles_map: HashMap<SemanticRole, String> = roles.into_iter().collect();
@@ -608,25 +579,36 @@ impl ExtractFrame {
         }
 
         // No schema matched — fall back to generic Event extraction.
-        self.extract(text)
+        self.extract_with_kb(text, kb)
     }
 
-    /// Extract a semantic frame from raw text.
+    /// Backward-compatible wrapper using bootstrapped KB.
+    #[deprecated(note = "Use extract_with_schemas_and_kb instead")]
+    pub fn extract_with_schemas(
+        &self,
+        text: &str,
+        schemas: &[super::action_schemas::ActionSchema],
+    ) -> Option<SemanticAtom> {
+        let kb = crate::v12::knowledge_base::create_indonesian_seeded();
+        self.extract_with_schemas_and_kb(text, schemas, &kb)
+    }
+
+    /// Extract a semantic frame from raw text using KnowledgeBase.
     ///
     /// This is the core extraction method. Returns `Some(SemanticAtom)` if
     /// the input is sentence-like and a predicate can be found, `None` otherwise.
-    pub fn extract(&self, text: &str) -> Option<SemanticAtom> {
-        if !Self::is_sentence_like(text) {
+    pub fn extract_with_kb(&self, text: &str, kb: &KnowledgeBase) -> Option<SemanticAtom> {
+        if !Self::is_sentence_like_with_kb(text, kb) {
             return None;
         }
 
         let tokens: Vec<&str> = text.split_whitespace().collect();
         let voice = Self::detect_voice(&tokens);
-        let polarity = Self::detect_polarity(&tokens);
+        let polarity = Self::detect_polarity_with_kb(&tokens, kb);
 
-        let predicate = Self::extract_predicate(&tokens, &voice)?;
-        let roles = Self::extract_roles(&tokens, predicate, &voice);
-        let confidence = Self::compute_frame_confidence(&roles, &polarity);
+        let predicate = Self::extract_predicate_with_kb(&tokens, &voice, kb)?;
+        let roles = Self::extract_roles_with_kb(&tokens, predicate, &voice, kb);
+        let confidence = Self::compute_frame_confidence_with_kb(&roles, &polarity, kb);
 
         Some(SemanticAtom {
             id: String::new(), // Will be assigned by PipelineContext
@@ -642,7 +624,14 @@ impl ExtractFrame {
         })
     }
 
-    /// Graph-assisted re-extraction with context hints.
+    /// Backward-compatible wrapper using bootstrapped KB.
+    #[deprecated(note = "Use extract_with_kb instead")]
+    pub fn extract(&self, text: &str) -> Option<SemanticAtom> {
+        let kb = crate::v12::knowledge_base::create_indonesian_seeded();
+        self.extract_with_kb(text, &kb)
+    }
+
+    /// Graph-assisted re-extraction with context hints (KB-based).
     ///
     /// When the feedback loop identifies a weak frame, it can request
     /// re-extraction with graph context (known role fillers from related
@@ -651,13 +640,14 @@ impl ExtractFrame {
     ///
     /// The `FrameSource` is set to `GraphAssisted` to mark that this
     /// extraction used graph context.
-    pub fn re_extract_with_context(
+    pub fn re_extract_with_context_and_kb(
         &self,
         text: &str,
         graph_context: &[(SemanticRole, NodeId, f32)],
         graph: &Graph,
+        kb: &KnowledgeBase,
     ) -> Option<SemanticAtom> {
-        let mut atom = self.extract(text)?;
+        let mut atom = self.extract_with_kb(text, kb)?;
 
         // Merge graph context: add roles that are missing from extraction
         // but present in graph context with sufficient confidence.
@@ -671,12 +661,24 @@ impl ExtractFrame {
 
         // Recompute confidence with merged roles.
         let polarity = atom.polarity.as_ref().unwrap_or(&Polarity::Positive);
-        atom.confidence = Self::compute_frame_confidence(&atom.roles, polarity);
+        atom.confidence = Self::compute_frame_confidence_with_kb(&atom.roles, polarity, kb);
 
         // Mark as graph-assisted.
         atom.variant = Some(AtomVariant::FrameVariant(FrameSource::GraphAssisted));
 
         Some(atom)
+    }
+
+    /// Backward-compatible wrapper using bootstrapped KB.
+    #[deprecated(note = "Use re_extract_with_context_and_kb instead")]
+    pub fn re_extract_with_context(
+        &self,
+        text: &str,
+        graph_context: &[(SemanticRole, NodeId, f32)],
+        graph: &Graph,
+    ) -> Option<SemanticAtom> {
+        let kb = crate::v12::knowledge_base::create_indonesian_seeded();
+        self.re_extract_with_context_and_kb(text, graph_context, graph, &kb)
     }
 }
 
@@ -689,8 +691,8 @@ impl Transform for ExtractFrame {
         "ExtractFrame"
     }
 
-    fn transform(&self, input: &Self::Input, _ctx: &mut PipelineContext) -> Self::Output {
-        self.extract(input)
+    fn transform(&self, input: &Self::Input, ctx: &mut PipelineContext) -> Self::Output {
+        self.extract_with_kb(input, &ctx.knowledge_base)
     }
 }
 
@@ -709,7 +711,7 @@ impl ErasedTransform for ExtractFrame {
         let mut atoms_created = 0;
 
         // Check if the input is sentence-like before attempting extraction.
-        if !Self::is_sentence_like(&text) {
+        if !Self::is_sentence_like_with_kb(&text, &ctx.knowledge_base) {
             // Update quality tracker.
             ctx.extraction_quality.low_confidence_frames += 1;
             // Audit v5 fix (D14): Also update the per-quality-level tracker.
@@ -719,9 +721,9 @@ impl ErasedTransform for ExtractFrame {
 
         // Try schema-driven extraction first, then fall back to generic.
         let atom_result = if !ctx.active_schemas.is_empty() {
-            self.extract_with_schemas(&text, &ctx.active_schemas)
+            self.extract_with_schemas_and_kb(&text, &ctx.active_schemas, &ctx.knowledge_base)
         } else {
-            self.extract(&text)
+            self.extract_with_kb(&text, &ctx.knowledge_base)
         };
 
         if let Some(mut atom) = atom_result {
@@ -755,63 +757,101 @@ impl ErasedTransform for ExtractFrame {
 }
 
 // ========================================================================
-// Helper Functions
+// Helper Functions — KnowledgeBase-based
 // ========================================================================
 
-/// Is a token verb-like?
+/// Is a token verb-like? (KB-based)
 ///
 /// A token is verb-like if it:
-/// - Starts with a known Malay/Indonesian verb prefix (me-, ber-, di-, ter-), OR
-/// - Is a known common verb, OR
-/// - Is at least 4 characters and looks like a derived verb
-fn is_verb_like(token: &str) -> bool {
+/// - Starts with a known verb prefix (from KnowledgeBase), OR
+/// - Is a known common verb (from KnowledgeBase CommonVerb markers)
+fn is_verb_like_with_kb(token: &str, kb: &KnowledgeBase) -> bool {
     let lower = token.to_lowercase();
 
-    // Check verb prefixes.
-    for prefix in VERB_PREFIXES {
-        if lower.starts_with(prefix) && lower.len() > prefix.len() + 1 {
-            return true;
-        }
+    // Check verb prefixes from KB.
+    if kb.is_verb_prefix_match(&lower) {
+        return true;
     }
 
-    // Check common verb list (very short for Phase 1).
-    const COMMON_VERBS: &[&str] = &[
-        "ada", "ialah", "adalah", "punya", "mahu", "hendak", "boleh", "perlu", "harus",
-        "mesti",
-    ];
-    if COMMON_VERBS.contains(&lower.as_str()) {
+    // Check common verb list from KB.
+    if kb.is_marker(&MarkerCategory::CommonVerb, &lower) {
         return true;
     }
 
     false
 }
 
-/// Is a token a marker (negation, cause, purpose, condition)?
+/// Backward-compatible wrapper using bootstrapped KB.
+#[deprecated(note = "Use is_verb_like_with_kb instead")]
+#[allow(dead_code)]
+fn is_verb_like(token: &str) -> bool {
+    let kb = crate::v12::knowledge_base::create_indonesian_seeded();
+    is_verb_like_with_kb(token, &kb)
+}
+
+/// Is a token a marker (negation, cause, purpose, condition)? (KB-based)
+fn is_marker_with_kb(token: &str, kb: &KnowledgeBase) -> bool {
+    kb.is_any_role_marker(token)
+}
+
+/// Backward-compatible wrapper using bootstrapped KB.
+#[deprecated(note = "Use is_marker_with_kb instead")]
+#[allow(dead_code)]
 fn is_marker(token: &str) -> bool {
-    is_negation_marker(token)
-        || is_cause_marker(token)
-        || is_purpose_marker(token)
-        || is_condition_marker(token)
+    let kb = crate::v12::knowledge_base::create_indonesian_seeded();
+    is_marker_with_kb(token, &kb)
 }
 
-/// Is a token a negation marker?
+/// Is a token a negation marker? (KB-based)
+fn is_negation_marker_with_kb(token: &str, kb: &KnowledgeBase) -> bool {
+    kb.is_marker(&MarkerCategory::Negation, token)
+}
+
+/// Backward-compatible wrapper using bootstrapped KB.
+#[deprecated(note = "Use is_negation_marker_with_kb instead")]
+#[allow(dead_code)]
 fn is_negation_marker(token: &str) -> bool {
-    NEGATION_MARKERS.contains(&token.to_lowercase().as_str())
+    let kb = crate::v12::knowledge_base::create_indonesian_seeded();
+    is_negation_marker_with_kb(token, &kb)
 }
 
-/// Is a token a cause marker?
+/// Is a token a cause marker? (KB-based)
+fn is_cause_marker_with_kb(token: &str, kb: &KnowledgeBase) -> bool {
+    kb.is_marker(&MarkerCategory::Cause, token)
+}
+
+/// Backward-compatible wrapper using bootstrapped KB.
+#[deprecated(note = "Use is_cause_marker_with_kb instead")]
+#[allow(dead_code)]
 fn is_cause_marker(token: &str) -> bool {
-    CAUSE_MARKERS.contains(&token.to_lowercase().as_str())
+    let kb = crate::v12::knowledge_base::create_indonesian_seeded();
+    is_cause_marker_with_kb(token, &kb)
 }
 
-/// Is a token a purpose marker?
+/// Is a token a purpose marker? (KB-based)
+fn is_purpose_marker_with_kb(token: &str, kb: &KnowledgeBase) -> bool {
+    kb.is_marker(&MarkerCategory::Purpose, token)
+}
+
+/// Backward-compatible wrapper using bootstrapped KB.
+#[deprecated(note = "Use is_purpose_marker_with_kb instead")]
+#[allow(dead_code)]
 fn is_purpose_marker(token: &str) -> bool {
-    PURPOSE_MARKERS.contains(&token.to_lowercase().as_str())
+    let kb = crate::v12::knowledge_base::create_indonesian_seeded();
+    is_purpose_marker_with_kb(token, &kb)
 }
 
-/// Is a token a conditional marker (jika, apabila, kalau, etc.)?
+/// Is a token a conditional marker? (KB-based)
+fn is_condition_marker_with_kb(token: &str, kb: &KnowledgeBase) -> bool {
+    kb.is_marker(&MarkerCategory::Condition, token)
+}
+
+/// Backward-compatible wrapper using bootstrapped KB.
+#[deprecated(note = "Use is_condition_marker_with_kb instead")]
+#[allow(dead_code)]
 fn is_condition_marker(token: &str) -> bool {
-    CONDITION_MARKERS.contains(&token.to_lowercase().as_str())
+    let kb = crate::v12::knowledge_base::create_indonesian_seeded();
+    is_condition_marker_with_kb(token, &kb)
 }
 
 // ========================================================================
@@ -822,21 +862,28 @@ fn is_condition_marker(token: &str) -> bool {
 mod tests {
     use super::*;
 
+    fn make_kb() -> KnowledgeBase {
+        crate::v12::knowledge_base::create_indonesian_seeded()
+    }
+
     #[test]
     fn test_is_sentence_like() {
+        let kb = make_kb();
+
         // Too short.
-        assert!(!ExtractFrame::is_sentence_like("hello"));
-        assert!(!ExtractFrame::is_sentence_like("dua kata"));
+        assert!(!ExtractFrame::is_sentence_like_with_kb("hello", &kb));
+        assert!(!ExtractFrame::is_sentence_like_with_kb("dua kata", &kb));
 
         // Repetitive.
-        assert!(!ExtractFrame::is_sentence_like("satu satu satu"));
+        assert!(!ExtractFrame::is_sentence_like_with_kb("satu satu satu", &kb));
 
         // No verb.
-        assert!(!ExtractFrame::is_sentence_like("kucing besar hitam"));
+        assert!(!ExtractFrame::is_sentence_like_with_kb("kucing besar hitam", &kb));
 
         // Valid sentence with verb.
-        assert!(ExtractFrame::is_sentence_like(
-            "Raymond membuat aplikasi karena lambat"
+        assert!(ExtractFrame::is_sentence_like_with_kb(
+            "Raymond membuat aplikasi karena lambat",
+            &kb
         ));
     }
 
@@ -854,49 +901,54 @@ mod tests {
 
     #[test]
     fn test_detect_polarity_positive() {
+        let kb = make_kb();
         let tokens: Vec<&str> = "Raymond membuat aplikasi".split_whitespace().collect();
-        assert_eq!(ExtractFrame::detect_polarity(&tokens), Polarity::Positive);
+        assert_eq!(ExtractFrame::detect_polarity_with_kb(&tokens, &kb), Polarity::Positive);
     }
 
     #[test]
     fn test_detect_polarity_negative() {
+        let kb = make_kb();
         let tokens: Vec<&str> = "Raymond tidak membuat aplikasi"
             .split_whitespace()
             .collect();
-        assert_eq!(ExtractFrame::detect_polarity(&tokens), Polarity::Negative);
+        assert_eq!(ExtractFrame::detect_polarity_with_kb(&tokens, &kb), Polarity::Negative);
     }
 
     #[test]
     fn test_extract_predicate() {
+        let kb = make_kb();
         let tokens: Vec<&str> = "Raymond membuat aplikasi".split_whitespace().collect();
-        let pred = ExtractFrame::extract_predicate(&tokens, &Voice::Active);
+        let pred = ExtractFrame::extract_predicate_with_kb(&tokens, &Voice::Active, &kb);
         assert_eq!(pred, Some("membuat"));
     }
 
     #[test]
     fn test_compute_frame_confidence() {
+        let kb = make_kb();
         let mut roles = HashMap::new();
         roles.insert(SemanticRole::Arg0Agent, "raymond".to_string());
         roles.insert(SemanticRole::Arg1Patient, "aplikasi".to_string());
 
-        let confidence = ExtractFrame::compute_frame_confidence(&roles, &Polarity::Positive);
+        let confidence = ExtractFrame::compute_frame_confidence_with_kb(&roles, &Polarity::Positive, &kb);
         // 0.30 + 0.15 + 0.15 = 0.60
         assert!((confidence - 0.60).abs() < 0.01);
 
         // With Cause: 0.30 + 0.15 + 0.15 + 0.10 = 0.70
         roles.insert(SemanticRole::Cause, "lambat".to_string());
-        let confidence = ExtractFrame::compute_frame_confidence(&roles, &Polarity::Positive);
+        let confidence = ExtractFrame::compute_frame_confidence_with_kb(&roles, &Polarity::Positive, &kb);
         assert!((confidence - 0.70).abs() < 0.01);
 
         // Negative: 0.70 - 0.05 = 0.65
-        let confidence = ExtractFrame::compute_frame_confidence(&roles, &Polarity::Negative);
+        let confidence = ExtractFrame::compute_frame_confidence_with_kb(&roles, &Polarity::Negative, &kb);
         assert!((confidence - 0.65).abs() < 0.01);
     }
 
     #[test]
     fn test_full_extraction() {
         let ef = ExtractFrame::new();
-        let result = ef.extract("Raymond membuat aplikasi karena lambat");
+        let kb = make_kb();
+        let result = ef.extract_with_kb("Raymond membuat aplikasi karena lambat", &kb);
 
         assert!(result.is_some());
         let atom = result.unwrap();
@@ -934,7 +986,8 @@ mod tests {
     fn test_extract_with_schemas_copula() {
         let ef = ExtractFrame::new();
         let schemas = super::super::action_schemas::bootstrap_schemas();
-        let result = ef.extract_with_schemas("ini adalah makanan", &schemas);
+        let kb = make_kb();
+        let result = ef.extract_with_schemas_and_kb("ini adalah makanan", &schemas, &kb);
 
         assert!(result.is_some());
         let atom = result.unwrap();
@@ -953,7 +1006,8 @@ mod tests {
     fn test_extract_with_schemas_possessive() {
         let ef = ExtractFrame::new();
         let schemas = super::super::action_schemas::bootstrap_schemas();
-        let result = ef.extract_with_schemas("raja punya kerajaan", &schemas);
+        let kb = make_kb();
+        let result = ef.extract_with_schemas_and_kb("raja punya kerajaan", &schemas, &kb);
 
         assert!(result.is_some());
         let atom = result.unwrap();
@@ -971,8 +1025,9 @@ mod tests {
     fn test_extract_with_schemas_fallback() {
         let ef = ExtractFrame::new();
         let schemas = super::super::action_schemas::bootstrap_schemas();
+        let kb = make_kb();
         // No schema matches "Raymond membuat aplikasi karena lambat"
-        let result = ef.extract_with_schemas("Raymond membuat aplikasi karena lambat", &schemas);
+        let result = ef.extract_with_schemas_and_kb("Raymond membuat aplikasi karena lambat", &schemas, &kb);
 
         assert!(result.is_some());
         let atom = result.unwrap();
@@ -986,8 +1041,9 @@ mod tests {
     #[test]
     fn test_extract_with_schemas_empty() {
         let ef = ExtractFrame::new();
+        let kb = make_kb();
         // Empty schemas should fall back to generic extraction
-        let result = ef.extract_with_schemas("Raymond membuat aplikasi karena lambat", &[]);
+        let result = ef.extract_with_schemas_and_kb("Raymond membuat aplikasi karena lambat", &[], &kb);
         assert!(result.is_some());
         let atom = result.unwrap();
         assert_eq!(atom.source, EdgeSource::FrameCompiler);
