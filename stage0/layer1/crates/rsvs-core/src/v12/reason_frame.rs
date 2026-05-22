@@ -217,6 +217,58 @@ impl ReasoningResult {
 }
 
 // ========================================================================
+// Shared Confidence Modulation — Phase T: Activation-Aware Reasoning
+// ========================================================================
+
+/// Apply activation-aware confidence modulation to reasoning results.
+///
+/// This shared function is used by both `ReasonFrame::reason_with_graph()`
+/// and `ReReasonFrame::execute()` to ensure consistent confidence adjustment.
+///
+/// # Modulation Rules
+///
+/// 1. **Predicate connectivity boost**: If the predicate is well-connected
+///    in the graph (activation energy > 0.5), boost confidence by up to 15%.
+/// 2. **Ambiguity penalty**: If two interpretations are too close
+///    (ambiguity score > 0.3), reduce confidence proportionally.
+/// 3. **Predicate count boost**: More existing compositions with the same
+///    predicate increases confidence (up to 10% boost).
+/// 4. **Contradiction penalty**: If a contradiction exists for this predicate,
+///    reduce confidence by 15%.
+fn apply_confidence_modulation(
+    results: &mut [ReasoningResult],
+    graph_ref: &GraphContextRef,
+) {
+    for result in results.iter_mut() {
+        // Predicate connectivity boost.
+        if graph_ref.activation_energy_for_predicate > 0.5 {
+            let boost = graph_ref.activation_energy_for_predicate * 0.15;
+            result.derivation_confidence = (result.derivation_confidence + boost).min(1.0);
+            result.atom.confidence = result.derivation_confidence;
+        }
+
+        // Ambiguity penalty.
+        if graph_ref.ambiguity_score > 0.3 {
+            result.derivation_confidence *= 1.0 - graph_ref.ambiguity_score * 0.5;
+            result.atom.confidence = result.derivation_confidence;
+        }
+
+        // Predicate count boost.
+        if graph_ref.same_predicate_count > 0 {
+            let boost = (graph_ref.same_predicate_count as f32 * 0.02).min(0.10);
+            result.derivation_confidence = (result.derivation_confidence + boost).min(1.0);
+            result.atom.confidence = result.derivation_confidence;
+        }
+
+        // Contradiction penalty.
+        if graph_ref.has_contradiction {
+            result.derivation_confidence *= 0.85;
+            result.atom.confidence = result.derivation_confidence;
+        }
+    }
+}
+
+// ========================================================================
 // Rule 1: ProblemSolutionRule
 // ========================================================================
 
@@ -736,37 +788,7 @@ impl ReasonFrame {
         for rule in &self.rules {
             if rule.applies(&context) {
                 let mut rule_results = rule.generate(&context);
-
-                // Phase T: Activation-aware confidence modulation.
-
-                // If predicate is well-connected in the graph, boost confidence.
-                for result in &mut rule_results {
-                    if graph_ref.activation_energy_for_predicate > 0.5 {
-                        let boost = graph_ref.activation_energy_for_predicate * 0.15;
-                        result.derivation_confidence = (result.derivation_confidence + boost).min(1.0);
-                        result.atom.confidence = result.derivation_confidence;
-                    }
-
-                    // If two interpretations are too close, reduce confidence.
-                    if graph_ref.ambiguity_score > 0.3 {
-                        result.derivation_confidence *= 1.0 - graph_ref.ambiguity_score * 0.5;
-                        result.atom.confidence = result.derivation_confidence;
-                    }
-
-                    // Existing logic: predicate count boost.
-                    if graph_ref.same_predicate_count > 0 {
-                        let boost = (graph_ref.same_predicate_count as f32 * 0.02).min(0.10);
-                        result.derivation_confidence = (result.derivation_confidence + boost).min(1.0);
-                        result.atom.confidence = result.derivation_confidence;
-                    }
-
-                    // Existing logic: contradiction reduction.
-                    if graph_ref.has_contradiction {
-                        result.derivation_confidence *= 0.85;
-                        result.atom.confidence = result.derivation_confidence;
-                    }
-                }
-
+                apply_confidence_modulation(&mut rule_results, &graph_ref);
                 results.extend(rule_results);
             }
         }
@@ -1031,48 +1053,22 @@ impl ErasedTransform for ReReasonFrame {
                     let mut rule_results = rule.generate(&context);
 
                     // Phase T: Activation-aware confidence modulation.
-                    for result in &mut rule_results {
-                        // Predicate connectivity boost.
-                        if graph_ref.activation_energy_for_predicate > 0.5 {
-                            let boost = graph_ref.activation_energy_for_predicate * 0.15;
-                            result.derivation_confidence = (result.derivation_confidence + boost).min(1.0);
-                            result.atom.confidence = result.derivation_confidence;
-                        }
+                    apply_confidence_modulation(&mut rule_results, &graph_ref);
 
-                        // Ambiguity penalty.
-                        if graph_ref.ambiguity_score > 0.3 {
-                            result.derivation_confidence *= 1.0 - graph_ref.ambiguity_score * 0.5;
-                            result.atom.confidence = result.derivation_confidence;
-
-                            // Generate clarification question for high ambiguity.
-                            if graph_ref.ambiguity_score > 0.5 {
-                                let question = super::acquisition::InquiryQuestion {
-                                    question_id: format!("q_amb_{}", event.id),
-                                    question_text: format!(
-                                        "'{}' di sini memiliki beberapa interpretasi. Mana yang dimaksud?",
-                                        event.label
-                                    ),
-                                    gap_id: format!("amb_{}", event.id),
-                                    target_role: None,
-                                    target_composition_id: None,
-                                    question_type: super::acquisition::QuestionType::ChoiceBetween,
-                                };
-                                ctx.pending_questions.push(question);
-                            }
-                        }
-
-                        // Predicate count boost.
-                        if graph_ref.same_predicate_count > 0 {
-                            let boost = (graph_ref.same_predicate_count as f32 * 0.02).min(0.10);
-                            result.derivation_confidence = (result.derivation_confidence + boost).min(1.0);
-                            result.atom.confidence = result.derivation_confidence;
-                        }
-
-                        // Contradiction penalty.
-                        if graph_ref.has_contradiction {
-                            result.derivation_confidence *= 0.85;
-                            result.atom.confidence = result.derivation_confidence;
-                        }
+                    // Generate clarification questions for high-ambiguity results.
+                    if graph_ref.ambiguity_score > 0.5 {
+                        let question = super::acquisition::InquiryQuestion {
+                            question_id: format!("q_amb_{}", event.id),
+                            question_text: format!(
+                                "'{}' di sini memiliki beberapa interpretasi. Mana yang dimaksud?",
+                                event.label
+                            ),
+                            gap_id: format!("amb_{}", event.id),
+                            target_role: None,
+                            target_composition_id: None,
+                            question_type: super::acquisition::QuestionType::ChoiceBetween,
+                        };
+                        ctx.pending_questions.push(question);
                     }
 
                     for result in rule_results {

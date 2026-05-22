@@ -14,7 +14,7 @@ fn create_pipeline() -> PipelineEngine {
 #[test]
 fn v12_pipeline_ingest_basic() {
     let mut engine = create_pipeline();
-    let result = engine.ingest("Raymond membuat aplikasi karena lambat");
+    let result = engine.ingest("Raymond membuat aplikasi karena lambat").unwrap();
 
     assert!(
         result.atoms_created > 0,
@@ -34,8 +34,8 @@ fn v12_pipeline_ingest_basic() {
 fn v12_pipeline_multiple_ingests() {
     let mut engine = create_pipeline();
 
-    let r1 = engine.ingest("The cat sat on the mat");
-    let r2 = engine.ingest("The dog chased the cat");
+    let r1 = engine.ingest("The cat sat on the mat").unwrap();
+    let r2 = engine.ingest("The dog chased the cat").unwrap();
 
     assert!(r1.atoms_created > 0);
     assert!(r2.atoms_created > 0);
@@ -48,7 +48,7 @@ fn v12_pipeline_multiple_ingests() {
 #[test]
 fn v12_pipeline_graph_state() {
     let mut engine = create_pipeline();
-    engine.ingest("Fire is hot and dangerous. Water is cold and refreshing.");
+    let _ = engine.ingest("Fire is hot and dangerous. Water is cold and refreshing.");
 
     let graph = engine.graph();
     assert!(!graph.nodes.is_empty(), "Graph should have nodes");
@@ -61,7 +61,7 @@ fn v12_pipeline_cognitive_mode() {
     let mut engine = create_pipeline();
     let mut orchestrator = ExecutiveOrchestrator::new();
 
-    engine.ingest("Simple factual statement about the weather");
+    let _ = engine.ingest("Simple factual statement about the weather");
 
     let snapshot = engine.snapshot();
     let mode = orchestrator.select_cognitive_mode("test query", &snapshot.compositions);
@@ -78,7 +78,7 @@ fn v12_pipeline_cognitive_mode() {
 fn v12_pipeline_gap_detection() {
     let mut engine = create_pipeline();
     engine.context.gap_detection_enabled = true;
-    engine.ingest("The event happened because of the cause");
+    let _ = engine.ingest("The event happened because of the cause");
 
     let snapshot = engine.snapshot();
     let mut detector = DetectGaps::new();
@@ -91,7 +91,7 @@ fn v12_pipeline_gap_detection() {
 #[test]
 fn v12_pipeline_snapshot_json() {
     let mut engine = create_pipeline();
-    engine.ingest("Test sentence for snapshot");
+    let _ = engine.ingest("Test sentence for snapshot");
 
     let snapshot = engine.snapshot();
     let json = serde_json::to_string(&snapshot);
@@ -101,7 +101,7 @@ fn v12_pipeline_snapshot_json() {
 #[test]
 fn v12_pipeline_weak_frames() {
     let mut engine = create_pipeline();
-    engine.ingest("Some event with low confidence");
+    let _ = engine.ingest("Some event with low confidence");
 
     let weak = engine.find_weak_frames();
     // Weak frames may or may not exist — test verifies no crash
@@ -111,7 +111,7 @@ fn v12_pipeline_weak_frames() {
 #[test]
 fn v12_pipeline_cooccurrence() {
     let mut engine = create_pipeline();
-    engine.ingest("Fire is hot. Fire is dangerous.");
+    let _ = engine.ingest("Fire is hot. Fire is dangerous.");
 
     let graph = engine.graph();
     // If we have at least 2 nodes, check cooccurrence

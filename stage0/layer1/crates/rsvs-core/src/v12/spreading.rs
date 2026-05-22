@@ -438,7 +438,7 @@ impl ErasedTransform for SpreadingActivationTransform {
         ctx.last_activation_energies = activation_map.energies;
 
         IngestResult {
-            atoms_created: seeds_with_grounding.len(),
+            atoms_created: 0, // SpreadingActivation doesn't create atoms; it adjusts energy.
             compositions_created: 0,
             edges_created: 0,
             gaps_detected: 0,

@@ -532,7 +532,7 @@ impl GraphAwareStemmer {
         }
 
         // Try reduplication
-        if let Some(mut decomp) = self.stem_reduplication_detailed(&lower) {
+        if let Some(decomp) = self.stem_reduplication_detailed(&lower) {
             if decomp.root != lower {
                 return Some(decomp);
             }
@@ -594,7 +594,7 @@ impl GraphAwareStemmer {
         // Strategy 1: Suffix then prefix
         if let Some(sans_suffix) = self.strip_suffix(word) {
             let sfx = &word[word.len() - sans_suffix.suffix.len()..];
-            let mut decomp = self.make_decomposition(word, &sans_suffix.stem, &[], &[sfx.to_string()]);
+            let decomp = self.make_decomposition(word, &sans_suffix.stem, &[], &[sfx.to_string()]);
             if let Some(sans_both) = self.strip_prefix(&sans_suffix.stem) {
                 let mut deep = self.make_decomposition(word, &sans_both.root, &sans_both.prefixes, &[sfx.to_string()]);
                 deep.assimilation = sans_both.assimilation;
@@ -759,6 +759,7 @@ const PE_N_ALLOMORPHS_DATA: &[(&str, &str, &str)] = &[
 mod tests_legacy {
     use super::*;
 
+    #[allow(non_snake_case)]
     #[test]
     fn test_stem_meN_prefix() {
         let stemmer = IndonesianStemmer::new();

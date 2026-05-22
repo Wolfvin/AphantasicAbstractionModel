@@ -111,6 +111,7 @@ pub fn make_event_composition(comp_id: &str, atom: &SemanticAtom, graph: &mut Gr
 /// // ... call govern().execute() ...
 /// assert_eq!(comp.batch_seen, expected); // will be 4
 /// ```
+#[allow(dead_code)]
 pub fn set_batch_seen_for_test(comp: &mut Composition, desired_before_govern: usize) -> usize {
     comp.batch_seen = desired_before_govern;
     // After govern().execute(), batch_seen will be incremented by 1.

@@ -186,7 +186,7 @@ impl Graph {
     /// Get the CompositionIds containing a specific node (O(1) lookup via reverse index).
     pub fn compositions_for_node_fast(&self, node_id: NodeId) -> &[CompositionId] {
         match self.node_to_compositions.get(&node_id) {
-            Some(set) => {
+            Some(_set) => {
                 // Convert HashSet to sorted Vec for consistent ordering
                 // Actually, return empty slice as placeholder - callers should use node_to_compositions
                 // For now, return an empty slice; the real data is in the HashSet

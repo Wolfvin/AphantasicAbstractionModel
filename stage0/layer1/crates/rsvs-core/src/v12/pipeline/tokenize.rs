@@ -61,7 +61,7 @@ impl Tokenize {
         // We detect these before splitting on punctuation so that
         // "kata-kata" is treated as a single token with root "kata",
         // rather than two separate tokens "kata" and "kata".
-        let reduplication_roots: HashMap<String, String> = self.detect_reduplications(text);
+        let _reduplication_roots: HashMap<String, String> = self.detect_reduplications(text);
 
         // Split on whitespace first, then further split each chunk on punctuation.
         for chunk in text.split_whitespace() {

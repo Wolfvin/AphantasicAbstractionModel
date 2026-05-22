@@ -531,7 +531,7 @@ mod tests {
     fn test_validate_usage_probe_empty_graph() {
         let engine = UsageDiscoveryEngine::new();
         let graph = Graph::new();
-        let (probe, result) = engine.validate_usage_probe("raja memerintah kerajaan", &graph);
+        let (_probe, result) = engine.validate_usage_probe("raja memerintah kerajaan", &graph);
         assert!(!result.valid);
         assert_eq!(result.score, 0.0);
     }
@@ -596,7 +596,6 @@ mod tests {
 
     #[test]
     fn test_engine_with_custom_threshold() {
-        let engine = UsageDiscoveryEngine::with_threshold(0.5);
-        assert!(true); // Just verify it constructs
+        let _engine = UsageDiscoveryEngine::with_threshold(0.5);
     }
 }
