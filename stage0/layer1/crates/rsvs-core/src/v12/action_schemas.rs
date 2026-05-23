@@ -70,6 +70,11 @@ pub enum SchemaTrigger {
     LocativeMarker,
     /// Custom predicate pattern (regex-like string)
     PredicatePattern(String),
+    /// Data-driven trigger from a MarkerCategory.
+    /// This is the extensible trigger type — new schemas can be
+    /// created at runtime by mapping to any MarkerCategory,
+    /// including `MarkerCategory::Custom(String)`.
+    MarkerTrigger(super::knowledge_base::MarkerCategory),
 }
 
 impl Default for SchemaTrigger {
@@ -149,6 +154,9 @@ impl SchemaTrigger {
             SchemaTrigger::PredicatePattern(pattern) => {
                 // Simple substring match for custom patterns
                 tokens.iter().position(|t| t.to_lowercase().contains(&pattern.to_lowercase()))
+            }
+            SchemaTrigger::MarkerTrigger(category) => {
+                tokens.iter().position(|t| kb.is_marker(&category, t))
             }
         }
     }

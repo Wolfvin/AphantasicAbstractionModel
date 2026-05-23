@@ -191,10 +191,21 @@ pub trait ErasedTransform: Send + Sync {
 /// shared pipeline context. Executes transforms in topological order with
 /// condition gating.
 ///
+/// # Constructors
+///
+/// - [`new()`](Self::new) — Blank-slate engine with ZERO pre-seeded knowledge
+///   (No-Hardcore entry point).
+/// - [`new_seeded()`](Self::new_seeded) — Convenience constructor that seeds
+///   Indonesian linguistic knowledge, bootstrap schemas, and sense registry.
+///
 /// # Usage
 ///
 /// ```ignore
+/// // Blank-slate: AAM starts knowing nothing
 /// let mut engine = PipelineEngine::new();
+///
+/// // Seeded: ready for Indonesian immediately
+/// let mut engine = PipelineEngine::new_seeded();
 /// register_default_pipeline(&mut engine);
 /// let result = engine.ingest("Raymond membuat aplikasi karena lambat").unwrap();
 /// ```
@@ -218,29 +229,36 @@ pub struct PipelineEngine {
 }
 
 impl PipelineEngine {
-    /// Create a new empty pipeline engine with default [`PipelineContext`]
-    /// and an empty [`Graph`].
+    /// Create a truly blank-slate pipeline engine with ZERO pre-seeded knowledge.
     ///
-    /// The context is initialized with:
-    /// - Bootstrap Action Schemas from RAB Phase 1
-    /// - **No-Hardcore Architecture**: KnowledgeBase seeded with Indonesian
-    ///   linguistic knowledge via `seed_indonesian()`. All marker words,
-    ///   morphology rules, and parameters are stored in the KnowledgeBase
-    ///   with `KnowledgeOrigin::Bootstrapped` provenance — not hardcoded.
+    /// This is the No-Hardcore entry point: AAM starts knowing nothing.
+    /// All knowledge must be explicitly taught via `TeachingProtocol`,
+    /// discovered by `SymbolicObserver`, or asked via `UsageProbe`.
+    ///
+    /// For convenience, use [`new_seeded()`](Self::new_seeded) to get Indonesian linguistic knowledge.
     pub fn new() -> Self {
-        let mut context = PipelineContext::default();
-        context.active_schemas = super::super::action_schemas::bootstrap_schemas();
-        // No-Hardcore: Seed KnowledgeBase with Indonesian linguistic knowledge.
-        // All previously-hardcoded const arrays are now in the KnowledgeBase
-        // with provenance tracking. They can be replaced by teaching or
-        // observation at runtime.
-        super::super::knowledge_base::seed_indonesian(&mut context.knowledge_base);
         Self {
             transforms: HashMap::new(),
             dag: Vec::new(),
-            context,
+            context: PipelineContext::default(),
             graph: Graph::new(),
         }
+    }
+
+    /// Create a pipeline engine seeded with linguistic knowledge from a Locale.
+    ///
+    /// This is the convenience constructor for users who want AAM to
+    /// work immediately with Indonesian (or any other language) without
+    /// manually teaching every marker and rule.
+    ///
+    /// All seeded knowledge has `KnowledgeOrigin::Bootstrapped` provenance —
+    /// it's tracked, auditable, and can be replaced by teaching/observation.
+    pub fn new_seeded() -> Self {
+        let mut engine = Self::new();
+        engine.context.active_schemas = super::super::action_schemas::bootstrap_schemas();
+        super::super::knowledge_base::seed_indonesian(&mut engine.context.knowledge_base);
+        engine.context.sense_registry = super::super::sense_registry::SenseRegistry::with_bootstrap_entries();
+        engine
     }
 
     /// Register a transform with its dependency chain and optional condition.
@@ -594,9 +612,12 @@ pub struct SyncPipelineEngine {
 
 impl SyncPipelineEngine {
     /// Create a new thread-safe pipeline engine with default transforms.
+    ///
+    /// Uses [`PipelineEngine::new_seeded()`] for backward compatibility so that
+    /// existing code gets the seeded (Indonesian) knowledge automatically.
     pub fn new() -> Self {
         Self {
-            inner: std::sync::Mutex::new(PipelineEngine::new()),
+            inner: std::sync::Mutex::new(PipelineEngine::new_seeded()),
         }
     }
 

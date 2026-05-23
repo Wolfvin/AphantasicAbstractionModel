@@ -453,10 +453,10 @@ impl ExtractFrame {
             confidence += kb.param("extract.purpose_bonus", 0.10);
         }
         if roles.contains_key(&SemanticRole::Antecedent) {
-            confidence += 0.10;
+            confidence += kb.param("extract.antecedent_bonus", 0.10);
         }
         if roles.contains_key(&SemanticRole::Consequent) {
-            confidence += 0.10;
+            confidence += kb.param("extract.consequent_bonus", 0.10);
         }
         if *polarity == Polarity::Negative {
             confidence -= kb.param("extract.negation_penalty", 0.05);
@@ -486,6 +486,36 @@ impl ExtractFrame {
         {
             ExtractionQuality::HighQuality
         } else if confidence >= 0.45
+            && (roles.contains_key(&SemanticRole::Arg0Agent)
+                || roles.contains_key(&SemanticRole::Arg1Patient))
+        {
+            ExtractionQuality::ModerateQuality
+        } else if !roles.is_empty() {
+            ExtractionQuality::LowQuality
+        } else {
+            ExtractionQuality::Failed
+        }
+    }
+
+    /// Classify extraction quality based on roles and confidence, using KB thresholds.
+    ///
+    /// Quality thresholds are read from AdaptiveParams:
+    /// - `extract.high_quality_threshold` (default 0.70)
+    /// - `extract.moderate_quality_threshold` (default 0.45)
+    pub fn classify_quality_with_kb(
+        roles: &HashMap<SemanticRole, String>,
+        confidence: f32,
+        kb: &KnowledgeBase,
+    ) -> ExtractionQuality {
+        let high_threshold = kb.param("extract.high_quality_threshold", 0.70);
+        let moderate_threshold = kb.param("extract.moderate_quality_threshold", 0.45);
+
+        if confidence >= high_threshold
+            && roles.contains_key(&SemanticRole::Arg0Agent)
+            && roles.contains_key(&SemanticRole::Arg1Patient)
+        {
+            ExtractionQuality::HighQuality
+        } else if confidence >= moderate_threshold
             && (roles.contains_key(&SemanticRole::Arg0Agent)
                 || roles.contains_key(&SemanticRole::Arg1Patient))
         {
@@ -737,7 +767,7 @@ impl ErasedTransform for ExtractFrame {
                 + atom.confidence)
                 / ctx.extraction_quality.frames_extracted as f32;
 
-            let quality = Self::classify_quality(&atom.roles, atom.confidence);
+            let quality = Self::classify_quality_with_kb(&atom.roles, atom.confidence, &ctx.knowledge_base);
             ctx.extraction_quality_ext.record(&quality, atom.confidence);
 
             if atom.confidence < 0.5 {

@@ -223,47 +223,55 @@ impl ReasoningResult {
 
 /// Apply activation-aware confidence modulation to reasoning results.
 ///
-/// This shared function is used by both `ReasonFrame::reason_with_graph()`
-/// and `ReReasonFrame::execute()` to ensure consistent confidence adjustment.
+/// # Modulation Parameters (TODO: Move to AdaptiveParams)
 ///
-/// # Modulation Rules
-///
-/// 1. **Predicate connectivity boost**: If the predicate is well-connected
-///    in the graph (activation energy > 0.5), boost confidence by up to 15%.
-/// 2. **Ambiguity penalty**: If two interpretations are too close
-///    (ambiguity score > 0.3), reduce confidence proportionally.
-/// 3. **Predicate count boost**: More existing compositions with the same
-///    predicate increases confidence (up to 10% boost).
-/// 4. **Contradiction penalty**: If a contradiction exists for this predicate,
-///    reduce confidence by 15%.
+/// | Parameter | Current Value | AdaptiveParams Key (planned) |
+/// |-----------|--------------|------------------------------|
+/// | Connectivity threshold | 0.5 | `reason.connectivity_threshold` |
+/// | Connectivity boost multiplier | 0.15 | `reason.connectivity_boost` |
+/// | Ambiguity threshold | 0.3 | `reason.ambiguity_threshold` |
+/// | Ambiguity penalty multiplier | 0.5 | `reason.ambiguity_penalty` |
+/// | Predicate count boost per instance | 0.02 | `reason.predicate_count_boost` |
+/// | Predicate count boost cap | 0.10 | `reason.predicate_count_boost_cap` |
+/// | Contradiction penalty | 0.85 | `reason.contradiction_penalty` |
 fn apply_confidence_modulation(
     results: &mut [ReasoningResult],
     graph_ref: &GraphContextRef,
 ) {
+    // TODO: These will be moved to AdaptiveParams when apply_confidence_modulation
+    // gains KB access (Phase 5 of No-Hardcore remediation roadmap).
+    let connectivity_threshold: f32 = 0.5;
+    let connectivity_boost: f32 = 0.15;
+    let ambiguity_threshold: f32 = 0.3;
+    let ambiguity_penalty: f32 = 0.5;
+    let predicate_count_boost: f32 = 0.02;
+    let predicate_count_boost_cap: f32 = 0.10;
+    let contradiction_penalty: f32 = 0.85;
+
     for result in results.iter_mut() {
         // Predicate connectivity boost.
-        if graph_ref.activation_energy_for_predicate > 0.5 {
-            let boost = graph_ref.activation_energy_for_predicate * 0.15;
+        if graph_ref.activation_energy_for_predicate > connectivity_threshold {
+            let boost = graph_ref.activation_energy_for_predicate * connectivity_boost;
             result.derivation_confidence = (result.derivation_confidence + boost).min(1.0);
             result.atom.confidence = result.derivation_confidence;
         }
 
         // Ambiguity penalty.
-        if graph_ref.ambiguity_score > 0.3 {
-            result.derivation_confidence *= 1.0 - graph_ref.ambiguity_score * 0.5;
+        if graph_ref.ambiguity_score > ambiguity_threshold {
+            result.derivation_confidence *= 1.0 - graph_ref.ambiguity_score * ambiguity_penalty;
             result.atom.confidence = result.derivation_confidence;
         }
 
         // Predicate count boost.
         if graph_ref.same_predicate_count > 0 {
-            let boost = (graph_ref.same_predicate_count as f32 * 0.02).min(0.10);
+            let boost = (graph_ref.same_predicate_count as f32 * predicate_count_boost).min(predicate_count_boost_cap);
             result.derivation_confidence = (result.derivation_confidence + boost).min(1.0);
             result.atom.confidence = result.derivation_confidence;
         }
 
         // Contradiction penalty.
         if graph_ref.has_contradiction {
-            result.derivation_confidence *= 0.85;
+            result.derivation_confidence *= contradiction_penalty;
             result.atom.confidence = result.derivation_confidence;
         }
     }
@@ -347,7 +355,8 @@ impl ReasoningRule for ProblemSolutionRule {
         // Copy structural reference.
         roles.insert(SemanticRole::SourceEvent, event.id.clone());
 
-        // Derivation confidence: based on event confidence with a small discount.
+        // Confidence multiplier: 0.85 for ProblemSolution derivations.
+        // TODO: Move to AdaptiveParams when rules gain KB access (Phase 5 of No-Hardcore roadmap).
         let derivation_confidence = event.confidence * 0.85;
 
         let atom = SemanticAtom {
@@ -437,7 +446,8 @@ impl ReasoningRule for GoalInferenceRule {
 
         roles.insert(SemanticRole::SourceEvent, event.id.clone());
 
-        // Derivation confidence: purpose is a strong signal, but we discount slightly.
+        // Confidence multiplier: 0.80 for GoalInference derivations.
+        // TODO: Move to AdaptiveParams when rules gain KB access (Phase 5 of No-Hardcore roadmap).
         let derivation_confidence = event.confidence * 0.80;
 
         let atom = SemanticAtom {
@@ -547,7 +557,8 @@ impl ReasoningRule for PolarityConflictRule {
                 roles.insert(SemanticRole::SourceEvent, event.id.clone());
                 roles.insert(SemanticRole::Problem, conflict_desc);
 
-                // Derivation confidence: conflicts are high-signal.
+                // Confidence multiplier: 0.90 for PolarityConflict derivations.
+                // TODO: Move to AdaptiveParams when rules gain KB access (Phase 5 of No-Hardcore roadmap).
                 let derivation_confidence = (event.confidence + opposite.confidence) / 2.0 * 0.90;
 
                 let atom = SemanticAtom {
@@ -654,7 +665,8 @@ impl ReasoningRule for ConditionConsequenceRule {
             roles.insert(SemanticRole::Arg1Patient, patient.clone());
         }
 
-        // Derivation confidence: conditional patterns are high-signal.
+        // Confidence multiplier: 0.90 for ConditionConsequence derivations.
+        // TODO: Move to AdaptiveParams when rules gain KB access (Phase 5 of No-Hardcore roadmap).
         let derivation_confidence = event.confidence * 0.90;
 
         let atom = SemanticAtom {

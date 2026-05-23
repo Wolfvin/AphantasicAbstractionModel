@@ -878,6 +878,40 @@ impl TeachingProtocol {
         });
     }
 
+    /// Teach a sense entry for a word.
+    ///
+    /// Example: `teacher.teach_sense(&mut kb, "bisa", SenseEntry { ... })`
+    pub fn teach_sense(
+        &self,
+        registry: &mut super::sense_registry::SenseRegistry,
+        word: &str,
+        entry: super::sense_registry::SenseEntry,
+    ) {
+        let taught_entry = super::sense_registry::SenseEntry {
+            origin: KnowledgeOrigin::Taught {
+                by: self.teacher.clone(),
+                at: now_epoch_string(),
+            },
+            ..entry
+        };
+        registry.add_sense(word, taught_entry);
+    }
+
+    /// Teach an Action Schema.
+    ///
+    /// Example: `teacher.teach_schema(&mut ctx, ActionSchema { ... })`
+    pub fn teach_schema(
+        &self,
+        ctx: &mut super::types::PipelineContext,
+        schema: super::action_schemas::ActionSchema,
+    ) {
+        // Schemas taught by users are added to active_schemas.
+        // Check for duplicate ID first.
+        if !ctx.active_schemas.iter().any(|s| s.id == schema.id) {
+            ctx.active_schemas.push(schema);
+        }
+    }
+
     /// Get the teacher name.
     pub fn teacher(&self) -> &str {
         &self.teacher
@@ -905,7 +939,7 @@ impl TeachingProtocol {
 /// This is how AAM "discovers" linguistic knowledge rather than
 /// having it hardcoded — by observing the relational structure
 /// of its own symbolic graph.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SymbolicObserver {
     /// Patterns observed so far: pattern_key → count.
     observations: HashMap<String, usize>,
@@ -1010,6 +1044,34 @@ impl SymbolicObserver {
     /// Get the count of observations for a pattern.
     pub fn observation_count(&self, pattern: &str) -> usize {
         self.observations.get(pattern).copied().unwrap_or(0)
+    }
+
+    /// Observe multiple compositions at once (batch mode).
+    ///
+    /// Called by pipeline transforms after governing compositions.
+    /// Returns all observation results from all compositions.
+    pub fn observe_batch(
+        &mut self,
+        compositions: &[super::types::Composition],
+        kb: &mut KnowledgeBase,
+    ) -> Vec<ObservationResult> {
+        let mut all_results = Vec::new();
+        for comp in compositions {
+            all_results.extend(self.observe_composition(comp, kb));
+        }
+        all_results
+    }
+
+    /// Read observation thresholds from AdaptiveParams.
+    ///
+    /// Currently returns defaults — will be wired to KB params in Phase 6
+    /// of the No-Hardcore roadmap.
+    pub fn marker_threshold(&self, kb: &KnowledgeBase) -> usize {
+        kb.param("observer.marker_threshold", 5.0) as usize
+    }
+
+    pub fn morphology_threshold(&self, kb: &KnowledgeBase) -> usize {
+        kb.param("observer.morphology_threshold", 10.0) as usize
     }
 }
 

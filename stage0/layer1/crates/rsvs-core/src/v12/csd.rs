@@ -504,10 +504,7 @@ impl ErasedTransform for CSDTransform {
         // Phase 7 (incremental learning) are visible to CSD. Previously,
         // CSDTransform always created a fresh CSDEngine with only bootstrap
         // entries, making it blind to any runtime learning.
-        let effective_registry = ctx.sense_registry
-            .as_ref()
-            .cloned()
-            .unwrap_or_else(|| self.engine.registry().clone());
+        let effective_registry = ctx.sense_registry.clone();
 
         // Check all token atoms for ambiguous words.
         let ambiguous_atoms: Vec<(usize, String, NodeId)> = ctx

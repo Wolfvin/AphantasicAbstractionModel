@@ -48,6 +48,16 @@ pub struct SenseEntry {
     /// Part of speech (e.g., "noun", "verb", "adjective").
     #[serde(default)]
     pub part_of_speech: String,
+    /// Provenance of this sense entry — tracks HOW it was learned.
+    /// Taught senses have higher confidence than Bootstrapped ones.
+    #[serde(default = "default_sense_origin")]
+    pub origin: super::knowledge_base::KnowledgeOrigin,
+}
+
+fn default_sense_origin() -> super::knowledge_base::KnowledgeOrigin {
+    super::knowledge_base::KnowledgeOrigin::Bootstrapped {
+        reason: "unknown".to_string(),
+    }
 }
 
 impl Default for SenseEntry {
@@ -57,6 +67,7 @@ impl Default for SenseEntry {
             label: String::new(),
             representative_labels: Vec::new(),
             part_of_speech: String::new(),
+            origin: default_sense_origin(),
         }
     }
 }
@@ -142,12 +153,18 @@ fn bootstrap_sense_entries(registry: &mut SenseRegistry) {
         label: "racun".into(),
         representative_labels: vec!["ular".into(), "racun".into(), "berbisa".into(), "venom".into(), "racun_hewan".into(), "gigitan".into()],
         part_of_speech: "noun".into(),
+        origin: super::knowledge_base::KnowledgeOrigin::Bootstrapped {
+            reason: "Indonesian homograph baseline".to_string(),
+        },
     });
     registry.add_sense("bisa", SenseEntry {
         sense_id: "bisa_ability".into(),
         label: "kemampuan".into(),
         representative_labels: vec!["mampu".into(), "boleh".into(), "kemampuan".into(), "mungkin".into(), "dapat".into(), "melakukan".into()],
         part_of_speech: "verb".into(),
+        origin: super::knowledge_base::KnowledgeOrigin::Bootstrapped {
+            reason: "Indonesian homograph baseline".to_string(),
+        },
     });
 
     // tahu: know vs tofu
@@ -156,12 +173,18 @@ fn bootstrap_sense_entries(registry: &mut SenseRegistry) {
         label: "mengerti".into(),
         representative_labels: vec!["mengerti".into(), "paham".into(), "mengetahui".into(), "informasi".into()],
         part_of_speech: "verb".into(),
+        origin: super::knowledge_base::KnowledgeOrigin::Bootstrapped {
+            reason: "Indonesian homograph baseline".to_string(),
+        },
     });
     registry.add_sense("tahu", SenseEntry {
         sense_id: "tahu_tofu".into(),
         label: "makanan".into(),
         representative_labels: vec!["makanan".into(), "kedelai".into(), "tempe".into(), "goreng".into()],
         part_of_speech: "noun".into(),
+        origin: super::knowledge_base::KnowledgeOrigin::Bootstrapped {
+            reason: "Indonesian homograph baseline".to_string(),
+        },
     });
 
     // mangga: mango vs please
@@ -170,12 +193,18 @@ fn bootstrap_sense_entries(registry: &mut SenseRegistry) {
         label: "buah".into(),
         representative_labels: vec!["buah".into(), "manis".into(), "kulit".into(), "pohon".into()],
         part_of_speech: "noun".into(),
+        origin: super::knowledge_base::KnowledgeOrigin::Bootstrapped {
+            reason: "Indonesian homograph baseline".to_string(),
+        },
     });
     registry.add_sense("mangga", SenseEntry {
         sense_id: "mangga_please".into(),
         label: "silakan".into(),
         representative_labels: vec!["silakan".into(), "dipersilakan".into(), "permisi".into()],
         part_of_speech: "interjection".into(),
+        origin: super::knowledge_base::KnowledgeOrigin::Bootstrapped {
+            reason: "Indonesian homograph baseline".to_string(),
+        },
     });
 
     // apis: fire's vs api's
@@ -184,12 +213,18 @@ fn bootstrap_sense_entries(registry: &mut SenseRegistry) {
         label: "api".into(),
         representative_labels: vec!["api".into(), "kebakaran".into(), "panas".into(), "nyala".into()],
         part_of_speech: "noun".into(),
+        origin: super::knowledge_base::KnowledgeOrigin::Bootstrapped {
+            reason: "Indonesian homograph baseline".to_string(),
+        },
     });
     registry.add_sense("apis", SenseEntry {
         sense_id: "apis_possessive".into(),
         label: "milik".into(),
         representative_labels: vec!["milik".into(), "kepunyaan".into(), "dari".into()],
         part_of_speech: "particle".into(),
+        origin: super::knowledge_base::KnowledgeOrigin::Bootstrapped {
+            reason: "Indonesian homograph baseline".to_string(),
+        },
     });
 
     // dapat: obtain vs can/may
@@ -198,12 +233,18 @@ fn bootstrap_sense_entries(registry: &mut SenseRegistry) {
         label: "memperoleh".into(),
         representative_labels: vec!["memperoleh".into(), "mendapat".into(), "menerima".into(), "hasil".into()],
         part_of_speech: "verb".into(),
+        origin: super::knowledge_base::KnowledgeOrigin::Bootstrapped {
+            reason: "Indonesian homograph baseline".to_string(),
+        },
     });
     registry.add_sense("dapat", SenseEntry {
         sense_id: "dapat_can".into(),
         label: "bisa".into(),
         representative_labels: vec!["bisa".into(), "mampu".into(), "boleh".into(), "mungkin".into()],
         part_of_speech: "verb".into(),
+        origin: super::knowledge_base::KnowledgeOrigin::Bootstrapped {
+            reason: "Indonesian homograph baseline".to_string(),
+        },
     });
 
     // makan: eat vs consume (figurative)
@@ -212,12 +253,18 @@ fn bootstrap_sense_entries(registry: &mut SenseRegistry) {
         label: "makan".into(),
         representative_labels: vec!["makanan".into(), "nasi".into(), "lapar".into(), "mulut".into(), "perut".into()],
         part_of_speech: "verb".into(),
+        origin: super::knowledge_base::KnowledgeOrigin::Bootstrapped {
+            reason: "Indonesian homograph baseline".to_string(),
+        },
     });
     registry.add_sense("makan", SenseEntry {
         sense_id: "makan_consume".into(),
         label: "menghabiskan".into(),
         representative_labels: vec!["waktu".into(), "biaya".into(), "menghabiskan".into(), "mengonsumsi".into()],
         part_of_speech: "verb".into(),
+        origin: super::knowledge_base::KnowledgeOrigin::Bootstrapped {
+            reason: "Indonesian homograph baseline".to_string(),
+        },
     });
 
     // tanam: plant vs bury
@@ -226,12 +273,18 @@ fn bootstrap_sense_entries(registry: &mut SenseRegistry) {
         label: "menanam".into(),
         representative_labels: vec!["pohon".into(), "bunga".into(), "benih".into(), "tumbuh".into(), "kebun".into()],
         part_of_speech: "verb".into(),
+        origin: super::knowledge_base::KnowledgeOrigin::Bootstrapped {
+            reason: "Indonesian homograph baseline".to_string(),
+        },
     });
     registry.add_sense("tanam", SenseEntry {
         sense_id: "tanam_bury".into(),
         label: "mengubur".into(),
         representative_labels: vec!["kubur".into(), "sembunyi".into(), "dalam".into(), "tanah".into()],
         part_of_speech: "verb".into(),
+        origin: super::knowledge_base::KnowledgeOrigin::Bootstrapped {
+            reason: "Indonesian homograph baseline".to_string(),
+        },
     });
 
     // buka: open vs opening (event)
@@ -240,12 +293,18 @@ fn bootstrap_sense_entries(registry: &mut SenseRegistry) {
         label: "membuka".into(),
         representative_labels: vec!["pintu".into(), "jendela".into(), "tutup".into(), "membuka".into()],
         part_of_speech: "verb".into(),
+        origin: super::knowledge_base::KnowledgeOrigin::Bootstrapped {
+            reason: "Indonesian homograph baseline".to_string(),
+        },
     });
     registry.add_sense("buka", SenseEntry {
         sense_id: "buka_event".into(),
         label: "perayaan".into(),
         representative_labels: vec!["acara".into(), "upacara".into(), "perayaan".into(), "resmi".into()],
         part_of_speech: "noun".into(),
+        origin: super::knowledge_base::KnowledgeOrigin::Bootstrapped {
+            reason: "Indonesian homograph baseline".to_string(),
+        },
     });
 
     // tinggal: stay vs remain vs passed_away
@@ -254,18 +313,27 @@ fn bootstrap_sense_entries(registry: &mut SenseRegistry) {
         label: "menetap".into(),
         representative_labels: vec!["rumah".into(), "tinggal".into(), "menetap".into(), "huni".into(), "tempat".into()],
         part_of_speech: "verb".into(),
+        origin: super::knowledge_base::KnowledgeOrigin::Bootstrapped {
+            reason: "Indonesian homograph baseline".to_string(),
+        },
     });
     registry.add_sense("tinggal", SenseEntry {
         sense_id: "tinggal_remain".into(),
         label: "tersisa".into(),
         representative_labels: vec!["sisa".into(), "hanya".into(), "masih".into(), "tersisa".into()],
         part_of_speech: "verb".into(),
+        origin: super::knowledge_base::KnowledgeOrigin::Bootstrapped {
+            reason: "Indonesian homograph baseline".to_string(),
+        },
     });
     registry.add_sense("tinggal", SenseEntry {
         sense_id: "tinggal_deceased".into(),
         label: "almarhum".into(),
         representative_labels: vec!["almarhum".into(), "meninggal".into(), "wafat".into(), "almarhumah".into()],
         part_of_speech: "verb".into(),
+        origin: super::knowledge_base::KnowledgeOrigin::Bootstrapped {
+            reason: "Indonesian homograph baseline".to_string(),
+        },
     });
 
     // kembali: return vs again
@@ -274,12 +342,18 @@ fn bootstrap_sense_entries(registry: &mut SenseRegistry) {
         label: "pulang".into(),
         representative_labels: vec!["pulang".into(), "datang".into(), "pergi".into(), "rumah".into()],
         part_of_speech: "verb".into(),
+        origin: super::knowledge_base::KnowledgeOrigin::Bootstrapped {
+            reason: "Indonesian homograph baseline".to_string(),
+        },
     });
     registry.add_sense("kembali", SenseEntry {
         sense_id: "kembali_again".into(),
         label: "lagi".into(),
         representative_labels: vec!["lagi".into(), "ulang".into(), "sekali".into(), "berulang".into()],
         part_of_speech: "adverb".into(),
+        origin: super::knowledge_base::KnowledgeOrigin::Bootstrapped {
+            reason: "Indonesian homograph baseline".to_string(),
+        },
     });
 }
 
@@ -314,8 +388,18 @@ impl DisambiguationResult {
     }
 
     /// Was disambiguation successful?
+    ///
+    /// Uses a default threshold of 0.3. For self-calibrating threshold,
+    /// use `is_resolved_with_threshold()` reading from AdaptiveParams.
     pub fn is_resolved(&self) -> bool {
         self.selected_sense.is_some() && self.confidence > 0.3
+    }
+
+    /// Was disambiguation successful with a configurable threshold?
+    ///
+    /// The threshold should come from `kb.param("csd.resolve_threshold", 0.3)`.
+    pub fn is_resolved_with_threshold(&self, threshold: f32) -> bool {
+        self.selected_sense.is_some() && self.confidence > threshold
     }
 }
 
