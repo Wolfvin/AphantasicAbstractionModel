@@ -192,6 +192,16 @@ class Introspector:
             desc += f"  Relevansi: {nd.get('score', 0):.2f}\n"
             desc += f"  Akurasi historis: {nd.get('accuracy', 0):.1%}\n"
             desc += f"  Sumber: {nd.get('source', '-')}\n"
+            # v35: Lifecycle + epistemic state
+            lifecycle = nd.get('lifecycle', 'stable')
+            epistemic = nd.get('epistemic', 'observed')
+            desc += f"  Status: {lifecycle} / {epistemic}\n"
+            # v35: Member roles
+            members = nd.get('members', [])
+            if members:
+                desc += "  Peran struktural:\n"
+                for m in members:
+                    desc += f"    - {m.get('role', '?')}: {m.get('description', '-')}\n"
             node_descriptions.append(desc)
 
         nodes_text = '\n'.join(node_descriptions)
@@ -210,9 +220,9 @@ class Introspector:
 Kekuatan injection: {strength:.3f}
 Layer yang di-inject: {layer}
 
-Jelaskan dalam bahasa Indonesia (3-5 kalimat) MENGAPA kamu menjawab seperti itu, berdasarkan pengalaman-pengalaman di atas. Jangan sekadar daftar — jelaskan BAGAIMANA pengalaman itu memengaruhi penalaranmu.
+Jelaskan dalam bahasa Indonesia (3-5 kalimat) MENGAPA kamu menjawab seperti itu, berdasarkan pengalaman-pengalaman di atas. Jangan sekadar daftar — jelaskan BAGAIMANA pengalaman itu memengaruhi penalaranmu. Sebutkan peran struktural mana yang paling mempengaruhi jawabanmu.
 
-Contoh format: "Jawaban saya dipengaruhi oleh pengalaman tentang X, di mana saya belajar bahwa pola Y selalu mengarah ke Z. Pengalaman itu membuat saya cenderung...""
+Contoh format: "Jawaban saya dipengaruhi oleh pengalaman tentang X, khususnya peran [trigger/result/exception] yang menyebabkan saya cenderung...""
 
     def _fallback_explanation(self, question: str, node_details: list,
                               log: dict) -> str:
@@ -221,6 +231,8 @@ Contoh format: "Jawaban saya dipengaruhi oleh pengalaman tentang X, di mana saya
         Used when Qwen3 is unavailable. This is NOT a hardcoded
         explanation — it's a structured summary that preserves the
         key information from the injection log.
+
+        v35: Includes member role details and governance status.
         """
         parts = []
 
@@ -229,18 +241,32 @@ Contoh format: "Jawaban saya dipengaruhi oleh pengalaman tentang X, di mana saya
 
         if len(node_details) == 1:
             nd = node_details[0]
+            # v35: Include member roles in explanation
+            members = nd.get('members', [])
+            member_text = ''
+            if members:
+                role_descriptions = [
+                    f"{m.get('role', '?')}={m.get('description', '-')}"
+                    for m in members[:3]
+                ]
+                member_text = f" ({', '.join(role_descriptions)})"
             parts.append(
                 f"jawaban saya dipengaruhi oleh pengalaman tentang "
-                f"{nd.get('concept', nd.get('name', 'unknown'))} "
+                f"{nd.get('concept', nd.get('name', 'unknown'))}"
+                f"{member_text} "
                 f"(relevansi: {nd.get('score', 0):.2f}, "
-                f"akurasi: {nd.get('accuracy', 0):.0%})"
+                f"akurasi: {nd.get('accuracy', 0):.0%}, "
+                f"status: {nd.get('lifecycle', 'stable')}/{nd.get('epistemic', 'observed')})"
             )
         else:
-            concepts = [
-                f"{nd.get('concept', nd.get('name', '?'))} "
-                f"(relevansi: {nd.get('score', 0):.2f})"
-                for nd in node_details
-            ]
+            concepts = []
+            for nd in node_details:
+                c = (
+                    f"{nd.get('concept', nd.get('name', '?'))} "
+                    f"({nd.get('lifecycle', 'stable')}/{nd.get('epistemic', 'observed')}, "
+                    f"relevansi: {nd.get('score', 0):.2f})"
+                )
+                concepts.append(c)
             parts.append(
                 f"jawaban saya dipengaruhi oleh {len(node_details)} pengalaman: "
                 + ", ".join(concepts)
@@ -254,14 +280,21 @@ Contoh format: "Jawaban saya dipengaruhi oleh pengalaman tentang X, di mana saya
         return " ".join(parts)
 
     def _explain_no_injection(self, question: str) -> str:
-        """Return explanation when no injection happened."""
+        """Return explanation when no injection happened.
+
+        v35: Also mention if experiences were deactivated (DEPRECATED)
+        or not yet verified (NEW).
+        """
         if question:
             return (
                 f"Untuk pertanyaan \"{question}\", jawaban saya tidak dipengaruhi "
                 f"oleh pengalaman tidak sadar — saya menggunakan penalaran sadar "
-                f"(conscious path)."
+                f"(conscious path). Pengalaman yang relevan mungkin sudah tidak aktif "
+                f"(deprecated) atau belum terverifikasi (new/candidate)."
             )
         return (
             "Tidak ada pengalaman tidak sadar yang aktif saat menjawab — "
-            "saya menggunakan penalaran sadar (conscious path)."
+            "saya menggunakan penalaran sadar (conscious path). "
+            "Pengalaman yang relevan mungkin sudah tidak aktif (deprecated) "
+            "atau belum terverifikasi (new/candidate)."
         )

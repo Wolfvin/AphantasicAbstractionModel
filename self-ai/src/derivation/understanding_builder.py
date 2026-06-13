@@ -94,9 +94,18 @@ Key Insight:
 import os
 import re
 import json
+import time
 import logging
 from typing import Optional, List, Dict, Any, Tuple
 from collections import defaultdict
+
+# v35: Governance types — dual-axis lifecycle + epistemic + compositional members
+from governance.states import (
+    LifecycleState,
+    EpistemicState,
+    SeedScores,
+    UnderstandingMember,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -171,13 +180,26 @@ class UnderstandingNode:
         source: How SELF discovered this
         confidence: SELF's confidence in this understanding
         stats: Usage statistics
+        members: v35 — Structured roles within this understanding (from AAM CompositionMember)
+        lifecycle: v35 — Maturity stage (NEW → CANDIDATE → STABLE → DEPRECATED)
+        epistemic: v35 — Credibility state (OBSERVED → INFERRED → GROUNDED / CONTRADICTED)
+        seed_scores: v35 — Multi-dimensional epistemic confidence
+        deprecated_reason: v35 — Why this was deactivated (None if active)
+        deprecated_at: v35 — When this was deactivated (None if active)
     """
 
     def __init__(self, id: str, name: str, concept: str, abstraction: str,
                  schemas: list = None, transformation: Transformation = None,
                  conditions: list = None, condition_embedding: list = None,
                  edges: list = None, source: str = 'self_discovered',
-                 confidence: float = 0.5):
+                 confidence: float = 0.5,
+                 # v35: Structural memory fields
+                 members: list = None,
+                 lifecycle: str = None,
+                 epistemic: str = None,
+                 seed_scores: dict = None,
+                 deprecated_reason: str = None,
+                 deprecated_at: float = None):
         self.id = id
         self.name = name
         self.concept = concept
@@ -192,6 +214,28 @@ class UnderstandingNode:
         self.times_applied = 0
         self.times_correct = 0
         self.times_failed = 0
+
+        # v35: Structural memory — compositional members with roles
+        self.members: List[UnderstandingMember] = members or []
+
+        # v35: Dual-axis governance
+        # Backward compatible: existing nodes default to STABLE + OBSERVED
+        self.lifecycle = (
+            LifecycleState(lifecycle) if lifecycle else LifecycleState.STABLE
+        )
+        self.epistemic = (
+            EpistemicState(epistemic) if epistemic else EpistemicState.OBSERVED
+        )
+
+        # v35: Multi-dimensional epistemic confidence
+        self.seed_scores = (
+            SeedScores.from_dict(seed_scores) if isinstance(seed_scores, dict)
+            else (seed_scores if seed_scores else SeedScores())
+        )
+
+        # v35: Deactivation tracking (None = active, set when DEPRECATED)
+        self.deprecated_reason = deprecated_reason
+        self.deprecated_at = deprecated_at
 
     @property
     def accuracy(self) -> float:
@@ -223,7 +267,7 @@ class UnderstandingNode:
         self.confidence = max(0.1, self.confidence - amount)
 
     def to_dict(self) -> dict:
-        return {
+        d = {
             'id': self.id,
             'name': self.name,
             'concept': self.concept,
@@ -238,7 +282,18 @@ class UnderstandingNode:
             'times_applied': self.times_applied,
             'times_correct': self.times_correct,
             'times_failed': self.times_failed,
+            # v35: Structural memory + governance
+            'members': [m.to_dict() for m in self.members] if self.members else [],
+            'lifecycle': self.lifecycle.value,
+            'epistemic': self.epistemic.value,
+            'seed_scores': self.seed_scores.to_dict(),
         }
+        # Only include deprecation info if actually deprecated
+        if self.deprecated_reason is not None:
+            d['deprecated_reason'] = self.deprecated_reason
+        if self.deprecated_at is not None:
+            d['deprecated_at'] = self.deprecated_at
+        return d
 
     @classmethod
     def from_dict(cls, d: dict) -> 'UnderstandingNode':
@@ -254,6 +309,13 @@ class UnderstandingNode:
             edges=d.get('edges', []),
             source=d.get('source', 'self_discovered'),
             confidence=d.get('confidence', 0.5),
+            # v35: Structural memory + governance (backward compatible defaults)
+            members=[UnderstandingMember.from_dict(m) for m in d.get('members', [])],
+            lifecycle=d.get('lifecycle'),  # Will default to STABLE in __init__
+            epistemic=d.get('epistemic'),  # Will default to OBSERVED in __init__
+            seed_scores=d.get('seed_scores'),  # Will default to SeedScores() in __init__
+            deprecated_reason=d.get('deprecated_reason'),
+            deprecated_at=d.get('deprecated_at'),
         )
         node.times_applied = d.get('times_applied', 0)
         node.times_correct = d.get('times_correct', 0)
