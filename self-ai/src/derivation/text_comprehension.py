@@ -2084,7 +2084,7 @@ class TextComprehension:
                 )
 
                 result = llm_engine.reason(
-                    context=prompt,
+                    text=prompt,
                     question=f"Mengapa {correct_answer} adalah jawaban yang benar?",
                 )
                 if result and result.get('answer'):
@@ -2749,7 +2749,15 @@ class TextComprehension:
             tmp_path = self._patterns_file + '.tmp'
             with open(tmp_path, 'w', encoding='utf-8') as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
-            os.replace(tmp_path, self._patterns_file)
+            # os.replace with Windows robustness — retry after unlink on OSError
+            try:
+                os.replace(tmp_path, self._patterns_file)
+            except OSError:
+                try:
+                    os.unlink(self._patterns_file)
+                except OSError:
+                    pass
+                os.replace(tmp_path, self._patterns_file)
         except Exception as e:
             logger.warning("Failed to save learned patterns: %s", e)
 

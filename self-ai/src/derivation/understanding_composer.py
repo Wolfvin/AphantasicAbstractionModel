@@ -399,7 +399,9 @@ Jawaban: [jawaban singkat]"""
             try:
                 # Use the LLM engine's reason method — it has its own SDK/local logic
                 result = self._llm_engine.reason(
-                    prompt, {'answer': None, 'confidence': 0.0}
+                    text=prompt,
+                    question="",
+                    previous_result={'answer': None, 'confidence': 0.0}
                 )
                 if result and result.get('answer'):
                     return str(result['answer'])

@@ -961,11 +961,18 @@ class SelfCorrectionLoop:
             state_path = self._state_path()
             os.makedirs(os.path.dirname(state_path), exist_ok=True)
 
-            # Atomic write
+            # Atomic write with Windows robustness
             tmp_path = state_path + '.tmp'
             with open(tmp_path, 'w', encoding='utf-8') as f:
                 json.dump(state, f, ensure_ascii=False, indent=2, default=str)
-            os.replace(tmp_path, state_path)
+            try:
+                os.replace(tmp_path, state_path)
+            except OSError:
+                try:
+                    os.unlink(state_path)
+                except OSError:
+                    pass
+                os.replace(tmp_path, state_path)
 
             logger.debug("Correction state persisted to disk (%d history records)",
                         len(self._correction_history))
