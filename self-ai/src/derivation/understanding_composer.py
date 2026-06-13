@@ -60,6 +60,9 @@ import subprocess
 import tempfile
 from typing import Optional, List
 
+# v35: Structural memory types
+from governance.states import UnderstandingMember
+
 logger = logging.getLogger(__name__)
 
 
@@ -285,13 +288,21 @@ Extract the understanding as JSON:
         "trigger": {{"signal_words": ["word1", "word2"], "result_position": "after/before"}},
         "action": "what the transformation does"
     }},
-    "schemas": ["generalized pattern like: ALL [STATE] KECUALI [EXCEPTION] → [EXCEPTION] has OPPOSITE [STATE]"]
+    "schemas": ["generalized pattern like: ALL [STATE] KECUALI [EXCEPTION] → [EXCEPTION] has OPPOSITE [STATE]"],
+    "members": [
+        {{"role": "trigger", "description": "what signal activates this", "confidence": 0.9}},
+        {{"role": "default", "description": "what the normal/default answer would be", "confidence": 0.8}},
+        {{"role": "exception", "description": "what overrides the default", "confidence": 0.9}},
+        {{"role": "result", "description": "the final transformed answer", "confidence": 0.8}}
+    ]
 }}
 
 IMPORTANT: 
 - The abstraction must generalize away specifics — use [ENTITY], [STATE], [EXCEPTION] as variables
 - The transformation kind must be one of the listed kinds
 - The conditions are signal words that trigger this understanding
+- The members describe the STRUCTURAL ROLES within this understanding — each has a role name, description, and confidence
+- Common roles: trigger, default, exception, result, cause, agent, patient, context, evidence
 - Respond ONLY with valid JSON, no other text"""
 
     def _build_observation_prompt(self, observation: dict) -> str:
@@ -321,7 +332,11 @@ If this observation reveals a pattern that could be generalized, extract the und
         "trigger": {{"signal_words": ["word1"], "result_position": "after"}},
         "action": "what the transformation does"
     }},
-    "schemas": ["generalized pattern"]
+    "schemas": ["generalized pattern"],
+    "members": [
+        {{"role": "trigger", "description": "what signal activates this", "confidence": 0.9}},
+        {{"role": "result", "description": "the expected outcome", "confidence": 0.8}}
+    ]
 }}
 
 If no clear understanding can be extracted, respond with: {{"skip": true}}
@@ -349,7 +364,11 @@ What understanding is missing or incorrect? Extract the correct understanding as
         "trigger": {{"signal_words": ["word1"], "result_position": "after"}},
         "action": "what the transformation should do to get the correct answer"
     }},
-    "schemas": ["generalized pattern that explains the correct answer"]
+    "schemas": ["generalized pattern that explains the correct answer"],
+    "members": [
+        {{"role": "trigger", "description": "what signal was missed or misapplied", "confidence": 0.9}},
+        {{"role": "result", "description": "the correct result when this trigger is recognized", "confidence": 0.8}}
+    ]
 }}
 
 Focus on WHY the wrong answer was wrong and what structural understanding would prevent it.
@@ -780,7 +799,32 @@ main();
             self.graph._save()
             return existing
 
+        # v35: Build members from parsed data (structural roles)
+        members = []
+        members_data = parsed.get('members', [])
+        if isinstance(members_data, list):
+            for m in members_data:
+                if isinstance(m, dict) and m.get('role') and m.get('description'):
+                    members.append(UnderstandingMember(
+                        role=m['role'],
+                        description=m['description'],
+                        confidence=m.get('confidence', 0.8),
+                    ))
+                elif isinstance(m, dict) and m.get('role'):
+                    # Partial member — role but no description
+                    members.append(UnderstandingMember(
+                        role=m['role'],
+                        description=m.get('description', ''),
+                        confidence=m.get('confidence', 0.7),
+                    ))
+
+        # v35: If no members were extracted but we have a transformation,
+        # infer basic members from the transformation structure
+        if not members and transformation:
+            members = self._infer_members_from_transformation(transformation, conditions)
+
         # Create the node
+        # v35: New nodes start as NEW (not yet verified)
         node = UnderstandingNode(
             id=node_id,
             name=name,
@@ -791,9 +835,106 @@ main();
             conditions=conditions[:15],
             source=source,
             confidence=0.55,  # LLM-composed understandings start with moderate confidence
+            members=members,  # v35: Structural roles
+            lifecycle='new',   # v35: Start as NEW — needs verification
+            epistemic='observed',  # v35: Observed from LLM output
         )
 
         return node
+
+    # ═══════════════ MEMBER INFERENCE ═══════════════
+
+    def _infer_members_from_transformation(self, transformation, conditions: list) -> list:
+        """Infer structural members from transformation when LLM didn't provide them.
+
+        v35: When Qwen3 doesn't output members in its JSON response, we can
+        still infer basic roles from the transformation structure. This ensures
+        EVERY understanding has at least a trigger and result role, which is
+        critical for:
+          - Per-role injection (inject only Trigger when needed)
+          - Gap detection (missing Result = gap)
+          - Detailed introspection
+
+        Args:
+            transformation: The Transformation object
+            conditions: The conditions list (signal words)
+
+        Returns:
+            List of UnderstandingMember objects.
+        """
+        members = []
+
+        # Trigger role — from conditions/signal words
+        if conditions:
+            trigger_desc = ', '.join(conditions[:5])
+            members.append(UnderstandingMember(
+                role='trigger',
+                description=trigger_desc,
+                confidence=0.85,
+            ))
+        elif transformation and transformation.trigger:
+            signal_words = transformation.trigger.get('signal_words', [])
+            if signal_words:
+                members.append(UnderstandingMember(
+                    role='trigger',
+                    description=', '.join(signal_words[:5]),
+                    confidence=0.85,
+                ))
+
+        # Result role — from transformation action
+        if transformation and transformation.action:
+            members.append(UnderstandingMember(
+                role='result',
+                description=transformation.action[:200],
+                confidence=0.75,
+            ))
+
+        # Kind-specific role inference
+        if transformation:
+            kind = transformation.kind
+
+            if kind == 'signal_flip':
+                # Signal flip: has default and exception
+                members.append(UnderstandingMember(
+                    role='default',
+                    description='jawaban default sebelum sinyal flip',
+                    confidence=0.7,
+                ))
+                members.append(UnderstandingMember(
+                    role='exception',
+                    description='jawaban setelah sinyal flip diterapkan',
+                    confidence=0.7,
+                ))
+
+            elif kind == 'contrast_focus':
+                members.append(UnderstandingMember(
+                    role='contrast_point',
+                    description='bagian yang menjadi fokus setelah kata kontras',
+                    confidence=0.7,
+                ))
+
+            elif kind == 'comparison_resolve':
+                members.append(UnderstandingMember(
+                    role='comparator',
+                    description='entitas yang dibandingkan',
+                    confidence=0.7,
+                ))
+
+            elif kind == 'quantity_compute':
+                members.append(UnderstandingMember(
+                    role='values',
+                    description='nilai-nilai yang perlu dihitung',
+                    confidence=0.7,
+                ))
+
+            elif kind == 'context_filter':
+                members.append(UnderstandingMember(
+                    role='target_info',
+                    description='informasi spesifik yang dicari dalam konteks',
+                    confidence=0.7,
+                ))
+
+        return members
 
     # ═══════════════ ANSWER EXTRACTION ═══════════════
 

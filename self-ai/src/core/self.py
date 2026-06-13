@@ -48,6 +48,9 @@ class SelfCore:
         self._introspector = None   # Introspector (lazy)
         self._unconscious_enabled = True  # Toggle for A/B testing
         self._last_answer_question = ''   # For introspection context
+
+        # v35: Governance engine — lifecycle + epistemic management
+        self._governance = None     # GovernanceEngine (lazy)
         
     @property
     def composer(self):
@@ -200,6 +203,152 @@ class SelfCore:
         if self._injector is not None:
             self._injector.set_enabled(enabled)
         logger.info("Unconscious injection %s", "ENABLED" if enabled else "DISABLED")
+
+    # ═══════════════ v35: GOVERNANCE API ═══════════════
+
+    def _get_governance(self):
+        """Lazy-init GovernanceEngine."""
+        if self._governance is not None:
+            return self._governance
+        try:
+            from governance.engine import GovernanceEngine
+            from derivation.understanding_builder import get_shared_graph
+            self._governance = GovernanceEngine(graph=get_shared_graph())
+            return self._governance
+        except ImportError:
+            logger.debug("governance module not available")
+            return None
+        except Exception as e:
+            logger.warning("Failed to init GovernanceEngine: %s", e)
+            return None
+
+    def deactivate(self, node_id: str, reason: str = '') -> bool:
+        """Deactivate an understanding — set to DEPRECATED without deleting.
+
+        This is the core of the "deactivate, don't delete" vision.
+        The understanding still exists in the graph, but it will NO LONGER:
+          - Be retrieved for unconscious injection
+          - Influence answers via reasoning
+
+        However, it CAN still be:
+          - Introspected (user asks "why did you used to think X?")
+          - Reactivated (if new evidence supports it)
+
+        This is like telling someone "the stove is safe now" — the memory
+        of being burned is still there, but the hands are no longer cautious.
+
+        Args:
+            node_id: ID of the UnderstandingNode to deactivate
+            reason: Why it's being deactivated (for traceability)
+
+        Returns:
+            True if deactivation succeeded, False otherwise
+        """
+        governance = self._get_governance()
+        if governance is None:
+            logger.warning("GovernanceEngine not available — cannot deactivate")
+            return False
+
+        result = governance.deactivate(node_id, reason=reason)
+        if result is not None:
+            logger.info("Deactivated understanding %s: %s", node_id, reason)
+            return True
+        return False
+
+    def reactivate(self, node_id: str, reason: str = '') -> bool:
+        """Reactivate a DEPRECATED understanding.
+
+        Like saying "actually, that stove IS still hot" — the memory
+        comes back to influence behavior.
+
+        Args:
+            node_id: ID of the UnderstandingNode to reactivate
+            reason: Why it's being reactivated
+
+        Returns:
+            True if reactivation succeeded, False otherwise
+        """
+        governance = self._get_governance()
+        if governance is None:
+            logger.warning("GovernanceEngine not available — cannot reactivate")
+            return False
+
+        result = governance.reactivate(node_id, reason=reason)
+        if result is not None:
+            logger.info("Reactivated understanding %s: %s", node_id, reason)
+            return True
+        return False
+
+    def list_experiences(self, include_deprecated: bool = False) -> list:
+        """List all understanding nodes with their governance status.
+
+        Args:
+            include_deprecated: Whether to include DEPRECATED nodes
+
+        Returns:
+            List of dicts with node id, name, lifecycle, epistemic, confidence
+        """
+        try:
+            from derivation.understanding_builder import get_shared_graph
+            graph = get_shared_graph()
+            results = []
+            for nid, node in graph._nodes.items():
+                if not include_deprecated:
+                    if hasattr(node, 'lifecycle') and node.lifecycle is not None:
+                        from governance.states import LifecycleState
+                        if node.lifecycle == LifecycleState.DEPRECATED:
+                            continue
+                results.append({
+                    'id': node.id,
+                    'name': node.name,
+                    'concept': node.concept[:80],
+                    'lifecycle': getattr(node, 'lifecycle', None),
+                    'epistemic': getattr(node, 'epistemic', None),
+                    'confidence': node.confidence,
+                    'members': [
+                        {'role': m.role, 'description': m.description}
+                        for m in node.members
+                    ] if hasattr(node, 'members') and node.members else [],
+                })
+            return results
+        except Exception as e:
+            logger.warning("Failed to list experiences: %s", e)
+            return []
+
+    def _governance_promote_after_derive(self, derive_result: dict):
+        """Promote understanding nodes after a derivation uses them.
+
+        v35: After a derivation is complete, any understanding nodes that
+        were used should be considered for lifecycle/epistemic promotion.
+
+        This is how understandings move from NEW → CANDIDATE → STABLE:
+          - Each time a node is used in reasoning → times_applied += 1
+          - If the answer is correct → times_correct += 1
+          - GovernanceEngine.promote() checks if the node qualifies for
+            the next lifecycle stage
+        """
+        governance = self._get_governance()
+        if governance is None:
+            return
+
+        # Find which understanding was used
+        method = derive_result.get('method', '')
+        if method and method.startswith('understanding_'):
+            # Extract node_id from method string
+            node_id = method.replace('understanding_', '')
+            try:
+                governance.promote(node_id)
+            except Exception as e:
+                logger.debug("Governance promote failed for %s: %s", node_id, e)
+
+        # Also try to promote nodes that were in the injection log
+        injection_log = getattr(self._injector, 'last_injection_log', {})
+        if injection_log.get('active'):
+            for node_id in injection_log.get('nodes', []):
+                try:
+                    governance.promote(node_id)
+                except Exception:
+                    pass
     
 
     
@@ -466,6 +615,9 @@ class SelfCore:
                 # Add injection metadata to result
                 if injector is not None:
                     derivation_result['unconscious_injection'] = injector.get_injection_log()
+
+                # v35: Governance — promote understanding nodes after successful use
+                self._governance_promote_after_derive(result)
 
                 # v28: If answer confidence is low and novelty is high, observe
                 confidence = result.get('confidence', 1.0)

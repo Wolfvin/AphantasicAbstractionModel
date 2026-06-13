@@ -55,6 +55,9 @@ from typing import List, Optional, Tuple
 
 import torch
 
+# v35: Governance filtering
+from governance.states import LifecycleState, EpistemicState
+
 logger = logging.getLogger(__name__)
 
 
@@ -165,7 +168,14 @@ class UnconsciousInjector:
         """Compute a single experience vector from multiple UnderstandingNodes.
 
         Averages the condition_embedding of all nodes into one vector.
-        Weighted by each node's confidence/accuracy.
+        Weighted by each node's confidence/accuracy AND governance state.
+
+        v35: Nodes that are DEPRECATED or CONTRADICTED are filtered out.
+        Only CANDIDATE and STABLE nodes with non-CONTRADICTED epistemic
+        state are included in the injection. This ensures that:
+          - Deactivated experiences don't influence behavior
+          - Contradicted knowledge isn't injected unconsciously
+          - Only verified knowledge steers the model's output
 
         Args:
             nodes: List of (UnderstandingNode, score) tuples from retrieval.
@@ -180,6 +190,16 @@ class UnconsciousInjector:
         weights = []
 
         for node, score in nodes:
+            # v35: Governance filter — skip non-injectable nodes
+            if not self._is_injectable(node):
+                logger.debug(
+                    "Skipping non-injectable node %s (lifecycle=%s, epistemic=%s)",
+                    node.id,
+                    getattr(node, 'lifecycle', '?'),
+                    getattr(node, 'epistemic', '?'),
+                )
+                continue
+
             emb = node.condition_embedding
             if emb is None:
                 continue
@@ -189,8 +209,13 @@ class UnconsciousInjector:
             vec = torch.tensor(emb, dtype=torch.float32)
             vectors.append(vec)
 
-            # Weight: combination of retrieval score and node accuracy
-            w = score * node.accuracy
+            # Weight: combination of retrieval score, accuracy, and governance quality
+            # v35: Include seed_scores.overall() in the weight
+            base_weight = score * node.accuracy
+            governance_bonus = 1.0
+            if hasattr(node, 'seed_scores') and node.seed_scores:
+                governance_bonus = 0.5 + (node.seed_scores.overall() * 0.5)
+            w = base_weight * governance_bonus
             weights.append(max(w, 0.01))  # floor to avoid zero weight
 
         if not vectors:
@@ -336,6 +361,17 @@ class UnconsciousInjector:
                         'score': float(s),
                         'accuracy': float(n.accuracy),
                         'source': n.source,
+                        # v35: Governance info
+                        'lifecycle': getattr(n, 'lifecycle', LifecycleState.STABLE).value
+                            if hasattr(n, 'lifecycle') and n.lifecycle is not None
+                            else 'stable',
+                        'epistemic': getattr(n, 'epistemic', EpistemicState.OBSERVED).value
+                            if hasattr(n, 'epistemic') and n.epistemic is not None
+                            else 'observed',
+                        'members': [
+                            {'role': m.role, 'description': m.description}
+                            for m in n.members
+                        ] if hasattr(n, 'members') and n.members else [],
                     }
                     for n, s in nodes
                 ],
@@ -382,3 +418,42 @@ class UnconsciousInjector:
         """Enable or disable injection (for A/B testing conscious vs unconscious)."""
         self.enabled = enabled
         logger.info("UnconsciousInjector %s", "ENABLED" if enabled else "DISABLED")
+
+    def _is_injectable(self, node) -> bool:
+        """Check if a node is eligible for unconscious injection.
+
+        v35: Governance filter — only inject nodes that are:
+          - Lifecycle: CANDIDATE or STABLE (not NEW, not DEPRECATED)
+          - Epistemic: NOT CONTRADICTED
+          - Confidence: above minimum (0.2)
+
+        NEW nodes are not injected because they haven't been verified.
+        DEPRECATED nodes are not injected because they've been silenced
+        ("deactivate, don't delete").
+        CONTRADICTED nodes are not injected because they're flagged as wrong.
+
+        This method is graceful — if a node doesn't have governance
+        fields (legacy nodes), it defaults to injectable for backward
+        compatibility.
+        """
+        lifecycle = getattr(node, 'lifecycle', None)
+        epistemic = getattr(node, 'epistemic', None)
+        confidence = getattr(node, 'confidence', 0.5)
+
+        # Backward compatible: nodes without governance fields are injectable
+        if lifecycle is None and epistemic is None:
+            return confidence >= 0.2
+
+        # Lifecycle check: only CANDIDATE and STABLE
+        if lifecycle not in (LifecycleState.CANDIDATE, LifecycleState.STABLE, None):
+            return False
+
+        # Epistemic check: not CONTRADICTED
+        if epistemic == EpistemicState.CONTRADICTED:
+            return False
+
+        # Confidence check
+        if confidence < 0.2:
+            return False
+
+        return True
