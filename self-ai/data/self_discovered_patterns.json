@@ -1,0 +1,422 @@
+{
+  "peribahasa_observed_pattern": {
+    "name": "peribahasa_observed_pattern",
+    "concept": "Pattern for peribahasa discovered from 10 teaching examples",
+    "abstraction": "Pattern for peribahasa discovered from 10 teaching examples",
+    "conditions": [
+      "anak",
+      "mendapat",
+      "peribahaaan",
+      "berbuat",
+      "keras",
+      "budi",
+      "sama",
+      "sari",
+      "saling",
+      "bekerja"
+    ],
+    "method": [
+      "Identifikasi situasi: seseorang yang lupa/melupakan → Identifikasi konteks: orang tua bekerja keras untuk anak → Identifikasi pola: usaha keras dulu → hasil baik kemudian"
+    ],
+    "examples": [
+      "Q: Apa peribahasa yang cocok untuk cerita tentang anak yang lup → A: kacang lupa akan kulitnya",
+      "Q: Apa peribahasa untuk orang yang bekerja keras dan kemudian m → A: bersakit-sakit dahulu bersenang-senang k",
+      "Q: Apa peribahasa untuk orang yang bekerja sama dan saling meno → A: berat sama dipikul ringan sama dijinjing",
+      "Q: Apa peribahasa untuk orang yang berbuat jahat dan mendapat b → A: siapa menabur angin akan menuai badai",
+      "Q: Apa peribahasa untuk orang tua yang bekerja keras demi anakn → A: banting tulang"
+    ],
+    "question_types": [
+      "peribahasa"
+    ],
+    "source": "self_discovered_from_teaching",
+    "confidence": 0.5
+  },
+  "bahasa_kiasan_observed_pattern": {
+    "name": "bahasa_kiasan_observed_pattern",
+    "concept": "Pattern for bahasa_kiasan discovered from 7 teaching examples",
+    "abstraction": "Pattern for bahasa_kiasan discovered from 7 teaching examples",
+    "conditions": [
+      "'suaranya",
+      "kalimat",
+      "berkelipkan",
+      "purnama",
+      "sedih",
+      "'wajahnya",
+      "bersinar",
+      "ketika",
+      "langit",
+      "merunduk"
+    ],
+    "method": [
+      "Identifikasi subjek: angin (benda mati) → Identifikasi kata kerja: menari-nari (sifat manusia) → Identifikasi kata pembanding: bagaikan"
+    ],
+    "examples": [
+      "Q: Apa gaya bahasa dalam kalimat 'angin menari-nari di antara p → A: personifikasi",
+      "Q: Apa gaya bahasa dalam kalimat 'wajahnya bagaikan bulan purna → A: perumpamaan (simile)",
+      "Q: Apa gaya bahasa dalam kalimat 'suaranya menggelegar bak peti → A: hiperbola",
+      "Q: Bintang-bintang berkelipkan mata di langit malam yang gelap. → A: personifikasi",
+      "Q: Pohon-pohon merunduk sedih ketika musim gugur tiba. Kata 'me → A: personifikasi"
+    ],
+    "question_types": [
+      "bahasa_kiasan"
+    ],
+    "source": "self_discovered_from_teaching",
+    "confidence": 0.5
+  },
+  "ide_pokok_observed_pattern": {
+    "name": "ide_pokok_observed_pattern",
+    "concept": "Pattern for ide_pokok discovered from 6 teaching examples",
+    "abstraction": "Pattern for ide_pokok discovered from 6 teaching examples",
+    "conditions": [
+      "kalimat",
+      "banyak",
+      "sangat",
+      "pencemaran",
+      "informasi",
+      "'oleh",
+      "minum",
+      "kota",
+      "keragaman",
+      "parah"
+    ],
+    "method": [
+      "Baca kalimat pertama: 'Kucing adalah hewan yang sangat rajin membersihkan diri' → Kalimat pertama menyatakan gagasan utama tentang kebersihan kucing → Identifikasi kata penanda kesimpulan: 'Oleh karena itu'"
+    ],
+    "examples": [
+      "Q: Apa ide pokok dari paragraf: 'Kucing adalah hewan yang sanga → A: kucing rajin membersihkan diri",
+      "Q: Apa ide pokok dari paragraf yang kalimat terakhirnya: 'Oleh  → A: kita harus menjaga kebersihan lingkungan",
+      "Q: Indonesia memiliki keragaman budaya yang sangat kaya. Setiap → A: keragaman budaya Indonesia",
+      "Q: Teknologi informasi berkembang sangat pesat. Internet memuda → A: perkembangan teknologi informasi",
+      "Q: Banyak siswa kurang minum air putih saat di sekolah. Mereka  → A: kita harus membiasakan minum air putih y"
+    ],
+    "question_types": [
+      "ide_pokok"
+    ],
+    "source": "self_discovered_from_teaching",
+    "confidence": 0.5
+  },
+  "pertanyaan_negatif_observed_pattern": {
+    "name": "pertanyaan_negatif_observed_pattern",
+    "concept": "Pattern for pertanyaan_negatif discovered from 4 teaching examples",
+    "abstraction": "Pattern for pertanyaan_negatif discovered from 4 teaching examples",
+    "conditions": [
+      "anak",
+      "tapi",
+      "malas,",
+      "selain",
+      "semua",
+      "hewan",
+      "jinak",
+      "siswa",
+      "kecuali",
+      "bukan"
+    ],
+    "method": [
+      "Identifikasi kata kunci: 'kecuali' = pengecualian → Artinya: semua hadir, TAPI Ani TIDAK hadir → Temukan kata pengecualian: 'kecuali'"
+    ],
+    "examples": [
+      "Q: Semua siswa hadir kecuali Ani. Siapa yang tidak hadir? → A: Ani",
+      "Q: Semua siswa hadir kecuali Ani. Siapa yang tidak hadir? → A: Ani",
+      "Q: Semua hewan di kebun itu jinak selain harimau. Hewan mana ya → A: harimau",
+      "Q: Siti bukan anak yang malas, tapi anak yang sangat rajin. Sif → A: rajin"
+    ],
+    "question_types": [
+      "pertanyaan_negatif"
+    ],
+    "source": "self_discovered_from_teaching",
+    "confidence": 0.5
+  },
+  "perbandingan_observed_pattern": {
+    "name": "perbandingan_observed_pattern",
+    "concept": "Pattern for perbandingan discovered from 10 teaching examples",
+    "abstraction": "Pattern for perbandingan discovered from 10 teaching examples",
+    "conditions": [
+      "makan",
+      "besar",
+      "budi",
+      "raja",
+      "setiap",
+      "tetapi",
+      "sangat",
+      "sari",
+      "berkuasa",
+      "berolahraga"
+    ],
+    "method": [
+      "Identifikasi kata 'tetapi' = penanda kontras → 'Besar tetapi sederhana' = meskipun besar, hidupnya sederhana → Identifikasi: Budi > Andi (tinggi)"
+    ],
+    "examples": [
+      "Q: Rumah Budi besar tetapi sederhana. Bagaimana gaya hidup Budi → A: sederhana",
+      "Q: Budi lebih tinggi dari Andi. Siapa yang lebih pendek? → A: Andi",
+      "Q: Rumah Budi besar tetapi sederhana. Bagaimana gaya hidup Budi → A: sederhana",
+      "Q: Raja sangat kaya dan berkuasa tetapi dia tidur di lantai dan → A: sederhana",
+      "Q: Andi lebih pendek dari Budi. Siapa yang lebih tinggi? → A: Budi"
+    ],
+    "question_types": [
+      "perbandingan"
+    ],
+    "source": "self_discovered_from_teaching",
+    "confidence": 0.5
+  },
+  "benar_salah_observed_pattern": {
+    "name": "benar_salah_observed_pattern",
+    "concept": "Pattern for benar_salah discovered from 1 teaching examples",
+    "abstraction": "Pattern for benar_salah discovered from 1 teaching examples",
+    "conditions": [
+      "kalimantan.'",
+      "terletak",
+      "pernyataan:",
+      "'jakarta",
+      "pulau"
+    ],
+    "method": [
+      "Cek pengetahuan: Jakarta adalah ibu kota Indonesia → Jakarta terletak di Pulau Jawa, BUKAN Kalimantan"
+    ],
+    "examples": [
+      "Q: Pernyataan: 'Jakarta terletak di Pulau Kalimantan.' Benar at → A: salah"
+    ],
+    "question_types": [
+      "benar_salah"
+    ],
+    "source": "self_discovered_from_teaching",
+    "confidence": 0.5
+  },
+  "teks_argumentatif_observed_pattern": {
+    "name": "teks_argumentatif_observed_pattern",
+    "concept": "Pattern for teks_argumentatif discovered from 1 teaching examples",
+    "abstraction": "Pattern for teks_argumentatif discovered from 1 teaching examples",
+    "conditions": [
+      "merupakan",
+      "kalimat",
+      "mana",
+      "argumentatif,",
+      "teks"
+    ],
+    "method": [
+      "Cari kata-kata yang menunjukkan pendapat pribadi → Penanda opini: 'menurut saya', 'sebaiknya', 'seharusnya'"
+    ],
+    "examples": [
+      "Q: Dalam teks argumentatif, kalimat mana yang merupakan opini? → A: Kalimat yang mengandung kata 'menurut sa"
+    ],
+    "question_types": [
+      "teks_argumentatif"
+    ],
+    "source": "self_discovered_from_teaching",
+    "confidence": 0.5
+  },
+  "sikap_tokoh_observed_pattern": {
+    "name": "sikap_tokoh_observed_pattern",
+    "concept": "Pattern for sikap_tokoh discovered from 4 teaching examples",
+    "abstraction": "Pattern for sikap_tokoh discovered from 4 teaching examples",
+    "conditions": [
+      "selalu",
+      "tapi",
+      "rani",
+      "pemarah.",
+      "dicemooh,",
+      "tetangganya",
+      "lebih",
+      "berbuat",
+      "meskipun",
+      "menolong"
+    ],
+    "method": [
+      "Identifikasi tindakan: menolong tetangga → Identifikasi konteks: meskipun miskin (berkorban) → Identifikasi dua sumber: 'semua orang berkata' vs 'Lia tidak pernah marah'"
+    ],
+    "examples": [
+      "Q: Tokoh selalu menolong tetangganya meskipun ia sendiri miskin → A: dermawan atau peduli",
+      "Q: Semua orang berkata Lia pemarah. Tapi Lia tidak pernah marah → A: sabar",
+      "Q: Rani selalu menghormati orang yang lebih tua dan menolong te → A: baik hati atau peduli",
+      "Q: Meskipun dicemooh, Amir tetap berbuat baik dan menolong siap → A: pemaaf atau ikhlas"
+    ],
+    "question_types": [
+      "sikap_tokoh"
+    ],
+    "source": "self_discovered_from_teaching",
+    "confidence": 0.5
+  },
+  "kesan_pesan_observed_pattern": {
+    "name": "kesan_pesan_observed_pattern",
+    "concept": "Pattern for kesan_pesan discovered from 1 teaching examples",
+    "abstraction": "Pattern for kesan_pesan discovered from 1 teaching examples",
+    "conditions": [
+      "anak",
+      "belajar",
+      "rajin",
+      "tentang",
+      "cerita"
+    ],
+    "method": [
+      "Identifikasi pola: rajin belajar → menjadi juara → Pesan: kerja keras menghasilkan keberhasilan"
+    ],
+    "examples": [
+      "Q: Cerita tentang anak yang rajin belajar dan akhirnya menjadi  → A: Kita harus rajin belajar agar berhasil"
+    ],
+    "question_types": [
+      "kesan_pesan"
+    ],
+    "source": "self_discovered_from_teaching",
+    "confidence": 0.5
+  },
+  "teks_eksplanasi_observed_pattern": {
+    "name": "teks_eksplanasi_observed_pattern",
+    "concept": "Pattern for teks_eksplanasi discovered from 4 teaching examples",
+    "abstraction": "Pattern for teks_eksplanasi discovered from 4 teaching examples",
+    "conditions": [
+      "lava",
+      "karena",
+      "mengeluarkan",
+      "merah",
+      "punya",
+      "andi",
+      "hujan",
+      "vulkanik.",
+      "kelereng",
+      "mengikis"
+    ],
+    "method": [
+      "Identifikasi pertanyaan sebab-akibat: 'mengapa' → Cari proses: pemanasan air → penguapan → kondensasi → hujan → Identifikasi siapa yang ditanyakan: Andi"
+    ],
+    "examples": [
+      "Q: Mengapa hujan turun? → A: Hujan turun karena air di laut dan darat",
+      "Q: Andi punya 5 kelereng merah dan 3 kelereng biru. Budi punya  → A: 8",
+      "Q: Gunung meletus mengeluarkan lava dan abu vulkanik. Lava memb → A: abu vulkanik menutupi lahan pertanian ak",
+      "Q: Erosi terjadi karena hujan mengikis tanah yang tidak tertutu → A: hujan mengikis tanah yang tidak lagi dit"
+    ],
+    "question_types": [
+      "teks_eksplanasi"
+    ],
+    "source": "self_discovered_from_teaching",
+    "confidence": 0.5
+  },
+  "analogi_observed_pattern": {
+    "name": "analogi_observed_pattern",
+    "concept": "Pattern for analogi discovered from 1 teaching examples",
+    "abstraction": "Pattern for analogi discovered from 1 teaching examples",
+    "conditions": [
+      "sakit",
+      "guru",
+      "rumah",
+      "dokter"
+    ],
+    "method": [
+      "Identifikasi relasi: dokter BEKERJA DI rumah sakit → Terapkan relasi yang sama: guru BEKERJA DI ?"
+    ],
+    "examples": [
+      "Q: Dokter : Rumah Sakit = Guru : ? → A: sekolah"
+    ],
+    "question_types": [
+      "analogi"
+    ],
+    "source": "self_discovered_from_teaching",
+    "confidence": 0.5
+  },
+  "tone_mood_observed_pattern": {
+    "name": "tone_mood_observed_pattern",
+    "concept": "Pattern for tone_mood discovered from 1 teaching examples",
+    "abstraction": "Pattern for tone_mood discovered from 1 teaching examples",
+    "conditions": [
+      "anak",
+      "suasana",
+      "tentang",
+      "kehilangan",
+      "cerita"
+    ],
+    "method": [
+      "Identifikasi peristiwa: kehilangan orang tua → Emosi yang muncul: sedih, duka, kehilangan"
+    ],
+    "examples": [
+      "Q: Bagaimana suasana dalam cerita tentang anak yang kehilangan  → A: sedih"
+    ],
+    "question_types": [
+      "tone_mood"
+    ],
+    "source": "self_discovered_from_teaching",
+    "confidence": 0.5
+  },
+  "implisit_observed_pattern": {
+    "name": "implisit_observed_pattern",
+    "concept": "Pattern for implisit discovered from 5 teaching examples",
+    "abstraction": "Pattern for implisit discovered from 5 teaching examples",
+    "conditions": [
+      "menghancurkan",
+      "gempa",
+      "itu.",
+      "jembatan",
+      "virus",
+      "kebakaran",
+      "kekeringan",
+      "menghasilkan",
+      "kota",
+      "membawa"
+    ],
+    "method": [
+      "Fakta eksplisit: Andi selalu bawa payung → Pertanyaan: apa yang TIDAK langsung dikatakan tapi bisa disimpulkan? → Identifikasi rantai sebab-akibat: gempa → jembatan hancur → truk tidak lewat → barang tidak sampai → harga naik"
+    ],
+    "examples": [
+      "Q: Andi selalu membawa payung meskipun cerah. Apa yang bisa dis → A: Andi adalah orang yang berhati-hati atau",
+      "Q: Gempa bumi menghancurkan jembatan penghubung dua kota. Truk  → A: gempa bumi menghancurkan jembatan sehing",
+      "Q: Virus menyebar cepat di kota itu. Banyak karyawan sakit sehi → A: karyawan sakit akibat penyebaran virus",
+      "Q: Kebakaran hutan menghasilkan asap tebal. Asap menutupi banda → A: pesawat tidak bisa mendarat karena asap ",
+      "Q: Kekeringan melanda desa itu. Tanaman padi layu dan petani ti → A: panen gagal karena kekeringan sehingga b"
+    ],
+    "question_types": [
+      "implisit"
+    ],
+    "source": "self_discovered_from_teaching",
+    "confidence": 0.5
+  },
+  "sinonim_antonim_observed_pattern": {
+    "name": "sinonim_antonim_observed_pattern",
+    "concept": "Pattern for sinonim_antonim discovered from 1 teaching examples",
+    "abstraction": "Pattern for sinonim_antonim discovered from 1 teaching examples",
+    "conditions": [
+      "kata",
+      "lawan",
+      "'rajin'?"
+    ],
+    "method": [
+      "Identifikasi: lawan kata = antonim → Rajin = suka bekerja keras"
+    ],
+    "examples": [
+      "Q: Apa lawan kata dari 'rajin'? → A: malas"
+    ],
+    "question_types": [
+      "sinonim_antonim"
+    ],
+    "source": "self_discovered_from_teaching",
+    "confidence": 0.5
+  },
+  "eksplisit_observed_pattern": {
+    "name": "eksplisit_observed_pattern",
+    "concept": "Pattern for eksplisit discovered from 5 teaching examples",
+    "abstraction": "Pattern for eksplisit discovered from 5 teaching examples",
+    "conditions": [
+      "taman",
+      "banyak",
+      "terletak",
+      "memasak",
+      "nasi",
+      "komodo",
+      "setiap",
+      "surabaya",
+      "kota",
+      "nasional"
+    ],
+    "method": [
+      "Pisahkan emosi dari fakta → Emosi: berduka, sedih (bukan yang ditanyakan) → Cari kata kunci: 'makanan khas'"
+    ],
+    "examples": [
+      "Q: Dengan hati berduka, ibu memasak nasi putih dan sayur. Apa y → A: nasi putih dan sayur",
+      "Q: Jakarta adalah ibu kota Indonesia. Banyak gedung pencakar la → A: kerak telor",
+      "Q: Taman Nasional Komodo terletak di Provinsi Nusa Tenggara Tim → A: Nusa Tenggara Timur",
+      "Q: Sekolah Dasar Negeri 3 Surabaya didirikan pada tahun 1975 ol → A: Bapak Suwiryo",
+      "Q: Perpustakaan kota buka setiap hari Senin sampai Sabtu pukul  → A: 09.00"
+    ],
+    "question_types": [
+      "eksplisit"
+    ],
+    "source": "self_discovered_from_teaching",
+    "confidence": 0.5
+  }
+}

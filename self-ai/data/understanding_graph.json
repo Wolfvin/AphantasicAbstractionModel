@@ -1,0 +1,3085 @@
+{
+  "core_exception": {
+    "id": "core_exception",
+    "name": "exception_reversal",
+    "concept": "Exception word reverses the general rule for the entity after it",
+    "abstraction": "Kata kecuali/selain membuat pengecualian — entitas setelahnya berkeadaan berlawanan dari aturan umum. Pola: SEMUA A [STATE] kecuali B → B TIDAK [STATE].",
+    "schemas": [
+      "Semua siswa hadir kecuali Ani → Ani tidak hadir",
+      "Semua hewan jinak selain harimau → harimau tidak jinak"
+    ],
+    "transformation": {
+      "kind": "signal_flip",
+      "trigger": {
+        "signal_words": [
+          "kecuali",
+          "selain",
+          "terkecuali"
+        ],
+        "result_position": "after"
+      },
+      "action": "Find exception word, entity after it has opposite state",
+      "slots": [],
+      "constraints": []
+    },
+    "conditions": [
+      "kecuali",
+      "selain",
+      "terkecuali",
+      "pengecualian",
+      "semua",
+      "siapa",
+      "after",
+      "tidak",
+      "state",
+      "person",
+      "animal",
+      "mana",
+      "kebun",
+      "hewan",
+      "bukan",
+      "jinak",
+      "siswa",
+      "jika",
+      "hadir",
+      "dina",
+      "harimau"
+    ],
+    "condition_embedding": null,
+    "edges": [
+      [
+        "core_double_negation",
+        "related"
+      ],
+      [
+        "core_double_negation",
+        "generalizes"
+      ],
+      [
+        "core_negation_affirm",
+        "related"
+      ],
+      [
+        "core_contrast",
+        "related"
+      ],
+      [
+        "e7111963823d",
+        "related"
+      ],
+      [
+        "91bdda04ec76",
+        "related"
+      ],
+      [
+        "7ca08ac2254a",
+        "related"
+      ],
+      [
+        "91bdda04ec76",
+        "related"
+      ],
+      [
+        "core_contrast",
+        "related"
+      ],
+      [
+        "core_negation_affirm",
+        "related"
+      ],
+      [
+        "core_double_negation",
+        "related"
+      ],
+      [
+        "core_double_negation",
+        "generalizes"
+      ],
+      [
+        "e7111963823d",
+        "related"
+      ],
+      [
+        "7ca08ac2254a",
+        "related"
+      ],
+      [
+        "c1e8f75d9ecf",
+        "related"
+      ],
+      [
+        "core_contrast",
+        "related"
+      ],
+      [
+        "core_negation_affirm",
+        "related"
+      ],
+      [
+        "core_double_negation",
+        "related"
+      ],
+      [
+        "core_double_negation",
+        "generalizes"
+      ],
+      [
+        "c1e8f75d9ecf",
+        "related"
+      ],
+      [
+        "91bdda04ec76",
+        "related"
+      ],
+      [
+        "e7111963823d",
+        "related"
+      ],
+      [
+        "7ca08ac2254a",
+        "related"
+      ],
+      [
+        "U_signal_flip_test",
+        "related"
+      ],
+      [
+        "U_signal_flip_test",
+        "generalizes"
+      ],
+      [
+        "U_signal_flip_emb",
+        "related"
+      ],
+      [
+        "U_signal_flip_emb",
+        "generalizes"
+      ],
+      [
+        "c1e8f75d9ecf",
+        "related"
+      ],
+      [
+        "91bdda04ec76",
+        "related"
+      ],
+      [
+        "core_contrast",
+        "related"
+      ],
+      [
+        "core_negation_affirm",
+        "related"
+      ],
+      [
+        "core_double_negation",
+        "related"
+      ],
+      [
+        "core_double_negation",
+        "generalizes"
+      ],
+      [
+        "e7111963823d",
+        "related"
+      ],
+      [
+        "7ca08ac2254a",
+        "related"
+      ],
+      [
+        "U_signal_flip_test",
+        "related"
+      ],
+      [
+        "U_signal_flip_test",
+        "generalizes"
+      ],
+      [
+        "U_signal_flip_emb",
+        "related"
+      ],
+      [
+        "U_signal_flip_emb",
+        "generalizes"
+      ],
+      [
+        "core_contrast",
+        "related"
+      ],
+      [
+        "core_negation_affirm",
+        "related"
+      ],
+      [
+        "core_double_negation",
+        "related"
+      ],
+      [
+        "core_double_negation",
+        "generalizes"
+      ],
+      [
+        "c1e8f75d9ecf",
+        "related"
+      ],
+      [
+        "91bdda04ec76",
+        "related"
+      ],
+      [
+        "e7111963823d",
+        "related"
+      ],
+      [
+        "7ca08ac2254a",
+        "related"
+      ],
+      [
+        "U_signal_flip_test",
+        "related"
+      ],
+      [
+        "U_signal_flip_test",
+        "generalizes"
+      ],
+      [
+        "U_signal_flip_emb",
+        "related"
+      ],
+      [
+        "U_signal_flip_emb",
+        "generalizes"
+      ]
+    ],
+    "source": "core_seed",
+    "confidence": 0.85,
+    "times_applied": 0,
+    "times_correct": 0,
+    "times_failed": 0
+  },
+  "core_contrast": {
+    "id": "core_contrast",
+    "name": "contrast_after_tetapi",
+    "concept": "After contrast word, the following part is the true description",
+    "abstraction": "Kata tetapi/namun menandakan kontras — bagian SETELAH tetapi lebih penting dan merupakan keadaan sebenarnya. Pola: A tetapi B → B lebih penting dari A.",
+    "schemas": [
+      "Kaya tetapi sederhana → sederhana",
+      "Besar tetapi rendah hati → rendah hati"
+    ],
+    "transformation": {
+      "kind": "contrast_focus",
+      "trigger": {
+        "contrast_words": [
+          "tetapi",
+          "namun",
+          "tapi",
+          "akan tetapi"
+        ]
+      },
+      "action": "Find contrast word, focus on what comes after",
+      "slots": [],
+      "constraints": []
+    },
+    "conditions": [
+      "tetapi",
+      "namun",
+      "tapi",
+      "kontras",
+      "berbeda",
+      "sebenarnya",
+      "sederhana",
+      "bagaimana",
+      "gaya",
+      "place",
+      "hidup",
+      "state",
+      "person",
+      "seadanya",
+      "tidur",
+      "sangat",
+      "lantai",
+      "berkuasa",
+      "sehari-hari",
+      "kehidupan",
+      "makan",
+      "maka",
+      "besar",
+      "budi",
+      "rumah",
+      "kaya",
+      "raja"
+    ],
+    "condition_embedding": null,
+    "edges": [
+      [
+        "core_negation_affirm",
+        "related"
+      ],
+      [
+        "core_exception",
+        "related"
+      ],
+      [
+        "core_fact_opinion",
+        "related"
+      ],
+      [
+        "core_fact_opinion",
+        "generalizes"
+      ],
+      [
+        "e7111963823d",
+        "related"
+      ],
+      [
+        "7ca08ac2254a",
+        "related"
+      ],
+      [
+        "91bdda04ec76",
+        "related"
+      ],
+      [
+        "91bdda04ec76",
+        "related"
+      ],
+      [
+        "core_exception",
+        "related"
+      ],
+      [
+        "core_negation_affirm",
+        "related"
+      ],
+      [
+        "core_fact_opinion",
+        "related"
+      ],
+      [
+        "core_fact_opinion",
+        "generalizes"
+      ],
+      [
+        "e7111963823d",
+        "related"
+      ],
+      [
+        "7ca08ac2254a",
+        "related"
+      ],
+      [
+        "c1e8f75d9ecf",
+        "related"
+      ],
+      [
+        "core_exception",
+        "related"
+      ],
+      [
+        "c1e8f75d9ecf",
+        "related"
+      ],
+      [
+        "91bdda04ec76",
+        "related"
+      ],
+      [
+        "core_exception",
+        "related"
+      ],
+      [
+        "core_negation_affirm",
+        "related"
+      ],
+      [
+        "core_fact_opinion",
+        "related"
+      ],
+      [
+        "core_fact_opinion",
+        "generalizes"
+      ],
+      [
+        "e7111963823d",
+        "related"
+      ],
+      [
+        "7ca08ac2254a",
+        "related"
+      ],
+      [
+        "U_contrast_test",
+        "related"
+      ],
+      [
+        "U_contrast_test",
+        "generalizes"
+      ],
+      [
+        "U_contrast_emb",
+        "related"
+      ],
+      [
+        "U_contrast_emb",
+        "generalizes"
+      ],
+      [
+        "core_comparison",
+        "related"
+      ],
+      [
+        "core_quantity",
+        "related"
+      ],
+      [
+        "core_exception",
+        "related"
+      ]
+    ],
+    "source": "core_seed",
+    "confidence": 0.85,
+    "times_applied": 0,
+    "times_correct": 0,
+    "times_failed": 0
+  },
+  "core_negation_affirm": {
+    "id": "core_negation_affirm",
+    "name": "negation_then_affirmation",
+    "concept": "Pattern bukan X tapi Y rejects X and affirms Y",
+    "abstraction": "Pola bukan X tapi Y menolak X dan menegaskan Y — jawaban selalu yang ditegaskan (setelah tapi). X ditolak, Y adalah kebenaran.",
+    "schemas": [
+      "Bukan malas tapi rajin → rajin",
+      "Bukan pemarah tapi sabar → sabar"
+    ],
+    "transformation": {
+      "kind": "negation_affirmation",
+      "trigger": {
+        "negation_words": [
+          "bukan",
+          "tidak"
+        ],
+        "affirmation_words": [
+          "tapi",
+          "tetapi",
+          "melainkan"
+        ]
+      },
+      "action": "Find bukan...tapi pattern, what comes after tapi is the truth",
+      "slots": [],
+      "constraints": []
+    },
+    "conditions": [
+      "bukan",
+      "tapi",
+      "negasi",
+      "menolak",
+      "menegaskan",
+      "sifat",
+      "sangat",
+      "tetapi",
+      "anak",
+      "melainkan",
+      "tidak",
+      "state",
+      "person",
+      "emotion",
+      "semua",
+      "berkata",
+      "sebenarnya",
+      "orang",
+      "pernah",
+      "rajin",
+      "malas",
+      "siti",
+      "pemarah",
+      "marah"
+    ],
+    "condition_embedding": null,
+    "edges": [
+      [
+        "core_exception",
+        "related"
+      ],
+      [
+        "core_contrast",
+        "related"
+      ],
+      [
+        "core_fact_opinion",
+        "related"
+      ],
+      [
+        "core_double_negation",
+        "related"
+      ],
+      [
+        "e7111963823d",
+        "related"
+      ],
+      [
+        "c1e8f75d9ecf",
+        "related"
+      ],
+      [
+        "7ca08ac2254a",
+        "related"
+      ],
+      [
+        "c1e8f75d9ecf",
+        "related"
+      ],
+      [
+        "core_exception",
+        "related"
+      ],
+      [
+        "core_contrast",
+        "related"
+      ],
+      [
+        "core_fact_opinion",
+        "related"
+      ],
+      [
+        "core_double_negation",
+        "related"
+      ],
+      [
+        "e7111963823d",
+        "related"
+      ],
+      [
+        "7ca08ac2254a",
+        "related"
+      ],
+      [
+        "core_exception",
+        "related"
+      ],
+      [
+        "c1e8f75d9ecf",
+        "related"
+      ],
+      [
+        "core_exception",
+        "related"
+      ],
+      [
+        "core_contrast",
+        "related"
+      ],
+      [
+        "core_fact_opinion",
+        "related"
+      ],
+      [
+        "core_double_negation",
+        "related"
+      ],
+      [
+        "91bdda04ec76",
+        "related"
+      ],
+      [
+        "e7111963823d",
+        "related"
+      ],
+      [
+        "7ca08ac2254a",
+        "related"
+      ],
+      [
+        "U_contrast_test",
+        "related"
+      ],
+      [
+        "U_negaff_test",
+        "related"
+      ],
+      [
+        "U_negaff_test",
+        "generalizes"
+      ],
+      [
+        "U_contrast_emb",
+        "related"
+      ],
+      [
+        "core_exception",
+        "related"
+      ]
+    ],
+    "source": "core_seed",
+    "confidence": 0.85,
+    "times_applied": 0,
+    "times_correct": 0,
+    "times_failed": 0
+  },
+  "core_comparison": {
+    "id": "core_comparison",
+    "name": "comparative_resolve",
+    "concept": "When comparison states A lebih X dari B, question may ask for opposite",
+    "abstraction": "Perbandingan terbalik: jika A lebih X dari B, dan pertanyaan bertanya lawan X, maka jawaban B. Contoh: A lebih pendek dari B → siapa lebih tinggi? → B.",
+    "schemas": [
+      "Andi lebih pendek dari Budi, siapa lebih tinggi? → Budi"
+    ],
+    "transformation": {
+      "kind": "comparison_resolve",
+      "trigger": {
+        "comparison_words": [
+          "lebih",
+          "kurang"
+        ]
+      },
+      "action": "Find comparison, resolve based on question direction",
+      "slots": [],
+      "constraints": []
+    },
+    "conditions": [
+      "lebih",
+      "dari",
+      "pendek",
+      "tinggi",
+      "besar",
+      "kecil",
+      "perbandingan",
+      "andi",
+      "budi",
+      "kurang",
+      "siapa"
+    ],
+    "condition_embedding": null,
+    "edges": [
+      [
+        "e7111963823d",
+        "generalizes"
+      ],
+      [
+        "e7111963823d",
+        "generalizes"
+      ],
+      [
+        "core_contrast",
+        "related"
+      ],
+      [
+        "e7111963823d",
+        "related"
+      ],
+      [
+        "e7111963823d",
+        "generalizes"
+      ],
+      [
+        "U_compare_test",
+        "related"
+      ],
+      [
+        "U_compare_test",
+        "generalizes"
+      ],
+      [
+        "core_quantity",
+        "related"
+      ]
+    ],
+    "source": "core_seed",
+    "confidence": 0.8,
+    "times_applied": 0,
+    "times_correct": 0,
+    "times_failed": 0
+  },
+  "core_fact_emotion": {
+    "id": "core_fact_emotion",
+    "name": "fact_vs_emotion",
+    "concept": "When question asks for fact, ignore emotional language",
+    "abstraction": "Pertanyaan tentang fakta → cari fakta di teks, abaikan emosi. Emosi (sedih, berduka) bukan jawaban untuk pertanyaan faktual (apa yang dimasak).",
+    "schemas": [
+      "Dengan berduka, ibu memasak nasi dan sayur → nasi dan sayur"
+    ],
+    "transformation": {
+      "kind": "fact_extract",
+      "trigger": {
+        "fact_indicator": "apa yang",
+        "fact_action": "memasak"
+      },
+      "action": "Find fact query, search text for factual content, ignore emotions",
+      "slots": [],
+      "constraints": []
+    },
+    "conditions": [
+      "apa",
+      "yang",
+      "masak",
+      "fakta",
+      "faktual",
+      "memasak",
+      "membuat",
+      "emotion",
+      "thing",
+      "hati",
+      "apa yang",
+      "putih",
+      "sayur",
+      "berduka",
+      "nasi"
+    ],
+    "condition_embedding": null,
+    "edges": [],
+    "source": "core_seed",
+    "confidence": 0.75,
+    "times_applied": 0,
+    "times_correct": 0,
+    "times_failed": 0
+  },
+  "core_fact_opinion": {
+    "id": "core_fact_opinion",
+    "name": "fact_vs_opinion",
+    "concept": "When text contradicts popular opinion, the text fact overrides",
+    "abstraction": "Fakta dalam teks mengalahkan opini populer. Jika teks bilang \"tidak pernah marah\" tapi orang bilang \"pemarah\", jawaban berdasarkan fakta teks.",
+    "schemas": [
+      "Semua orang berkata pemarah, tapi tidak pernah marah → sabar"
+    ],
+    "transformation": {
+      "kind": "contrast_focus",
+      "trigger": {
+        "contrast_words": [
+          "tapi",
+          "tetapi",
+          "namun"
+        ]
+      },
+      "action": "Find contrast between opinion and fact, text fact wins",
+      "slots": [],
+      "constraints": []
+    },
+    "conditions": [
+      "orang",
+      "berkata",
+      "semua",
+      "tapi",
+      "tetapi",
+      "menurut",
+      "berkata"
+    ],
+    "condition_embedding": null,
+    "edges": [
+      [
+        "core_negation_affirm",
+        "related"
+      ],
+      [
+        "core_contrast",
+        "related"
+      ],
+      [
+        "core_contrast",
+        "specializes"
+      ],
+      [
+        "core_negation_affirm",
+        "related"
+      ],
+      [
+        "core_contrast",
+        "related"
+      ],
+      [
+        "core_contrast",
+        "specializes"
+      ],
+      [
+        "core_negation_affirm",
+        "related"
+      ],
+      [
+        "core_contrast",
+        "related"
+      ],
+      [
+        "core_contrast",
+        "specializes"
+      ]
+    ],
+    "source": "core_seed",
+    "confidence": 0.8,
+    "times_applied": 0,
+    "times_correct": 0,
+    "times_failed": 0
+  },
+  "core_quantity": {
+    "id": "core_quantity",
+    "name": "quantity_compute",
+    "concept": "Find the relevant entity and its numbers, then compute",
+    "abstraction": "Pertanyaan kuantitatif: identifikasi entitas yang ditanya, cari angka yang HANYA milik entitas tersebut, hitung. Jangan campur angka entitas lain!",
+    "schemas": [
+      "Andi punya 5 merah dan 3 biru. Berapa jumlah Andi? → 8 (5+3, tanpa Budi)"
+    ],
+    "transformation": {
+      "kind": "quantity_compute",
+      "trigger": {
+        "compute_type": "sum"
+      },
+      "action": "Find entity in question, find its numbers only, compute",
+      "slots": [],
+      "constraints": []
+    },
+    "conditions": [
+      "berapa",
+      "jumlah",
+      "total",
+      "hitung",
+      "thing",
+      "person",
+      "sum",
+      "biru",
+      "merah",
+      "punya",
+      "andi",
+      "budi",
+      "kelereng"
+    ],
+    "condition_embedding": null,
+    "edges": [
+      [
+        "91bdda04ec76",
+        "specializes"
+      ],
+      [
+        "061971c384fc",
+        "specializes"
+      ],
+      [
+        "core_kembalian",
+        "generalizes"
+      ],
+      [
+        "core_quantity_berapa",
+        "related"
+      ],
+      [
+        "core_quantity_berapa",
+        "generalizes"
+      ],
+      [
+        "91bdda04ec76",
+        "specializes"
+      ],
+      [
+        "core_kembalian",
+        "generalizes"
+      ],
+      [
+        "core_quantity_berapa",
+        "related"
+      ],
+      [
+        "core_quantity_berapa",
+        "generalizes"
+      ],
+      [
+        "91bdda04ec76",
+        "specializes"
+      ],
+      [
+        "core_contrast",
+        "related"
+      ],
+      [
+        "core_comparison",
+        "related"
+      ],
+      [
+        "core_kembalian",
+        "generalizes"
+      ],
+      [
+        "core_quantity_berapa",
+        "related"
+      ],
+      [
+        "core_quantity_berapa",
+        "generalizes"
+      ],
+      [
+        "061971c384fc",
+        "generalizes"
+      ],
+      [
+        "U_qty_test",
+        "related"
+      ],
+      [
+        "U_qty_test",
+        "generalizes"
+      ],
+      [
+        "U_kembalian_test",
+        "generalizes"
+      ],
+      [
+        "U_quantity_emb",
+        "related"
+      ],
+      [
+        "U_quantity_emb",
+        "generalizes"
+      ],
+      [
+        "c1e8f75d9ecf",
+        "related"
+      ]
+    ],
+    "source": "core_seed",
+    "confidence": 0.7,
+    "times_applied": 0,
+    "times_correct": 0,
+    "times_failed": 0
+  },
+  "core_context_filter": {
+    "id": "core_context_filter",
+    "name": "context_filter",
+    "concept": "Find specific info in long text using keyword matching",
+    "abstraction": "Dalam teks panjang, cari kata kunci dari pertanyaan → ekstrak informasi yang tepat di sekitarnya. Abaikan konteks yang tidak relevan.",
+    "schemas": [
+      "Jakarta... makanan khas Jakarta adalah kerak telor... → kerak telor"
+    ],
+    "transformation": {
+      "kind": "context_filter",
+      "trigger": {
+        "search_pattern": ""
+      },
+      "action": "Find keyword from question in text, extract nearby answer",
+      "slots": [],
+      "constraints": []
+    },
+    "conditions": [
+      "menurut",
+      "teks",
+      "berdasarkan",
+      "dalam",
+      "tersebut"
+    ],
+    "condition_embedding": null,
+    "edges": [
+      [
+        "91bdda04ec76",
+        "related"
+      ]
+    ],
+    "source": "core_seed",
+    "confidence": 0.65,
+    "times_applied": 0,
+    "times_correct": 0,
+    "times_failed": 0
+  },
+  "core_word_sense": {
+    "id": "core_word_sense",
+    "name": "word_sense_disambiguation",
+    "concept": "Same word can have different meanings — determine from context",
+    "abstraction": "Kata yang sama bisa bermakna berbeda tergantung konteks. \"Kepala desa\" = pemimpin, \"kepala ikan\" = bagian tubuh. Tentukan makna dari kata yang menyertainya.",
+    "schemas": [
+      "Kepala desa bijaksana → pemimpin (bukan bagian tubuh)"
+    ],
+    "transformation": {
+      "kind": "word_sense",
+      "trigger": {
+        "target_word": "",
+        "context_words": [],
+        "meaning_if_context": "",
+        "meaning_otherwise": ""
+      },
+      "action": "Find target word, check surrounding context, determine meaning",
+      "slots": [],
+      "constraints": []
+    },
+    "conditions": [
+      "bermakna",
+      "makna",
+      "artinya",
+      "maksud"
+    ],
+    "condition_embedding": null,
+    "edges": [],
+    "source": "core_seed",
+    "confidence": 0.7,
+    "times_applied": 0,
+    "times_correct": 0,
+    "times_failed": 0
+  },
+  "core_kembalian": {
+    "id": "core_kembalian",
+    "name": "kembalian_compute",
+    "concept": "Compute change: payment minus total cost",
+    "abstraction": "Kembalian = uang bayar - total harga. Total harga = jumlah x harga satuan. Jangan lupa kalikan dulu baru kurangi!",
+    "schemas": [
+      "3 buku @Rp5000, bayar Rp20000 → kembalian = 20000 - 15000 = 5000"
+    ],
+    "transformation": {
+      "kind": "quantity_compute",
+      "trigger": {
+        "compute_type": "change"
+      },
+      "action": "Find quantity and unit price, multiply, subtract from payment",
+      "slots": [],
+      "constraints": []
+    },
+    "conditions": [
+      "kembalian",
+      "bayar",
+      "seharga",
+      "membeli"
+    ],
+    "condition_embedding": null,
+    "edges": [
+      [
+        "91bdda04ec76",
+        "specializes"
+      ],
+      [
+        "061971c384fc",
+        "specializes"
+      ],
+      [
+        "core_quantity",
+        "specializes"
+      ],
+      [
+        "91bdda04ec76",
+        "specializes"
+      ],
+      [
+        "061971c384fc",
+        "specializes"
+      ],
+      [
+        "core_quantity",
+        "specializes"
+      ],
+      [
+        "91bdda04ec76",
+        "specializes"
+      ],
+      [
+        "061971c384fc",
+        "specializes"
+      ],
+      [
+        "core_quantity",
+        "specializes"
+      ]
+    ],
+    "source": "core_seed",
+    "confidence": 0.75,
+    "times_applied": 0,
+    "times_correct": 0,
+    "times_failed": 0
+  },
+  "core_double_negation": {
+    "id": "core_double_negation",
+    "name": "double_negation_resolve",
+    "concept": "Multiple negations cancel out — even number of negations = affirmative",
+    "abstraction": "Negasi ganda saling meniadakan. \"TIDAK BUKAN tidak\" = 3 negasi = negatif. \"TIDAK BUKAN\" = 2 negasi = afirmatif. KECUALI setelah resolusi negasi berarti pengecualian dari yang benar → cari yang SALAH.",
+    "schemas": [
+      "TIDAK BUKAN tidak benar = 3 negasi = tidak benar → semua benar KECUALI satu → cari yang salah"
+    ],
+    "transformation": {
+      "kind": "signal_flip",
+      "trigger": {
+        "signal_words": [
+          "kecuali",
+          "tidak bukan"
+        ],
+        "result_position": "after"
+      },
+      "action": "Count negations, resolve, find exception after kecuali",
+      "slots": [],
+      "constraints": []
+    },
+    "conditions": [
+      "tidak",
+      "bukan",
+      "kecuali",
+      "tidak bukan",
+      "tidak benar"
+    ],
+    "condition_embedding": null,
+    "edges": [
+      [
+        "core_exception",
+        "related"
+      ],
+      [
+        "core_exception",
+        "specializes"
+      ],
+      [
+        "core_negation_affirm",
+        "related"
+      ],
+      [
+        "core_exception",
+        "related"
+      ],
+      [
+        "core_exception",
+        "specializes"
+      ],
+      [
+        "core_negation_affirm",
+        "related"
+      ],
+      [
+        "core_exception",
+        "related"
+      ],
+      [
+        "core_exception",
+        "specializes"
+      ],
+      [
+        "core_exception",
+        "related"
+      ],
+      [
+        "core_exception",
+        "specializes"
+      ],
+      [
+        "core_negation_affirm",
+        "related"
+      ],
+      [
+        "core_exception",
+        "related"
+      ],
+      [
+        "core_exception",
+        "specializes"
+      ]
+    ],
+    "source": "core_seed",
+    "confidence": 0.7,
+    "times_applied": 0,
+    "times_correct": 0,
+    "times_failed": 0
+  },
+  "core_word_sense_kepala": {
+    "id": "core_word_sense_kepala",
+    "name": "word_sense_kepala",
+    "concept": "\"Kepala\" before organization = leader, before body part = body part",
+    "abstraction": "Kata \"kepala\" bermakna ganda: (1) sebelum nama organisasi/desa = pemimpin/ketua, (2) sebelum anggota tubuh/ikan = bagian tubuh. Tentukan dari konteks.",
+    "schemas": [
+      "Kepala desa → pemimpin (bukan bagian tubuh)",
+      "Kepala ikan → bagian tubuh"
+    ],
+    "transformation": {
+      "kind": "word_sense",
+      "trigger": {
+        "target_word": "kepala",
+        "context_words": [
+          "desa",
+          "kampung",
+          "negara",
+          "sekolah",
+          "kantor"
+        ],
+        "meaning_if_context": "pemimpin",
+        "meaning_otherwise": "bagian tubuh"
+      },
+      "action": "Find \"kepala\", check next word — if organization, meaning = leader",
+      "slots": [],
+      "constraints": []
+    },
+    "conditions": [
+      "kepala",
+      "bermakna",
+      "makna",
+      "artinya"
+    ],
+    "condition_embedding": null,
+    "edges": [],
+    "source": "core_seed",
+    "confidence": 0.75,
+    "times_applied": 0,
+    "times_correct": 0,
+    "times_failed": 0
+  },
+  "core_quantity_berapa": {
+    "id": "core_quantity_berapa",
+    "name": "quantity_berapa_jumlah",
+    "concept": "Find entity in question, sum ONLY its numbers",
+    "abstraction": "Pertanyaan \"berapa jumlah X\" → cari X di teks → jumlahkan HANYA angka yang dimiliki X → jangan campur angka milik entitas lain!",
+    "schemas": [
+      "Andi punya 5 merah dan 3 biru. Berapa jumlah Andi? → 8 (5+3, tanpa Budi)"
+    ],
+    "transformation": {
+      "kind": "quantity_compute",
+      "trigger": {
+        "compute_type": "sum"
+      },
+      "action": "Find entity in question, find its numbers only, compute",
+      "slots": [],
+      "constraints": []
+    },
+    "conditions": [
+      "berapa",
+      "jumlah",
+      "kelereng",
+      "buku"
+    ],
+    "condition_embedding": null,
+    "edges": [
+      [
+        "91bdda04ec76",
+        "specializes"
+      ],
+      [
+        "061971c384fc",
+        "specializes"
+      ],
+      [
+        "core_quantity",
+        "related"
+      ],
+      [
+        "core_quantity",
+        "specializes"
+      ],
+      [
+        "91bdda04ec76",
+        "specializes"
+      ],
+      [
+        "061971c384fc",
+        "specializes"
+      ],
+      [
+        "core_quantity",
+        "related"
+      ],
+      [
+        "core_quantity",
+        "specializes"
+      ],
+      [
+        "91bdda04ec76",
+        "specializes"
+      ],
+      [
+        "061971c384fc",
+        "specializes"
+      ],
+      [
+        "core_quantity",
+        "related"
+      ],
+      [
+        "core_quantity",
+        "specializes"
+      ]
+    ],
+    "source": "core_seed",
+    "confidence": 0.75,
+    "times_applied": 0,
+    "times_correct": 0,
+    "times_failed": 0
+  },
+  "c1e8f75d9ecf": {
+    "id": "c1e8f75d9ecf",
+    "name": "entity_extract_lupa_peribahasa_cocok",
+    "concept": "Peribahasa ini berarti orang yang melupakan asal-usulnya atau tidak bersyukur atas jasa orang lain. ",
+    "abstraction": "Peribahasa ini berarti orang yang melupakan asal-usulnya atau tidak bersyukur atas jasa orang lain. Seperti kacang yang lupa bahwa ia tumbuh dari kulitnya.",
+    "schemas": [
+      "apa peribahasa yang cocok untuk cerita tentang anak yang lupa pada orang tuanya yang bekerja keras?"
+    ],
+    "transformation": {
+      "kind": "entity_extract",
+      "trigger": {
+        "pattern": "",
+        "extract_after": "",
+        "extract_before": ""
+      },
+      "action": "Peribahasa ini berarti orang yang melupakan asal-usulnya atau tidak bersyukur atas jasa orang lain. Seperti kacang yang lupa bahwa ia tumbuh dari kulitnya.",
+      "slots": [],
+      "constraints": []
+    },
+    "conditions": [
+      "lupa",
+      "peribahasa",
+      "cocok",
+      "bekerja",
+      "cerita",
+      "keras",
+      "tuanya",
+      "anak",
+      "orang",
+      "kemudian",
+      "mendapat",
+      "hasil",
+      "saling",
+      "menolong",
+      "sama",
+      "jahat",
+      "berbuat",
+      "balas",
+      "demi",
+      "anaknya",
+      "baik",
+      "peribahaaan",
+      "balasan",
+      "juara",
+      "pesan",
+      "belajar",
+      "akhirnya",
+      "menjadi",
+      "state",
+      "sendiri",
+      "tetangganya",
+      "tersebut",
+      "sikap",
+      "selalu",
+      "meskipun",
+      "tokoh",
+      "payung",
+      "bisa",
+      "disimpulkan",
+      "membawa",
+      "cerah",
+      "person",
+      "miskin",
+      "rajin",
+      "andi"
+    ],
+    "condition_embedding": null,
+    "edges": [
+      [
+        "000da139e786",
+        "generalizes"
+      ],
+      [
+        "7ca08ac2254a",
+        "generalizes"
+      ],
+      [
+        "core_negation_affirm",
+        "related"
+      ],
+      [
+        "7ca08ac2254a",
+        "related"
+      ],
+      [
+        "92d53e3fa597",
+        "generalizes"
+      ],
+      [
+        "c479c006061f",
+        "generalizes"
+      ],
+      [
+        "core_negation_affirm",
+        "related"
+      ],
+      [
+        "000da139e786",
+        "generalizes"
+      ],
+      [
+        "7ca08ac2254a",
+        "related"
+      ],
+      [
+        "7ca08ac2254a",
+        "generalizes"
+      ],
+      [
+        "92d53e3fa597",
+        "generalizes"
+      ],
+      [
+        "c479c006061f",
+        "generalizes"
+      ],
+      [
+        "core_exception",
+        "related"
+      ],
+      [
+        "core_contrast",
+        "related"
+      ],
+      [
+        "e7111963823d",
+        "related"
+      ],
+      [
+        "core_exception",
+        "related"
+      ],
+      [
+        "core_exception",
+        "related"
+      ],
+      [
+        "core_contrast",
+        "related"
+      ],
+      [
+        "core_negation_affirm",
+        "related"
+      ],
+      [
+        "000da139e786",
+        "generalizes"
+      ],
+      [
+        "e7111963823d",
+        "related"
+      ],
+      [
+        "7ca08ac2254a",
+        "related"
+      ],
+      [
+        "7ca08ac2254a",
+        "generalizes"
+      ],
+      [
+        "92d53e3fa597",
+        "generalizes"
+      ],
+      [
+        "c479c006061f",
+        "generalizes"
+      ],
+      [
+        "91bdda04ec76",
+        "related"
+      ],
+      [
+        "core_quantity",
+        "related"
+      ],
+      [
+        "core_exception",
+        "related"
+      ]
+    ],
+    "source": "self_discovered_from_observation",
+    "confidence": 0.6,
+    "times_applied": 0,
+    "times_correct": 0,
+    "times_failed": 0
+  },
+  "000da139e786": {
+    "id": "000da139e786",
+    "name": "entity_extract_menari-nari_'angin_bahasa",
+    "concept": "Personifikasi adalah gaya bahasa yang memberikan sifat manusia pada benda mati. 'Menari-nari' adalah",
+    "abstraction": "Personifikasi adalah gaya bahasa yang memberikan sifat manusia pada benda mati. 'Menari-nari' adalah aktivitas manusia, diberikan pada 'angin' yang adalah benda mati.",
+    "schemas": [
+      "apa gaya bahasa dalam kalimat 'angin menari-nari di antara pepohonan'?"
+    ],
+    "transformation": {
+      "kind": "entity_extract",
+      "trigger": {
+        "pattern": "",
+        "extract_after": "",
+        "extract_before": ""
+      },
+      "action": "Personifikasi adalah gaya bahasa yang memberikan sifat manusia pada benda mati. 'Menari-nari' adalah aktivitas manusia, diberikan pada 'angin' yang adalah benda mati.",
+      "slots": [],
+      "constraints": []
+    },
+    "conditions": [
+      "menari-nari",
+      "'angin",
+      "bahasa",
+      "pepohonan'",
+      "antara",
+      "gaya",
+      "kalimat",
+      "'wajahnya",
+      "bagaikan",
+      "bulan",
+      "purnama'",
+      "petir'",
+      "'suaranya",
+      "menggelegar"
+    ],
+    "condition_embedding": null,
+    "edges": [
+      [
+        "c1e8f75d9ecf",
+        "specializes"
+      ],
+      [
+        "7ca08ac2254a",
+        "generalizes"
+      ],
+      [
+        "92d53e3fa597",
+        "generalizes"
+      ],
+      [
+        "7ca08ac2254a",
+        "specializes"
+      ],
+      [
+        "c479c006061f",
+        "generalizes"
+      ],
+      [
+        "c1e8f75d9ecf",
+        "specializes"
+      ],
+      [
+        "7ca08ac2254a",
+        "specializes"
+      ],
+      [
+        "92d53e3fa597",
+        "generalizes"
+      ],
+      [
+        "c479c006061f",
+        "generalizes"
+      ],
+      [
+        "c1e8f75d9ecf",
+        "specializes"
+      ],
+      [
+        "7ca08ac2254a",
+        "specializes"
+      ],
+      [
+        "92d53e3fa597",
+        "generalizes"
+      ],
+      [
+        "c479c006061f",
+        "generalizes"
+      ]
+    ],
+    "source": "self_discovered_from_observation",
+    "confidence": 0.6,
+    "times_applied": 0,
+    "times_correct": 0,
+    "times_failed": 0
+  },
+  "91bdda04ec76": {
+    "id": "91bdda04ec76",
+    "name": "quantity_compute_animal_sangat_setiap",
+    "concept": "Dalam teks eksposisi, ide pokok sering ada di kalimat pertama. Kalimat pertama menyatakan gagasan ut",
+    "abstraction": "Dalam teks eksposisi, ide pokok sering ada di kalimat pertama. Kalimat pertama menyatakan gagasan utama, kalimat berikutnya adalah penjelasan.",
+    "schemas": [
+      "apa ide pokok dari paragraf: 'kucing adalah hewan yang sangat rajin membersihkan diri. setiap hari k"
+    ],
+    "transformation": {
+      "kind": "quantity_compute",
+      "trigger": {
+        "compute_type": "sum"
+      },
+      "action": "Dalam teks eksposisi, ide pokok sering ada di kalimat pertama. Kalimat pertama menyatakan gagasan utama, kalimat berikutnya adalah penjelasan.",
+      "slots": [],
+      "constraints": []
+    },
+    "conditions": [
+      "animal",
+      "sangat",
+      "setiap",
+      "bulunya",
+      "menjilat",
+      "pokok",
+      "diri",
+      "membersihkan",
+      "'kucing",
+      "kotorannya",
+      "paragraf",
+      "hari",
+      "sum",
+      "mengubur",
+      "menjaga",
+      "kita",
+      "lingkungan.'",
+      "karena",
+      "'oleh",
+      "terakhirnya",
+      "selalu",
+      "kebersihan",
+      "harus",
+      "kalimat",
+      "argumentatif",
+      "mana",
+      "merupakan",
+      "teks",
+      "opini",
+      "khas",
+      "kerak",
+      "indonesia",
+      "banyak",
+      "lintas",
+      "padat",
+      "place",
+      "telor",
+      "langit",
+      "lalu",
+      "makanan",
+      "gedung",
+      "pencakar",
+      "hewan",
+      "rajin",
+      "tanah.'",
+      "kucing",
+      "maka",
+      "menurut",
+      "kota"
+    ],
+    "condition_embedding": null,
+    "edges": [
+      [
+        "core_quantity",
+        "generalizes"
+      ],
+      [
+        "core_kembalian",
+        "generalizes"
+      ],
+      [
+        "core_quantity_berapa",
+        "generalizes"
+      ],
+      [
+        "061971c384fc",
+        "generalizes"
+      ],
+      [
+        "core_exception",
+        "related"
+      ],
+      [
+        "core_contrast",
+        "related"
+      ],
+      [
+        "core_exception",
+        "related"
+      ],
+      [
+        "core_contrast",
+        "related"
+      ],
+      [
+        "core_quantity",
+        "generalizes"
+      ],
+      [
+        "core_kembalian",
+        "generalizes"
+      ],
+      [
+        "core_quantity_berapa",
+        "generalizes"
+      ],
+      [
+        "061971c384fc",
+        "generalizes"
+      ],
+      [
+        "core_exception",
+        "related"
+      ],
+      [
+        "core_exception",
+        "related"
+      ],
+      [
+        "core_contrast",
+        "related"
+      ],
+      [
+        "core_quantity",
+        "generalizes"
+      ],
+      [
+        "core_kembalian",
+        "generalizes"
+      ],
+      [
+        "core_quantity_berapa",
+        "generalizes"
+      ],
+      [
+        "061971c384fc",
+        "generalizes"
+      ],
+      [
+        "U_qty_test",
+        "generalizes"
+      ],
+      [
+        "U_kembalian_test",
+        "generalizes"
+      ],
+      [
+        "U_quantity_emb",
+        "generalizes"
+      ],
+      [
+        "core_negation_affirm",
+        "related"
+      ],
+      [
+        "c1e8f75d9ecf",
+        "related"
+      ],
+      [
+        "core_context_filter",
+        "related"
+      ],
+      [
+        "core_exception",
+        "related"
+      ]
+    ],
+    "source": "self_discovered_from_observation",
+    "confidence": 0.6,
+    "times_applied": 0,
+    "times_correct": 0,
+    "times_failed": 0
+  },
+  "e7111963823d": {
+    "id": "e7111963823d",
+    "name": "comparison_resolve_siapa_lebih_person",
+    "concept": "Perbandingan 'lebih tinggi dari' membuat relasi terurut. Jika A > B dalam tinggi, maka B < A dalam t",
+    "abstraction": "Perbandingan 'lebih tinggi dari' membuat relasi terurut. Jika A > B dalam tinggi, maka B < A dalam tinggi, yang berarti B lebih pendek.",
+    "schemas": [
+      "budi lebih tinggi dari andi. siapa yang lebih pendek?"
+    ],
+    "transformation": {
+      "kind": "comparison_resolve",
+      "trigger": {
+        "comparison_words": [
+          "lebih",
+          "kurang"
+        ]
+      },
+      "action": "Perbandingan 'lebih tinggi dari' membuat relasi terurut. Jika A > B dalam tinggi, maka B < A dalam tinggi, yang berarti B lebih pendek.",
+      "slots": [],
+      "constraints": []
+    },
+    "conditions": [
+      "siapa",
+      "lebih",
+      "person",
+      "kurang",
+      "state"
+    ],
+    "condition_embedding": null,
+    "edges": [
+      [
+        "core_exception",
+        "related"
+      ],
+      [
+        "core_contrast",
+        "related"
+      ],
+      [
+        "core_negation_affirm",
+        "related"
+      ],
+      [
+        "core_comparison",
+        "specializes"
+      ],
+      [
+        "7ca08ac2254a",
+        "related"
+      ],
+      [
+        "core_exception",
+        "related"
+      ],
+      [
+        "core_negation_affirm",
+        "related"
+      ],
+      [
+        "core_contrast",
+        "related"
+      ],
+      [
+        "core_comparison",
+        "specializes"
+      ],
+      [
+        "7ca08ac2254a",
+        "related"
+      ],
+      [
+        "c1e8f75d9ecf",
+        "related"
+      ],
+      [
+        "core_exception",
+        "related"
+      ],
+      [
+        "c1e8f75d9ecf",
+        "related"
+      ],
+      [
+        "core_exception",
+        "related"
+      ],
+      [
+        "core_negation_affirm",
+        "related"
+      ],
+      [
+        "core_contrast",
+        "related"
+      ],
+      [
+        "core_comparison",
+        "related"
+      ],
+      [
+        "core_comparison",
+        "specializes"
+      ],
+      [
+        "core_exception",
+        "related"
+      ]
+    ],
+    "source": "self_discovered_from_observation",
+    "confidence": 0.6,
+    "times_applied": 0,
+    "times_correct": 0,
+    "times_failed": 0
+  },
+  "061971c384fc": {
+    "id": "061971c384fc",
+    "name": "quantity_compute_benar_'jakarta_tak",
+    "concept": "Jakarta terletak di Pulau Jawa. Pernyataan yang bertentangan dengan fakta adalah salah. Untuk menent",
+    "abstraction": "Jakarta terletak di Pulau Jawa. Pernyataan yang bertentangan dengan fakta adalah salah. Untuk menentukan benar/salah, kita harus membandingkan pernyataan dengan pengetahuan yang benar.",
+    "schemas": [
+      "pernyataan: 'jakarta terletak di pulau kalimantan.' benar atau salah?"
+    ],
+    "transformation": {
+      "kind": "quantity_compute",
+      "trigger": {
+        "compute_type": "sum"
+      },
+      "action": "Jakarta terletak di Pulau Jawa. Pernyataan yang bertentangan dengan fakta adalah salah. Untuk menentukan benar/salah, kita harus membandingkan pernyataan dengan pengetahuan yang benar.",
+      "slots": [],
+      "constraints": []
+    },
+    "conditions": [
+      "benar",
+      "'jakarta",
+      "tak",
+      "sum",
+      "kalimantan.'",
+      "terletak",
+      "salah",
+      "atau",
+      "pulau",
+      "pernyataan"
+    ],
+    "condition_embedding": null,
+    "edges": [
+      [
+        "core_quantity",
+        "generalizes"
+      ],
+      [
+        "core_kembalian",
+        "generalizes"
+      ],
+      [
+        "core_quantity_berapa",
+        "generalizes"
+      ],
+      [
+        "91bdda04ec76",
+        "specializes"
+      ],
+      [
+        "91bdda04ec76",
+        "specializes"
+      ],
+      [
+        "core_kembalian",
+        "generalizes"
+      ],
+      [
+        "core_quantity_berapa",
+        "generalizes"
+      ],
+      [
+        "91bdda04ec76",
+        "specializes"
+      ],
+      [
+        "core_kembalian",
+        "generalizes"
+      ],
+      [
+        "core_quantity_berapa",
+        "generalizes"
+      ],
+      [
+        "U_qty_test",
+        "generalizes"
+      ],
+      [
+        "U_kembalian_test",
+        "generalizes"
+      ],
+      [
+        "U_quantity_emb",
+        "generalizes"
+      ],
+      [
+        "core_quantity",
+        "specializes"
+      ]
+    ],
+    "source": "self_discovered_from_observation",
+    "confidence": 0.6,
+    "times_applied": 0,
+    "times_correct": 0,
+    "times_failed": 0
+  },
+  "7ca08ac2254a": {
+    "id": "7ca08ac2254a",
+    "name": "entity_extract_sendiri_tetangganya_tersebut",
+    "concept": "Sikap dermawan/peduli ditunjukkan melalui tindakan menolong orang lain meskipun dalam keadaan sulit.",
+    "abstraction": "Sikap dermawan/peduli ditunjukkan melalui tindakan menolong orang lain meskipun dalam keadaan sulit. Kata kunci: menolong, berkorban, meskipun.",
+    "schemas": [
+      "tokoh selalu menolong tetangganya meskipun ia sendiri miskin. apa sikap tokoh tersebut?"
+    ],
+    "transformation": {
+      "kind": "entity_extract",
+      "trigger": {
+        "pattern": "",
+        "extract_after": "",
+        "extract_before": ""
+      },
+      "action": "Sikap dermawan/peduli ditunjukkan melalui tindakan menolong orang lain meskipun dalam keadaan sulit. Kata kunci: menolong, berkorban, meskipun.",
+      "slots": [],
+      "constraints": []
+    },
+    "conditions": [
+      "sendiri",
+      "tetangganya",
+      "tersebut",
+      "sikap",
+      "selalu",
+      "meskipun",
+      "tokoh",
+      "menolong",
+      "state",
+      "payung",
+      "bisa",
+      "disimpulkan",
+      "membawa",
+      "cerah",
+      "person"
+    ],
+    "condition_embedding": null,
+    "edges": [
+      [
+        "c1e8f75d9ecf",
+        "specializes"
+      ],
+      [
+        "000da139e786",
+        "specializes"
+      ],
+      [
+        "c1e8f75d9ecf",
+        "related"
+      ],
+      [
+        "92d53e3fa597",
+        "generalizes"
+      ],
+      [
+        "core_exception",
+        "related"
+      ],
+      [
+        "core_contrast",
+        "related"
+      ],
+      [
+        "core_negation_affirm",
+        "related"
+      ],
+      [
+        "000da139e786",
+        "generalizes"
+      ],
+      [
+        "e7111963823d",
+        "related"
+      ],
+      [
+        "c479c006061f",
+        "generalizes"
+      ],
+      [
+        "c1e8f75d9ecf",
+        "related"
+      ],
+      [
+        "c1e8f75d9ecf",
+        "specializes"
+      ],
+      [
+        "000da139e786",
+        "generalizes"
+      ],
+      [
+        "core_exception",
+        "related"
+      ],
+      [
+        "core_negation_affirm",
+        "related"
+      ],
+      [
+        "core_contrast",
+        "related"
+      ],
+      [
+        "e7111963823d",
+        "related"
+      ],
+      [
+        "92d53e3fa597",
+        "generalizes"
+      ],
+      [
+        "c479c006061f",
+        "generalizes"
+      ],
+      [
+        "core_exception",
+        "related"
+      ],
+      [
+        "c1e8f75d9ecf",
+        "related"
+      ],
+      [
+        "c1e8f75d9ecf",
+        "specializes"
+      ],
+      [
+        "000da139e786",
+        "generalizes"
+      ],
+      [
+        "core_exception",
+        "related"
+      ],
+      [
+        "core_negation_affirm",
+        "related"
+      ],
+      [
+        "core_contrast",
+        "related"
+      ],
+      [
+        "92d53e3fa597",
+        "generalizes"
+      ],
+      [
+        "c479c006061f",
+        "generalizes"
+      ],
+      [
+        "core_exception",
+        "related"
+      ]
+    ],
+    "source": "self_discovered_from_observation",
+    "confidence": 0.6,
+    "times_applied": 0,
+    "times_correct": 0,
+    "times_failed": 0
+  },
+  "92d53e3fa597": {
+    "id": "92d53e3fa597",
+    "name": "entity_extract_hujan_mengapa_turun",
+    "concept": "Teks eksplanasi menjelaskan proses sebab-akibat. 'Mengapa' menanyakan penyebab. Jawaban harus menjel",
+    "abstraction": "Teks eksplanasi menjelaskan proses sebab-akibat. 'Mengapa' menanyakan penyebab. Jawaban harus menjelaskan rantai proses dari awal sampai akhir.",
+    "schemas": [
+      "mengapa hujan turun?"
+    ],
+    "transformation": {
+      "kind": "entity_extract",
+      "trigger": {
+        "pattern": "",
+        "extract_after": "",
+        "extract_before": ""
+      },
+      "action": "Teks eksplanasi menjelaskan proses sebab-akibat. 'Mengapa' menanyakan penyebab. Jawaban harus menjelaskan rantai proses dari awal sampai akhir.",
+      "slots": [],
+      "constraints": []
+    },
+    "conditions": [
+      "hujan",
+      "mengapa",
+      "turun"
+    ],
+    "condition_embedding": null,
+    "edges": [
+      [
+        "c1e8f75d9ecf",
+        "specializes"
+      ],
+      [
+        "000da139e786",
+        "specializes"
+      ],
+      [
+        "7ca08ac2254a",
+        "specializes"
+      ],
+      [
+        "c1e8f75d9ecf",
+        "specializes"
+      ],
+      [
+        "000da139e786",
+        "specializes"
+      ],
+      [
+        "7ca08ac2254a",
+        "specializes"
+      ],
+      [
+        "c1e8f75d9ecf",
+        "specializes"
+      ],
+      [
+        "000da139e786",
+        "specializes"
+      ],
+      [
+        "7ca08ac2254a",
+        "specializes"
+      ]
+    ],
+    "source": "self_discovered_from_observation",
+    "confidence": 0.6,
+    "times_applied": 0,
+    "times_correct": 0,
+    "times_failed": 0
+  },
+  "c479c006061f": {
+    "id": "c479c006061f",
+    "name": "entity_extract_kata_lawan_'rajin'",
+    "concept": "Antonim adalah kata yang berlawanan makna. Rajin (suka bekerja) berlawanan dengan malas (tidak suka ",
+    "abstraction": "Antonim adalah kata yang berlawanan makna. Rajin (suka bekerja) berlawanan dengan malas (tidak suka bekerja). Keduanya mendeskripsikan sikap terhadap kerja.",
+    "schemas": [
+      "apa lawan kata dari 'rajin'?"
+    ],
+    "transformation": {
+      "kind": "entity_extract",
+      "trigger": {
+        "pattern": "",
+        "extract_after": "",
+        "extract_before": ""
+      },
+      "action": "Antonim adalah kata yang berlawanan makna. Rajin (suka bekerja) berlawanan dengan malas (tidak suka bekerja). Keduanya mendeskripsikan sikap terhadap kerja.",
+      "slots": [],
+      "constraints": []
+    },
+    "conditions": [
+      "kata",
+      "lawan",
+      "'rajin'"
+    ],
+    "condition_embedding": null,
+    "edges": [
+      [
+        "c1e8f75d9ecf",
+        "specializes"
+      ],
+      [
+        "000da139e786",
+        "specializes"
+      ],
+      [
+        "7ca08ac2254a",
+        "specializes"
+      ],
+      [
+        "c1e8f75d9ecf",
+        "specializes"
+      ],
+      [
+        "000da139e786",
+        "specializes"
+      ],
+      [
+        "7ca08ac2254a",
+        "specializes"
+      ],
+      [
+        "c1e8f75d9ecf",
+        "specializes"
+      ],
+      [
+        "000da139e786",
+        "specializes"
+      ],
+      [
+        "7ca08ac2254a",
+        "specializes"
+      ]
+    ],
+    "source": "self_discovered_from_observation",
+    "confidence": 0.6,
+    "times_applied": 0,
+    "times_correct": 0,
+    "times_failed": 0
+  },
+  "U_qty_test": {
+    "id": "U_qty_test",
+    "name": "quantity_compute_test",
+    "concept": "Menghitung jumlah kelereng entitas",
+    "abstraction": "Jumlahkan semua angka milik entitas yang ditanyakan",
+    "schemas": [],
+    "transformation": {
+      "kind": "quantity_compute",
+      "trigger": {
+        "signal_words": [
+          "berapa",
+          "jumlah"
+        ],
+        "result_position": "after"
+      },
+      "action": "Jumlahkan angka milik entitas",
+      "slots": [],
+      "constraints": []
+    },
+    "conditions": [
+      "kelereng",
+      "jumlah",
+      "berapa"
+    ],
+    "condition_embedding": null,
+    "edges": [
+      [
+        "91bdda04ec76",
+        "specializes"
+      ],
+      [
+        "061971c384fc",
+        "specializes"
+      ],
+      [
+        "core_quantity",
+        "related"
+      ],
+      [
+        "core_quantity",
+        "specializes"
+      ]
+    ],
+    "source": "test",
+    "confidence": 0.8,
+    "times_applied": 0,
+    "times_correct": 0,
+    "times_failed": 0
+  },
+  "U_kembalian_test": {
+    "id": "U_kembalian_test",
+    "name": "kembalian_compute",
+    "concept": "Menghitung kembalian",
+    "abstraction": "Kembalian = uang bayar - total harga",
+    "schemas": [],
+    "transformation": {
+      "kind": "quantity_compute",
+      "trigger": {
+        "signal_words": [
+          "kembalian",
+          "bayar"
+        ],
+        "result_position": "after"
+      },
+      "action": "Hitung kembalian dari uang bayar dikurangi total harga",
+      "slots": [],
+      "constraints": []
+    },
+    "conditions": [
+      "kembalian",
+      "bayar",
+      "harga"
+    ],
+    "condition_embedding": null,
+    "edges": [
+      [
+        "91bdda04ec76",
+        "specializes"
+      ],
+      [
+        "061971c384fc",
+        "specializes"
+      ],
+      [
+        "core_quantity",
+        "specializes"
+      ]
+    ],
+    "source": "test",
+    "confidence": 0.8,
+    "times_applied": 0,
+    "times_correct": 0,
+    "times_failed": 0
+  },
+  "U_compare_test": {
+    "id": "U_compare_test",
+    "name": "perbandingan_terbalik",
+    "concept": "Perbandingan terbalik — pertanyaan bertanya kebalikan",
+    "abstraction": "Jika A lebih X dari B, maka B lebih (lawan X) dari A",
+    "schemas": [],
+    "transformation": {
+      "kind": "comparison_resolve",
+      "trigger": {
+        "signal_words": [
+          "lebih",
+          "dari"
+        ],
+        "result_position": "after"
+      },
+      "action": "Resolve berdasarkan arah pertanyaan",
+      "slots": [],
+      "constraints": []
+    },
+    "conditions": [
+      "lebih",
+      "dari",
+      "perbandingan"
+    ],
+    "condition_embedding": null,
+    "edges": [
+      [
+        "core_comparison",
+        "related"
+      ],
+      [
+        "core_comparison",
+        "specializes"
+      ]
+    ],
+    "source": "test",
+    "confidence": 0.8,
+    "times_applied": 0,
+    "times_correct": 0,
+    "times_failed": 0
+  },
+  "U_signal_flip_test": {
+    "id": "U_signal_flip_test",
+    "name": "pengecualian_kecuali",
+    "concept": "Pengecualian dengan kata kecuali/selain",
+    "abstraction": "SEMUA [STATE] kecuali [EXCEPTION] → [EXCEPTION] TIDAK [STATE]",
+    "schemas": [],
+    "transformation": {
+      "kind": "signal_flip",
+      "trigger": {
+        "signal_words": [
+          "kecuali",
+          "selain",
+          "terkecuali"
+        ],
+        "result_position": "after"
+      },
+      "action": "Ambil entitas setelah kecuali sebagai pengecualian",
+      "slots": [],
+      "constraints": []
+    },
+    "conditions": [
+      "kecuali",
+      "selain",
+      "pengecualian"
+    ],
+    "condition_embedding": null,
+    "edges": [
+      [
+        "core_exception",
+        "related"
+      ],
+      [
+        "core_exception",
+        "specializes"
+      ],
+      [
+        "core_exception",
+        "related"
+      ],
+      [
+        "core_exception",
+        "specializes"
+      ],
+      [
+        "core_exception",
+        "related"
+      ],
+      [
+        "core_exception",
+        "specializes"
+      ]
+    ],
+    "source": "test",
+    "confidence": 0.8,
+    "times_applied": 0,
+    "times_correct": 0,
+    "times_failed": 0
+  },
+  "U_contrast_test": {
+    "id": "U_contrast_test",
+    "name": "kontras_tetapi",
+    "concept": "Kontras dengan kata tetapi/namun",
+    "abstraction": "A tetapi B → B lebih penting/dominan dari A",
+    "schemas": [],
+    "transformation": {
+      "kind": "contrast_focus",
+      "trigger": {
+        "signal_words": [
+          "tetapi",
+          "namun",
+          "tapi"
+        ],
+        "result_position": "after"
+      },
+      "action": "Fokus pada bagian setelah kata kontras",
+      "slots": [],
+      "constraints": []
+    },
+    "conditions": [
+      "tetapi",
+      "namun",
+      "tapi",
+      "kontras"
+    ],
+    "condition_embedding": null,
+    "edges": [
+      [
+        "core_negation_affirm",
+        "related"
+      ],
+      [
+        "core_contrast",
+        "related"
+      ],
+      [
+        "core_contrast",
+        "specializes"
+      ]
+    ],
+    "source": "test",
+    "confidence": 0.8,
+    "times_applied": 0,
+    "times_correct": 0,
+    "times_failed": 0
+  },
+  "U_negaff_test": {
+    "id": "U_negaff_test",
+    "name": "negasi_penegasan",
+    "concept": "Pola bukan X tapi Y → Y adalah kebenaran",
+    "abstraction": "Bukan [REJECTED], tapi [AFFIRMED] → [AFFIRMED] adalah jawaban",
+    "schemas": [],
+    "transformation": {
+      "kind": "negation_affirmation",
+      "trigger": {
+        "negation_words": [
+          "bukan",
+          "tidak"
+        ],
+        "affirmation_words": [
+          "tapi",
+          "tetapi",
+          "melainkan"
+        ]
+      },
+      "action": "Ambil bagian setelah kata penegasan",
+      "slots": [],
+      "constraints": []
+    },
+    "conditions": [
+      "bukan",
+      "tapi",
+      "melainkan"
+    ],
+    "condition_embedding": null,
+    "edges": [
+      [
+        "core_negation_affirm",
+        "related"
+      ],
+      [
+        "core_negation_affirm",
+        "specializes"
+      ]
+    ],
+    "source": "test",
+    "confidence": 0.8,
+    "times_applied": 0,
+    "times_correct": 0,
+    "times_failed": 0
+  },
+  "U_signal_flip_emb": {
+    "id": "U_signal_flip_emb",
+    "name": "pengecualian_kecuali",
+    "concept": "Pengecualian dengan kata kecuali/selain",
+    "abstraction": "SEMUA [STATE] kecuali [EXCEPTION] → [EXCEPTION] TIDAK [STATE]",
+    "schemas": [],
+    "transformation": {
+      "kind": "signal_flip",
+      "trigger": {
+        "signal_words": [
+          "kecuali",
+          "selain"
+        ],
+        "result_position": "after"
+      },
+      "action": "Ambil entitas setelah kecuali sebagai pengecualian",
+      "slots": [],
+      "constraints": []
+    },
+    "conditions": [
+      "kecuali",
+      "selain",
+      "pengecualian"
+    ],
+    "condition_embedding": null,
+    "edges": [
+      [
+        "core_exception",
+        "related"
+      ],
+      [
+        "core_exception",
+        "specializes"
+      ],
+      [
+        "core_exception",
+        "related"
+      ],
+      [
+        "core_exception",
+        "specializes"
+      ],
+      [
+        "core_exception",
+        "related"
+      ],
+      [
+        "core_exception",
+        "specializes"
+      ]
+    ],
+    "source": "test",
+    "confidence": 0.8,
+    "times_applied": 0,
+    "times_correct": 0,
+    "times_failed": 0
+  },
+  "U_contrast_emb": {
+    "id": "U_contrast_emb",
+    "name": "kontras_tetapi",
+    "concept": "Kontras dengan kata tetapi/namun",
+    "abstraction": "A tetapi B → B lebih penting/dominan",
+    "schemas": [],
+    "transformation": {
+      "kind": "contrast_focus",
+      "trigger": {
+        "signal_words": [
+          "tetapi",
+          "namun"
+        ],
+        "result_position": "after"
+      },
+      "action": "Fokus pada bagian setelah kata kontras",
+      "slots": [],
+      "constraints": []
+    },
+    "conditions": [
+      "tetapi",
+      "namun",
+      "tapi"
+    ],
+    "condition_embedding": null,
+    "edges": [
+      [
+        "core_negation_affirm",
+        "related"
+      ],
+      [
+        "core_contrast",
+        "related"
+      ],
+      [
+        "core_contrast",
+        "specializes"
+      ]
+    ],
+    "source": "test",
+    "confidence": 0.8,
+    "times_applied": 0,
+    "times_correct": 0,
+    "times_failed": 0
+  },
+  "U_quantity_emb": {
+    "id": "U_quantity_emb",
+    "name": "kuantitas_hitung",
+    "concept": "Menghitung jumlah dengan angka",
+    "abstraction": "Jumlahkan angka milik entitas yang ditanyakan",
+    "schemas": [],
+    "transformation": {
+      "kind": "quantity_compute",
+      "trigger": {
+        "signal_words": [
+          "berapa",
+          "jumlah"
+        ],
+        "result_position": "after"
+      },
+      "action": "Jumlahkan angka yang relevan",
+      "slots": [],
+      "constraints": []
+    },
+    "conditions": [
+      "berapa",
+      "jumlah",
+      "hitung"
+    ],
+    "condition_embedding": null,
+    "edges": [
+      [
+        "91bdda04ec76",
+        "specializes"
+      ],
+      [
+        "061971c384fc",
+        "specializes"
+      ],
+      [
+        "core_quantity",
+        "related"
+      ],
+      [
+        "core_quantity",
+        "specializes"
+      ]
+    ],
+    "source": "test",
+    "confidence": 0.8,
+    "times_applied": 0,
+    "times_correct": 0,
+    "times_failed": 0
+  },
+  "da4161711638": {
+    "id": "da4161711638",
+    "name": "mathematical_multiplication",
+    "concept": "mathematical multiplication operation",
+    "abstraction": "When presented with a mathematical multiplication problem in the format 'number × number = ?', the task is to compute the product of the two numbers.",
+    "schemas": [
+      "mathematical operation",
+      "computation"
+    ],
+    "transformation": {
+      "kind": "quantity_compute",
+      "trigger": {
+        "signal_words": [
+          "×",
+          "="
+        ],
+        "result_position": "after"
+      },
+      "action": "multiply the two numbers provided in the question",
+      "slots": [],
+      "constraints": []
+    },
+    "conditions": [
+      "TEKS: number × number = ?",
+      "PERTANYAAN: number × number = ?"
+    ],
+    "condition_embedding": null,
+    "edges": [],
+    "source": "composed_from_observation",
+    "confidence": 0.55,
+    "times_applied": 0,
+    "times_correct": 0,
+    "times_failed": 0
+  },
+  "c4ec0a76f232": {
+    "id": "c4ec0a76f232",
+    "name": "math_multiplication",
+    "concept": "basic multiplication operation",
+    "abstraction": "when a multiplication question is presented in the format 'number × number = ?', the answer is the product of the two numbers",
+    "schemas": [
+      "mathematical operation",
+      "question-answer format"
+    ],
+    "transformation": {
+      "kind": "quantity_compute",
+      "trigger": {
+        "signal_words": [
+          "×",
+          "="
+        ],
+        "result_position": "after"
+      },
+      "action": "multiply the two numbers before the × symbol to get the answer",
+      "slots": [],
+      "constraints": []
+    },
+    "conditions": [
+      "TEKS",
+      "PERTANYAAN",
+      "JAWABAN"
+    ],
+    "condition_embedding": null,
+    "edges": [],
+    "source": "composed_from_observation",
+    "confidence": 0.55,
+    "times_applied": 0,
+    "times_correct": 0,
+    "times_failed": 0
+  },
+  "7ada7105bbb1": {
+    "id": "7ada7105bbb1",
+    "name": "mathematical_equation_solver",
+    "concept": "solving basic multiplication equations",
+    "abstraction": "when presented with a mathematical multiplication equation in the format 'number × number = ?', the system should compute the product of the two numbers",
+    "schemas": [
+      "mathematical equation",
+      "computation"
+    ],
+    "transformation": {
+      "kind": "quantity_compute",
+      "trigger": {
+        "signal_words": [
+          "×"
+        ],
+        "result_position": "after"
+      },
+      "action": "multiply the two numbers before and after the multiplication sign",
+      "slots": [],
+      "constraints": []
+    },
+    "conditions": [
+      "TEKS",
+      "PERTANYAAN",
+      "JAWABAN",
+      "KONTEKS",
+      "NOVELTY"
+    ],
+    "condition_embedding": null,
+    "edges": [],
+    "source": "composed_from_observation",
+    "confidence": 0.55,
+    "times_applied": 0,
+    "times_correct": 0,
+    "times_failed": 0
+  },
+  "8815a96bed63": {
+    "id": "8815a96bed63",
+    "name": "math_multiplication_solution",
+    "concept": "solving multiplication problems",
+    "abstraction": "Given a multiplication problem [OPERAND1] × [OPERAND2] = ?, perform multiplication operation to get [RESULT]",
+    "schemas": [
+      "[PROBLEM] → [STEPS] → [SOLUTION] → [EXPLANATION] → [TYPE]"
+    ],
+    "transformation": {
+      "kind": "quantity_compute",
+      "trigger": {
+        "signal_words": [
+          "×",
+          "multiplied by",
+          "kali"
+        ],
+        "result_position": "after"
+      },
+      "action": "compute the product of two numbers",
+      "slots": [],
+      "constraints": []
+    },
+    "conditions": [
+      "SOAL:",
+      "CARA:",
+      "JAWABAN:",
+      "KENAPA:",
+      "TIPE:"
+    ],
+    "condition_embedding": null,
+    "edges": [],
+    "source": "composed_from_teaching",
+    "confidence": 0.55,
+    "times_applied": 0,
+    "times_correct": 0,
+    "times_failed": 0
+  },
+  "1278f9c8cd78": {
+    "id": "1278f9c8cd78",
+    "name": "mathematical_equation",
+    "concept": "mathematical multiplication problem",
+    "abstraction": "When given a mathematical multiplication equation in the format 'number × number = ?', the expected response is the product of the two numbers.",
+    "schemas": [
+      "mathematical operation",
+      "calculation",
+      "equation solving"
+    ],
+    "transformation": {
+      "kind": "quantity_compute",
+      "trigger": {
+        "signal_words": [
+          "×",
+          "="
+        ],
+        "result_position": "after"
+      },
+      "action": "compute the product of the two numbers in the multiplication equation",
+      "slots": [],
+      "constraints": []
+    },
+    "conditions": [
+      "TEKS",
+      "PERTANYAAN",
+      "JAWABAN",
+      "KONTEKS",
+      "NOVELTY"
+    ],
+    "condition_embedding": null,
+    "edges": [],
+    "source": "composed_from_observation",
+    "confidence": 0.55,
+    "times_applied": 0,
+    "times_correct": 0,
+    "times_failed": 0
+  },
+  "20d166e1fa18": {
+    "id": "20d166e1fa18",
+    "name": "math_multiplication",
+    "concept": "mathematical multiplication problem solving",
+    "abstraction": "Given [NUMBER1] × [NUMBER2] = ?, identify operation, compute result, provide answer and explanation",
+    "schemas": [
+      "[QUESTION] → [METHOD] → [ANSWER] → [EXPLANATION] → [TYPE]"
+    ],
+    "transformation": {
+      "kind": "quantity_compute",
+      "trigger": {
+        "signal_words": [
+          "×",
+          "multiply"
+        ],
+        "result_position": "after"
+      },
+      "action": "compute the product of two numbers",
+      "slots": [],
+      "constraints": []
+    },
+    "conditions": [
+      "SOAL:",
+      "CARA:",
+      "JAWABAN:",
+      "KENAPA:",
+      "TIPE:"
+    ],
+    "condition_embedding": null,
+    "edges": [],
+    "source": "composed_from_teaching",
+    "confidence": 0.55,
+    "times_applied": 0,
+    "times_correct": 0,
+    "times_failed": 0
+  },
+  "22b8a3ae02d4": {
+    "id": "22b8a3ae02d4",
+    "name": "math_multiplication",
+    "concept": "mathematical operation of multiplication",
+    "abstraction": "When given a multiplication operation [OPERATOR] × [OPERAND], compute the result as [RESULT]",
+    "schemas": [
+      "SOAL: [QUESTION] → CARA: [STEPS] → JAWABAN: [ANSWER] → KENAPA: [EXPLANATION] → TIPE: [TYPE]"
+    ],
+    "transformation": {
+      "kind": "quantity_compute",
+      "trigger": {
+        "signal_words": [
+          "×",
+          "multiplied by"
+        ],
+        "result_position": "after"
+      },
+      "action": "Compute the product of two numbers",
+      "slots": [],
+      "constraints": []
+    },
+    "conditions": [
+      "SOAL",
+      "CARA",
+      "JAWABAN",
+      "KENAPA",
+      "TIPE"
+    ],
+    "condition_embedding": null,
+    "edges": [],
+    "source": "composed_from_teaching",
+    "confidence": 0.55,
+    "times_applied": 0,
+    "times_correct": 0,
+    "times_failed": 0
+  },
+  "c1ce247a5070": {
+    "id": "c1ce247a5070",
+    "name": "math_multiplication",
+    "concept": "mathematical multiplication operation",
+    "abstraction": "When presented with a multiplication expression in the format 'number × number = ?', the system should compute the product of the two numbers",
+    "schemas": [
+      "mathematical operation",
+      "calculation",
+      "arithmetic"
+    ],
+    "transformation": {
+      "kind": "quantity_compute",
+      "trigger": {
+        "signal_words": [
+          "×",
+          "="
+        ],
+        "result_position": "after"
+      },
+      "action": "extract the two numbers from the expression and compute their product",
+      "slots": [],
+      "constraints": []
+    },
+    "conditions": [
+      "TEKS",
+      "PERTANYAAN",
+      "JAWABAN",
+      "KONTEKS",
+      "NOVELTY"
+    ],
+    "condition_embedding": null,
+    "edges": [],
+    "source": "composed_from_observation",
+    "confidence": 0.55,
+    "times_applied": 0,
+    "times_correct": 0,
+    "times_failed": 0
+  },
+  "66c71fcc5e63": {
+    "id": "66c71fcc5e63",
+    "name": "quantity_compute",
+    "concept": "mathematical multiplication question",
+    "abstraction": "When a question asks for the product of two numbers, the answer should be the result of multiplying those numbers",
+    "schemas": [
+      "question answering",
+      "mathematical computation"
+    ],
+    "transformation": {
+      "kind": "quantity_compute",
+      "trigger": {
+        "signal_words": [
+          "kali"
+        ],
+        "result_position": "after"
+      },
+      "action": "multiply the two numbers mentioned in the question",
+      "slots": [],
+      "constraints": []
+    },
+    "conditions": [
+      "question format",
+      "mathematical operation",
+      "two numbers"
+    ],
+    "condition_embedding": null,
+    "edges": [],
+    "source": "composed_from_observation",
+    "confidence": 0.55,
+    "times_applied": 0,
+    "times_correct": 0,
+    "times_failed": 0
+  },
+  "8058be48d31c": {
+    "id": "8058be48d31c",
+    "name": "mathematical_operation",
+    "concept": "basic multiplication problem",
+    "abstraction": "when presented with a mathematical expression in the format 'number × number = ?', the system should compute the product of the two numbers",
+    "schemas": [
+      "mathematical_equation",
+      "arithmetic_operation"
+    ],
+    "transformation": {
+      "kind": "quantity_compute",
+      "trigger": {
+        "signal_words": [
+          "×",
+          "="
+        ],
+        "result_position": "after"
+      },
+      "action": "multiply the two numbers before the × symbol to get the product",
+      "slots": [],
+      "constraints": []
+    },
+    "conditions": [
+      "TEKS",
+      "PERTANYAAN",
+      "JAWABAN",
+      "KONTEKS"
+    ],
+    "condition_embedding": null,
+    "edges": [],
+    "source": "composed_from_observation",
+    "confidence": 0.55,
+    "times_applied": 0,
+    "times_correct": 0,
+    "times_failed": 0
+  },
+  "fbf258609542": {
+    "id": "fbf258609542",
+    "name": "exception_handling",
+    "concept": "identifying exceptions in statements with 'kecuali'",
+    "abstraction": "When a statement contains [ENTITY] [STATE] KECUALI [EXCEPTION], [EXCEPTION] has the opposite [STATE]",
+    "schemas": [
+      "ALL [STATE] KECUALI [EXCEPTION] → [EXCEPTION] has OPPOSITE [STATE]"
+    ],
+    "transformation": {
+      "kind": "contrast_focus",
+      "trigger": {
+        "signal_words": [
+          "kecuali"
+        ],
+        "result_position": "after"
+      },
+      "action": "identifying the exception entity and assigning it the opposite state",
+      "slots": [],
+      "constraints": []
+    },
+    "conditions": [
+      "kecuali"
+    ],
+    "condition_embedding": null,
+    "edges": [],
+    "source": "composed_from_teaching",
+    "confidence": 0.55,
+    "times_applied": 0,
+    "times_correct": 0,
+    "times_failed": 0
+  }
+}

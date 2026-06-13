@@ -1,0 +1,105 @@
+{
+  "thin": {
+    "total": 29,
+    "top1_correct": 25,
+    "top3_correct": 27,
+    "top1_accuracy": 0.8620689655172413,
+    "top3_accuracy": 0.9310344827586207,
+    "by_domain": {
+      "peribahasa": {
+        "total": 4,
+        "top1": 3,
+        "top3": 3
+      },
+      "bahasa_kiasan": {
+        "total": 6,
+        "top1": 4,
+        "top3": 5
+      },
+      "ide_pokok": {
+        "total": 4,
+        "top1": 3,
+        "top3": 4
+      },
+      "implisit": {
+        "total": 4,
+        "top1": 4,
+        "top3": 4
+      },
+      "perbandingan": {
+        "total": 4,
+        "top1": 4,
+        "top3": 4
+      },
+      "eksplisit": {
+        "total": 3,
+        "top1": 3,
+        "top3": 3
+      },
+      "sikap_tokoh": {
+        "total": 2,
+        "top1": 2,
+        "top3": 2
+      },
+      "teks_eksplanasi": {
+        "total": 2,
+        "top1": 2,
+        "top3": 2
+      }
+    }
+  },
+  "expanded": {
+    "total": 29,
+    "top1_correct": 26,
+    "top3_correct": 28,
+    "top1_accuracy": 0.896551724137931,
+    "top3_accuracy": 0.9655172413793104,
+    "by_domain": {
+      "peribahasa": {
+        "total": 4,
+        "top1": 3,
+        "top3": 3
+      },
+      "bahasa_kiasan": {
+        "total": 6,
+        "top1": 5,
+        "top3": 6
+      },
+      "ide_pokok": {
+        "total": 4,
+        "top1": 4,
+        "top3": 4
+      },
+      "implisit": {
+        "total": 4,
+        "top1": 4,
+        "top3": 4
+      },
+      "perbandingan": {
+        "total": 4,
+        "top1": 4,
+        "top3": 4
+      },
+      "eksplisit": {
+        "total": 3,
+        "top1": 2,
+        "top3": 3
+      },
+      "sikap_tokoh": {
+        "total": 2,
+        "top1": 2,
+        "top3": 2
+      },
+      "teks_eksplanasi": {
+        "total": 2,
+        "top1": 2,
+        "top3": 2
+      }
+    }
+  },
+  "comparison": {
+    "delta_top1": 1,
+    "delta_top3": 1,
+    "hypothesis_confirmed": true
+  }
+}

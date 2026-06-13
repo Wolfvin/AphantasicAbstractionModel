@@ -1,0 +1,1224 @@
+{
+  "peribahasa_observed_understanding": {
+    "name": "peribahasa_observed_understanding",
+    "concept": "Understanding for peribahasa questions",
+    "abstraction": "Peribahasa ini berarti orang yang melupakan asal-usulnya atau tidak bersyukur atas jasa orang lain. Seperti kacang yang lupa bahwa ia tumbuh dari kulitnya.",
+    "conditions": [
+      "baik",
+      "bekerja",
+      "saling",
+      "balasan",
+      "menolong?",
+      "orang",
+      "peribahasa",
+      "cocok",
+      "anaknya?",
+      "peribahaaan",
+      "balas",
+      "tuanya",
+      "anak",
+      "hasil?",
+      "sama"
+    ],
+    "method": [
+      "Identifikasi situasi: seseorang yang lupa/melupakan",
+      "Identifikasi konteks: orang tua bekerja keras untuk anak",
+      "Cocokkan dengan peribahasa tentang ketidakbersyukuran",
+      "Identifikasi pola: usaha keras dulu → hasil baik kemudian",
+      "Cocokkan dengan peribahasa tentang usaha dan hasil",
+      "Identifikasi situasi: kerja sama, tolong-menolong"
+    ],
+    "extraction_rules": [
+      {
+        "step": 1,
+        "action": "FIND",
+        "target": "apa\\s+(?:yang\\s+)?(.+?)\\??",
+        "output_var": "fact_query",
+        "description": "Extract fact query"
+      },
+      {
+        "step": 2,
+        "action": "ANSWER",
+        "target": "fact_query",
+        "output_var": "answer",
+        "description": "Return the fact"
+      }
+    ],
+    "invariants": [],
+    "question_types": [
+      "peribahasa"
+    ],
+    "examples": [
+      "Q: Apa peribahasa yang cocok untuk cerita tentang anak yang lup → A: kacang lupa akan kulitnya",
+      "Q: Apa peribahasa untuk orang yang bekerja keras dan kemudian m → A: bersakit-sakit dahulu bersenang-senang k",
+      "Q: Apa peribahasa untuk orang yang bekerja sama dan saling meno → A: berat sama dipikul ringan sama dijinjing",
+      "Q: Apa peribahasa untuk orang yang berbuat jahat dan mendapat b → A: siapa menabur angin akan menuai badai",
+      "Q: Apa peribahasa untuk orang tua yang bekerja keras demi anakn → A: banting tulang"
+    ],
+    "source": "self_discovered_from_observation",
+    "confidence": 0.5,
+    "times_applied": 0,
+    "times_correct": 0,
+    "condition_embedding": null
+  },
+  "bahasa_kiasan_observed_understanding": {
+    "name": "bahasa_kiasan_observed_understanding",
+    "concept": "Understanding for bahasa_kiasan questions",
+    "abstraction": "Personifikasi adalah gaya bahasa yang memberikan sifat manusia pada benda mati. 'Menari-nari' adalah aktivitas manusia, diberikan pada 'angin' yang adalah benda mati.",
+    "conditions": [
+      "menggelegar",
+      "menari-nari",
+      "'angin",
+      "'wajahnya",
+      "bahasa",
+      "petir'?",
+      "bagaikan",
+      "pepohonan'?",
+      "bulan",
+      "purnama'?",
+      "'suaranya",
+      "antara",
+      "gaya",
+      "kalimat"
+    ],
+    "method": [
+      "Identifikasi subjek: angin (benda mati)",
+      "Identifikasi kata kerja: menari-nari (sifat manusia)",
+      "Kesimpulan: benda mati diberi sifat manusia = personifikasi",
+      "Identifikasi kata pembanding: bagaikan",
+      "Identifikasi yang dibandingkan: wajahnya dengan bulan purnama",
+      "Kesimpulan: perbandingan eksplisit = perumpamaan/simile"
+    ],
+    "extraction_rules": [
+      {
+        "step": 1,
+        "action": "FIND",
+        "target": "apa\\s+(?:yang\\s+)?(.+?)\\??",
+        "output_var": "fact_query",
+        "description": "Extract fact query"
+      },
+      {
+        "step": 2,
+        "action": "ANSWER",
+        "target": "fact_query",
+        "output_var": "answer",
+        "description": "Return the fact"
+      }
+    ],
+    "invariants": [],
+    "question_types": [
+      "bahasa_kiasan"
+    ],
+    "examples": [
+      "Q: Apa gaya bahasa dalam kalimat 'angin menari-nari di antara p → A: personifikasi",
+      "Q: Apa gaya bahasa dalam kalimat 'wajahnya bagaikan bulan purna → A: perumpamaan (simile)",
+      "Q: Apa gaya bahasa dalam kalimat 'suaranya menggelegar bak peti → A: hiperbola"
+    ],
+    "source": "self_discovered_from_observation",
+    "confidence": 0.5,
+    "times_applied": 0,
+    "times_correct": 0,
+    "condition_embedding": null
+  },
+  "ide_pokok_observed_understanding": {
+    "name": "ide_pokok_observed_understanding",
+    "concept": "Understanding for ide_pokok questions",
+    "abstraction": "Dalam teks eksposisi, ide pokok sering ada di kalimat pertama. Kalimat pertama menyatakan gagasan utama, kalimat berikutnya adalah penjelasan.",
+    "conditions": [
+      "kucing",
+      "sangat",
+      "selalu",
+      "setiap",
+      "bulunya",
+      "menjilat",
+      "pokok",
+      "terakhirnya:",
+      "membersihkan",
+      "'kucing",
+      "kotorannya",
+      "diri.",
+      "karena",
+      "itu,",
+      "paragraf:"
+    ],
+    "method": [
+      "Baca kalimat pertama: 'Kucing adalah hewan yang sangat rajin membersihkan diri'",
+      "Kalimat pertama menyatakan gagasan utama tentang kebersihan kucing",
+      "Kalimat berikutnya menjelaskan detail cara kucing membersihkan diri",
+      "Identifikasi kata penanda kesimpulan: 'Oleh karena itu'",
+      "Kalimat dengan penanda kesimpulan biasanya berisi ide pokok",
+      "Kesimpulan: ide pokok ada di kalimat terakhir"
+    ],
+    "extraction_rules": [
+      {
+        "step": 1,
+        "action": "FIND",
+        "target": "apa\\s+(?:yang\\s+)?(.+?)\\??",
+        "output_var": "fact_query",
+        "description": "Extract fact query"
+      },
+      {
+        "step": 2,
+        "action": "ANSWER",
+        "target": "fact_query",
+        "output_var": "answer",
+        "description": "Return the fact"
+      }
+    ],
+    "invariants": [],
+    "question_types": [
+      "ide_pokok"
+    ],
+    "examples": [
+      "Q: Apa ide pokok dari paragraf: 'Kucing adalah hewan yang sanga → A: kucing rajin membersihkan diri",
+      "Q: Apa ide pokok dari paragraf yang kalimat terakhirnya: 'Oleh  → A: kita harus menjaga kebersihan lingkungan"
+    ],
+    "source": "self_discovered_from_observation",
+    "confidence": 0.5,
+    "times_applied": 0,
+    "times_correct": 0,
+    "condition_embedding": null
+  },
+  "pertanyaan_negatif_observed_understanding": {
+    "name": "pertanyaan_negatif_observed_understanding",
+    "concept": "Understanding for pertanyaan_negatif questions",
+    "abstraction": "Kata 'kecuali' menandakan pengecualian. Semua hadir, TAPI yang disebut setelah 'kecuali' TIDAK hadir. Jadi Ani tidak hadir. Pola: SEMUA A kecuali B → B TIDAK A.",
+    "conditions": [
+      "semua",
+      "tapi",
+      "sangat",
+      "malas,",
+      "kecuali",
+      "selain",
+      "siti?",
+      "harimau.",
+      "kebun",
+      "anak",
+      "bukan",
+      "siti",
+      "sifat",
+      "siswa",
+      "hadir"
+    ],
+    "method": [
+      "Identifikasi kata kunci: 'kecuali' = pengecualian",
+      "Artinya: semua hadir, TAPI Ani TIDAK hadir",
+      "'Kecuali' membalikkan makna untuk yang disebut setelahnya",
+      "Temukan kata pengecualian: 'kecuali'",
+      "Pisahkan: [semua siswa hadir] kecuali [Ani]",
+      "Yang disebut setelah 'kecuali' TIDAK ikut aturan umum"
+    ],
+    "extraction_rules": [
+      {
+        "step": 1,
+        "action": "FIND",
+        "target": "kecuali|selain|terkecuali",
+        "output_var": "exception_marker",
+        "description": "Find exception word"
+      },
+      {
+        "step": 2,
+        "action": "SPLIT",
+        "target": "exception_marker",
+        "output_var": "split_result",
+        "description": "Split at exception"
+      },
+      {
+        "step": 3,
+        "action": "EXTRACT",
+        "target": "entity_after:kecuali",
+        "output_var": "excepted_entity",
+        "description": "Extract entity after exception"
+      },
+      {
+        "step": 4,
+        "action": "CAPITALIZE",
+        "target": "excepted_entity",
+        "output_var": "answer",
+        "description": "Capitalize and return"
+      },
+      {
+        "step": 5,
+        "action": "ANSWER",
+        "target": "answer",
+        "output_var": "final",
+        "description": "Return the excepted entity"
+      }
+    ],
+    "invariants": [],
+    "question_types": [
+      "pertanyaan_negatif"
+    ],
+    "examples": [
+      "Q: Semua siswa hadir kecuali Ani. Siapa yang tidak hadir? → A: Ani",
+      "Q: Semua siswa hadir kecuali Ani. Siapa yang tidak hadir? → A: Ani",
+      "Q: Semua hewan di kebun itu jinak selain harimau. Hewan mana ya → A: harimau",
+      "Q: Siti bukan anak yang malas, tapi anak yang sangat rajin. Sif → A: rajin"
+    ],
+    "source": "self_discovered_from_observation",
+    "confidence": 0.5,
+    "times_applied": 0,
+    "times_correct": 0,
+    "condition_embedding": null
+  },
+  "perbandingan_observed_understanding": {
+    "name": "perbandingan_observed_understanding",
+    "concept": "Understanding for perbandingan questions",
+    "abstraction": "Kata 'tetapi' menandakan kontras. Kata setelah 'tetapi' menunjukkan sifat yang lebih penting/dominan. 'Sederhana' adalah sifat yang menonjol dari Budi.",
+    "conditions": [
+      "raja",
+      "pendek?",
+      "pendek",
+      "sangat",
+      "lantai",
+      "kehidupan",
+      "tinggi?",
+      "lebih",
+      "besar",
+      "berkuasa",
+      "tinggi",
+      "tidur",
+      "budi",
+      "sederhana.",
+      "tetapi"
+    ],
+    "method": [
+      "Identifikasi kata 'tetapi' = penanda kontras",
+      "'Besar tetapi sederhana' = meskipun besar, hidupnya sederhana",
+      "Kontras menunjukkan bahwa 'sederhana' adalah sifat yang menonjol",
+      "Identifikasi: Budi > Andi (tinggi)",
+      "Pertanyaan bertanya yang lebih pendek",
+      "Jika Budi lebih tinggi, maka Andi lebih pendek"
+    ],
+    "extraction_rules": [
+      {
+        "step": 1,
+        "action": "FIND",
+        "target": "tetapi|namun|tapi|akan tetapi",
+        "output_var": "contrast_marker",
+        "description": "Find contrast word"
+      },
+      {
+        "step": 2,
+        "action": "SPLIT",
+        "target": "contrast_marker",
+        "output_var": "split_result",
+        "description": "Split at contrast"
+      },
+      {
+        "step": 3,
+        "action": "EXTRACT",
+        "target": "entity_after:tetapi",
+        "output_var": "contrast_part",
+        "description": "Extract part after contrast"
+      },
+      {
+        "step": 4,
+        "action": "ANSWER",
+        "target": "contrast_part",
+        "output_var": "answer",
+        "description": "Return the contrast part"
+      }
+    ],
+    "invariants": [],
+    "question_types": [
+      "perbandingan"
+    ],
+    "examples": [
+      "Q: Rumah Budi besar tetapi sederhana. Bagaimana gaya hidup Budi → A: sederhana",
+      "Q: Budi lebih tinggi dari Andi. Siapa yang lebih pendek? → A: Andi",
+      "Q: Rumah Budi besar tetapi sederhana. Bagaimana gaya hidup Budi → A: sederhana",
+      "Q: Raja sangat kaya dan berkuasa tetapi dia tidur di lantai dan → A: sederhana",
+      "Q: Andi lebih pendek dari Budi. Siapa yang lebih tinggi? → A: Budi"
+    ],
+    "source": "self_discovered_from_observation",
+    "confidence": 0.5,
+    "times_applied": 0,
+    "times_correct": 0,
+    "condition_embedding": null
+  },
+  "benar_salah_observed_understanding": {
+    "name": "benar_salah_observed_understanding",
+    "concept": "Understanding for benar_salah questions",
+    "abstraction": "Jakarta terletak di Pulau Jawa. Pernyataan yang bertentangan dengan fakta adalah salah. Untuk menentukan benar/salah, kita harus membandingkan pernyataan dengan pengetahuan yang benar.",
+    "conditions": [
+      "benar",
+      "'jakarta",
+      "pulau",
+      "pernyataan:",
+      "terletak",
+      "salah?",
+      "kalimantan.'"
+    ],
+    "method": [
+      "Cek pengetahuan: Jakarta adalah ibu kota Indonesia",
+      "Jakarta terletak di Pulau Jawa, BUKAN Kalimantan",
+      "Pernyataan bertentangan dengan fakta → salah"
+    ],
+    "extraction_rules": [
+      {
+        "step": 1,
+        "action": "VERIFY",
+        "target": "benar_salah",
+        "output_var": "type_match",
+        "description": "Verify question type"
+      },
+      {
+        "step": 2,
+        "action": "FIND",
+        "target": "(\\w+)",
+        "output_var": "candidate",
+        "description": "Find candidate answer"
+      },
+      {
+        "step": 3,
+        "action": "ANSWER",
+        "target": "candidate",
+        "output_var": "answer",
+        "description": "Return best candidate"
+      }
+    ],
+    "invariants": [],
+    "question_types": [
+      "benar_salah"
+    ],
+    "examples": [
+      "Q: Pernyataan: 'Jakarta terletak di Pulau Kalimantan.' Benar at → A: salah"
+    ],
+    "source": "self_discovered_from_observation",
+    "confidence": 0.5,
+    "times_applied": 0,
+    "times_correct": 0,
+    "condition_embedding": null
+  },
+  "teks_argumentatif_observed_understanding": {
+    "name": "teks_argumentatif_observed_understanding",
+    "concept": "Understanding for teks_argumentatif questions",
+    "abstraction": "Opini adalah pendapat pribadi yang ditandai oleh kata-kata seperti 'menurut saya', 'sebaiknya'. Fakta adalah pernyataan yang bisa dibuktikan dengan data. Perbedaan kunci: opini = subjektif, fakta = ob",
+    "conditions": [
+      "mana",
+      "opini?",
+      "argumentatif,",
+      "merupakan",
+      "teks",
+      "kalimat"
+    ],
+    "method": [
+      "Cari kata-kata yang menunjukkan pendapat pribadi",
+      "Penanda opini: 'menurut saya', 'sebaiknya', 'seharusnya'",
+      "Penanda fakta: data, angka, penelitian"
+    ],
+    "extraction_rules": [
+      {
+        "step": 1,
+        "action": "VERIFY",
+        "target": "teks_argumentatif",
+        "output_var": "type_match",
+        "description": "Verify question type"
+      },
+      {
+        "step": 2,
+        "action": "FIND",
+        "target": "(\\w+)",
+        "output_var": "candidate",
+        "description": "Find candidate answer"
+      },
+      {
+        "step": 3,
+        "action": "ANSWER",
+        "target": "candidate",
+        "output_var": "answer",
+        "description": "Return best candidate"
+      }
+    ],
+    "invariants": [],
+    "question_types": [
+      "teks_argumentatif"
+    ],
+    "examples": [
+      "Q: Dalam teks argumentatif, kalimat mana yang merupakan opini? → A: Kalimat yang mengandung kata 'menurut sa"
+    ],
+    "source": "self_discovered_from_observation",
+    "confidence": 0.5,
+    "times_applied": 0,
+    "times_correct": 0,
+    "condition_embedding": null
+  },
+  "sikap_tokoh_observed_understanding": {
+    "name": "sikap_tokoh_observed_understanding",
+    "concept": "Understanding for sikap_tokoh questions",
+    "abstraction": "Sikap dermawan/peduli ditunjukkan melalui tindakan menolong orang lain meskipun dalam keadaan sulit. Kata kunci: menolong, berkorban, meskipun.",
+    "conditions": [
+      "sendiri",
+      "semua",
+      "pemarah.",
+      "sifat",
+      "tetangganya",
+      "sikap",
+      "berkata",
+      "tapi",
+      "selalu",
+      "meskipun",
+      "tokoh",
+      "menolong",
+      "miskin.",
+      "tersebut?",
+      "orang"
+    ],
+    "method": [
+      "Identifikasi tindakan: menolong tetangga",
+      "Identifikasi konteks: meskipun miskin (berkorban)",
+      "Menolong meskipun sulit = dermawan/peduli",
+      "Identifikasi dua sumber: 'semua orang berkata' vs 'Lia tidak pernah marah'",
+      "'Semua orang berkata' = opini populer (bisa salah)",
+      "'Lia tidak pernah marah' = fakta dari cerita"
+    ],
+    "extraction_rules": [
+      {
+        "step": 1,
+        "action": "FIND",
+        "target": "apa\\s+(\\w+\\s*\\w*)",
+        "output_var": "key_phrase",
+        "description": "Find key phrase from question"
+      },
+      {
+        "step": 2,
+        "action": "ANSWER",
+        "target": "key_phrase",
+        "output_var": "answer",
+        "description": "Return matching text"
+      }
+    ],
+    "invariants": [],
+    "question_types": [
+      "sikap_tokoh"
+    ],
+    "examples": [
+      "Q: Tokoh selalu menolong tetangganya meskipun ia sendiri miskin → A: dermawan atau peduli",
+      "Q: Semua orang berkata Lia pemarah. Tapi Lia tidak pernah marah → A: sabar"
+    ],
+    "source": "self_discovered_from_observation",
+    "confidence": 0.5,
+    "times_applied": 0,
+    "times_correct": 0,
+    "condition_embedding": null
+  },
+  "kesan_pesan_observed_understanding": {
+    "name": "kesan_pesan_observed_understanding",
+    "concept": "Understanding for kesan_pesan questions",
+    "abstraction": "Pesan cerita adalah ajaran moral yang bisa diambil. Pola usaha → keberhasilan menunjukkan pesan bahwa kerja keras menghasilkan hasil yang baik.",
+    "conditions": [
+      "rajin",
+      "pesan",
+      "cerita",
+      "belajar",
+      "akhirnya",
+      "anak",
+      "menjadi",
+      "juara.",
+      "cerita?"
+    ],
+    "method": [
+      "Identifikasi pola: rajin belajar → menjadi juara",
+      "Pesan: kerja keras menghasilkan keberhasilan",
+      "Ini adalah pesan moral tentang pentingnya kerja keras"
+    ],
+    "extraction_rules": [
+      {
+        "step": 1,
+        "action": "FIND",
+        "target": "apa\\s+(?:yang\\s+)?(.+?)\\??",
+        "output_var": "fact_query",
+        "description": "Extract fact query"
+      },
+      {
+        "step": 2,
+        "action": "ANSWER",
+        "target": "fact_query",
+        "output_var": "answer",
+        "description": "Return the fact"
+      }
+    ],
+    "invariants": [],
+    "question_types": [
+      "kesan_pesan"
+    ],
+    "examples": [
+      "Q: Cerita tentang anak yang rajin belajar dan akhirnya menjadi  → A: Kita harus rajin belajar agar berhasil"
+    ],
+    "source": "self_discovered_from_observation",
+    "confidence": 0.5,
+    "times_applied": 0,
+    "times_correct": 0,
+    "condition_embedding": null
+  },
+  "teks_eksplanasi_observed_understanding": {
+    "name": "teks_eksplanasi_observed_understanding",
+    "concept": "Understanding for teks_eksplanasi questions",
+    "abstraction": "Teks eksplanasi menjelaskan proses sebab-akibat. 'Mengapa' menanyakan penyebab. Jawaban harus menjelaskan rantai proses dari awal sampai akhir.",
+    "conditions": [
+      "andi?",
+      "berapa",
+      "jumlah",
+      "biru.",
+      "budi",
+      "kelereng.",
+      "turun?",
+      "kelereng",
+      "hujan",
+      "andi",
+      "punya",
+      "merah"
+    ],
+    "method": [
+      "Identifikasi pertanyaan sebab-akibat: 'mengapa'",
+      "Cari proses: pemanasan air → penguapan → kondensasi → hujan",
+      "Jelaskan rantai sebab-akibat",
+      "Identifikasi siapa yang ditanyakan: Andi",
+      "Kelereng Andi: 5 merah + 3 biru = 8",
+      "Kelereng Budi (7) TIDAK ditanyakan — angka pengganggu"
+    ],
+    "extraction_rules": [
+      {
+        "step": 1,
+        "action": "FIND",
+        "target": "apa\\s+(?:yang\\s+)?(.+?)\\??",
+        "output_var": "fact_query",
+        "description": "Extract fact query"
+      },
+      {
+        "step": 2,
+        "action": "ANSWER",
+        "target": "fact_query",
+        "output_var": "answer",
+        "description": "Return the fact"
+      }
+    ],
+    "invariants": [],
+    "question_types": [
+      "teks_eksplanasi"
+    ],
+    "examples": [
+      "Q: Mengapa hujan turun? → A: Hujan turun karena air di laut dan darat",
+      "Q: Andi punya 5 kelereng merah dan 3 kelereng biru. Budi punya  → A: 8"
+    ],
+    "source": "self_discovered_from_observation",
+    "confidence": 0.5,
+    "times_applied": 0,
+    "times_correct": 0,
+    "condition_embedding": null
+  },
+  "analogi_observed_understanding": {
+    "name": "analogi_observed_understanding",
+    "concept": "Understanding for analogi questions",
+    "abstraction": "Analogi menggunakan relasi yang sama. Relasi 'bekerja di' menghubungkan dokter dengan rumah sakit. Relasi yang sama menghubungkan guru dengan sekolah.",
+    "conditions": [
+      "sakit",
+      "rumah",
+      "guru",
+      "dokter"
+    ],
+    "method": [
+      "Identifikasi relasi: dokter BEKERJA DI rumah sakit",
+      "Terapkan relasi yang sama: guru BEKERJA DI ?",
+      "Guru bekerja di sekolah"
+    ],
+    "extraction_rules": [
+      {
+        "step": 1,
+        "action": "VERIFY",
+        "target": "analogi",
+        "output_var": "type_match",
+        "description": "Verify question type"
+      },
+      {
+        "step": 2,
+        "action": "FIND",
+        "target": "(\\w+)",
+        "output_var": "candidate",
+        "description": "Find candidate answer"
+      },
+      {
+        "step": 3,
+        "action": "ANSWER",
+        "target": "candidate",
+        "output_var": "answer",
+        "description": "Return best candidate"
+      }
+    ],
+    "invariants": [],
+    "question_types": [
+      "analogi"
+    ],
+    "examples": [
+      "Q: Dokter : Rumah Sakit = Guru : ? → A: sekolah"
+    ],
+    "source": "self_discovered_from_observation",
+    "confidence": 0.5,
+    "times_applied": 0,
+    "times_correct": 0,
+    "condition_embedding": null
+  },
+  "tone_mood_observed_understanding": {
+    "name": "tone_mood_observed_understanding",
+    "concept": "Understanding for tone_mood questions",
+    "abstraction": "Suasana (tone/mood) ditentukan oleh emosi dominan dalam cerita. Kehilangan orang tua menghasilkan suasana sedih/duka. Peristiwa tragis → suasana sedih.",
+    "conditions": [
+      "kehilangan",
+      "cerita",
+      "tuanya?",
+      "anak",
+      "orang",
+      "suasana"
+    ],
+    "method": [
+      "Identifikasi peristiwa: kehilangan orang tua",
+      "Emosi yang muncul: sedih, duka, kehilangan",
+      "Suasana = keseluruhan perasaan yang dominan"
+    ],
+    "extraction_rules": [
+      {
+        "step": 1,
+        "action": "VERIFY",
+        "target": "tone_mood",
+        "output_var": "type_match",
+        "description": "Verify question type"
+      },
+      {
+        "step": 2,
+        "action": "FIND",
+        "target": "(\\w+)",
+        "output_var": "candidate",
+        "description": "Find candidate answer"
+      },
+      {
+        "step": 3,
+        "action": "ANSWER",
+        "target": "candidate",
+        "output_var": "answer",
+        "description": "Return best candidate"
+      }
+    ],
+    "invariants": [],
+    "question_types": [
+      "tone_mood"
+    ],
+    "examples": [
+      "Q: Bagaimana suasana dalam cerita tentang anak yang kehilangan  → A: sedih"
+    ],
+    "source": "self_discovered_from_observation",
+    "confidence": 0.5,
+    "times_applied": 0,
+    "times_correct": 0,
+    "condition_embedding": null
+  },
+  "implisit_observed_understanding": {
+    "name": "implisit_observed_understanding",
+    "concept": "Understanding for implisit questions",
+    "abstraction": "Implisit berarti tidak langsung dikatakan tapi bisa disimpulkan dari fakta. Kebiasaan selalu membawa payung menunjukkan sifat berhati-hati.",
+    "conditions": [
+      "payung",
+      "bisa",
+      "cerah.",
+      "selalu",
+      "meskipun",
+      "membawa",
+      "disimpulkan?",
+      "andi"
+    ],
+    "method": [
+      "Fakta eksplisit: Andi selalu bawa payung",
+      "Pertanyaan: apa yang TIDAK langsung dikatakan tapi bisa disimpulkan?",
+      "Orang bawa payung = antisipasi hujan"
+    ],
+    "extraction_rules": [
+      {
+        "step": 1,
+        "action": "FIND",
+        "target": "apa\\s+(?:yang\\s+)?(.+?)\\??",
+        "output_var": "fact_query",
+        "description": "Extract fact query"
+      },
+      {
+        "step": 2,
+        "action": "ANSWER",
+        "target": "fact_query",
+        "output_var": "answer",
+        "description": "Return the fact"
+      }
+    ],
+    "invariants": [],
+    "question_types": [
+      "implisit"
+    ],
+    "examples": [
+      "Q: Andi selalu membawa payung meskipun cerah. Apa yang bisa dis → A: Andi adalah orang yang berhati-hati atau"
+    ],
+    "source": "self_discovered_from_observation",
+    "confidence": 0.5,
+    "times_applied": 0,
+    "times_correct": 0,
+    "condition_embedding": null
+  },
+  "sinonim_antonim_observed_understanding": {
+    "name": "sinonim_antonim_observed_understanding",
+    "concept": "Understanding for sinonim_antonim questions",
+    "abstraction": "Antonim adalah kata yang berlawanan makna. Rajin (suka bekerja) berlawanan dengan malas (tidak suka bekerja). Keduanya mendeskripsikan sikap terhadap kerja.",
+    "conditions": [
+      "kata",
+      "lawan",
+      "'rajin'?"
+    ],
+    "method": [
+      "Identifikasi: lawan kata = antonim",
+      "Rajin = suka bekerja keras",
+      "Antonim = malas = tidak suka bekerja keras"
+    ],
+    "extraction_rules": [
+      {
+        "step": 1,
+        "action": "FIND",
+        "target": "apa\\s+(?:yang\\s+)?(.+?)\\??",
+        "output_var": "fact_query",
+        "description": "Extract fact query"
+      },
+      {
+        "step": 2,
+        "action": "ANSWER",
+        "target": "fact_query",
+        "output_var": "answer",
+        "description": "Return the fact"
+      }
+    ],
+    "invariants": [],
+    "question_types": [
+      "sinonim_antonim"
+    ],
+    "examples": [
+      "Q: Apa lawan kata dari 'rajin'? → A: malas"
+    ],
+    "source": "self_discovered_from_observation",
+    "confidence": 0.5,
+    "times_applied": 0,
+    "times_correct": 0,
+    "condition_embedding": null
+  },
+  "eksplisit_observed_understanding": {
+    "name": "eksplisit_observed_understanding",
+    "concept": "Understanding for eksplisit questions",
+    "abstraction": "Pertanyaan 'apa yang dimasak' bertanya fakta, bukan emosi. Meskipun teks penuh emosi (berduka), jawaban harus berdasarkan fakta (memasak nasi putih dan sayur). Jangan terpengaruh emosi dominan.",
+    "conditions": [
+      "jakarta",
+      "khas",
+      "hati",
+      "nasi",
+      "lalu",
+      "lintas.",
+      "kota",
+      "menurut",
+      "kerak",
+      "padat",
+      "telor.",
+      "langit.",
+      "banyak",
+      "indonesia.",
+      "teks?"
+    ],
+    "method": [
+      "Pisahkan emosi dari fakta",
+      "Emosi: berduka, sedih (bukan yang ditanyakan)",
+      "Fakta: memasak nasi putih dan sayur",
+      "Cari kata kunci: 'makanan khas'",
+      "Temukan kalimat yang menyebut 'makanan khas': kerak telor",
+      "Abaikan informasi lain (ibu kota, gedung, lalu lintas)"
+    ],
+    "extraction_rules": [
+      {
+        "step": 1,
+        "action": "FIND",
+        "target": "apa\\s+(?:yang\\s+)?(.+?)\\??",
+        "output_var": "fact_query",
+        "description": "Extract fact query"
+      },
+      {
+        "step": 2,
+        "action": "ANSWER",
+        "target": "fact_query",
+        "output_var": "answer",
+        "description": "Return the fact"
+      }
+    ],
+    "invariants": [],
+    "question_types": [
+      "eksplisit"
+    ],
+    "examples": [
+      "Q: Dengan hati berduka, ibu memasak nasi putih dan sayur. Apa y → A: nasi putih dan sayur",
+      "Q: Jakarta adalah ibu kota Indonesia. Banyak gedung pencakar la → A: kerak telor"
+    ],
+    "source": "self_discovered_from_observation",
+    "confidence": 0.5,
+    "times_applied": 0,
+    "times_correct": 0,
+    "condition_embedding": null
+  },
+  "exception_reversal": {
+    "name": "exception_reversal",
+    "concept": "When exception word appears, entity after it has opposite state",
+    "abstraction": "Kata kecuali/selain membuat pengecualian — entitas setelahnya berkeadaan berlawanan dari aturan umum. Pola: SEMUA A kecuali B → B TIDAK A.",
+    "conditions": [
+      "kecuali",
+      "selain",
+      "terkecuali",
+      "tidak",
+      "pengecualian",
+      "bukan",
+      "semua",
+      "kecuali"
+    ],
+    "method": [
+      "Find exception word (kecuali/selain/terkecuali)",
+      "Extract entity after exception word",
+      "The excepted entity has opposite state from general rule"
+    ],
+    "extraction_rules": [
+      {
+        "step": 1,
+        "action": "FIND",
+        "target": "kecuali|selain|terkecuali",
+        "output_var": "exception_marker",
+        "description": "Find exception word"
+      },
+      {
+        "step": 2,
+        "action": "SPLIT",
+        "target": "exception_marker",
+        "output_var": "split_result",
+        "description": "Split at exception"
+      },
+      {
+        "step": 3,
+        "action": "EXTRACT",
+        "target": "entity_after:kecuali",
+        "output_var": "excepted_entity",
+        "description": "Extract entity after exception"
+      },
+      {
+        "step": 4,
+        "action": "CAPITALIZE",
+        "target": "excepted_entity",
+        "output_var": "answer",
+        "description": "Capitalize"
+      },
+      {
+        "step": 5,
+        "action": "ANSWER",
+        "target": "answer",
+        "output_var": "final",
+        "description": "Return the excepted entity"
+      }
+    ],
+    "invariants": [
+      "text_must_contain:kecuali"
+    ],
+    "question_types": [
+      "pertanyaan_negatif"
+    ],
+    "examples": [
+      "Semua siswa hadir kecuali Ani → Ani",
+      "Semua hewan jinak selain harimau → harimau"
+    ],
+    "source": "teacher_guided",
+    "confidence": 0.85,
+    "times_applied": 0,
+    "times_correct": 0,
+    "condition_embedding": null
+  },
+  "contrast_after_tetapi": {
+    "name": "contrast_after_tetapi",
+    "concept": "After contrast word, the following part is the true/dominant description",
+    "abstraction": "Kata tetapi/namun menandakan kontras — bagian SETELAH tetapi lebih penting dan merupakan keadaan sebenarnya. Pola: A tetapi B → B lebih penting dari A.",
+    "conditions": [
+      "tetapi",
+      "namun",
+      "tapi",
+      "kontras",
+      "berbeda",
+      "sebenarnya",
+      "meskipun",
+      "tetapi"
+    ],
+    "method": [
+      "Find contrast word (tetapi/namun/tapi)",
+      "Take what comes AFTER the contrast word",
+      "The part after contrast is the true/dominant description"
+    ],
+    "extraction_rules": [
+      {
+        "step": 1,
+        "action": "FIND",
+        "target": "tetapi|namun|tapi|akan tetapi",
+        "output_var": "contrast_marker",
+        "description": "Find contrast word"
+      },
+      {
+        "step": 2,
+        "action": "SPLIT",
+        "target": "contrast_marker",
+        "output_var": "split_result",
+        "description": "Split at contrast"
+      },
+      {
+        "step": 3,
+        "action": "EXTRACT",
+        "target": "entity_after:tetapi",
+        "output_var": "contrast_part",
+        "description": "Extract part after contrast"
+      },
+      {
+        "step": 4,
+        "action": "ANSWER",
+        "target": "contrast_part",
+        "output_var": "answer",
+        "description": "Return the contrast part"
+      }
+    ],
+    "invariants": [],
+    "question_types": [
+      "perbandingan",
+      "sikap_tokoh"
+    ],
+    "examples": [
+      "Besar tetapi sederhana → sederhana",
+      "Kaya tetapi tidur di lantai → sederhana"
+    ],
+    "source": "teacher_guided",
+    "confidence": 0.85,
+    "times_applied": 0,
+    "times_correct": 0,
+    "condition_embedding": null
+  },
+  "negation_then_affirmation": {
+    "name": "negation_then_affirmation",
+    "concept": "Pattern bukan X tapi Y rejects X and affirms Y",
+    "abstraction": "Pola bukan X tapi Y menolak X dan menegaskan Y — jawaban selalu yang ditegaskan (setelah tapi). X adalah klaim yang ditolak, Y adalah kebenaran.",
+    "conditions": [
+      "bukan",
+      "tapi",
+      "negasi",
+      "menolak",
+      "menegaskan",
+      "tidak",
+      "bukan"
+    ],
+    "method": [
+      "Find bukan...tapi pattern",
+      "What comes after tapi is the affirmed truth",
+      "What comes after bukan is the rejected false claim"
+    ],
+    "extraction_rules": [
+      {
+        "step": 1,
+        "action": "FIND",
+        "target": "bukan",
+        "output_var": "negation_marker",
+        "description": "Find negation word"
+      },
+      {
+        "step": 2,
+        "action": "FIND",
+        "target": "tapi|tetapi",
+        "output_var": "contrast_marker",
+        "description": "Find contrast after negation"
+      },
+      {
+        "step": 3,
+        "action": "EXTRACT",
+        "target": "entity_after:tapi",
+        "output_var": "affirmed_part",
+        "description": "Extract what is affirmed"
+      },
+      {
+        "step": 4,
+        "action": "ANSWER",
+        "target": "affirmed_part",
+        "output_var": "answer",
+        "description": "Return the affirmed part"
+      }
+    ],
+    "invariants": [],
+    "question_types": [
+      "pertanyaan_negatif"
+    ],
+    "examples": [
+      "Bukan malas tapi rajin → rajin",
+      "Bukan pemarah tapi sabar → sabar"
+    ],
+    "source": "teacher_guided",
+    "confidence": 0.85,
+    "times_applied": 0,
+    "times_correct": 0,
+    "condition_embedding": null
+  },
+  "comparative_reverse": {
+    "name": "comparative_reverse",
+    "concept": "When comparison states A lebih X dari B, and question asks for opposite, answer is B",
+    "abstraction": "Perbandingan terbalik: jika A lebih X dari B, dan pertanyaan bertanya lawan X, maka jawaban B. Contoh: A lebih pendek dari B → siapa lebih tinggi? → B.",
+    "conditions": [
+      "lebih",
+      "dari",
+      "pendek",
+      "tinggi",
+      "besar",
+      "kecil",
+      "perbandingan",
+      "dari"
+    ],
+    "method": [
+      "Identify comparison direction",
+      "If question asks opposite, return the other entity"
+    ],
+    "extraction_rules": [
+      {
+        "step": 1,
+        "action": "FIND",
+        "target": "(\\w+)\\s+lebih\\s+(\\w+)\\s+dari\\s+(\\w+)",
+        "output_var": "comparison",
+        "description": "Find comparison pattern"
+      },
+      {
+        "step": 2,
+        "action": "EXTRACT",
+        "target": "entity_after:dari",
+        "output_var": "second_entity",
+        "description": "Extract second entity"
+      },
+      {
+        "step": 3,
+        "action": "ANSWER",
+        "target": "second_entity",
+        "output_var": "answer",
+        "description": "Return the second entity"
+      }
+    ],
+    "invariants": [],
+    "question_types": [
+      "perbandingan"
+    ],
+    "examples": [
+      "Andi lebih pendek dari Budi, siapa lebih tinggi? → Budi"
+    ],
+    "source": "teacher_guided",
+    "confidence": 0.8,
+    "times_applied": 0,
+    "times_correct": 0,
+    "condition_embedding": null
+  },
+  "fact_vs_emotion": {
+    "name": "fact_vs_emotion",
+    "concept": "When question asks for a fact, ignore emotional language and extract the factual answer",
+    "abstraction": "Pertanyaan tentang fakta → cari fakta di teks, abaikan emosi. Emosi (sedih, berduka) bukan jawaban untuk pertanyaan faktual (apa yang dimasak).",
+    "conditions": [
+      "apa",
+      "yang",
+      "masak",
+      "fakta",
+      "faktual",
+      "membuat",
+      "memasak"
+    ],
+    "method": [
+      "Identify that question asks for fact",
+      "Search text for the factual content",
+      "Ignore emotional words"
+    ],
+    "extraction_rules": [
+      {
+        "step": 1,
+        "action": "FIND",
+        "target": "apa\\s+yang",
+        "output_var": "fact_query",
+        "description": "Find fact query"
+      },
+      {
+        "step": 2,
+        "action": "EXTRACT",
+        "target": "entity_after:memasak",
+        "output_var": "fact_answer",
+        "description": "Extract what was cooked"
+      },
+      {
+        "step": 3,
+        "action": "ANSWER",
+        "target": "fact_answer",
+        "output_var": "answer",
+        "description": "Return the fact"
+      }
+    ],
+    "invariants": [],
+    "question_types": [
+      "eksplisit"
+    ],
+    "examples": [
+      "Dengan berduka, ibu memasak nasi dan sayur → nasi dan sayur"
+    ],
+    "source": "teacher_guided",
+    "confidence": 0.75,
+    "times_applied": 0,
+    "times_correct": 0,
+    "condition_embedding": null
+  },
+  "fact_vs_opinion": {
+    "name": "fact_vs_opinion",
+    "concept": "When text contradicts popular opinion, the text fact overrides the opinion",
+    "abstraction": "Fakta dalam teks mengalahkan opini populer. Jika teks bilang \"tidak pernah marah\" tapi orang bilang \"pemarah\", jawaban berdasarkan fakta teks.",
+    "conditions": [
+      "orang",
+      "berkata",
+      "semua",
+      "tapi",
+      "tetapi",
+      "menurut",
+      "berkata"
+    ],
+    "method": [
+      "Identify two sources: popular opinion vs text fact",
+      "Fakta dalam teks mengalahkan opini"
+    ],
+    "extraction_rules": [
+      {
+        "step": 1,
+        "action": "FIND",
+        "target": "tapi|tetapi|namun",
+        "output_var": "contrast_marker",
+        "description": "Find contrast"
+      },
+      {
+        "step": 2,
+        "action": "EXTRACT",
+        "target": "entity_after:tapi",
+        "output_var": "factual_part",
+        "description": "Extract factual part after contrast"
+      },
+      {
+        "step": 3,
+        "action": "ANSWER",
+        "target": "factual_part",
+        "output_var": "answer",
+        "description": "Return the fact"
+      }
+    ],
+    "invariants": [],
+    "question_types": [
+      "sikap_tokoh"
+    ],
+    "examples": [
+      "Semua orang berkata pemarah, tapi tidak pernah marah → sabar"
+    ],
+    "source": "teacher_guided",
+    "confidence": 0.8,
+    "times_applied": 0,
+    "times_correct": 0,
+    "condition_embedding": null
+  }
+}

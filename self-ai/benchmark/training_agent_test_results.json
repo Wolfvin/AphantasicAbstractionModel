@@ -1,0 +1,87 @@
+{
+  "timestamp": "2026-06-08 10:07:46",
+  "poc1_correction_flow": false,
+  "poc2_pattern_survives": false,
+  "poc3_accuracy_improves": false,
+  "details": {
+    "models_loaded": false,
+    "poc1": {
+      "initial_answer": "None",
+      "initial_correct": false,
+      "reasoning_generated": "Koreksi pengguna: jawaban yang benar untuk pertanyaan ini adalah personifikasi",
+      "not_auto_confirmed": true,
+      "pattern_saved": true,
+      "answer_after_correction": "None",
+      "correct_after_correction": false
+    },
+    "poc2": {
+      "patterns_on_disk": 5,
+      "correct_after_restart": false,
+      "tc_pattern_count": 60
+    },
+    "poc3": {
+      "before_accuracy": 0.0,
+      "before_correct": 0,
+      "before_total": 20,
+      "after_accuracy": 0.0,
+      "after_correct": 0,
+      "after_total": 20,
+      "delta": 0.0,
+      "corrections_applied": 5,
+      "before_per_type": {
+        "peribahasa": {
+          "correct": 0,
+          "total": 4,
+          "accuracy": 0.0
+        },
+        "bahasa_kiasan": {
+          "correct": 0,
+          "total": 4,
+          "accuracy": 0.0
+        },
+        "implisit": {
+          "correct": 0,
+          "total": 4,
+          "accuracy": 0.0
+        },
+        "perbandingan": {
+          "correct": 0,
+          "total": 4,
+          "accuracy": 0.0
+        },
+        "eksplisit": {
+          "correct": 0,
+          "total": 4,
+          "accuracy": 0.0
+        }
+      },
+      "after_per_type": {
+        "peribahasa": {
+          "correct": 0,
+          "total": 4,
+          "accuracy": 0.0
+        },
+        "bahasa_kiasan": {
+          "correct": 0,
+          "total": 4,
+          "accuracy": 0.0
+        },
+        "implisit": {
+          "correct": 0,
+          "total": 4,
+          "accuracy": 0.0
+        },
+        "perbandingan": {
+          "correct": 0,
+          "total": 4,
+          "accuracy": 0.0
+        },
+        "eksplisit": {
+          "correct": 0,
+          "total": 4,
+          "accuracy": 0.0
+        }
+      }
+    }
+  }
+}

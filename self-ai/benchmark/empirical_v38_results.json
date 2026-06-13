@@ -1,0 +1,99 @@
+{
+  "version": "v38_embedding_test",
+  "timestamp": "2026-06-07 16:49:48",
+  "results": [
+    {
+      "query": "EXACT-BK",
+      "question": "Kata menari-nari majas....",
+      "best_match": "Kata menari-nari maj",
+      "cosine": 1.0,
+      "threshold": "EXACT",
+      "answer": "personifikasi",
+      "expected": "personifikasi",
+      "correct": true
+    },
+    {
+      "query": "GEN-BK",
+      "question": "Kata berkelipkan mata majas....",
+      "best_match": "Kata menari-nari maj",
+      "cosine": 0.7426,
+      "threshold": "SIMILAR",
+      "answer": "personifikasi",
+      "expected": "personifikasi",
+      "correct": true
+    },
+    {
+      "query": "WRONG-BK",
+      "question": "Kata menjerit majas....",
+      "best_match": "Kata menari-nari maj",
+      "cosine": 0.8218,
+      "threshold": "SIMILAR",
+      "answer": "personifikasi",
+      "expected": "personifikasi",
+      "correct": true
+    },
+    {
+      "query": "EXACT-IM",
+      "question": "Mengapa toko kehilangan persediaan?",
+      "best_match": "Mengapa toko kehilan",
+      "cosine": 1.0,
+      "threshold": "EXACT",
+      "answer": "kebakaran gudang",
+      "expected": "kebakaran",
+      "correct": true
+    },
+    {
+      "query": "GEN-IM",
+      "question": "Mengapa pekerja kehilangan jabatan?",
+      "best_match": "Mengapa toko kehilan",
+      "cosine": 0.6575,
+      "threshold": "SIMILAR",
+      "answer": "kebakaran gudang",
+      "expected": "kebakaran",
+      "correct": true
+    },
+    {
+      "query": "WRONG-IM",
+      "question": "Mengapa harga beras naik?",
+      "best_match": "Mengapa toko kehilan",
+      "cosine": 0.4892,
+      "threshold": "PASS2",
+      "answer": "kebakaran gudang",
+      "expected": null,
+      "correct": null
+    },
+    {
+      "query": "EXACT-EK",
+      "question": "Pukul berapa dokter praktik?",
+      "best_match": "Pukul berapa dokter ",
+      "cosine": 1.0,
+      "threshold": "EXACT",
+      "answer": "08.00",
+      "expected": "08.00",
+      "correct": true
+    },
+    {
+      "query": "GEN-EK",
+      "question": "Pukul berapa perpustakaan buka?",
+      "best_match": "Pukul berapa dokter ",
+      "cosine": 0.7119,
+      "threshold": "SIMILAR",
+      "answer": "08.00",
+      "expected": null,
+      "correct": false
+    },
+    {
+      "query": "CROSS",
+      "question": "Berapa PPN impor kendaraan?",
+      "best_match": "Mengapa toko kehilan",
+      "cosine": 0.3954,
+      "threshold": "NO_MATCH",
+      "answer": "kebakaran gudang",
+      "expected": null,
+      "correct": null
+    }
+  ],
+  "tp": 6,
+  "fp": 1,
+  "fn": 0
+}

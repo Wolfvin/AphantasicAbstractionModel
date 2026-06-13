@@ -1,0 +1,54 @@
+{
+  "axioms": {
+    "test_sub": {
+      "subject": "5",
+      "predicate": "SUBTRACT",
+      "object": "3",
+      "confidence": 0.8
+    },
+    "test_add": {
+      "subject": "5",
+      "predicate": "ADD",
+      "object": "3",
+      "confidence": 0.8
+    },
+    "test_mul": {
+      "subject": "5",
+      "predicate": "MULTIPLY",
+      "object": "3",
+      "confidence": 0.8
+    },
+    "test_div": {
+      "subject": "12",
+      "predicate": "DIVIDE",
+      "object": "3",
+      "confidence": 0.8
+    },
+    "test_frac": {
+      "subject": "24",
+      "predicate": "FRACTION_MULTIPLY",
+      "object": "0.5",
+      "confidence": 0.8
+    },
+    "test_peri": {
+      "subject": "12",
+      "predicate": "PERIMETER",
+      "object": "8",
+      "confidence": 0.8
+    },
+    "test_time": {
+      "subject": "870",
+      "predicate": "TIME_DURATION",
+      "object": "975",
+      "confidence": 0.8
+    }
+  },
+  "observations": [],
+  "relation_registry": {},
+  "confidence_alpha": 0.5,
+  "learning_rate": 0.01,
+  "feedback_history": [],
+  "concept_graph": {},
+  "curiosity_queue": [],
+  "derivation_results": []
+}
