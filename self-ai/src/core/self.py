@@ -42,6 +42,12 @@ class SelfCore:
         self._derivation_engine = None
         self._composer = None
         self._correction_loop = None  # v31: Shared SelfCorrectionLoop
+
+        # v34: Unconscious injection + Introspection
+        self._injector = None       # UnconsciousInjector (lazy, needs Qwen3)
+        self._introspector = None   # Introspector (lazy)
+        self._unconscious_enabled = True  # Toggle for A/B testing
+        self._last_answer_question = ''   # For introspection context
         
     @property
     def composer(self):
@@ -87,6 +93,113 @@ class SelfCore:
         except Exception as e:
             logger.warning("Failed to init shared SelfCorrectionLoop: %s", e)
             return None
+
+    # ═══════════════ v34: UNCONSCIOUS INJECTION ═══════════════
+
+    def _get_injector(self):
+        """Lazy-init UnconsciousInjector.
+
+        Requires Qwen3 model to be loaded. If model is unavailable,
+        returns None and SELF falls back to conscious-only path.
+        """
+        if self._injector is not None:
+            return self._injector
+
+        try:
+            from derivation.model_registry import get_shared_qwen
+            model, _ = get_shared_qwen()
+            if model is None:
+                logger.debug("Qwen3 not available — UnconsciousInjector disabled")
+                return None
+
+            from unconscious.injector import UnconsciousInjector
+            self._injector = UnconsciousInjector(
+                model,
+                enabled=self._unconscious_enabled,
+            )
+            return self._injector
+        except ImportError:
+            logger.debug("unconscious module not available — injector disabled")
+            return None
+        except Exception as e:
+            logger.warning("Failed to init UnconsciousInjector: %s", e)
+            return None
+
+    def _get_introspector(self):
+        """Lazy-init Introspector.
+
+        Requires an UnconsciousInjector instance. If unavailable,
+        returns None and why() returns a fallback message.
+        """
+        if self._introspector is not None:
+            return self._introspector
+
+        try:
+            injector = self._get_injector()
+            if injector is None:
+                return None
+
+            from introspection.introspector import Introspector
+            self._introspector = Introspector(injector)
+            return self._introspector
+        except ImportError:
+            logger.debug("introspection module not available — introspector disabled")
+            return None
+        except Exception as e:
+            logger.warning("Failed to init Introspector: %s", e)
+            return None
+
+    def _retrieve_experience_nodes(self, text: str, question: str) -> list:
+        """Retrieve relevant UnderstandingNodes for unconscious injection.
+
+        Uses the same bge-m3 retrieval as the conscious path,
+        but returns the raw (node, score) tuples for the injector
+        instead of applying transformations.
+        """
+        try:
+            from derivation.understanding_builder import get_shared_graph
+            graph = get_shared_graph()
+            return graph.find_matching_multi(
+                text, question, top_k=3, threshold=0.15
+            )
+        except Exception as e:
+            logger.debug("Failed to retrieve experience nodes: %s", e)
+            return []
+
+    def why(self) -> str:
+        """Explain why SELF answered the way it did.
+
+        Call this after process() to get an introspective explanation.
+        If the answer was influenced by unconscious injection, the
+        explanation will reference the injected experiences.
+        If no injection happened, returns a conscious-path explanation.
+
+        Returns:
+            String explanation in Bahasa Indonesia.
+        """
+        introspector = self._get_introspector()
+        if introspector is not None:
+            explanation = introspector.explain_last_answer(
+                question=self._last_answer_question
+            )
+            if explanation:
+                return explanation
+
+        return (
+            "Jawaban saya menggunakan penalaran sadar (conscious path) — "
+            "tidak ada pengalaman tidak sadar yang aktif saat ini."
+        )
+
+    def set_unconscious_enabled(self, enabled: bool):
+        """Enable or disable unconscious injection (for A/B testing).
+
+        Args:
+            enabled: True to enable unconscious path, False to disable.
+        """
+        self._unconscious_enabled = enabled
+        if self._injector is not None:
+            self._injector.set_enabled(enabled)
+        logger.info("Unconscious injection %s", "ENABLED" if enabled else "DISABLED")
     
 
     
@@ -328,11 +441,31 @@ class SelfCore:
 
         if is_question:
             try:
-                # v15 fix: Use cached property instead of creating new engine each call
-                result = self.derivation_engine.derive(text, memory_result)
+                # v34: Try unconscious injection before conscious derivation.
+                # Retrieve experience nodes for injection.
+                injector = self._get_injector() if self._unconscious_enabled else None
+                experience_nodes = []
+                if injector is not None:
+                    experience_nodes = self._retrieve_experience_nodes(text, text)
+
+                # Derive answer — if injector is active, the generate()
+                # calls inside the derivation engine will be steered.
+                if injector is not None and experience_nodes:
+                    with injector.active(experience_nodes):
+                        result = self.derivation_engine.derive(text, memory_result)
+                else:
+                    result = self.derivation_engine.derive(text, memory_result)
+
                 self.derivation_results.append(result)
 
+                # Store question for introspection
+                self._last_answer_question = text
+
                 derivation_result = {**memory_result, 'answer': result.get('answer'), 'confidence': result.get('confidence', 0.0), 'method': result.get('method', 'unknown')}
+
+                # Add injection metadata to result
+                if injector is not None:
+                    derivation_result['unconscious_injection'] = injector.get_injection_log()
 
                 # v28: If answer confidence is low and novelty is high, observe
                 confidence = result.get('confidence', 1.0)
