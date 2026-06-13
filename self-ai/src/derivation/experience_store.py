@@ -782,7 +782,14 @@ class ExperienceStore:
             tmp_path = self._store_path + '.tmp'
             with open(tmp_path, 'w', encoding='utf-8') as f:
                 json.dump(data, f, ensure_ascii=False)
-            os.replace(tmp_path, self._store_path)
+            try:
+                os.replace(tmp_path, self._store_path)
+            except OSError:
+                try:
+                    os.unlink(self._store_path)
+                except OSError:
+                    pass
+                os.replace(tmp_path, self._store_path)
         except Exception as e:
             logger.warning("Failed to save experience store: %s", e)
 

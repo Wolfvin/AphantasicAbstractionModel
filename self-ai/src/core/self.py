@@ -630,13 +630,21 @@ class SelfCore:
             'curiosity_queue': self.curiosity_queue[-50:],
             'derivation_results': self.derivation_results[-50:],
         }
-        # Atomic write: write to temp file, then rename
+        # Atomic write: write to temp file, then replace (Windows-robust)
         dir_name = os.path.dirname(filepath)
         fd, tmp_path = tempfile.mkstemp(dir=dir_name, suffix='.tmp')
         try:
             with os.fdopen(fd, 'w') as f:
                 json.dump(state, f, indent=2, default=str)
-            os.replace(tmp_path, filepath)
+            try:
+                os.replace(tmp_path, filepath)
+            except OSError:
+                # Windows: target may be locked — try removing it first
+                try:
+                    os.unlink(filepath)
+                except OSError:
+                    pass
+                os.replace(tmp_path, filepath)
         except Exception:
             # Clean up temp file on failure
             try:

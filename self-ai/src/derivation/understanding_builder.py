@@ -1258,6 +1258,26 @@ class UnderstandingGraph:
 
     # ═══════════════ PERSISTENCE ═══════════════
 
+    @staticmethod
+    def _safe_replace(src: str, dst: str):
+        """Atomically replace dst with src, with Windows robustness.
+
+        os.replace() is atomic on POSIX and overwrites on all platforms,
+        but on Windows it can still fail with PermissionError if the
+        destination file is locked by another process. This helper adds
+        a fallback: if os.replace() fails, try to remove the target
+        first and retry.
+        """
+        try:
+            os.replace(src, dst)
+        except OSError:
+            # Windows: target may be locked — try removing it first
+            try:
+                os.unlink(dst)
+            except OSError:
+                pass
+            os.replace(src, dst)
+
     def _save(self):
         """Persist graph to disk."""
         try:
@@ -1266,7 +1286,7 @@ class UnderstandingGraph:
             tmp = self._store_path + '.tmp'
             with open(tmp, 'w') as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
-            os.replace(tmp, self._store_path)
+            self._safe_replace(tmp, self._store_path)
         except Exception as e:
             logger.warning("Failed to save understanding graph: %s", e)
 
