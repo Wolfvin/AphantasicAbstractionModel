@@ -96,6 +96,7 @@ import re
 import json
 import time
 import logging
+from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any, Tuple
 from collections import defaultdict
 
@@ -105,6 +106,7 @@ from governance.states import (
     EpistemicState,
     SeedScores,
     UnderstandingMember,
+    can_transition_lifecycle,
 )
 
 logger = logging.getLogger(__name__)
@@ -186,6 +188,9 @@ class UnderstandingNode:
         seed_scores: v35 — Multi-dimensional epistemic confidence
         deprecated_reason: v35 — Why this was deactivated (None if active)
         deprecated_at: v35 — When this was deactivated (None if active)
+        last_used_at: v36 — ISO 8601 timestamp of when this node was last used
+            in injection or retrieval. Used for temporal decay. None if never used
+            (backward compatible default for existing nodes).
     """
 
     def __init__(self, id: str, name: str, concept: str, abstraction: str,
@@ -199,7 +204,9 @@ class UnderstandingNode:
                  epistemic: str = None,
                  seed_scores: dict = None,
                  deprecated_reason: str = None,
-                 deprecated_at: float = None):
+                 deprecated_at: float = None,
+                 # v36: Temporal decay — last usage tracking
+                 last_used_at: str = None):
         self.id = id
         self.name = name
         self.concept = concept
@@ -236,6 +243,10 @@ class UnderstandingNode:
         # v35: Deactivation tracking (None = active, set when DEPRECATED)
         self.deprecated_reason = deprecated_reason
         self.deprecated_at = deprecated_at
+
+        # v36: Temporal decay — when this node was last used in injection/retrieval
+        # ISO 8601 string (e.g. '2025-01-15T10:30:00Z'), None = never used
+        self.last_used_at = last_used_at
 
     @property
     def accuracy(self) -> float:
@@ -293,6 +304,9 @@ class UnderstandingNode:
             d['deprecated_reason'] = self.deprecated_reason
         if self.deprecated_at is not None:
             d['deprecated_at'] = self.deprecated_at
+        # v36: Temporal decay — persist last usage timestamp
+        if self.last_used_at is not None:
+            d['last_used_at'] = self.last_used_at
         return d
 
     @classmethod
@@ -316,6 +330,8 @@ class UnderstandingNode:
             seed_scores=d.get('seed_scores'),  # Will default to SeedScores() in __init__
             deprecated_reason=d.get('deprecated_reason'),
             deprecated_at=d.get('deprecated_at'),
+            # v36: Temporal decay — backward compatible (None if absent)
+            last_used_at=d.get('last_used_at'),
         )
         node.times_applied = d.get('times_applied', 0)
         node.times_correct = d.get('times_correct', 0)
@@ -447,6 +463,8 @@ class UnderstandingGraph:
         )
         if result is not None:
             node, score = result
+            # v36: Mark retrieved node as used (for temporal decay tracking)
+            node.last_used_at = datetime.now(timezone.utc).isoformat()
             logger.debug("Embedding match: %s (score=%.3f, kind=%s)",
                         node.id, score,
                         node.transformation.kind if node.transformation else '?')
@@ -538,6 +556,10 @@ class UnderstandingGraph:
             text, question, self._nodes,
             top_k=top_k, threshold=threshold
         )
+        # v36: Mark all retrieved nodes as used (for temporal decay tracking)
+        now_iso = datetime.now(timezone.utc).isoformat()
+        for node, score in results:
+            node.last_used_at = now_iso
         return results
 
     def apply(self, node: UnderstandingNode, text: str, question: str) -> Optional[dict]:
@@ -545,12 +567,17 @@ class UnderstandingGraph:
 
         This is the CORE of SELF's autonomous reasoning — applying
         self-discovered transformations WITHOUT LLM.
+
+        v36: Updates last_used_at when a node is successfully applied.
         """
         if node.transformation is None:
             return None
 
         result = self._apply_transformation(node, text, question)
         if result is not None:
+            # v36: Mark node as used when successfully applied
+            node.last_used_at = datetime.now(timezone.utc).isoformat()
+
             return {
                 'answer': result,
                 'confidence': node.accuracy,
@@ -571,6 +598,303 @@ class UnderstandingGraph:
         else:
             node.weaken()
         self._save()
+
+    # ═══════════════ v36: TEMPORAL REINFORCEMENT & DECAY ═══════════════
+
+    # Tunable constants for reinforcement and decay
+    REINFORCE_STEP = 0.05       # How much confidence/accuracy rises per reinforce()
+    PENALIZE_STEP = 0.10        # How much confidence/accuracy drops per penalize()
+    DECAY_RATE_PER_DAY = 0.01   # How much confidence decays per day of non-use
+    DEPRECATION_THRESHOLD = 0.1 # Confidence below this → DEPRECATED
+
+    def reinforce(self, node_id: str, step: float = None) -> Optional[UnderstandingNode]:
+        """Reinforce a node — increase its confidence and accuracy.
+
+        Called when a node is used in injection and the output is confirmed
+        correct (e.g., user doesn't correct within N seconds, or user
+        explicitly confirms).
+
+        v36: Temporal reinforcement — nodes get stronger with repeated
+        successful use, capped at 1.0. Also updates last_used_at.
+
+        Args:
+            node_id: The ID of the node to reinforce.
+            step: How much to increase confidence/accuracy.
+                  Defaults to REINFORCE_STEP (0.05).
+
+        Returns:
+            The reinforced node, or None if not found.
+        """
+        node = self._nodes.get(node_id)
+        if node is None:
+            logger.warning("reinforce(): node %s not found", node_id)
+            return None
+
+        if step is None:
+            step = self.REINFORCE_STEP
+
+        # Increase confidence (capped at 1.0)
+        node.confidence = min(1.0, node.confidence + step)
+
+        # Increase accuracy by recording a correct application
+        node.times_applied += 1
+        node.times_correct += 1
+
+        # Update last usage timestamp
+        node.last_used_at = datetime.now(timezone.utc).isoformat()
+
+        # Lifecycle promotion: NEW → CANDIDATE if confidence is sufficient
+        if (node.lifecycle == LifecycleState.NEW
+                and node.confidence >= 0.4):
+            if can_transition_lifecycle(node.lifecycle, LifecycleState.CANDIDATE):
+                node.lifecycle = LifecycleState.CANDIDATE
+                logger.info(
+                    "reinforce(): %s promoted NEW → CANDIDATE (confidence=%.2f)",
+                    node_id, node.confidence
+                )
+
+        # Lifecycle promotion: CANDIDATE → STABLE after repeated reinforcement
+        if (node.lifecycle == LifecycleState.CANDIDATE
+                and node.times_correct >= 3
+                and node.confidence >= 0.6):
+            if can_transition_lifecycle(node.lifecycle, LifecycleState.STABLE):
+                node.lifecycle = LifecycleState.STABLE
+                logger.info(
+                    "reinforce(): %s promoted CANDIDATE → STABLE "
+                    "(correct=%d, confidence=%.2f)",
+                    node_id, node.times_correct, node.confidence
+                )
+
+        # Epistemic promotion: OBSERVED → GROUNDED after multiple reinforcements
+        if (node.epistemic == EpistemicState.OBSERVED
+                and node.times_correct >= 2
+                and node.confidence >= 0.7):
+            from governance.states import can_transition_epistemic
+            if can_transition_epistemic(node.epistemic, EpistemicState.GROUNDED):
+                node.epistemic = EpistemicState.GROUNDED
+                logger.info(
+                    "reinforce(): %s epistemic OBSERVED → GROUNDED", node_id
+                )
+
+        self._save()
+        logger.debug(
+            "reinforce(): %s confidence=%.3f accuracy=%.3f",
+            node_id, node.confidence, node.accuracy
+        )
+        return node
+
+    def penalize(self, node_id: str, step: float = None,
+                 reason: str = None) -> Optional[UnderstandingNode]:
+        """Penalize a node — decrease its confidence and accuracy.
+
+        Called when a node's output is corrected or contradicted.
+        If confidence drops below DEPRECATION_THRESHOLD, the node
+        is automatically transitioned to DEPRECATED.
+
+        v36: Temporal penalty — nodes get weaker with negative feedback,
+        potentially triggering deprecation.
+
+        Args:
+            node_id: The ID of the node to penalize.
+            step: How much to decrease confidence/accuracy.
+                  Defaults to PENALIZE_STEP (0.10).
+            reason: Optional reason for the penalty (stored in deprecated_reason
+                    if deprecation is triggered).
+
+        Returns:
+            The penalized node, or None if not found.
+        """
+        node = self._nodes.get(node_id)
+        if node is None:
+            logger.warning("penalize(): node %s not found", node_id)
+            return None
+
+        if step is None:
+            step = self.PENALIZE_STEP
+
+        # Decrease confidence (floored at 0.0)
+        node.confidence = max(0.0, node.confidence - step)
+
+        # Record a failed application
+        node.times_applied += 1
+        node.times_failed += 1
+
+        # Update last usage timestamp (still "used", just incorrectly)
+        node.last_used_at = datetime.now(timezone.utc).isoformat()
+
+        # Check if confidence has fallen below deprecation threshold
+        if node.confidence < self.DEPRECATION_THRESHOLD:
+            if can_transition_lifecycle(node.lifecycle, LifecycleState.DEPRECATED):
+                former_lifecycle = node.lifecycle
+                node.lifecycle = LifecycleState.DEPRECATED
+                node.deprecated_reason = (
+                    reason or f"Confidence fell below {self.DEPRECATION_THRESHOLD} "
+                    f"after penalization (confidence={node.confidence:.3f})"
+                )
+                node.deprecated_at = time.time()
+                logger.info(
+                    "penalize(): %s %s → DEPRECATED (confidence=%.3f)",
+                    node_id, former_lifecycle.value, node.confidence
+                )
+            else:
+                # Cannot transition directly (e.g., already DEPRECATED)
+                logger.debug(
+                    "penalize(): %s confidence=%.3f but cannot transition "
+                    "lifecycle %s → DEPRECATED",
+                    node_id, node.confidence, node.lifecycle.value
+                )
+
+        # Epistemic: flag as CONTRADICTED if significantly penalized
+        if node.times_failed >= 2 and node.confidence < 0.3:
+            from governance.states import can_transition_epistemic
+            if can_transition_epistemic(node.epistemic, EpistemicState.CONTRADICTED):
+                node.epistemic = EpistemicState.CONTRADICTED
+                logger.info(
+                    "penalize(): %s epistemic → CONTRADICTED (failed=%d, confidence=%.2f)",
+                    node_id, node.times_failed, node.confidence
+                )
+
+        self._save()
+        logger.debug(
+            "penalize(): %s confidence=%.3f accuracy=%.3f",
+            node_id, node.confidence, node.accuracy
+        )
+        return node
+
+    def decay_all(self, days_since_last_use: float = None) -> Dict[str, Any]:
+        """Apply temporal decay to all nodes in the graph.
+
+        Nodes that haven't been used recently lose confidence gradually.
+        Nodes whose confidence drops below DEPRECATION_THRESHOLD are
+        automatically transitioned to DEPRECATED.
+
+        v36: Temporal decay — "use it or lose it" principle. Knowledge
+        that isn't exercised fades, preventing the graph from being
+        polluted by stale or outdated understandings.
+
+        The decay is GRADUAL, not immediate deletion:
+          - Each day of non-use reduces confidence by DECAY_RATE_PER_DAY (0.01)
+          - A node unused for 90 days loses ~0.9 confidence
+          - Nodes below DEPRECATION_THRESHOLD (0.1) are DEPRECATED
+          - DEPRECATED nodes are NEVER deleted — they can be reactivated
+
+        Args:
+            days_since_last_use: Override for testing — pretend this many days
+                have passed since each node's last use. If None, calculates
+                actual elapsed time from last_used_at.
+
+        Returns:
+            Dict with decay statistics:
+              - 'total_nodes': total number of nodes in graph
+              - 'decayed': number of nodes that lost confidence
+              - 'deprecated': number of nodes that became DEPRECATED
+              - 'skipped': number of nodes skipped (already DEPRECATED or no last_used_at)
+        """
+        stats = {
+            'total_nodes': len(self._nodes),
+            'decayed': 0,
+            'deprecated': 0,
+            'skipped': 0,
+        }
+
+        now = datetime.now(timezone.utc)
+
+        for node in self._nodes.values():
+            # Already DEPRECATED nodes — skip (they don't decay further)
+            if node.lifecycle == LifecycleState.DEPRECATED:
+                stats['skipped'] += 1
+                continue
+
+            # Determine days since last use
+            if days_since_last_use is not None:
+                # Override for testing
+                elapsed_days = days_since_last_use
+            elif node.last_used_at is None:
+                # Node never used — don't apply decay
+                # (preserves backward compatibility for existing nodes)
+                stats['skipped'] += 1
+                continue
+            else:
+                # Calculate actual elapsed time
+                try:
+                    last_used = datetime.fromisoformat(node.last_used_at)
+                    # Handle timezone-naive timestamps (assume UTC)
+                    if last_used.tzinfo is None:
+                        last_used = last_used.replace(tzinfo=timezone.utc)
+                    elapsed = (now - last_used).total_seconds() / 86400.0
+                    elapsed_days = max(0.0, elapsed)
+                except (ValueError, TypeError):
+                    logger.warning(
+                        "decay_all(): invalid last_used_at '%s' for node %s — skipping",
+                        node.last_used_at, node.id
+                    )
+                    stats['skipped'] += 1
+                    continue
+
+            # Apply gradual decay
+            confidence_loss = elapsed_days * self.DECAY_RATE_PER_DAY
+
+            if confidence_loss > 0:
+                old_confidence = node.confidence
+                node.confidence = max(0.0, node.confidence - confidence_loss)
+                stats['decayed'] += 1
+
+                logger.debug(
+                    "decay_all(): %s confidence %.3f → %.3f (idle %.1f days)",
+                    node.id, old_confidence, node.confidence, elapsed_days
+                )
+
+            # Check deprecation threshold
+            if node.confidence < self.DEPRECATION_THRESHOLD:
+                if can_transition_lifecycle(node.lifecycle, LifecycleState.DEPRECATED):
+                    former_lifecycle = node.lifecycle
+                    node.lifecycle = LifecycleState.DEPRECATED
+                    node.deprecated_reason = (
+                        f"Temporal decay: confidence {node.confidence:.3f} < "
+                        f"threshold {self.DEPRECATION_THRESHOLD} "
+                        f"(idle {elapsed_days:.1f} days)"
+                    )
+                    node.deprecated_at = time.time()
+                    stats['deprecated'] += 1
+
+                    logger.info(
+                        "decay_all(): %s %s → DEPRECATED "
+                        "(confidence=%.3f, idle=%.1f days)",
+                        node.id, former_lifecycle.value,
+                        node.confidence, elapsed_days
+                    )
+                else:
+                    # Cannot transition — already in a state that can't go to DEPRECATED
+                    stats['skipped'] += 1
+
+        if stats['decayed'] > 0 or stats['deprecated'] > 0:
+            self._save()
+
+        logger.info(
+            "decay_all(): %d total, %d decayed, %d deprecated, %d skipped",
+            stats['total_nodes'], stats['decayed'],
+            stats['deprecated'], stats['skipped']
+        )
+        return stats
+
+    def touch(self, node_id: str) -> Optional[UnderstandingNode]:
+        """Mark a node as recently used by updating last_used_at.
+
+        Called when a node is retrieved for injection or reasoning.
+        This prevents the node from decaying due to non-use.
+
+        Args:
+            node_id: The ID of the node to touch.
+
+        Returns:
+            The touched node, or None if not found.
+        """
+        node = self._nodes.get(node_id)
+        if node is None:
+            return None
+
+        node.last_used_at = datetime.now(timezone.utc).isoformat()
+        return node
 
     def get_related(self, node_id: str, edge_type: str = None) -> List[UnderstandingNode]:
         """Get related understanding nodes."""

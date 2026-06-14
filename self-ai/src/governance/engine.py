@@ -373,15 +373,18 @@ class GovernanceEngine:
         Auto-deprecation happens when a node hasn't been used in a long time.
         This is NOT deletion — the node is marked DEPRECATED.
 
-        Currently a no-op placeholder — requires interaction count tracking
-        that isn't yet implemented. Will be connected to the curiosity/usage
-        tracking system in a future phase.
+        v36: Now delegates to UnderstandingGraph.decay_all() which implements
+        temporal decay based on last_used_at timestamps. Nodes whose confidence
+        drops below the deprecation threshold (0.1) are automatically deprecated.
 
         Returns:
             Number of nodes auto-deprecated.
         """
-        # Future: check usage count and deprecate stale nodes
-        return 0
+        if self.graph is None:
+            return 0
+
+        stats = self.graph.decay_all()
+        return stats.get('deprecated', 0)
 
     # ═══════════════ INTERNAL ═══════════════
 
