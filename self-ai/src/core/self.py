@@ -49,9 +49,33 @@ class SelfCore:
         self._unconscious_enabled = True  # Toggle for A/B testing
         self._last_answer_question = ''   # For introspection context
 
+        # v36: CompositionLayer with introspection (lazy)
+        self._composition_layer = None
+
         # v35: Governance engine — lifecycle + epistemic management
         self._governance = None     # GovernanceEngine (lazy)
         
+    @property
+    def composition_layer(self):
+        """Lazy-init CompositionLayer with injector wired for introspection.
+
+        v36: The CompositionLayer now supports explain_last_answer() via
+        Introspector. This property ensures the injector is wired up
+        automatically when the CompositionLayer is accessed through SelfCore.
+        """
+        if self._composition_layer is None:
+            from composition.layer import CompositionLayer
+            self._composition_layer = CompositionLayer()
+            # Wire up injector for introspection — if injector is already
+            # initialized, set it now. Otherwise, it will be wired lazily
+            # on first call to explain_last_answer().
+            if self._injector is not None:
+                self._composition_layer.set_injector(self._injector)
+        elif self._injector is not None and self._composition_layer._injector is None:
+            # Injector was initialized after CompositionLayer — wire it now
+            self._composition_layer.set_injector(self._injector)
+        return self._composition_layer
+
     @property
     def composer(self):
         """Lazy-init shared UnderstandingComposer (singleton via get_shared_composer)."""
@@ -120,6 +144,9 @@ class SelfCore:
                 model,
                 enabled=self._unconscious_enabled,
             )
+            # v36: Wire injector to CompositionLayer for introspection
+            if self._composition_layer is not None:
+                self._composition_layer.set_injector(self._injector)
             return self._injector
         except ImportError:
             logger.debug("unconscious module not available — injector disabled")

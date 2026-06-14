@@ -222,7 +222,7 @@ Layer yang di-inject: {layer}
 
 Jelaskan dalam bahasa Indonesia (3-5 kalimat) MENGAPA kamu menjawab seperti itu, berdasarkan pengalaman-pengalaman di atas. Jangan sekadar daftar — jelaskan BAGAIMANA pengalaman itu memengaruhi penalaranmu. Sebutkan peran struktural mana yang paling mempengaruhi jawabanmu.
 
-Contoh format: "Jawaban saya dipengaruhi oleh pengalaman tentang X, khususnya peran [trigger/result/exception] yang menyebabkan saya cenderung...""
+Contoh format: 'Jawaban saya dipengaruhi oleh pengalaman tentang X, khususnya peran [trigger/result/exception] yang menyebabkan saya cenderung...'"""
 
     def _fallback_explanation(self, question: str, node_details: list,
                               log: dict) -> str:
