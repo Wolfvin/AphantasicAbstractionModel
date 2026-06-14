@@ -39,7 +39,7 @@ Usage:
 
 Qwen3-0.6B architecture notes:
     - 28 transformer layers (model.model.layers)
-    - hidden_size = 896 (NOT 1024 like bge-m3)
+    - hidden_size = 1024 (read from model.config.hidden_size)
     - We inject at layer 14 (middle of 28 layers)
     - A simple linear projection bridges 1024 → 896 dims
     - Projection is NOT trained — initialized with truncated SVD-like mapping
@@ -78,9 +78,6 @@ class UnconsciousInjector:
             for Introspector to use.
     """
 
-    # Qwen3-0.6B specifics
-    QWEN3_NUM_LAYERS = 28
-    QWEN3_HIDDEN_SIZE = 896
     BGE_EMBEDDING_DIM = 1024
 
     def __init__(self, model, enabled: bool = True,
@@ -103,6 +100,10 @@ class UnconsciousInjector:
         self.enabled = enabled
         self.injection_strength = injection_strength
         self.hook_layer_index = hook_layer_index
+
+        # Read from model config — don't hardcode (Qwen3-0.6B hidden_size=1024)
+        self.QWEN3_HIDDEN_SIZE = model.config.hidden_size
+        self.QWEN3_NUM_LAYERS = model.config.num_hidden_layers
 
         # State
         self._hook_handle = None
