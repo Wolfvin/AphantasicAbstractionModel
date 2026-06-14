@@ -213,8 +213,8 @@ def main():
     weights_path = os.path.join(SRC_DIR, 'unconscious', 'projection_weights.pt')
     if not os.path.exists(weights_path):
         logger.info("Training projection...")
-        pairs = [(exp, tc["correct_answer"])
-                 for tc in TEST_CASES for exp in tc["experiences"]]
+        from unconscious.training_pairs_dataset import get_training_pairs
+        pairs = get_training_pairs()
         trainer = ProjectionTrainer(model, tokenizer, embedding_model=bge, hook_layer_index=14)
         trainer.train(pairs, epochs=80)
         trainer.load_into_injector(injector)
