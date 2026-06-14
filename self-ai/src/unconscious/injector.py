@@ -147,8 +147,11 @@ class UnconsciousInjector:
             )
             # Small random for the extra dimensions
             if self.BGE_EMBEDDING_DIM > self.QWEN3_HIDDEN_SIZE:
+                # Fix: xavier_uniform_ expects a 2D tensor for correct
+                # fan_in/fan_out calculation. unsqueeze(0) made it 3D,
+                # causing wrong initialization scale.
                 torch.nn.init.xavier_uniform_(
-                    weight[:, self.QWEN3_HIDDEN_SIZE:].unsqueeze(0)
+                    weight[:, self.QWEN3_HIDDEN_SIZE:]
                 )
                 weight[:, self.QWEN3_HIDDEN_SIZE:] *= 0.1  # Scale down extra dims
 
@@ -250,29 +253,42 @@ class UnconsciousInjector:
         Args:
             module: The transformer layer module.
             input: Layer input (unused).
-            output: Layer output — tuple of (hidden_states, ...) for
-                transformer layers. We modify hidden_states in-place.
+            output: Layer output. Qwen3DecoderLayer returns a bare
+                torch.Tensor (hidden_states). Some older HF models return
+                a tuple (hidden_states, present_key_value, ...). We handle
+                both cases.
         """
         if self._experience_vector is None or not self._active:
             return output
 
         try:
-            # Transformer layer output is typically (hidden_states, attention_weights, ...)
-            # hidden_states shape: (batch_size, seq_len, hidden_size)
+            # Qwen3 (transformers ≥5.x): Qwen3DecoderLayer.forward()
+            # returns a bare torch.Tensor, NOT a tuple. The old code only
+            # handled tuples, making the hook a dead path on Qwen3.
+            #
+            # Fix: support both tuple and bare-tensor outputs.
             if isinstance(output, tuple):
                 hidden_states = output[0]
+            elif isinstance(output, torch.Tensor):
+                hidden_states = output
             else:
                 return output
 
+            # hidden_states shape: (batch_size, seq_len, hidden_size)
             # Clone to avoid in-place modification issues with autograd
             modified = hidden_states.clone()
 
             # Inject only at the last token position
             # This is the position being predicted — steering here
             # influences what comes next without disrupting context
-            modified[:, -1, :] += (
-                self._experience_vector * self.injection_strength
-            )
+            #
+            # Cast experience vector to match hidden_states dtype.
+            # When Qwen3 is loaded with torch.float16, hidden_states are
+            # float16 but _experience_vector is float32. Direct += on a
+            # float16 tensor with a float32 source raises:
+            #   RuntimeError: result type Float can't be cast to Half
+            injection = self._experience_vector.to(modified.dtype) * self.injection_strength
+            modified[:, -1, :] += injection
 
             if isinstance(output, tuple):
                 return (modified,) + output[1:]
