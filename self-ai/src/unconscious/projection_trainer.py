@@ -410,7 +410,7 @@ class ProjectionTrainer:
                 epoch_cosine_sim += cos_sim.item()
 
             avg_loss = epoch_loss / len(training_data)
-            avg_cos_sim = epoch_cos_sim / len(training_data)
+            avg_cos_sim = epoch_cosine_sim / len(training_data)
 
             if initial_loss is None:
                 initial_loss = avg_loss
