@@ -1,0 +1,24 @@
+{
+  "metric_version": "v2_keyword_hit_plus_answer_alignment",
+  "n_runs": 4,
+  "n_cases": 4,
+  "baseline": {
+    "hit_rate": 0.75,
+    "alignment": 0.5445,
+    "score": 0.6678,
+    "consistency": 0.7186
+  },
+  "single_node": {
+    "hit_rate": 0.8125,
+    "alignment": 0.5214,
+    "score": 0.6961,
+    "consistency": 0.7933
+  },
+  "multi_node": {
+    "hit_rate": 0.875,
+    "alignment": 0.5697,
+    "score": 0.7529,
+    "consistency": 0.8214
+  },
+  "verdict": "L2 WORKS \u2014 multi-node > single > baseline"
+}
