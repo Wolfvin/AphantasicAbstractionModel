@@ -59,6 +59,12 @@ class CompositionLayer:
         self._injector = None
         self._introspector = None
 
+        # v41: UnderstandingGraph reference for automatic retrieve+inject in answer().
+        # Set externally via set_graph(). When both injector and graph are
+        # available, answer() automatically retrieves relevant nodes and
+        # injects them during generation.
+        self._graph = None
+
         # v39: Self-Critique Pipeline — model evaluates its own answers.
         # When enabled, after each _generate() call, SelfCritic evaluates
         # the answer. If should_learn() → True, an UnderstandingNode is
@@ -390,6 +396,72 @@ class CompositionLayer:
         self._injector = injector
         # Reset introspector so it picks up the new injector
         self._introspector = None
+
+    def set_graph(self, graph):
+        """Set the UnderstandingGraph reference for automatic retrieval+injection.
+
+        When both injector and graph are available, answer() automatically:
+          1. Retrieves relevant UnderstandingNodes from the graph
+          2. Injects them into Qwen3's hidden states during generation
+
+        If the graph has no matching nodes, or if no injector is set,
+        generation proceeds without injection (no regression).
+
+        Args:
+            graph: UnderstandingGraph instance, or None to clear.
+        """
+        self._graph = graph
+
+    def answer(self, question: str, max_new_tokens: int = 256) -> str:
+        """Answer a question with automatic retrieve+inject when available.
+
+        v41: This method wires together retrieval and injection into a
+        single end-to-end flow:
+
+            question
+              → UnderstandingGraph.retrieve(question, top_k=5)
+              → list[(node, score)]  (kosong jika graph belum punya nodes)
+              → UnconsciousInjector.active(nodes)  (skip jika kosong)
+              → model.generate(question)
+              → answer
+
+        If no injector or graph is set, or if retrieve() returns no matches,
+        generation proceeds without injection (conscious-only path).
+        This guarantees zero regression for existing callers.
+
+        The signature is simple — just question and optional max_new_tokens —
+        because all the retrieval and injection wiring is handled internally.
+
+        Args:
+            question: The question to answer.
+            max_new_tokens: Maximum tokens to generate (default 256).
+
+        Returns:
+            Generated answer string.
+        """
+        # ── Step 1: Try retrieve+inject path ──
+        node_tuples = []
+        if self._graph is not None and self._injector is not None:
+            try:
+                node_tuples = self._graph.retrieve(
+                    question, question, top_k=5, threshold=0.15
+                )
+            except Exception as e:
+                logger.warning("Failed to retrieve from graph in answer(): %s", e)
+                node_tuples = []
+
+        # ── Step 2: Generate with or without injection ──
+        if node_tuples:
+            try:
+                with self._injector.active(node_tuples):
+                    return self._generate(question, max_new_tokens=max_new_tokens)
+            except Exception as e:
+                logger.warning(
+                    "Injection failed in answer(), falling back to plain generation: %s", e
+                )
+                return self._generate(question, max_new_tokens=max_new_tokens)
+        else:
+            return self._generate(question, max_new_tokens=max_new_tokens)
 
     def _get_introspector(self):
         """Lazy-init Introspector using the injector reference.
