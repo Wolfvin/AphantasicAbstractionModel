@@ -353,6 +353,12 @@ class UnderstandingGraph:
     multiple semantic understandings to generate appropriate answers.
     """
 
+    # Cluster similarity threshold — nodes with cosine sim > this are in same cluster
+    CLUSTER_SIMILARITY_THRESHOLD = 0.7
+    # Transfer score bonus — how much to boost a node from the same cluster
+    # as a high-confidence first-hop hit
+    TRANSFER_SCORE_BONUS = 0.1
+
     def __init__(self, store_path: str = None, embedding_model=None):
         self._nodes: Dict[str, UnderstandingNode] = {}
         self._signal_index: Dict[str, List[str]] = defaultdict(list)
@@ -366,6 +372,12 @@ class UnderstandingGraph:
         # Lazy-initialized on first use to avoid loading the model at startup.
         self._retriever = None
         self._retriever_initialized = False
+
+        # v36: Concept clustering — groups of nodes with similar embeddings.
+        # Not persisted; recomputed on demand / at startup.
+        # Format: list of sets, each set contains node_id strings.
+        self._clusters: List[set] = []
+        self._clusters_dirty = True  # True when nodes changed and clusters need rebuild
 
         self._load()
 
@@ -394,6 +406,9 @@ class UnderstandingGraph:
         # Compute embedding if model available
         if self._embedding_model is not None and node.condition_embedding is None:
             self._compute_embedding(node)
+
+        # v36: Invalidate clusters since graph changed
+        self._clusters_dirty = True
 
         self._save()
         logger.info("Added understanding node: %s (%s)", node.id, node.concept[:60])
@@ -539,6 +554,288 @@ class UnderstandingGraph:
             top_k=top_k, threshold=threshold
         )
         return results
+
+    def retrieve(self, text: str, question: str,
+                 top_k: int = 5, threshold: float = 0.25,
+                 enable_cross_domain: bool = True,
+                 second_hop_limit: int = 3) -> List[Tuple[UnderstandingNode, float]]:
+        """Retrieve matching understanding nodes with optional cross-domain transfer.
+
+        v36: Enhanced retrieval that captures cross-domain relevance.
+
+        When enable_cross_domain=True, this performs THREE stages:
+          1. FIRST-HOP: Standard cosine similarity retrieval (same as before)
+          2. SECOND-HOP: For each first-hop hit, find its embedding-nearest
+             neighbors that weren't already retrieved. This allows transfer
+             of experience to semantically adjacent domains (e.g., "kecuali"
+             → "selain", "tidak termasuk", "minus").
+          3. TRANSFER SCORE: Nodes in the same concept cluster as a
+             high-confidence first-hop hit get a bonus, because cluster
+             membership implies shared operational logic.
+
+        When enable_cross_domain=False, behavior is IDENTICAL to calling
+        find_matching_multi() — no second-hop, no clustering, no bonus.
+        This guarantees zero regression for existing callers.
+
+        Args:
+            text: The source text
+            question: The question to answer
+            top_k: Maximum number of understanding nodes to return
+            threshold: Minimum similarity score (0-1)
+            enable_cross_domain: If True, perform second-hop and transfer scoring
+            second_hop_limit: Max neighbors to expand per first-hop hit
+
+        Returns:
+            List of (UnderstandingNode, score) tuples, sorted by score descending
+        """
+        # ── First-hop: standard retrieval ──
+        self._ensure_retriever()
+        if self._retriever is None:
+            logger.warning("Embedding model unavailable for retrieve — returning empty")
+            return []
+
+        first_hop = self._retriever.retrieve(
+            text, question, self._nodes,
+            top_k=top_k, threshold=threshold
+        )
+
+        # If cross-domain is disabled, return first-hop as-is (zero regression)
+        if not enable_cross_domain:
+            return first_hop
+
+        if not first_hop:
+            return []
+
+        # ── Second-hop: expand to embedding neighbors of first-hop hits ──
+        second_hop = self._second_hop_retrieve(first_hop, second_hop_limit, threshold)
+
+        # ── Merge first-hop and second-hop, deduplicating by node ID ──
+        seen_ids = set()
+        merged = []
+        for node, score in first_hop:
+            if node.id not in seen_ids:
+                seen_ids.add(node.id)
+                merged.append((node, score))
+        for node, score in second_hop:
+            if node.id not in seen_ids:
+                seen_ids.add(node.id)
+                # Second-hop scores are lower than first-hop by design
+                # (they are the cosine sim between the query and the neighbor,
+                #  which is typically < the sim to the first-hop node itself)
+                merged.append((node, score))
+
+        # ── Transfer score: boost nodes in same cluster as high-confidence hits ──
+        merged = self._apply_transfer_score(merged, first_hop)
+
+        # Re-sort by final score and truncate
+        merged.sort(key=lambda x: x[1], reverse=True)
+        return merged[:top_k]
+
+    def _second_hop_retrieve(self, first_hop: List[Tuple],
+                              limit: int,
+                              threshold: float) -> List[Tuple[UnderstandingNode, float]]:
+        """Find embedding-nearest neighbors of first-hop hits.
+
+        For each node in first_hop, look at all other indexed nodes and
+        find those whose embeddings are close (cosine sim > threshold).
+        These "second-hop" nodes capture semantically adjacent concepts
+        that the query didn't directly match but are relevant via
+        transitive similarity.
+
+        Example: query "selain" → first-hop misses the "kecuali" node
+        (low direct cosine sim), but the "tidak termasuk" node has high
+        similarity to "kecuali" → second-hop pulls in "kecuali" because
+        it's a neighbor of "tidak termasuk" which WAS in first-hop.
+
+        Args:
+            first_hop: List of (UnderstandingNode, score) from first-hop
+            limit: Max neighbors to add per first-hop node
+            threshold: Minimum cosine similarity for a neighbor to qualify
+
+        Returns:
+            List of (UnderstandingNode, score) for second-hop discoveries
+        """
+        if self._retriever is None or not hasattr(self._retriever, '_embeddings'):
+            return []
+
+        import numpy as np
+
+        second_hop_results = []
+        seen_ids = {node.id for node, _ in first_hop}
+
+        for first_node, first_score in first_hop:
+            first_emb = self._retriever._embeddings.get(first_node.id)
+            if first_emb is None:
+                continue
+
+            # Find neighbors of this first-hop node
+            neighbors = []
+            for candidate_id, candidate_emb in self._retriever._embeddings.items():
+                if candidate_id in seen_ids:
+                    continue
+                sim = float(np.dot(first_emb, candidate_emb))
+                if sim >= self.CLUSTER_SIMILARITY_THRESHOLD:
+                    candidate_node = self._nodes.get(candidate_id)
+                    if candidate_node is not None:
+                        # Score = neighbor similarity × first-hop score (attenuated)
+                        # This ensures second-hop results are always scored lower
+                        # than the first-hop node that led to them
+                        second_hop_score = sim * first_score * 0.8
+                        if second_hop_score >= threshold:
+                            neighbors.append((candidate_node, second_hop_score, sim))
+
+            # Sort by neighbor similarity, take top `limit`
+            neighbors.sort(key=lambda x: x[2], reverse=True)
+            for node, score, _ in neighbors[:limit]:
+                if node.id not in seen_ids:
+                    seen_ids.add(node.id)
+                    second_hop_results.append((node, score))
+
+        return second_hop_results
+
+    def _apply_transfer_score(self, merged: List[Tuple],
+                               first_hop: List[Tuple]) -> List[Tuple]:
+        """Apply transfer score bonus to nodes in same cluster as high-confidence hits.
+
+        The intuition: if a first-hop node has high confidence (score > threshold)
+        and another node is in the SAME concept cluster, that other node likely
+        shares operational logic and deserves a small score boost.
+
+        Example: "kecuali" node scores 0.8 → its cluster-mate "selain" node
+        (which arrived via second-hop at 0.3) gets +0.1 transfer bonus → 0.4.
+        This makes cluster-mates more competitive vs. unrelated low-score nodes.
+
+        Args:
+            merged: All candidate (node, score) tuples (first + second hop)
+            first_hop: Original first-hop results for cluster identification
+
+        Returns:
+            Same list with transfer bonus applied to qualifying nodes
+        """
+        clusters = self.get_clusters()
+        if not clusters:
+            return merged
+
+        # Find which clusters contain high-confidence first-hop nodes
+        high_conf_clusters = set()
+        for node, score in first_hop:
+            if score >= 0.3:  # Only consider reasonably confident hits
+                for i, cluster in enumerate(clusters):
+                    if node.id in cluster:
+                        high_conf_clusters.add(i)
+
+        if not high_conf_clusters:
+            return merged
+
+        # Build a set of node IDs that should get a bonus
+        bonus_ids = set()
+        for ci in high_conf_clusters:
+            bonus_ids.update(clusters[ci])
+
+        # Apply bonus
+        result = []
+        for node, score in merged:
+            if node.id in bonus_ids:
+                # Don't boost first-hop nodes — they already have high scores
+                # Only boost second-hop (or lower) nodes that share a cluster
+                is_first_hop = any(n.id == node.id for n, _ in first_hop)
+                if not is_first_hop:
+                    score = min(1.0, score + self.TRANSFER_SCORE_BONUS)
+                    logger.debug(
+                        "Transfer bonus +%.2f for %s (cluster mate of high-conf hit)",
+                        self.TRANSFER_SCORE_BONUS, node.id
+                    )
+            result.append((node, score))
+
+        return result
+
+    # ═══════════════ CONCEPT CLUSTERING ═══════════════
+
+    def get_clusters(self) -> List[set]:
+        """Get concept clusters — groups of nodes with similar embeddings.
+
+        v36: Clusters are computed lazily and cached until the graph changes.
+        Each cluster is a set of node IDs. Nodes in the same cluster share
+        semantically similar condition_embeddings (cosine sim > 0.7 by default).
+
+        Clusters enable transfer learning: if a node in cluster C is
+        retrieved with high confidence, other nodes in C get a score
+        boost because they likely share operational logic.
+
+        Returns:
+            List of sets, each set contains node_id strings.
+        """
+        if not self._clusters_dirty and self._clusters:
+            return self._clusters
+
+        self._compute_clusters()
+        return self._clusters
+
+    def _compute_clusters(self):
+        """Compute concept clusters from embedding similarity.
+
+        Uses a simple union-find approach:
+        1. For every pair of nodes with embeddings, compute cosine similarity
+        2. If similarity > CLUSTER_SIMILARITY_THRESHOLD, merge their clusters
+        3. Result: disjoint sets of semantically related nodes
+
+        This is O(n^2) in number of nodes but practical because:
+        - SELF-AI typically has < 50 understanding nodes
+        - Clustering is only recomputed when the graph changes
+        - No external clustering library needed (KISS)
+        """
+        import numpy as np
+
+        self._ensure_retriever()
+        if self._retriever is None or not hasattr(self._retriever, '_embeddings'):
+            self._clusters = []
+            self._clusters_dirty = False
+            return
+
+        embeddings = self._retriever._embeddings
+        node_ids = list(embeddings.keys())
+
+        if not node_ids:
+            self._clusters = []
+            self._clusters_dirty = False
+            return
+
+        # Union-Find
+        parent = {nid: nid for nid in node_ids}
+
+        def find(x):
+            while parent[x] != x:
+                parent[x] = parent[parent[x]]  # path compression
+                x = parent[x]
+            return x
+
+        def union(a, b):
+            ra, rb = find(a), find(b)
+            if ra != rb:
+                parent[ra] = rb
+
+        # Compare all pairs
+        threshold = self.CLUSTER_SIMILARITY_THRESHOLD
+        for i in range(len(node_ids)):
+            emb_i = embeddings[node_ids[i]]
+            for j in range(i + 1, len(node_ids)):
+                emb_j = embeddings[node_ids[j]]
+                sim = float(np.dot(emb_i, emb_j))
+                if sim >= threshold:
+                    union(node_ids[i], node_ids[j])
+
+        # Build clusters from union-find roots
+        cluster_map: Dict[str, set] = defaultdict(set)
+        for nid in node_ids:
+            root = find(nid)
+            cluster_map[root].add(nid)
+
+        # Only keep clusters with > 1 node (singletons aren't useful)
+        self._clusters = [nodes for nodes in cluster_map.values() if len(nodes) > 1]
+        self._clusters_dirty = False
+
+        logger.info("Computed %d concept clusters from %d nodes",
+                     len(self._clusters), len(node_ids))
 
     def apply(self, node: UnderstandingNode, text: str, question: str) -> Optional[dict]:
         """Apply an understanding node to extract an answer.
@@ -1366,6 +1663,8 @@ class UnderstandingGraph:
             for nid, node in self._nodes.items():
                 for cond in node.conditions:
                     self._signal_index[cond.lower()].append(nid)
+            # v36: Mark clusters as dirty since we loaded new nodes
+            self._clusters_dirty = True
             logger.info("Loaded %d understanding nodes", len(self._nodes))
         except Exception as e:
             logger.warning("Failed to load understanding graph: %s", e)
