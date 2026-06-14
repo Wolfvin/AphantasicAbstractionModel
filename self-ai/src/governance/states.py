@@ -53,6 +53,8 @@ class LifecycleState(str, Enum):
         NEW → CANDIDATE:  After the understanding is used once in reasoning
         CANDIDATE → STABLE: After ≥3 successful applications
         STABLE → DEPRECATED: When user says irrelevant, or contradicted, or unused
+        NEW → DEPRECATED: v36 — When temporal decay drops confidence below threshold
+        CANDIDATE → DEPRECATED: v36 — When temporal decay drops confidence below threshold
         DEPRECATED → CANDIDATE: Reactivation — new evidence supports it
 
     A DEPRECATED understanding:
@@ -278,6 +280,10 @@ LIFECYCLE_TRANSITIONS = {
     (LifecycleState.CANDIDATE, LifecycleState.STABLE),
     (LifecycleState.STABLE, LifecycleState.DEPRECATED),
     (LifecycleState.DEPRECATED, LifecycleState.CANDIDATE),  # Reactivation
+    # v36: Temporal decay — any non-deprecated state can transition to DEPRECATED
+    # when confidence drops below threshold
+    (LifecycleState.NEW, LifecycleState.DEPRECATED),
+    (LifecycleState.CANDIDATE, LifecycleState.DEPRECATED),
     # Allow same-state (no-op)
     (LifecycleState.NEW, LifecycleState.NEW),
     (LifecycleState.CANDIDATE, LifecycleState.CANDIDATE),

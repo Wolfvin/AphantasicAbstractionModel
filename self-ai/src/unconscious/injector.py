@@ -51,6 +51,7 @@ Constraint:
 """
 
 import logging
+from datetime import datetime, timezone
 from typing import List, Optional, Tuple
 
 import torch
@@ -401,6 +402,12 @@ class UnconsciousInjector:
                 "UnconsciousInjector ACTIVE: %d nodes, strength=%.3f, layer=%d",
                 len(nodes), self.injection_strength, self.hook_layer_index
             )
+
+            # v36: Mark all injectable nodes as used (for temporal decay tracking)
+            now_iso = datetime.now(timezone.utc).isoformat()
+            for n, s in nodes:
+                if self._is_injectable(n) and hasattr(n, 'last_used_at'):
+                    n.last_used_at = now_iso
 
         except (AttributeError, IndexError) as e:
             logger.warning("Failed to register injection hook: %s", e)
