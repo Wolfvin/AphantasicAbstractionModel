@@ -1,0 +1,24 @@
+{
+  "metric_version": "v41_contextual_injection",
+  "n_runs": 4,
+  "n_cases": 4,
+  "baseline": {
+    "hit_rate": 0.5625,
+    "alignment": 0.4895,
+    "score": 0.5333,
+    "consistency": 0.6908
+  },
+  "populated_no_injection": {
+    "hit_rate": 0.8125,
+    "alignment": 0.7868,
+    "score": 0.8022,
+    "consistency": 0.909
+  },
+  "populated_with_injection": {
+    "hit_rate": 0.875,
+    "alignment": 0.7948,
+    "score": 0.8429,
+    "consistency": 0.9065
+  },
+  "verdict": "CONTEXTUAL INJECTION WORKS \u2014 injection > graph-only > baseline"
+}

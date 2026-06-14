@@ -243,6 +243,10 @@ def print_condition(label, results):
 
 
 def main():
+    # Prevent huggingface_hub from making network requests during benchmark
+    os.environ.setdefault("HF_HUB_OFFLINE", "1")
+    os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+
     logger.info("Loading Qwen3-0.6B...")
     tokenizer = AutoTokenizer.from_pretrained(QWEN_PATH)
     model = AutoModelForCausalLM.from_pretrained(QWEN_PATH, dtype=torch.float16)
@@ -314,6 +318,9 @@ def main():
     comp_with_inj._tokenizer = tokenizer
     comp_with_inj.set_graph(graph_with_inj)
     comp_with_inj.set_injector(injector)
+    # Wire local bge-m3 directly so injector doesn't fetch from HF hub
+    injector._embedding_model = bge
+    injector._embedding_model_loaded = True
     # Both graph and injector — full retrieve+inject pipeline
 
     with_inj_results = run_condition(
