@@ -10,10 +10,11 @@ Purpose:
     bge-m3 condition_embedding vectors (1024-dim). Currently, these only
     influence answers via the conscious path (text prompt injection).
 
-    UnconsciousInjector adds an UNCONSCIOUS path: it averages the embedding
-    vectors of relevant UnderstandingNodes into a single "experience vector",
-    then injects it into Qwen3's hidden state during forward pass via a
-    forward hook on a middle transformer layer.
+    UnconsciousInjector adds an UNCONSCIOUS path: it projects the embedding
+    vectors of relevant UnderstandingNodes into Qwen3's hidden state space,
+    combines them via weighted average, and injects the combined vector into
+    Qwen3's hidden state during forward pass via a forward hook on a middle
+    transformer layer.
 
     This is activation steering — the model "feels" the experience without
     the experience appearing in the prompt text. The injection is additive
@@ -22,10 +23,12 @@ Purpose:
 
 Architecture:
     UnderstandingNode.condition_embedding (1024-dim)
-        ↓ average across retrieved nodes
-    experience_vector (1024-dim float tensor)
+        ↓ per-node projection via self._projection
+    projected_vectors (QWEN3_HIDDEN_SIZE-dim each)
+        ↓ weighted average by node.confidence
+    combined_vector (QWEN3_HIDDEN_SIZE-dim float tensor)
         ↓ register_forward_hook on Qwen3 middle layer
-    hidden_state[:, -1, :] += experience_vector
+    hidden_state[:, -1, :] += combined_vector
         ↓ model.generate() continues with steered activations
     output tokens influenced by experience
 
@@ -70,10 +73,17 @@ class UnconsciousInjector:
     activations without appearing in the prompt text. The model "feels"
     the experience rather than "reads" about it.
 
+    v40: Multi-experience injection — each node's embedding is projected
+    individually to Qwen3's hidden state space, then combined via weighted
+    average (weights = node.confidence). This replaces the previous approach
+    of combining first in embedding space and then projecting the combined
+    vector. Projecting first allows the projection to handle each experience
+    vector's specific characteristics before blending.
+
     Attributes:
         model: The Qwen3 model to inject into.
         enabled: Global flag to enable/disable injection (for A/B testing).
-        injection_strength: Scaling factor for the additive vector (default 0.1).
+        injection_strength: Scaling factor for the additive vector (default 0.3).
             Higher = stronger influence but more disruption.
         hook_layer_index: Which transformer layer to hook (default 14 of 28).
         last_injection_log: Dict recording what was injected last time,
@@ -91,7 +101,7 @@ class UnconsciousInjector:
             model: A Qwen3 model (AutoModelForCausalLM instance).
             enabled: Whether injection is active (can toggle for A/B testing).
             injection_strength: Scaling factor for additive injection.
-                0.0 = no effect, 1.0 = full vector added. Default 0.1 is
+                0.0 = no effect, 1.0 = full vector added. Default 0.3 is
                 conservative — strong enough to influence, weak enough not
                 to break the model's generation.
             hook_layer_index: Which transformer layer to hook (0-indexed).
@@ -126,6 +136,12 @@ class UnconsciousInjector:
         # Initialized as identity; auto-loads trained weights if available
         self._projection = self._build_projection()
         self._try_load_trained_projection()
+
+        # v40: Multi-experience injection — lazy bge-m3 embedding model
+        # Used by _get_node_embedding() when a node lacks condition_embedding.
+        # Loaded lazily via model_registry.get_shared_embedding_model().
+        self._embedding_model = None
+        self._embedding_model_loaded = False
 
     def _build_projection(self) -> torch.nn.Linear:
         """Build a linear projection from embedding dim to hidden size.
@@ -230,18 +246,190 @@ class UnconsciousInjector:
                 weights_path, e
             )
 
+    # ═══════════════ v40: MULTI-EXPERIENCE INJECTION ═══════════════
+
+    def _ensure_embedding_model(self):
+        """Lazy-load bge-m3 embedding model from shared singleton.
+
+        Only loaded when needed — i.e., when a node lacks a cached
+        condition_embedding and we need to encode its text on-the-fly.
+        Uses get_shared_embedding_model() to avoid loading bge-m3
+        multiple times (~2.2GB RAM each).
+        """
+        if self._embedding_model_loaded:
+            return
+
+        self._embedding_model_loaded = True  # Mark as attempted
+
+        try:
+            from derivation.model_registry import get_shared_embedding_model
+            self._embedding_model = get_shared_embedding_model()
+            if self._embedding_model is not None:
+                logger.debug("Embedding model loaded for multi-experience injection")
+            else:
+                logger.warning(
+                    "bge-m3 not available — nodes without cached embeddings "
+                    "will be skipped in multi-experience injection"
+                )
+        except ImportError:
+            logger.warning(
+                "model_registry not available — cannot load embedding model"
+            )
+        except Exception as e:
+            logger.warning("Failed to load embedding model: %s", e)
+
+    def _get_node_embedding(self, node) -> Optional[torch.Tensor]:
+        """Get the embedding vector for a node, using cache or encoding on-the-fly.
+
+        Checks if the node has a cached condition_embedding (stored as a
+        list or tensor). If so, returns it as a float32 tensor. If not,
+        encodes the node's concept text via bge-m3 (lazy-loaded).
+
+        This ensures that nodes with pre-computed embeddings don't require
+        the embedding model to be loaded, saving ~2.2GB RAM when all nodes
+        have cached embeddings.
+
+        Args:
+            node: UnderstandingNode instance.
+
+        Returns:
+            Float32 tensor of shape (BGE_EMBEDDING_DIM,), or None if
+            no embedding is available (neither cached nor encodable).
+        """
+        # Check for cached embedding — most common path
+        emb = getattr(node, 'condition_embedding', None)
+        if emb is not None:
+            if isinstance(emb, (list, tuple)) and len(emb) > 0:
+                return torch.tensor(emb, dtype=torch.float32)
+            if isinstance(emb, torch.Tensor) and emb.numel() > 0:
+                return emb.float().flatten()
+
+        # No cached embedding — try encoding via bge-m3
+        self._ensure_embedding_model()
+        if self._embedding_model is None:
+            logger.debug(
+                "No embedding model — cannot encode node %s",
+                getattr(node, 'id', '?')
+            )
+            return None
+
+        # Use node.concept as the text to encode (most representative)
+        text = getattr(node, 'concept', '') or getattr(node, 'name', '') or ''
+        if not text:
+            logger.debug("Node %s has no text to encode", getattr(node, 'id', '?'))
+            return None
+
+        try:
+            embedding = self._embedding_model.encode(text, normalize_embeddings=True)
+            return torch.tensor(embedding, dtype=torch.float32)
+        except Exception as e:
+            logger.warning(
+                "Failed to encode node %s: %s", getattr(node, 'id', '?'), e
+            )
+            return None
+
+    def _compute_combined_vector(self, nodes: list) -> Optional[torch.Tensor]:
+        """Compute a combined experience vector from multiple UnderstandingNodes.
+
+        v40: Multi-experience injection — projects each node's embedding
+        individually to Qwen3's hidden state space and then combines them
+        via weighted average. This replaces the previous approach of combining
+        first in embedding space and then projecting the combined vector.
+
+        Why project-then-combine instead of combine-then-project?
+          - Each experience vector may have different characteristics that the
+            projection should handle individually before blending.
+          - The projection is trained to map individual embeddings to meaningful
+            directions in hidden state space; combining first may produce a
+            vector that doesn't correspond to any meaningful direction.
+          - Projecting first preserves the directional information of each
+            experience, leading to more meaningful activation steering.
+
+        Algorithm:
+          1. For each injectable node:
+             a. Get experience embedding (cached condition_embedding or
+                encode via bge-m3)
+             b. Project to hidden state space via self._projection
+             c. Record node.confidence as weight
+          2. If all weights are 0, use equal weights (fallback)
+          3. Compute weighted average of projected vectors
+          4. Normalize to unit length
+          5. Return single combined tensor (QWEN3_HIDDEN_SIZE-dim)
+
+        Args:
+            nodes: List of (UnderstandingNode, score) tuples from retrieval.
+
+        Returns:
+            Float32 tensor of shape (QWEN3_HIDDEN_SIZE,) — the combined
+            projected experience vector, or None if no valid vectors.
+        """
+        if not nodes:
+            return None
+
+        projected_vectors = []
+        weights = []
+
+        for node, score in nodes:
+            # v35: Governance filter — skip non-injectable nodes
+            if not self._is_injectable(node):
+                logger.debug(
+                    "Skipping non-injectable node %s (lifecycle=%s, epistemic=%s)",
+                    node.id,
+                    getattr(node, 'lifecycle', '?'),
+                    getattr(node, 'epistemic', '?'),
+                )
+                continue
+
+            # Get experience vector — use cached or encode on-the-fly
+            vec = self._get_node_embedding(node)
+            if vec is None:
+                continue
+
+            # Project to hidden state space individually
+            with torch.no_grad():
+                projected = self._projection(vec.unsqueeze(0)).squeeze(0)
+
+            projected_vectors.append(projected)
+
+            # Weight = node.confidence (not retrieval score)
+            confidence = getattr(node, 'confidence', 0.5)
+            weights.append(confidence)
+
+        if not projected_vectors:
+            return None
+
+        # If all confidences are 0, fallback to equal weights
+        total_weight = sum(weights)
+        if total_weight == 0:
+            logger.debug(
+                "All node confidences are 0 — using equal weights for %d nodes",
+                len(projected_vectors),
+            )
+            weights = [1.0] * len(projected_vectors)
+
+        # Weighted average
+        weights_tensor = torch.tensor(weights, dtype=torch.float32)
+        weights_tensor = weights_tensor / weights_tensor.sum()
+
+        stacked = torch.stack(projected_vectors)  # (num_nodes, QWEN3_HIDDEN_SIZE)
+        combined = (stacked * weights_tensor.unsqueeze(1)).sum(dim=0)
+
+        # Normalize to unit length (direction matters more than magnitude)
+        norm = combined.norm()
+        if norm > 1e-8:
+            combined = combined / norm
+
+        return combined
+
     def _compute_experience_vector(self, nodes: list) -> Optional[torch.Tensor]:
         """Compute a single experience vector from multiple UnderstandingNodes.
 
-        Averages the condition_embedding of all nodes into one vector.
-        Weighted by each node's confidence/accuracy AND governance state.
+        Legacy method: averages condition_embedding of all nodes in embedding
+        space, weighted by retrieval score * accuracy * governance bonus.
 
-        v35: Nodes that are DEPRECATED or CONTRADICTED are filtered out.
-        Only CANDIDATE and STABLE nodes with non-CONTRADICTED epistemic
-        state are included in the injection. This ensures that:
-          - Deactivated experiences don't influence behavior
-          - Contradicted knowledge isn't injected unconsciously
-          - Only verified knowledge steers the model's output
+        This method is preserved for backward compatibility but is no longer
+        used in the main injection flow (v40 uses _compute_combined_vector
+        instead, which projects each vector individually before combining).
 
         Args:
             nodes: List of (UnderstandingNode, score) tuples from retrieval.
@@ -313,6 +501,11 @@ class UnconsciousInjector:
         disrupting the model's understanding of the already-generated
         context.
 
+        v40: The _experience_vector is now computed via
+        _compute_combined_vector(), which projects each node individually
+        and then combines via weighted average. The hook itself is
+        unchanged — it simply adds the combined vector to the hidden state.
+
         Args:
             module: The transformer layer module.
             input: Layer input (unused).
@@ -381,7 +574,13 @@ class UnconsciousInjector:
         return self
 
     def __enter__(self):
-        """Enter context: compute experience vector and register hook."""
+        """Enter context: compute combined experience vector and register hook.
+
+        v40: Uses _compute_combined_vector() which projects each node's
+        embedding individually and then combines via weighted average
+        (weights = node.confidence). This replaces the previous approach
+        of combining in embedding space first and then projecting.
+        """
         if not self.enabled:
             logger.debug("UnconsciousInjector disabled — skipping injection")
             self.last_injection_log['active'] = False
@@ -393,26 +592,24 @@ class UnconsciousInjector:
             self.last_injection_log['active'] = False
             return self
 
-        # Compute raw experience vector (1024-dim)
-        raw_vector = self._compute_experience_vector(nodes)
-        if raw_vector is None:
+        # v40: Compute combined experience vector via multi-experience injection
+        # Projects each node individually, then combines via weighted average
+        combined_vector = self._compute_combined_vector(nodes)
+        if combined_vector is None:
             logger.debug("No valid embeddings in experience nodes — skipping injection")
             self.last_injection_log['active'] = False
             return self
-        self._raw_experience_vector = raw_vector
 
-        # Project to hidden size (embedding_dim → hidden_size)
-        with torch.no_grad():
-            projected = self._projection(raw_vector.unsqueeze(0)).squeeze(0)
+        self._raw_experience_vector = combined_vector.clone()
 
         # Move to model's device
         try:
             device = next(self.model.parameters()).device
-            projected = projected.to(device)
+            combined_vector = combined_vector.to(device)
         except (StopIteration, AttributeError):
             pass
 
-        self._experience_vector = projected
+        self._experience_vector = combined_vector
 
         # Register hook on the target layer
         try:
@@ -456,7 +653,7 @@ class UnconsciousInjector:
                 ],
                 'strength': self.injection_strength,
                 'layer': self.hook_layer_index,
-                'vector_norm': float(raw_vector.norm()),
+                'vector_norm': float(combined_vector.norm()),
             }
 
             logger.info(
