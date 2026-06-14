@@ -81,7 +81,7 @@ class UnconsciousInjector:
     BGE_EMBEDDING_DIM = 1024
 
     def __init__(self, model, enabled: bool = True,
-                 injection_strength: float = 0.1,
+                 injection_strength: float = 0.3,
                  hook_layer_index: int = 14):
         """Initialize the injector.
 
