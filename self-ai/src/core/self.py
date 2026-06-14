@@ -811,6 +811,146 @@ class SelfCore:
 
         return None
 
+    def learn(self, question: str, wrong_answer: str, correction: str) -> dict:
+        """Store a correction as a new UnderstandingNode in the graph.
+
+        This is the simplest learning loop: when a user corrects SELF's
+        answer, the correction is stored as a new understanding that can
+        influence future answers via unconscious injection.
+
+        The method:
+          1. Generates an experience text from (question, wrong_answer, correction)
+          2. Checks for duplicate nodes (idempotent for same input)
+          3. Encodes the experience text with bge-m3 (graceful if unavailable)
+          4. Creates an UnderstandingNode with confidence=0.6 (unproven)
+          5. Adds the node to the shared UnderstandingGraph
+          6. Returns a summary dict
+
+        The node starts at confidence=0.6 because it comes directly from
+        a user correction — it's more reliable than SELF's own derivations
+        (0.5) but hasn't been verified through repeated use yet. With
+        temporal reinforcement (v36), repeated successful use will
+        strengthen it; disuse will fade it.
+
+        Args:
+            question: The question that was asked.
+            wrong_answer: The wrong answer SELF gave.
+            correction: The correct answer from the user.
+
+        Returns:
+            Dict with keys:
+              - node_id: ID of the created (or existing) UnderstandingNode
+              - experience: The experience text stored in the node
+              - confidence: The node's confidence (0.6 for new nodes)
+              - graph_size: Number of nodes in the graph after adding
+              - duplicate: True if a matching node already existed
+        """
+        from datetime import datetime, timezone
+
+        # ── Step 1: Generate experience text ──
+        # Template-based, no LLM call — keeps learn() fast and reliable.
+        # Truncate to keep the experience focused and avoid embedding noise.
+        q_short = question[:50].strip()
+        w_short = wrong_answer[:30].strip()
+        c_short = correction[:50].strip()
+        experience = (
+            f"ketika ditanya '{q_short}', jawaban yang benar adalah "
+            f"'{c_short}' bukan '{w_short}'"
+        )
+
+        # ── Step 2: Lazy-init the shared graph ──
+        try:
+            from derivation.understanding_builder import get_shared_graph
+            graph = get_shared_graph()
+        except ImportError:
+            logger.warning("UnderstandingGraph not available — learn() cannot store")
+            return {
+                'node_id': None,
+                'experience': experience,
+                'confidence': 0.0,
+                'graph_size': 0,
+                'duplicate': False,
+                'error': 'UnderstandingGraph not available',
+            }
+        except Exception as e:
+            logger.warning("Failed to get shared graph: %s", e)
+            return {
+                'node_id': None,
+                'experience': experience,
+                'confidence': 0.0,
+                'graph_size': 0,
+                'duplicate': False,
+                'error': str(e),
+            }
+
+        # ── Step 3: Idempotency check — don't duplicate identical corrections ──
+        for nid, existing_node in graph._nodes.items():
+            if existing_node.abstraction == experience:
+                # Same correction already stored — just touch it
+                existing_node.last_used_at = datetime.now(timezone.utc).isoformat()
+                logger.info("learn(): duplicate correction for '%s...' — touching existing node %s",
+                           q_short[:30], nid)
+                return {
+                    'node_id': nid,
+                    'experience': experience,
+                    'confidence': existing_node.confidence,
+                    'graph_size': graph.count(),
+                    'duplicate': True,
+                }
+
+        # ── Step 4: Encode experience text with bge-m3 (graceful fallback) ──
+        condition_embedding = None
+        try:
+            from derivation.model_registry import get_shared_embedding_model
+            embed_model = get_shared_embedding_model()
+            if embed_model is not None:
+                import numpy as np
+                emb = embed_model.encode(
+                    [experience], show_progress_bar=False, normalize_embeddings=True
+                )[0]
+                condition_embedding = emb.tolist()
+                logger.debug("learn(): encoded experience with bge-m3 (dim=%d)", len(condition_embedding))
+            else:
+                logger.debug("learn(): bge-m3 not available — storing node without embedding")
+        except ImportError:
+            logger.debug("learn(): model_registry not available — storing node without embedding")
+        except Exception as e:
+            logger.debug("learn(): embedding failed — storing node without embedding: %s", e)
+
+        # ── Step 5: Create and add UnderstandingNode ──
+        from derivation.understanding_builder import UnderstandingNode
+        import uuid
+
+        node_id = f"learn_{uuid.uuid4().hex[:12]}"
+        node = UnderstandingNode(
+            id=node_id,
+            name=f"Correction: {q_short[:30]}",
+            concept=question,
+            abstraction=experience,
+            conditions=[question.lower()],
+            condition_embedding=condition_embedding,
+            source='user_correction',
+            confidence=0.6,
+            lifecycle='new',  # New node — not yet verified through use
+            last_used_at=datetime.now(timezone.utc).isoformat(),
+        )
+
+        graph.add_node(node)
+
+        graph_size = graph.count()
+        logger.info(
+            "learn(): stored correction as node %s (graph_size=%d, has_embedding=%s)",
+            node_id, graph_size, condition_embedding is not None
+        )
+
+        return {
+            'node_id': node_id,
+            'experience': experience,
+            'confidence': 0.6,
+            'graph_size': graph_size,
+            'duplicate': False,
+        }
+
     def _run_self_correction(self, text: str, question: str, wrong_answer: str,
                               correct_answer: str, answer_method: str = '',
                               answer_confidence: float = 0.0):
