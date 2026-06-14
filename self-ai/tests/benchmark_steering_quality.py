@@ -221,15 +221,17 @@ def generate_with_injection(qwen_model, tokenizer, prompt, injector, nodes,
                     output = qwen_model.generate(
                         **inputs,
                         max_new_tokens=max_new_tokens,
-                        do_sample=False,  # Deterministic for comparison
-                        temperature=1.0,
+                        do_sample=True,
+                        temperature=0.7,
+                        top_p=0.9,
                     )
             else:
                 output = qwen_model.generate(
                     **inputs,
                     max_new_tokens=max_new_tokens,
-                    do_sample=False,
-                    temperature=1.0,
+                    do_sample=True,
+                    temperature=0.7,
+                    top_p=0.9,
                 )
 
     text = tokenizer.decode(output[0], skip_special_tokens=True)
