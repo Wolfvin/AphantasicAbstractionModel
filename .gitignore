@@ -2,3 +2,4 @@
 self-ai/dependencies/
 self-ai/data/experience_store.json
 self-ai/data/embedding_cache/
+self-ai/src/unconscious/projection_weights.pt

@@ -41,8 +41,9 @@ Qwen3-0.6B architecture notes:
     - 28 transformer layers (model.model.layers)
     - hidden_size = 1024 (read from model.config.hidden_size)
     - We inject at layer 14 (middle of 28 layers)
-    - A simple linear projection bridges 1024 → 896 dims
-    - Projection is NOT trained — initialized with truncated SVD-like mapping
+    - A linear projection maps embedding dim → hidden_size
+    - Projection is initialized as identity; can be trained via ProjectionTrainer
+    - If projection_weights.pt exists, trained weights are auto-loaded
 
 Constraint:
     - KISS: additive injection, not attention manipulation
@@ -120,41 +121,35 @@ class UnconsciousInjector:
             'layer': hook_layer_index,
         }
 
-        # Build projection: 1024 → 896 (simple, NOT trained)
+        # Build projection: embedding_dim → hidden_size
+        # Initialized as identity; auto-loads trained weights if available
         self._projection = self._build_projection()
+        self._try_load_trained_projection()
 
     def _build_projection(self) -> torch.nn.Linear:
-        """Build a simple linear projection from embedding dim to hidden size.
+        """Build a linear projection from embedding dim to hidden size.
 
-        Since bge-m3 (1024) and Qwen3 hidden (896) have different dims,
-        we need a projection. This is a simple truncated identity mapping:
-        take the first 896 dimensions of the 1024-dim vector, with
-        Xavier-uniform initialization for the remaining mapping.
+        For Qwen3-0.6B (hidden_size=1024) and bge-m3 (1024-dim),
+        this is a square Linear(1024, 1024) initialized as identity.
+        For models where dims differ, the overlapping block is identity
+        and extra dimensions get small random weights.
 
-        This is NOT trained — it's a reasonable initialization that
-        preserves most information via the identity-like structure.
-        If it works, we can fine-tune the projection later.
+        If projection_weights.pt exists, trained weights will be loaded
+        after construction (see _try_load_trained_projection).
         """
         projection = torch.nn.Linear(self.BGE_EMBEDDING_DIM, self.QWEN3_HIDDEN_SIZE, bias=False)
 
-        # Initialize as identity-like: first 896 dims pass through,
-        # remaining 128 dims get small random weights
+        # Initialize as identity-like: overlapping dims pass through,
+        # extra dims get small random weights
         with torch.no_grad():
             weight = torch.zeros(self.QWEN3_HIDDEN_SIZE, self.BGE_EMBEDDING_DIM)
-            # Identity block for overlapping dimensions
-            weight[:min(self.QWEN3_HIDDEN_SIZE, self.BGE_EMBEDDING_DIM),
-                   :min(self.QWEN3_HIDDEN_SIZE, self.BGE_EMBEDDING_DIM)] = torch.eye(
-                min(self.QWEN3_HIDDEN_SIZE, self.BGE_EMBEDDING_DIM)
-            )
-            # Small random for the extra dimensions
+            overlap = min(self.QWEN3_HIDDEN_SIZE, self.BGE_EMBEDDING_DIM)
+            weight[:overlap, :overlap] = torch.eye(overlap)
+
+            # Small random for the extra dimensions (when embedding > hidden)
             if self.BGE_EMBEDDING_DIM > self.QWEN3_HIDDEN_SIZE:
-                # Fix: xavier_uniform_ expects a 2D tensor for correct
-                # fan_in/fan_out calculation. unsqueeze(0) made it 3D,
-                # causing wrong initialization scale.
-                torch.nn.init.xavier_uniform_(
-                    weight[:, self.QWEN3_HIDDEN_SIZE:]
-                )
-                weight[:, self.QWEN3_HIDDEN_SIZE:] *= 0.1  # Scale down extra dims
+                torch.nn.init.xavier_uniform_(weight[:, self.QWEN3_HIDDEN_SIZE:])
+                weight[:, self.QWEN3_HIDDEN_SIZE:] *= 0.1
 
             projection.weight.copy_(weight)
 
@@ -167,6 +162,72 @@ class UnconsciousInjector:
 
         projection.eval()  # Not training this
         return projection
+
+    def _try_load_trained_projection(self):
+        """Auto-load trained projection weights if projection_weights.pt exists.
+
+        This is called during __init__ after building the default projection.
+        If a trained weights file exists (created by ProjectionTrainer),
+        it replaces the identity initialization with trained weights.
+
+        The load is graceful — if the file doesn't exist or dimensions
+        mismatch, the default identity projection is kept and a debug
+        message is logged. No crash.
+        """
+        import os
+
+        weights_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            'projection_weights.pt'
+        )
+
+        if not os.path.exists(weights_path):
+            logger.debug(
+                "No trained projection weights at %s — using identity init",
+                weights_path
+            )
+            return
+
+        try:
+            checkpoint = torch.load(weights_path, map_location='cpu', weights_only=True)
+            saved_weight = checkpoint['weight']
+            saved_config = checkpoint.get('config', {})
+
+            # Validate dimensions
+            expected_shape = (self.QWEN3_HIDDEN_SIZE, self.BGE_EMBEDDING_DIM)
+            if saved_weight.shape != expected_shape:
+                logger.warning(
+                    "Projection weights shape mismatch: saved=%s, expected=%s "
+                    "— keeping identity init",
+                    tuple(saved_weight.shape), expected_shape
+                )
+                return
+
+            # Load weights
+            with torch.no_grad():
+                self._projection.weight.data.copy_(saved_weight)
+
+            # Move to model's device
+            try:
+                device = next(self.model.parameters()).device
+                self._projection = self._projection.to(device)
+            except (StopIteration, AttributeError):
+                pass
+
+            logger.info(
+                "Loaded trained projection weights from %s "
+                "(shape=%s, trained_layer=%s)",
+                weights_path,
+                tuple(saved_weight.shape),
+                saved_config.get('hook_layer_index', '?'),
+            )
+
+        except Exception as e:
+            logger.warning(
+                "Failed to load projection weights from %s: %s "
+                "— keeping identity init",
+                weights_path, e
+            )
 
     def _compute_experience_vector(self, nodes: list) -> Optional[torch.Tensor]:
         """Compute a single experience vector from multiple UnderstandingNodes.
@@ -339,7 +400,7 @@ class UnconsciousInjector:
             return self
         self._raw_experience_vector = raw_vector
 
-        # Project to hidden size (1024 → 896)
+        # Project to hidden size (embedding_dim → hidden_size)
         with torch.no_grad():
             projected = self._projection(raw_vector.unsqueeze(0)).squeeze(0)
 

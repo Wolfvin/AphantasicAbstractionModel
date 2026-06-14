@@ -12,5 +12,6 @@ so the model "feels" the experience without seeing it in the prompt.
 """
 
 from unconscious.injector import UnconsciousInjector
+from unconscious.projection_trainer import ProjectionTrainer
 
-__all__ = ['UnconsciousInjector']
+__all__ = ['UnconsciousInjector', 'ProjectionTrainer']
