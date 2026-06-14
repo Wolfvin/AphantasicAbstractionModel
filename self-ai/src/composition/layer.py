@@ -1,7 +1,7 @@
 # @WHO:   self-ai/src/composition/layer.py
-# @WHAT:  Composition Layer — Qwen3-0.6B untuk translate_to_human() dan reasoning
+# @WHAT:  Composition Layer — Qwen3-0.6B untuk translate_to_human(), reasoning, dan introspection
 # @PART:  composition
-# @ENTRY: CompositionLayer.translate_to_human(), CompositionLayer.reason_derivation(), CompositionLayer.raise_question()
+# @ENTRY: CompositionLayer.translate_to_human(), CompositionLayer.reason_derivation(), CompositionLayer.raise_question(), CompositionLayer.explain_last_answer()
 
 import re
 import numpy as np
@@ -32,6 +32,7 @@ class CompositionLayer:
     2. reason_derivation() — inferensi yang lebih kaya (IS-A, HAS-PROPERTY, kausal)
     3. raise_question() — saat SELF menemukan kontradiksi, bisa bertanya
     4. curiosity_question() — generate pertanyaan eksplorasi
+    5. explain_last_answer() — introspection: jelaskan kenapa jawaban terakhir seperti itu
     """
 
     def __init__(self, model_name: str = "Qwen/Qwen3-0.6B"):
@@ -45,6 +46,11 @@ class CompositionLayer:
         self.model_name = model_name
         self._model = None
         self._tokenizer = None
+
+        # v36: Introspection — lazy references to injector/introspector.
+        # Set externally via set_injector() or initialized lazily.
+        self._injector = None
+        self._introspector = None
 
     def _ensure_model(self):
         # @FLOW:     COMPOSITION_INIT
@@ -343,6 +349,107 @@ class CompositionLayer:
                 return f"Saya ingin tahu lebih banyak tentang {topic_area}. {reason} — bisa dijelaskan?"
 
         return response
+
+    # ═══════════════ v36: INTROSPECTION ═══════════════
+
+    def set_injector(self, injector):
+        """Set the UnconsciousInjector reference for introspection.
+
+        This is called by the orchestrator (SelfCore) to wire up
+        the injector so that CompositionLayer.explain_last_answer()
+        can access the injection log.
+
+        Args:
+            injector: UnconsciousInjector instance, or None to clear.
+        """
+        self._injector = injector
+        # Reset introspector so it picks up the new injector
+        self._introspector = None
+
+    def _get_introspector(self):
+        """Lazy-init Introspector using the injector reference.
+
+        If an injector has been set via set_injector(), create an
+        Introspector that reads from its injection log. The Introspector
+        reuses this CompositionLayer's Qwen3 model/tokenizer.
+
+        Returns:
+            Introspector instance, or None if no injector is set.
+        """
+        if self._introspector is not None:
+            return self._introspector
+
+        if self._injector is None:
+            return None
+
+        try:
+            from introspection.introspector import Introspector
+            # Reuse this layer's Qwen3 model/tokenizer if available,
+            # otherwise let Introspector load its own lazily.
+            self._introspector = Introspector(
+                self._injector,
+                model=self._model,
+                tokenizer=self._tokenizer,
+            )
+            return self._introspector
+        except ImportError:
+            return None
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(
+                "Failed to init Introspector: %s", e
+            )
+            return None
+
+    def explain_last_answer(self, question: str = '') -> Optional[str]:
+        """Explain why SELF answered the way it did — introspection entry point.
+
+        Call this after generating an answer with unconscious injection
+        to get a natural-language explanation of what experiences
+        influenced the answer.
+
+        If no injection happened (conscious-only path), returns a
+        neutral message explaining that no unconscious experience
+        was active.
+
+        This method delegates to Introspector.explain_last_answer(),
+        which reads the injection log from the UnconsciousInjector
+        and generates an explanation via Qwen3.
+
+        Args:
+            question: Optional — the question that was answered.
+                If provided, the explanation will reference it.
+
+        Returns:
+            String explanation in Bahasa Indonesia, or None if
+            introspection is not available (no injector set).
+        """
+        introspector = self._get_introspector()
+        if introspector is None:
+            # No injector wired up — graceful fallback
+            if question:
+                return (
+                    f"Untuk pertanyaan \"{question}\", jawaban saya "
+                    f"menggunakan penalaran sadar (conscious path) — "
+                    f"introspection tidak tersedia karena tidak ada "
+                    f"injector yang dikonfigurasi."
+                )
+            return None
+
+        try:
+            explanation = introspector.explain_last_answer(question=question)
+            return explanation
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(
+                "Introspection failed: %s", e
+            )
+            if question:
+                return (
+                    f"Untuk pertanyaan \"{question}\", saya tidak bisa "
+                    f"menjelaskan alasan jawaban saya saat ini (introspection error)."
+                )
+            return None
 
     def _template_fallback(self, prompt: str) -> str:
         """
