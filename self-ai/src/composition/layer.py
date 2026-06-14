@@ -4,9 +4,14 @@
 # @ENTRY: CompositionLayer.translate_to_human(), CompositionLayer.reason_derivation(), CompositionLayer.raise_question(), CompositionLayer.explain_last_answer()
 
 import re
+import time
+import uuid
+import logging
 import numpy as np
 from typing import Optional, List, Dict
 from dataclasses import dataclass
+
+logger = logging.getLogger(__name__)
 
 try:
     from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -33,9 +38,11 @@ class CompositionLayer:
     3. raise_question() — saat SELF menemukan kontradiksi, bisa bertanya
     4. curiosity_question() — generate pertanyaan eksplorasi
     5. explain_last_answer() — introspection: jelaskan kenapa jawaban terakhir seperti itu
+    6. v39: Self-Critique Pipeline — model mengevaluasi jawabannya sendiri
     """
 
-    def __init__(self, model_name: str = "Qwen/Qwen3-0.6B"):
+    def __init__(self, model_name: str = "Qwen/Qwen3-0.6B",
+                 self_critique_enabled: bool = False):
         # @FLOW:     COMPOSITION_INIT
         # @CALLS:    AutoModelForCausalLM.from_pretrained(), AutoTokenizer.from_pretrained()
         # @MUTATES:  none
@@ -51,6 +58,14 @@ class CompositionLayer:
         # Set externally via set_injector() or initialized lazily.
         self._injector = None
         self._introspector = None
+
+        # v39: Self-Critique Pipeline — model evaluates its own answers.
+        # When enabled, after each _generate() call, SelfCritic evaluates
+        # the answer. If should_learn() → True, an UnderstandingNode is
+        # automatically created and saved to the UnderstandingGraph.
+        self.self_critique_enabled = self_critique_enabled
+        self._self_critic = None  # Lazy-init SelfCritic
+        self._last_critique_result = None  # Expose last critique for inspection
 
     def _ensure_model(self):
         # @FLOW:     COMPOSITION_INIT
@@ -103,9 +118,13 @@ class CompositionLayer:
                    (tanpa prompt). Jika model tidak tersedia, fallback ke
                    template-based response.
                    Qwen3-0.6B memiliki mode "thinking" yang menghasilkan
-                   <think>...</think> sebelum respons aktual. Secara default
+                   <think...reasoning...</think< sebelum respons aktual. Secara default
                    thinking dinonaktifkan (/no_think) untuk respons cepat.
                    Gunakan use_thinking=True untuk reasoning mendalam.
+
+                   v39: If self_critique_enabled, runs SelfCritic after generation.
+                   When should_learn() returns True, automatically creates an
+                   UnderstandingNode and saves it to the UnderstandingGraph.
         """
         self._ensure_model()
 
@@ -149,7 +168,13 @@ class CompositionLayer:
         # Decode dengan special tokens agar bisa strip thinking blocks
         raw_response = self._tokenizer.decode(generated_ids, skip_special_tokens=False)
         response = self._strip_thinking(raw_response)
-        return response.strip()
+        response = response.strip()
+
+        # v39: Self-Critique Pipeline — evaluate answer after generation
+        if self.self_critique_enabled and response:
+            self._run_self_critique(prompt, response)
+
+        return response
 
     @staticmethod
     def _strip_thinking(text: str) -> str:
@@ -157,24 +182,24 @@ class CompositionLayer:
         Strip Qwen3 thinking blocks dari generated text.
 
         Qwen3-0.6B menghasilkan format:
-        <think>reasoning...</think>actual_response
+         <think<reasoning...</think<actual_response
 
-        Kita hanya mengambil bagian setelah </think>.
+        Kita hanya mengambil bagian setelah </think<.
         Jika tidak ada thinking block, kembalikan teks apa adanya
         setelah membersihkan special tokens.
         """
-        # Cari </think> dan ambil semua setelahnya
+        # Cari </think< dan ambil semua setelahnya
         end_think = text.find('</think')
         if end_think != -1:
             text = text[end_think:]
-            # Skip past the </think> tag
+            # Skip past the </think< tag
             tag_end = text.find('>', 0)
             if tag_end != -1:
                 text = text[tag_end + 1:]
             else:
-                text = text[len('</think'):]  
+                text = text[len('</think'):]
 
-        # Jika ada <think> tanpa </think>, model belum selesai thinking
+        # Jika ada <think< tanpa </think<, model belum selesai thinking
         if '<think' in text:
             return ''
 
@@ -395,7 +420,6 @@ class CompositionLayer:
         except ImportError:
             return None
         except Exception as e:
-            import logging
             logging.getLogger(__name__).warning(
                 "Failed to init Introspector: %s", e
             )
@@ -440,7 +464,6 @@ class CompositionLayer:
             explanation = introspector.explain_last_answer(question=question)
             return explanation
         except Exception as e:
-            import logging
             logging.getLogger(__name__).warning(
                 "Introspection failed: %s", e
             )
@@ -450,6 +473,158 @@ class CompositionLayer:
                     f"menjelaskan alasan jawaban saya saat ini (introspection error)."
                 )
             return None
+
+    # ═══════════════ v39: SELF-CRITIQUE PIPELINE ═══════════════
+
+    def _get_self_critic(self):
+        """Lazy-init SelfCritic instance.
+
+        The SelfCritic is created once and reused across calls.
+        It uses get_shared_qwen() internally, so no extra RAM is used
+        beyond what the CompositionLayer already loads.
+        """
+        if self._self_critic is None:
+            try:
+                from derivation.self_critic import SelfCritic
+                self._self_critic = SelfCritic()
+            except ImportError:
+                logger.warning(
+                    "SelfCritic module not available — "
+                    "self-critique pipeline disabled"
+                )
+                self.self_critique_enabled = False
+                return None
+            except Exception as e:
+                logger.warning("Failed to init SelfCritic: %s", e)
+                self.self_critique_enabled = False
+                return None
+        return self._self_critic
+
+    def _run_self_critique(self, prompt: str, answer: str):
+        """Run self-critique after generating an answer.
+
+        If the critique indicates the answer is not confident and
+        should_learn() returns True, automatically create an
+        UnderstandingNode and save it to the UnderstandingGraph.
+
+        This is the core of the autonomous learning loop:
+            model answers → model critiques → model learns
+
+        Args:
+            prompt: The original prompt/question that was asked.
+            answer: The answer that was generated.
+        """
+        critic = self._get_self_critic()
+        if critic is None:
+            return
+
+        try:
+            # The prompt may contain system context; use as-is
+            # but the critique focuses on question-answer correctness
+            critique_result = critic.critique(prompt, answer)
+            self._last_critique_result = critique_result
+
+            logger.debug(
+                "Self-critique: confident=%s, critique=%.80s",
+                critique_result.get('confident'),
+                critique_result.get('critique', ''),
+            )
+
+            # If the critique is worth learning from, save it
+            if critic.should_learn(critique_result):
+                self._save_critique_as_understanding(prompt, answer, critique_result)
+
+        except Exception as e:
+            logger.warning("Self-critique pipeline failed: %s", e)
+            # Non-fatal — the answer is still returned to the caller
+
+    def _save_critique_as_understanding(self, question: str, answer: str,
+                                         critique_result: dict):
+        """Save a self-critique result as an UnderstandingNode.
+
+        Creates a new UnderstandingNode in the shared UnderstandingGraph
+        that captures the mistake and the correction. This node can then
+        be retrieved later when similar questions arise, helping SELF
+        avoid making the same mistake again.
+
+        Args:
+            question: The original question/prompt.
+            answer: The incorrect answer that was generated.
+            critique_result: The structured critique from SelfCritic.critique().
+        """
+        try:
+            from derivation.understanding_builder import (
+                UnderstandingNode,
+                UnderstandingGraph,
+                Transformation,
+                get_shared_graph,
+            )
+        except ImportError:
+            logger.warning(
+                "Cannot save critique as UnderstandingNode — "
+                "understanding_builder module not available"
+            )
+            return
+
+        try:
+            graph = get_shared_graph()
+
+            # Generate a unique node ID
+            node_id = f"SC_{uuid.uuid4().hex[:8]}"
+
+            # Build the critique description
+            critique_text = critique_result.get('critique', '')
+            correction = critique_result.get('suggested_correction')
+
+            # Build the abstraction — what SELF learned from this mistake
+            abstraction = (
+                f"Pertanyaan: {question[:200]} → "
+                f"Jawaban salah: {answer[:100]}. "
+                f"{critique_text}"
+            )
+            if correction:
+                abstraction += f" Jawaban yang benar: {correction}"
+
+            # Create a Transformation that captures the correction pattern
+            transformation = Transformation(
+                kind='self_critique_correction',
+                trigger={'question_pattern': question[:100]},
+                action=correction if correction else critique_text,
+            )
+
+            # Create the UnderstandingNode
+            node = UnderstandingNode(
+                id=node_id,
+                name=f"Self-critique: {question[:50]}",
+                concept=question[:200],
+                abstraction=abstraction,
+                schemas=[{
+                    'question': question[:300],
+                    'wrong_answer': answer[:200],
+                    'correction': correction,
+                    'critique': critique_text,
+                }],
+                transformation=transformation,
+                conditions=[question[:100]],
+                source='self_critique',
+                confidence=0.3,  # Start low — self-critique is not yet verified
+                lifecycle='CANDIDATE',  # Not yet STABLE — needs verification
+                epistemic='INFERRED',   # Inferred from self-evaluation, not observed
+            )
+
+            graph.add_node(node)
+
+            logger.info(
+                "Self-critique saved as UnderstandingNode %s: "
+                "question=%.60s, correction=%s",
+                node_id, question[:60],
+                correction[:60] if correction else 'none',
+            )
+
+        except Exception as e:
+            logger.warning(
+                "Failed to save critique as UnderstandingNode: %s", e
+            )
 
     def _template_fallback(self, prompt: str) -> str:
         """
