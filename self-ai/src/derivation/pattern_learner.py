@@ -383,13 +383,15 @@ class PatternLearner:
     # ═══════════════ PERSISTENCE ═══════════════
 
     def _save_patterns(self):
-        """Persist SELF's discovered patterns to disk (legacy)."""
+        """Persist SELF's discovered patterns to disk (atomic write)."""
         try:
             os.makedirs(os.path.dirname(self._patterns_file), exist_ok=True)
             data = {name: p.to_dict() if hasattr(p, 'to_dict') else {}
                     for name, p in self._patterns.items()}
-            with open(self._patterns_file, 'w') as f:
+            tmp = self._patterns_file + '.tmp'
+            with open(tmp, 'w', encoding='utf-8') as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
+            os.replace(tmp, self._patterns_file)
         except Exception as e:
             logger.warning("Failed to save patterns: %s", e)
 

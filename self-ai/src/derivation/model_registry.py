@@ -1,5 +1,5 @@
 # @WHO:   self-ai/src/derivation/model_registry.py
-# @WHAT:  Shared model singletons — one bge-m3, one Qwen3-0.6B for the entire process
+# @WHAT:  Shared model singletons — one bge-m3, one Qwen3-0.6B for the entire process (local path, no HF hub)
 # @PART:  self-ai/derivation
 # @ENTRY: get_shared_embedding_model(), get_shared_qwen()
 
@@ -38,6 +38,12 @@ Disk space guard:
 import os
 import logging
 import shutil
+from pathlib import Path
+
+# Local model paths — relative to this file's package root
+_SELF_AI_ROOT = Path(__file__).resolve().parents[2]  # self-ai/
+_LOCAL_QWEN_PATH = _SELF_AI_ROOT / "dependencies" / "models" / "Qwen3-0.6B"
+_LOCAL_BGE_PATH = _SELF_AI_ROOT / "dependencies" / "models" / "bge-m3"
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +92,7 @@ def _is_model_cached(model_name: str) -> bool:
 
 _shared_embedding_model = None
 _embedding_model_loading = False  # Prevent recursive loading
+_embedding_model_failed = False   # Prevent retry after permanent failure
 
 
 def get_shared_embedding_model():
@@ -98,10 +105,13 @@ def get_shared_embedding_model():
     Returns:
         SentenceTransformer instance, or None if loading fails.
     """
-    global _shared_embedding_model, _embedding_model_loading
+    global _shared_embedding_model, _embedding_model_loading, _embedding_model_failed
 
     if _shared_embedding_model is not None:
         return _shared_embedding_model
+
+    if _embedding_model_failed:
+        return None
 
     if _embedding_model_loading:
         logger.warning("Recursive embedding model load detected — returning None")
@@ -115,27 +125,22 @@ def get_shared_embedding_model():
             logger.warning("Insufficient disk space — bge-m3 loading skipped")
             return None
 
-        # If model is already cached, set offline mode to prevent re-download
-        if _is_model_cached('BAAI/bge-m3'):
-            os.environ['HF_HUB_OFFLINE'] = '1'
-            logger.info("bge-m3 is cached — setting HF_HUB_OFFLINE=1")
-
         from sentence_transformers import SentenceTransformer
-        logger.info("Loading shared bge-m3 model (first time)...")
-        _shared_embedding_model = SentenceTransformer('BAAI/bge-m3')
+        # Prefer local path; fall back to HF hub if local not present
+        bge_source = str(_LOCAL_BGE_PATH) if _LOCAL_BGE_PATH.exists() else 'BAAI/bge-m3'
+        logger.info("Loading shared bge-m3 model from %s...", bge_source)
+        _shared_embedding_model = SentenceTransformer(bge_source)
         logger.info("Shared bge-m3 loaded successfully (dim=1024)")
-
-        # Clear offline flag after loading
-        os.environ.pop('HF_HUB_OFFLINE', None)
 
         return _shared_embedding_model
 
     except ImportError:
         logger.warning("sentence_transformers not available — embedding model disabled")
+        _embedding_model_failed = True
         return None
     except Exception as e:
         logger.warning("Failed to load shared bge-m3 model: %s", e)
-        os.environ.pop('HF_HUB_OFFLINE', None)
+        _embedding_model_failed = True
         return None
     finally:
         _embedding_model_loading = False
@@ -148,6 +153,7 @@ def get_shared_embedding_model():
 _shared_qwen_model = None
 _shared_qwen_tokenizer = None
 _qwen_loading = False  # Prevent recursive loading
+_qwen_failed = False   # Prevent retry after permanent failure
 
 
 def get_shared_qwen():
@@ -160,10 +166,13 @@ def get_shared_qwen():
     Returns:
         Tuple of (model, tokenizer), or (None, None) if loading fails.
     """
-    global _shared_qwen_model, _shared_qwen_tokenizer, _qwen_loading
+    global _shared_qwen_model, _shared_qwen_tokenizer, _qwen_loading, _qwen_failed
 
     if _shared_qwen_model is not None and _shared_qwen_tokenizer is not None:
         return _shared_qwen_model, _shared_qwen_tokenizer
+
+    if _qwen_failed:
+        return None, None
 
     if _qwen_loading:
         logger.warning("Recursive Qwen model load detected — returning None")
@@ -172,9 +181,13 @@ def get_shared_qwen():
     _qwen_loading = True
 
     try:
-        # Check if model is cached
-        if not _is_model_cached('Qwen/Qwen3-0.6B'):
-            logger.info("Qwen3-0.6B not cached locally — skipping shared loading")
+        # Prefer local path; fall back to HF hub name if local not present
+        if _LOCAL_QWEN_PATH.exists():
+            qwen_source = str(_LOCAL_QWEN_PATH)
+        elif _is_model_cached('Qwen/Qwen3-0.6B'):
+            qwen_source = 'Qwen/Qwen3-0.6B'
+        else:
+            logger.info("Qwen3-0.6B not found locally — skipping shared loading")
             return None, None
 
         # Disk space check
@@ -182,38 +195,45 @@ def get_shared_qwen():
             logger.warning("Insufficient disk space — Qwen3-0.6B loading skipped")
             return None, None
 
-        # If model is cached, set offline mode
-        os.environ['HF_HUB_OFFLINE'] = '1'
-
+        import torch
         from transformers import AutoModelForCausalLM, AutoTokenizer
-        logger.info("Loading shared Qwen3-0.6B model (first time)...")
-        _shared_qwen_tokenizer = AutoTokenizer.from_pretrained('Qwen/Qwen3-0.6B')
+        logger.info("Loading shared Qwen3-0.6B from %s...", qwen_source)
+        _shared_qwen_tokenizer = AutoTokenizer.from_pretrained(qwen_source)
+        # float16 saves ~50% RAM vs float32 (~1.2GB vs ~2.4GB) — critical for CPU
         _shared_qwen_model = AutoModelForCausalLM.from_pretrained(
-            'Qwen/Qwen3-0.6B', torch_dtype='auto', device_map='auto'
+            qwen_source, dtype=torch.float16
         )
         logger.info("Shared Qwen3-0.6B loaded successfully")
-
-        # Clear offline flag
-        os.environ.pop('HF_HUB_OFFLINE', None)
 
         return _shared_qwen_model, _shared_qwen_tokenizer
 
     except ImportError:
         logger.warning("transformers not available — Qwen3 model disabled")
+        _qwen_failed = True
         return None, None
     except Exception as e:
         logger.warning("Failed to load shared Qwen3-0.6B model: %s", e)
-        os.environ.pop('HF_HUB_OFFLINE', None)
+        _qwen_failed = True
         return None, None
     finally:
         _qwen_loading = False
 
 
 def is_qwen_available() -> bool:
+<<<<<<< Updated upstream
     """Quick check if Qwen3-0.6B is cached locally (without loading it)."""
     return _is_model_cached('Qwen/Qwen3-0.6B')
+=======
+    """Quick check if Qwen3-0.6B is available locally."""
+    return _LOCAL_QWEN_PATH.exists() or _is_model_cached('Qwen/Qwen3-0.6B')
+>>>>>>> Stashed changes
 
 
 def is_embedding_model_available() -> bool:
     """Quick check if bge-m3 is cached locally (without loading it)."""
     return _is_model_cached('BAAI/bge-m3')
+<<<<<<< Updated upstream
+=======
+
+
+>>>>>>> Stashed changes

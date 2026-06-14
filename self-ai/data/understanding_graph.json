@@ -250,13 +250,179 @@
       [
         "U_signal_flip_emb",
         "generalizes"
+      ],
+      [
+        "c1e8f75d9ecf",
+        "related"
+      ],
+      [
+        "91bdda04ec76",
+        "related"
+      ],
+      [
+        "core_contrast",
+        "related"
+      ],
+      [
+        "core_negation_affirm",
+        "related"
+      ],
+      [
+        "core_double_negation",
+        "related"
+      ],
+      [
+        "core_double_negation",
+        "generalizes"
+      ],
+      [
+        "e7111963823d",
+        "related"
+      ],
+      [
+        "7ca08ac2254a",
+        "related"
+      ],
+      [
+        "U_signal_flip_test",
+        "related"
+      ],
+      [
+        "U_signal_flip_test",
+        "generalizes"
+      ],
+      [
+        "U_signal_flip_emb",
+        "related"
+      ],
+      [
+        "U_signal_flip_emb",
+        "generalizes"
+      ],
+      [
+        "c1e8f75d9ecf",
+        "related"
+      ],
+      [
+        "91bdda04ec76",
+        "related"
+      ],
+      [
+        "core_comparison",
+        "related"
+      ],
+      [
+        "core_contrast",
+        "related"
+      ],
+      [
+        "core_negation_affirm",
+        "related"
+      ],
+      [
+        "core_double_negation",
+        "related"
+      ],
+      [
+        "core_double_negation",
+        "generalizes"
+      ],
+      [
+        "e7111963823d",
+        "related"
+      ],
+      [
+        "7ca08ac2254a",
+        "related"
+      ],
+      [
+        "U_signal_flip_test",
+        "related"
+      ],
+      [
+        "U_signal_flip_test",
+        "generalizes"
+      ],
+      [
+        "U_signal_flip_emb",
+        "related"
+      ],
+      [
+        "U_signal_flip_emb",
+        "generalizes"
+      ],
+      [
+        "c1e8f75d9ecf",
+        "related"
+      ],
+      [
+        "core_comparison",
+        "related"
+      ],
+      [
+        "91bdda04ec76",
+        "related"
+      ],
+      [
+        "core_contrast",
+        "related"
+      ],
+      [
+        "core_negation_affirm",
+        "related"
+      ],
+      [
+        "core_double_negation",
+        "related"
+      ],
+      [
+        "core_double_negation",
+        "generalizes"
+      ],
+      [
+        "e7111963823d",
+        "related"
+      ],
+      [
+        "7ca08ac2254a",
+        "related"
+      ],
+      [
+        "U_signal_flip_test",
+        "related"
+      ],
+      [
+        "U_signal_flip_test",
+        "generalizes"
+      ],
+      [
+        "U_signal_flip_emb",
+        "related"
+      ],
+      [
+        "U_signal_flip_emb",
+        "generalizes"
+      ],
+      [
+        "core_quantity",
+        "related"
       ]
     ],
     "source": "core_seed",
     "confidence": 0.85,
     "times_applied": 0,
     "times_correct": 0,
-    "times_failed": 0
+    "times_failed": 0,
+    "members": [],
+    "lifecycle": "stable",
+    "epistemic": "observed",
+    "seed_scores": {
+      "trust": 0.5,
+      "risk": 0.3,
+      "value": 0.5,
+      "goal": 0.5,
+      "identity": 0.3
+    }
   },
   "core_contrast": {
     "id": "core_contrast",
@@ -435,13 +601,215 @@
       [
         "core_exception",
         "related"
+      ],
+      [
+        "c1e8f75d9ecf",
+        "related"
+      ],
+      [
+        "core_comparison",
+        "related"
+      ],
+      [
+        "91bdda04ec76",
+        "related"
+      ],
+      [
+        "core_exception",
+        "related"
+      ],
+      [
+        "core_negation_affirm",
+        "related"
+      ],
+      [
+        "core_fact_opinion",
+        "related"
+      ],
+      [
+        "core_fact_opinion",
+        "generalizes"
+      ],
+      [
+        "core_quantity",
+        "related"
+      ],
+      [
+        "e7111963823d",
+        "related"
+      ],
+      [
+        "7ca08ac2254a",
+        "related"
+      ],
+      [
+        "U_contrast_test",
+        "related"
+      ],
+      [
+        "U_contrast_test",
+        "generalizes"
+      ],
+      [
+        "U_contrast_emb",
+        "related"
+      ],
+      [
+        "U_contrast_emb",
+        "generalizes"
+      ],
+      [
+        "fbf258609542",
+        "generalizes"
+      ],
+      [
+        "1f4932f73187",
+        "related"
+      ],
+      [
+        "c1e8f75d9ecf",
+        "related"
+      ],
+      [
+        "core_comparison",
+        "related"
+      ],
+      [
+        "91bdda04ec76",
+        "related"
+      ],
+      [
+        "core_quantity",
+        "related"
+      ],
+      [
+        "core_exception",
+        "related"
+      ],
+      [
+        "core_negation_affirm",
+        "related"
+      ],
+      [
+        "core_fact_opinion",
+        "related"
+      ],
+      [
+        "core_fact_opinion",
+        "generalizes"
+      ],
+      [
+        "e7111963823d",
+        "related"
+      ],
+      [
+        "7ca08ac2254a",
+        "related"
+      ],
+      [
+        "U_contrast_test",
+        "related"
+      ],
+      [
+        "U_contrast_test",
+        "generalizes"
+      ],
+      [
+        "U_contrast_emb",
+        "related"
+      ],
+      [
+        "U_contrast_emb",
+        "generalizes"
+      ],
+      [
+        "fbf258609542",
+        "generalizes"
+      ],
+      [
+        "1f4932f73187",
+        "related"
+      ],
+      [
+        "c1e8f75d9ecf",
+        "related"
+      ],
+      [
+        "core_comparison",
+        "related"
+      ],
+      [
+        "91bdda04ec76",
+        "related"
+      ],
+      [
+        "core_quantity",
+        "related"
+      ],
+      [
+        "core_exception",
+        "related"
+      ],
+      [
+        "core_negation_affirm",
+        "related"
+      ],
+      [
+        "core_fact_opinion",
+        "related"
+      ],
+      [
+        "core_fact_opinion",
+        "generalizes"
+      ],
+      [
+        "e7111963823d",
+        "related"
+      ],
+      [
+        "7ca08ac2254a",
+        "related"
+      ],
+      [
+        "U_contrast_test",
+        "related"
+      ],
+      [
+        "U_contrast_test",
+        "generalizes"
+      ],
+      [
+        "U_contrast_emb",
+        "related"
+      ],
+      [
+        "U_contrast_emb",
+        "generalizes"
+      ],
+      [
+        "fbf258609542",
+        "generalizes"
+      ],
+      [
+        "1f4932f73187",
+        "related"
       ]
     ],
     "source": "core_seed",
     "confidence": 0.85,
     "times_applied": 0,
     "times_correct": 0,
-    "times_failed": 0
+    "times_failed": 0,
+    "members": [],
+    "lifecycle": "stable",
+    "epistemic": "observed",
+    "seed_scores": {
+      "trust": 0.5,
+      "risk": 0.3,
+      "value": 0.5,
+      "goal": 0.5,
+      "identity": 0.3
+    }
   },
   "core_negation_affirm": {
     "id": "core_negation_affirm",
@@ -608,13 +976,183 @@
       [
         "core_exception",
         "related"
+      ],
+      [
+        "c1e8f75d9ecf",
+        "related"
+      ],
+      [
+        "91bdda04ec76",
+        "related"
+      ],
+      [
+        "core_exception",
+        "related"
+      ],
+      [
+        "core_contrast",
+        "related"
+      ],
+      [
+        "core_fact_opinion",
+        "related"
+      ],
+      [
+        "core_double_negation",
+        "related"
+      ],
+      [
+        "e7111963823d",
+        "related"
+      ],
+      [
+        "7ca08ac2254a",
+        "related"
+      ],
+      [
+        "U_contrast_test",
+        "related"
+      ],
+      [
+        "U_negaff_test",
+        "related"
+      ],
+      [
+        "U_negaff_test",
+        "generalizes"
+      ],
+      [
+        "U_contrast_emb",
+        "related"
+      ],
+      [
+        "core_comparison",
+        "related"
+      ],
+      [
+        "c1e8f75d9ecf",
+        "related"
+      ],
+      [
+        "core_comparison",
+        "related"
+      ],
+      [
+        "91bdda04ec76",
+        "related"
+      ],
+      [
+        "core_exception",
+        "related"
+      ],
+      [
+        "core_contrast",
+        "related"
+      ],
+      [
+        "core_fact_opinion",
+        "related"
+      ],
+      [
+        "core_double_negation",
+        "related"
+      ],
+      [
+        "e7111963823d",
+        "related"
+      ],
+      [
+        "7ca08ac2254a",
+        "related"
+      ],
+      [
+        "U_contrast_test",
+        "related"
+      ],
+      [
+        "U_negaff_test",
+        "related"
+      ],
+      [
+        "U_negaff_test",
+        "generalizes"
+      ],
+      [
+        "U_contrast_emb",
+        "related"
+      ],
+      [
+        "c1e8f75d9ecf",
+        "related"
+      ],
+      [
+        "core_comparison",
+        "related"
+      ],
+      [
+        "91bdda04ec76",
+        "related"
+      ],
+      [
+        "core_quantity",
+        "related"
+      ],
+      [
+        "core_exception",
+        "related"
+      ],
+      [
+        "core_contrast",
+        "related"
+      ],
+      [
+        "core_fact_opinion",
+        "related"
+      ],
+      [
+        "core_double_negation",
+        "related"
+      ],
+      [
+        "e7111963823d",
+        "related"
+      ],
+      [
+        "7ca08ac2254a",
+        "related"
+      ],
+      [
+        "U_contrast_test",
+        "related"
+      ],
+      [
+        "U_negaff_test",
+        "related"
+      ],
+      [
+        "U_negaff_test",
+        "generalizes"
+      ],
+      [
+        "U_contrast_emb",
+        "related"
       ]
     ],
     "source": "core_seed",
     "confidence": 0.85,
     "times_applied": 0,
     "times_correct": 0,
-    "times_failed": 0
+    "times_failed": 0,
+    "members": [],
+    "lifecycle": "stable",
+    "epistemic": "observed",
+    "seed_scores": {
+      "trust": 0.5,
+      "risk": 0.3,
+      "value": 0.5,
+      "goal": 0.5,
+      "identity": 0.3
+    }
   },
   "core_comparison": {
     "id": "core_comparison",
@@ -647,7 +1185,41 @@
       "andi",
       "budi",
       "kurang",
-      "siapa"
+      "siapa",
+      "teman",
+      "selalu",
+      "menolong",
+      "kesulitan",
+      "tepat",
+      "menghormati",
+      "peribahasa",
+      "rina",
+      "sikap",
+      "orang",
+      "minuman",
+      "pokok",
+      "memilih",
+      "harus",
+      "paragraf",
+      "tersebut",
+      "putih",
+      "saat",
+      "minum",
+      "mereka",
+      "cukup",
+      "banyak",
+      "karena",
+      "hati",
+      "rani",
+      "sebagai",
+      "dikenal",
+      "baik",
+      "anak",
+      "siswa",
+      "membiasakan",
+      "kita",
+      "manis",
+      "sekolah"
     ],
     "condition_embedding": null,
     "edges": [
@@ -682,13 +1254,179 @@
       [
         "core_quantity",
         "related"
+      ],
+      [
+        "core_contrast",
+        "related"
+      ],
+      [
+        "core_quantity",
+        "related"
+      ],
+      [
+        "c1e8f75d9ecf",
+        "related"
+      ],
+      [
+        "e7111963823d",
+        "related"
+      ],
+      [
+        "e7111963823d",
+        "generalizes"
+      ],
+      [
+        "7ca08ac2254a",
+        "related"
+      ],
+      [
+        "U_compare_test",
+        "related"
+      ],
+      [
+        "U_compare_test",
+        "generalizes"
+      ],
+      [
+        "91bdda04ec76",
+        "related"
+      ],
+      [
+        "core_negation_affirm",
+        "related"
+      ],
+      [
+        "core_fact_emotion",
+        "related"
+      ],
+      [
+        "92d53e3fa597",
+        "related"
+      ],
+      [
+        "c1e8f75d9ecf",
+        "related"
+      ],
+      [
+        "core_contrast",
+        "related"
+      ],
+      [
+        "core_negation_affirm",
+        "related"
+      ],
+      [
+        "core_fact_emotion",
+        "related"
+      ],
+      [
+        "core_quantity",
+        "related"
+      ],
+      [
+        "91bdda04ec76",
+        "related"
+      ],
+      [
+        "e7111963823d",
+        "related"
+      ],
+      [
+        "e7111963823d",
+        "generalizes"
+      ],
+      [
+        "7ca08ac2254a",
+        "related"
+      ],
+      [
+        "92d53e3fa597",
+        "related"
+      ],
+      [
+        "U_compare_test",
+        "related"
+      ],
+      [
+        "U_compare_test",
+        "generalizes"
+      ],
+      [
+        "core_exception",
+        "related"
+      ],
+      [
+        "c1e8f75d9ecf",
+        "related"
+      ],
+      [
+        "core_exception",
+        "related"
+      ],
+      [
+        "core_contrast",
+        "related"
+      ],
+      [
+        "core_negation_affirm",
+        "related"
+      ],
+      [
+        "core_fact_emotion",
+        "related"
+      ],
+      [
+        "core_quantity",
+        "related"
+      ],
+      [
+        "91bdda04ec76",
+        "related"
+      ],
+      [
+        "e7111963823d",
+        "related"
+      ],
+      [
+        "e7111963823d",
+        "generalizes"
+      ],
+      [
+        "7ca08ac2254a",
+        "related"
+      ],
+      [
+        "92d53e3fa597",
+        "related"
+      ],
+      [
+        "U_compare_test",
+        "related"
+      ],
+      [
+        "U_compare_test",
+        "generalizes"
+      ],
+      [
+        "225109ba2b8c",
+        "related"
       ]
     ],
     "source": "core_seed",
     "confidence": 0.8,
     "times_applied": 0,
     "times_correct": 0,
-    "times_failed": 0
+    "times_failed": 0,
+    "members": [],
+    "lifecycle": "stable",
+    "epistemic": "observed",
+    "seed_scores": {
+      "trust": 0.5,
+      "risk": 0.3,
+      "value": 0.5,
+      "goal": 0.5,
+      "identity": 0.3
+    }
   },
   "core_fact_emotion": {
     "id": "core_fact_emotion",
@@ -726,12 +1464,35 @@
       "nasi"
     ],
     "condition_embedding": null,
-    "edges": [],
+    "edges": [
+      [
+        "core_comparison",
+        "related"
+      ],
+      [
+        "core_comparison",
+        "related"
+      ],
+      [
+        "core_comparison",
+        "related"
+      ]
+    ],
     "source": "core_seed",
     "confidence": 0.75,
     "times_applied": 0,
     "times_correct": 0,
-    "times_failed": 0
+    "times_failed": 0,
+    "members": [],
+    "lifecycle": "stable",
+    "epistemic": "observed",
+    "seed_scores": {
+      "trust": 0.5,
+      "risk": 0.3,
+      "value": 0.5,
+      "goal": 0.5,
+      "identity": 0.3
+    }
   },
   "core_fact_opinion": {
     "id": "core_fact_opinion",
@@ -800,13 +1561,71 @@
       [
         "core_contrast",
         "specializes"
+      ],
+      [
+        "core_negation_affirm",
+        "related"
+      ],
+      [
+        "core_contrast",
+        "related"
+      ],
+      [
+        "core_contrast",
+        "specializes"
+      ],
+      [
+        "91bdda04ec76",
+        "related"
+      ],
+      [
+        "core_negation_affirm",
+        "related"
+      ],
+      [
+        "core_contrast",
+        "related"
+      ],
+      [
+        "core_contrast",
+        "specializes"
+      ],
+      [
+        "91bdda04ec76",
+        "related"
+      ],
+      [
+        "core_quantity",
+        "related"
+      ],
+      [
+        "core_negation_affirm",
+        "related"
+      ],
+      [
+        "core_contrast",
+        "related"
+      ],
+      [
+        "core_contrast",
+        "specializes"
       ]
     ],
     "source": "core_seed",
     "confidence": 0.8,
     "times_applied": 0,
     "times_correct": 0,
-    "times_failed": 0
+    "times_failed": 0,
+    "members": [],
+    "lifecycle": "stable",
+    "epistemic": "observed",
+    "seed_scores": {
+      "trust": 0.5,
+      "risk": 0.3,
+      "value": 0.5,
+      "goal": 0.5,
+      "identity": 0.3
+    }
   },
   "core_quantity": {
     "id": "core_quantity",
@@ -838,7 +1657,96 @@
       "punya",
       "andi",
       "budi",
-      "kelereng"
+      "kelereng",
+      "sabtu",
+      "pukul",
+      "minggu",
+      "senin",
+      "09.00",
+      "buka",
+      "perpustakaan",
+      "tutup",
+      "kota",
+      "17.00",
+      "sampai",
+      "hari",
+      "tak",
+      "pembersihan",
+      "utama",
+      "sungai",
+      "upaya",
+      "parah",
+      "pencemaran",
+      "mencemari",
+      "semakin",
+      "paragraf",
+      "karena",
+      "harus",
+      "limbah",
+      "industri",
+      "terletak",
+      "'jakarta",
+      "atau",
+      "kalimantan.'",
+      "benar",
+      "salah",
+      "pulau",
+      "pernyataan",
+      "jakarta",
+      "padat",
+      "menurut",
+      "lintas",
+      "makanan",
+      "pencakar",
+      "gedung",
+      "maka",
+      "lalu",
+      "langit",
+      "indonesia",
+      "kerak",
+      "banyak",
+      "kebersihan",
+      "menjaga",
+      "terakhirnya",
+      "lingkungan.'",
+      "kita",
+      "'oleh",
+      "selalu",
+      "pokok",
+      "kalimat",
+      "unik",
+      "budaya",
+      "berbeda",
+      "pakaian",
+      "keragaman",
+      "daerah",
+      "memiliki",
+      "tersebut",
+      "menjadikan",
+      "sangat",
+      "setiap",
+      "mempunyai",
+      "pesat",
+      "berkembang",
+      "gagasan",
+      "memudahkan",
+      "internet",
+      "dunia",
+      "teknologi",
+      "menghubungkan",
+      "akses",
+      "sosial",
+      "orang",
+      "segera",
+      "dilakukan",
+      "domestik",
+      "teks",
+      "mana",
+      "opini",
+      "argumentatif",
+      "merupakan",
+      "telor",
+      "khas"
     ],
     "condition_embedding": null,
     "edges": [
@@ -929,13 +1837,363 @@
       [
         "c1e8f75d9ecf",
         "related"
+      ],
+      [
+        "c1e8f75d9ecf",
+        "related"
+      ],
+      [
+        "core_comparison",
+        "related"
+      ],
+      [
+        "91bdda04ec76",
+        "specializes"
+      ],
+      [
+        "core_contrast",
+        "related"
+      ],
+      [
+        "061971c384fc",
+        "generalizes"
+      ],
+      [
+        "core_kembalian",
+        "generalizes"
+      ],
+      [
+        "core_quantity_berapa",
+        "related"
+      ],
+      [
+        "core_quantity_berapa",
+        "generalizes"
+      ],
+      [
+        "U_qty_test",
+        "related"
+      ],
+      [
+        "U_qty_test",
+        "generalizes"
+      ],
+      [
+        "U_kembalian_test",
+        "generalizes"
+      ],
+      [
+        "U_quantity_emb",
+        "related"
+      ],
+      [
+        "U_quantity_emb",
+        "generalizes"
+      ],
+      [
+        "da4161711638",
+        "generalizes"
+      ],
+      [
+        "c4ec0a76f232",
+        "generalizes"
+      ],
+      [
+        "7ada7105bbb1",
+        "generalizes"
+      ],
+      [
+        "8815a96bed63",
+        "generalizes"
+      ],
+      [
+        "1278f9c8cd78",
+        "generalizes"
+      ],
+      [
+        "20d166e1fa18",
+        "generalizes"
+      ],
+      [
+        "22b8a3ae02d4",
+        "generalizes"
+      ],
+      [
+        "c1ce247a5070",
+        "generalizes"
+      ],
+      [
+        "66c71fcc5e63",
+        "generalizes"
+      ],
+      [
+        "8058be48d31c",
+        "generalizes"
+      ],
+      [
+        "91bdda04ec76",
+        "related"
+      ],
+      [
+        "061971c384fc",
+        "related"
+      ],
+      [
+        "c1e8f75d9ecf",
+        "related"
+      ],
+      [
+        "core_comparison",
+        "related"
+      ],
+      [
+        "91bdda04ec76",
+        "related"
+      ],
+      [
+        "91bdda04ec76",
+        "specializes"
+      ],
+      [
+        "core_contrast",
+        "related"
+      ],
+      [
+        "core_kembalian",
+        "generalizes"
+      ],
+      [
+        "core_quantity_berapa",
+        "related"
+      ],
+      [
+        "core_quantity_berapa",
+        "generalizes"
+      ],
+      [
+        "061971c384fc",
+        "related"
+      ],
+      [
+        "061971c384fc",
+        "generalizes"
+      ],
+      [
+        "92d53e3fa597",
+        "related"
+      ],
+      [
+        "U_qty_test",
+        "related"
+      ],
+      [
+        "U_qty_test",
+        "generalizes"
+      ],
+      [
+        "U_kembalian_test",
+        "generalizes"
+      ],
+      [
+        "U_quantity_emb",
+        "related"
+      ],
+      [
+        "U_quantity_emb",
+        "generalizes"
+      ],
+      [
+        "da4161711638",
+        "generalizes"
+      ],
+      [
+        "c4ec0a76f232",
+        "generalizes"
+      ],
+      [
+        "7ada7105bbb1",
+        "generalizes"
+      ],
+      [
+        "8815a96bed63",
+        "generalizes"
+      ],
+      [
+        "1278f9c8cd78",
+        "generalizes"
+      ],
+      [
+        "20d166e1fa18",
+        "generalizes"
+      ],
+      [
+        "22b8a3ae02d4",
+        "generalizes"
+      ],
+      [
+        "c1ce247a5070",
+        "generalizes"
+      ],
+      [
+        "66c71fcc5e63",
+        "generalizes"
+      ],
+      [
+        "8058be48d31c",
+        "generalizes"
+      ],
+      [
+        "1f4932f73187",
+        "related"
+      ],
+      [
+        "c1e8f75d9ecf",
+        "related"
+      ],
+      [
+        "core_comparison",
+        "related"
+      ],
+      [
+        "91bdda04ec76",
+        "related"
+      ],
+      [
+        "91bdda04ec76",
+        "specializes"
+      ],
+      [
+        "core_contrast",
+        "related"
+      ],
+      [
+        "core_kembalian",
+        "generalizes"
+      ],
+      [
+        "core_quantity_berapa",
+        "related"
+      ],
+      [
+        "core_quantity_berapa",
+        "generalizes"
+      ],
+      [
+        "061971c384fc",
+        "related"
+      ],
+      [
+        "061971c384fc",
+        "generalizes"
+      ],
+      [
+        "7ca08ac2254a",
+        "related"
+      ],
+      [
+        "92d53e3fa597",
+        "related"
+      ],
+      [
+        "U_qty_test",
+        "related"
+      ],
+      [
+        "U_qty_test",
+        "generalizes"
+      ],
+      [
+        "U_kembalian_test",
+        "generalizes"
+      ],
+      [
+        "U_quantity_emb",
+        "related"
+      ],
+      [
+        "U_quantity_emb",
+        "generalizes"
+      ],
+      [
+        "da4161711638",
+        "generalizes"
+      ],
+      [
+        "c4ec0a76f232",
+        "generalizes"
+      ],
+      [
+        "7ada7105bbb1",
+        "generalizes"
+      ],
+      [
+        "8815a96bed63",
+        "generalizes"
+      ],
+      [
+        "1278f9c8cd78",
+        "generalizes"
+      ],
+      [
+        "20d166e1fa18",
+        "generalizes"
+      ],
+      [
+        "22b8a3ae02d4",
+        "generalizes"
+      ],
+      [
+        "c1ce247a5070",
+        "generalizes"
+      ],
+      [
+        "66c71fcc5e63",
+        "generalizes"
+      ],
+      [
+        "8058be48d31c",
+        "generalizes"
+      ],
+      [
+        "1f4932f73187",
+        "related"
+      ],
+      [
+        "core_negation_affirm",
+        "related"
+      ],
+      [
+        "core_context_filter",
+        "related"
+      ],
+      [
+        "core_fact_opinion",
+        "related"
+      ],
+      [
+        "91bdda04ec76",
+        "generalizes"
+      ],
+      [
+        "core_exception",
+        "related"
       ]
     ],
     "source": "core_seed",
     "confidence": 0.7,
     "times_applied": 0,
     "times_correct": 0,
-    "times_failed": 0
+    "times_failed": 0,
+    "members": [],
+    "lifecycle": "stable",
+    "epistemic": "observed",
+    "seed_scores": {
+      "trust": 0.5,
+      "risk": 0.3,
+      "value": 0.5,
+      "goal": 0.5,
+      "identity": 0.3
+    }
   },
   "core_context_filter": {
     "id": "core_context_filter",
@@ -966,13 +2224,39 @@
       [
         "91bdda04ec76",
         "related"
+      ],
+      [
+        "91bdda04ec76",
+        "related"
+      ],
+      [
+        "91bdda04ec76",
+        "related"
+      ],
+      [
+        "91bdda04ec76",
+        "related"
+      ],
+      [
+        "core_quantity",
+        "related"
       ]
     ],
     "source": "core_seed",
     "confidence": 0.65,
     "times_applied": 0,
     "times_correct": 0,
-    "times_failed": 0
+    "times_failed": 0,
+    "members": [],
+    "lifecycle": "stable",
+    "epistemic": "observed",
+    "seed_scores": {
+      "trust": 0.5,
+      "risk": 0.3,
+      "value": 0.5,
+      "goal": 0.5,
+      "identity": 0.3
+    }
   },
   "core_word_sense": {
     "id": "core_word_sense",
@@ -1006,7 +2290,17 @@
     "confidence": 0.7,
     "times_applied": 0,
     "times_correct": 0,
-    "times_failed": 0
+    "times_failed": 0,
+    "members": [],
+    "lifecycle": "stable",
+    "epistemic": "observed",
+    "seed_scores": {
+      "trust": 0.5,
+      "risk": 0.3,
+      "value": 0.5,
+      "goal": 0.5,
+      "identity": 0.3
+    }
   },
   "core_kembalian": {
     "id": "core_kembalian",
@@ -1068,13 +2362,51 @@
       [
         "core_quantity",
         "specializes"
+      ],
+      [
+        "91bdda04ec76",
+        "specializes"
+      ],
+      [
+        "061971c384fc",
+        "specializes"
+      ],
+      [
+        "core_quantity",
+        "specializes"
+      ],
+      [
+        "91bdda04ec76",
+        "specializes"
+      ],
+      [
+        "core_quantity",
+        "specializes"
+      ],
+      [
+        "91bdda04ec76",
+        "specializes"
+      ],
+      [
+        "core_quantity",
+        "specializes"
       ]
     ],
     "source": "core_seed",
     "confidence": 0.75,
     "times_applied": 0,
     "times_correct": 0,
-    "times_failed": 0
+    "times_failed": 0,
+    "members": [],
+    "lifecycle": "stable",
+    "epistemic": "observed",
+    "seed_scores": {
+      "trust": 0.5,
+      "risk": 0.3,
+      "value": 0.5,
+      "goal": 0.5,
+      "identity": 0.3
+    }
   },
   "core_double_negation": {
     "id": "core_double_negation",
@@ -1157,13 +2489,59 @@
       [
         "core_exception",
         "specializes"
+      ],
+      [
+        "core_exception",
+        "related"
+      ],
+      [
+        "core_exception",
+        "specializes"
+      ],
+      [
+        "core_negation_affirm",
+        "related"
+      ],
+      [
+        "core_exception",
+        "related"
+      ],
+      [
+        "core_exception",
+        "specializes"
+      ],
+      [
+        "core_negation_affirm",
+        "related"
+      ],
+      [
+        "core_exception",
+        "related"
+      ],
+      [
+        "core_exception",
+        "specializes"
+      ],
+      [
+        "core_negation_affirm",
+        "related"
       ]
     ],
     "source": "core_seed",
     "confidence": 0.7,
     "times_applied": 0,
     "times_correct": 0,
-    "times_failed": 0
+    "times_failed": 0,
+    "members": [],
+    "lifecycle": "stable",
+    "epistemic": "observed",
+    "seed_scores": {
+      "trust": 0.5,
+      "risk": 0.3,
+      "value": 0.5,
+      "goal": 0.5,
+      "identity": 0.3
+    }
   },
   "core_word_sense_kepala": {
     "id": "core_word_sense_kepala",
@@ -1204,7 +2582,17 @@
     "confidence": 0.75,
     "times_applied": 0,
     "times_correct": 0,
-    "times_failed": 0
+    "times_failed": 0,
+    "members": [],
+    "lifecycle": "stable",
+    "epistemic": "observed",
+    "seed_scores": {
+      "trust": 0.5,
+      "risk": 0.3,
+      "value": 0.5,
+      "goal": 0.5,
+      "identity": 0.3
+    }
   },
   "core_quantity_berapa": {
     "id": "core_quantity_berapa",
@@ -1278,13 +2666,63 @@
       [
         "core_quantity",
         "specializes"
+      ],
+      [
+        "91bdda04ec76",
+        "specializes"
+      ],
+      [
+        "061971c384fc",
+        "specializes"
+      ],
+      [
+        "core_quantity",
+        "related"
+      ],
+      [
+        "core_quantity",
+        "specializes"
+      ],
+      [
+        "91bdda04ec76",
+        "specializes"
+      ],
+      [
+        "core_quantity",
+        "related"
+      ],
+      [
+        "core_quantity",
+        "specializes"
+      ],
+      [
+        "91bdda04ec76",
+        "specializes"
+      ],
+      [
+        "core_quantity",
+        "related"
+      ],
+      [
+        "core_quantity",
+        "specializes"
       ]
     ],
     "source": "core_seed",
     "confidence": 0.75,
     "times_applied": 0,
     "times_correct": 0,
-    "times_failed": 0
+    "times_failed": 0,
+    "members": [],
+    "lifecycle": "stable",
+    "epistemic": "observed",
+    "seed_scores": {
+      "trust": 0.5,
+      "risk": 0.3,
+      "value": 0.5,
+      "goal": 0.5,
+      "identity": 0.3
+    }
   },
   "c1e8f75d9ecf": {
     "id": "c1e8f75d9ecf",
@@ -1350,7 +2788,27 @@
       "person",
       "miskin",
       "rajin",
-      "andi"
+      "andi",
+      "sering",
+      "bermain",
+      "mengerjakan",
+      "menunda",
+      "larut",
+      "tepat",
+      "kebiasaan",
+      "game",
+      "fajar",
+      "jadwal",
+      "hingga",
+      "perbedaan",
+      "membuat",
+      "tetap",
+      "dicemooh",
+      "saja",
+      "amir",
+      "siapa",
+      "sifat",
+      "waktu"
     ],
     "condition_embedding": null,
     "edges": [
@@ -1465,13 +2923,207 @@
       [
         "core_exception",
         "related"
+      ],
+      [
+        "core_exception",
+        "related"
+      ],
+      [
+        "core_contrast",
+        "related"
+      ],
+      [
+        "core_negation_affirm",
+        "related"
+      ],
+      [
+        "core_quantity",
+        "related"
+      ],
+      [
+        "000da139e786",
+        "generalizes"
+      ],
+      [
+        "91bdda04ec76",
+        "related"
+      ],
+      [
+        "e7111963823d",
+        "related"
+      ],
+      [
+        "7ca08ac2254a",
+        "related"
+      ],
+      [
+        "7ca08ac2254a",
+        "generalizes"
+      ],
+      [
+        "92d53e3fa597",
+        "generalizes"
+      ],
+      [
+        "c479c006061f",
+        "generalizes"
+      ],
+      [
+        "core_comparison",
+        "related"
+      ],
+      [
+        "1f4932f73187",
+        "generalizes"
+      ],
+      [
+        "3ab49c9bcaae",
+        "generalizes"
+      ],
+      [
+        "225109ba2b8c",
+        "generalizes"
+      ],
+      [
+        "core_exception",
+        "related"
+      ],
+      [
+        "core_contrast",
+        "related"
+      ],
+      [
+        "core_negation_affirm",
+        "related"
+      ],
+      [
+        "core_comparison",
+        "related"
+      ],
+      [
+        "core_quantity",
+        "related"
+      ],
+      [
+        "000da139e786",
+        "generalizes"
+      ],
+      [
+        "91bdda04ec76",
+        "related"
+      ],
+      [
+        "e7111963823d",
+        "related"
+      ],
+      [
+        "7ca08ac2254a",
+        "related"
+      ],
+      [
+        "7ca08ac2254a",
+        "generalizes"
+      ],
+      [
+        "92d53e3fa597",
+        "generalizes"
+      ],
+      [
+        "c479c006061f",
+        "generalizes"
+      ],
+      [
+        "1f4932f73187",
+        "generalizes"
+      ],
+      [
+        "3ab49c9bcaae",
+        "generalizes"
+      ],
+      [
+        "225109ba2b8c",
+        "generalizes"
+      ],
+      [
+        "92d53e3fa597",
+        "specializes"
+      ],
+      [
+        "core_exception",
+        "related"
+      ],
+      [
+        "core_contrast",
+        "related"
+      ],
+      [
+        "core_negation_affirm",
+        "related"
+      ],
+      [
+        "core_comparison",
+        "related"
+      ],
+      [
+        "core_quantity",
+        "related"
+      ],
+      [
+        "000da139e786",
+        "generalizes"
+      ],
+      [
+        "91bdda04ec76",
+        "related"
+      ],
+      [
+        "e7111963823d",
+        "related"
+      ],
+      [
+        "7ca08ac2254a",
+        "related"
+      ],
+      [
+        "7ca08ac2254a",
+        "generalizes"
+      ],
+      [
+        "92d53e3fa597",
+        "specializes"
+      ],
+      [
+        "c479c006061f",
+        "generalizes"
+      ],
+      [
+        "1f4932f73187",
+        "generalizes"
+      ],
+      [
+        "3ab49c9bcaae",
+        "generalizes"
+      ],
+      [
+        "225109ba2b8c",
+        "generalizes"
       ]
     ],
     "source": "self_discovered_from_observation",
     "confidence": 0.6,
     "times_applied": 0,
     "times_correct": 0,
-    "times_failed": 0
+    "times_failed": 0,
+    "members": [],
+    "lifecycle": "stable",
+    "epistemic": "observed",
+    "seed_scores": {
+      "trust": 0.5,
+      "risk": 0.3,
+      "value": 0.5,
+      "goal": 0.5,
+      "identity": 0.3
+    }
   },
   "000da139e786": {
     "id": "000da139e786",
@@ -1561,13 +3213,107 @@
       [
         "c479c006061f",
         "generalizes"
+      ],
+      [
+        "c1e8f75d9ecf",
+        "specializes"
+      ],
+      [
+        "7ca08ac2254a",
+        "specializes"
+      ],
+      [
+        "92d53e3fa597",
+        "generalizes"
+      ],
+      [
+        "c479c006061f",
+        "generalizes"
+      ],
+      [
+        "1f4932f73187",
+        "specializes"
+      ],
+      [
+        "3ab49c9bcaae",
+        "generalizes"
+      ],
+      [
+        "92d53e3fa597",
+        "specializes"
+      ],
+      [
+        "c1e8f75d9ecf",
+        "specializes"
+      ],
+      [
+        "7ca08ac2254a",
+        "specializes"
+      ],
+      [
+        "92d53e3fa597",
+        "specializes"
+      ],
+      [
+        "c479c006061f",
+        "generalizes"
+      ],
+      [
+        "1f4932f73187",
+        "specializes"
+      ],
+      [
+        "3ab49c9bcaae",
+        "generalizes"
+      ],
+      [
+        "91bdda04ec76",
+        "related"
+      ],
+      [
+        "c1e8f75d9ecf",
+        "specializes"
+      ],
+      [
+        "91bdda04ec76",
+        "related"
+      ],
+      [
+        "7ca08ac2254a",
+        "specializes"
+      ],
+      [
+        "92d53e3fa597",
+        "specializes"
+      ],
+      [
+        "c479c006061f",
+        "generalizes"
+      ],
+      [
+        "1f4932f73187",
+        "specializes"
+      ],
+      [
+        "3ab49c9bcaae",
+        "generalizes"
       ]
     ],
     "source": "self_discovered_from_observation",
     "confidence": 0.6,
     "times_applied": 0,
     "times_correct": 0,
-    "times_failed": 0
+    "times_failed": 0,
+    "members": [],
+    "lifecycle": "stable",
+    "epistemic": "observed",
+    "seed_scores": {
+      "trust": 0.5,
+      "risk": 0.3,
+      "value": 0.5,
+      "goal": 0.5,
+      "identity": 0.3
+    }
   },
   "91bdda04ec76": {
     "id": "91bdda04ec76",
@@ -1635,7 +3381,45 @@
       "kucing",
       "maka",
       "menurut",
-      "kota"
+      "kota",
+      "mempunyai",
+      "budaya",
+      "berbeda",
+      "pakaian",
+      "tersebut",
+      "adat",
+      "menjadikan",
+      "daerah",
+      "kaya",
+      "informasi",
+      "gagasan",
+      "sosial",
+      "media",
+      "internet",
+      "pesat",
+      "dunia",
+      "pengetahuan",
+      "seluruh",
+      "memudahkan",
+      "akses",
+      "semakin",
+      "limbah",
+      "dilakukan",
+      "besar",
+      "mencemari",
+      "parah",
+      "domestik",
+      "upaya",
+      "pencemaran",
+      "jakarta",
+      "bahasa",
+      "keragaman",
+      "memiliki",
+      "orang",
+      "berkembang",
+      "utama",
+      "teknologi",
+      "menghubungkan"
     ],
     "condition_embedding": null,
     "edges": [
@@ -1742,13 +3526,367 @@
       [
         "core_exception",
         "related"
+      ],
+      [
+        "c1e8f75d9ecf",
+        "related"
+      ],
+      [
+        "core_exception",
+        "related"
+      ],
+      [
+        "core_contrast",
+        "related"
+      ],
+      [
+        "core_negation_affirm",
+        "related"
+      ],
+      [
+        "core_quantity",
+        "generalizes"
+      ],
+      [
+        "core_context_filter",
+        "related"
+      ],
+      [
+        "core_kembalian",
+        "generalizes"
+      ],
+      [
+        "core_quantity_berapa",
+        "generalizes"
+      ],
+      [
+        "061971c384fc",
+        "generalizes"
+      ],
+      [
+        "U_qty_test",
+        "generalizes"
+      ],
+      [
+        "U_kembalian_test",
+        "generalizes"
+      ],
+      [
+        "U_quantity_emb",
+        "generalizes"
+      ],
+      [
+        "da4161711638",
+        "generalizes"
+      ],
+      [
+        "c4ec0a76f232",
+        "generalizes"
+      ],
+      [
+        "7ada7105bbb1",
+        "generalizes"
+      ],
+      [
+        "8815a96bed63",
+        "generalizes"
+      ],
+      [
+        "1278f9c8cd78",
+        "generalizes"
+      ],
+      [
+        "20d166e1fa18",
+        "generalizes"
+      ],
+      [
+        "22b8a3ae02d4",
+        "generalizes"
+      ],
+      [
+        "c1ce247a5070",
+        "generalizes"
+      ],
+      [
+        "66c71fcc5e63",
+        "generalizes"
+      ],
+      [
+        "8058be48d31c",
+        "generalizes"
+      ],
+      [
+        "7ca08ac2254a",
+        "related"
+      ],
+      [
+        "core_comparison",
+        "related"
+      ],
+      [
+        "1f4932f73187",
+        "related"
+      ],
+      [
+        "92d53e3fa597",
+        "related"
+      ],
+      [
+        "core_quantity",
+        "related"
+      ],
+      [
+        "c1e8f75d9ecf",
+        "related"
+      ],
+      [
+        "core_comparison",
+        "related"
+      ],
+      [
+        "core_exception",
+        "related"
+      ],
+      [
+        "core_contrast",
+        "related"
+      ],
+      [
+        "core_negation_affirm",
+        "related"
+      ],
+      [
+        "core_quantity",
+        "related"
+      ],
+      [
+        "core_quantity",
+        "generalizes"
+      ],
+      [
+        "core_context_filter",
+        "related"
+      ],
+      [
+        "core_kembalian",
+        "generalizes"
+      ],
+      [
+        "core_quantity_berapa",
+        "generalizes"
+      ],
+      [
+        "061971c384fc",
+        "generalizes"
+      ],
+      [
+        "7ca08ac2254a",
+        "related"
+      ],
+      [
+        "92d53e3fa597",
+        "related"
+      ],
+      [
+        "U_qty_test",
+        "generalizes"
+      ],
+      [
+        "U_kembalian_test",
+        "generalizes"
+      ],
+      [
+        "U_quantity_emb",
+        "generalizes"
+      ],
+      [
+        "da4161711638",
+        "generalizes"
+      ],
+      [
+        "c4ec0a76f232",
+        "generalizes"
+      ],
+      [
+        "7ada7105bbb1",
+        "generalizes"
+      ],
+      [
+        "8815a96bed63",
+        "generalizes"
+      ],
+      [
+        "1278f9c8cd78",
+        "generalizes"
+      ],
+      [
+        "20d166e1fa18",
+        "generalizes"
+      ],
+      [
+        "22b8a3ae02d4",
+        "generalizes"
+      ],
+      [
+        "c1ce247a5070",
+        "generalizes"
+      ],
+      [
+        "66c71fcc5e63",
+        "generalizes"
+      ],
+      [
+        "8058be48d31c",
+        "generalizes"
+      ],
+      [
+        "1f4932f73187",
+        "related"
+      ],
+      [
+        "000da139e786",
+        "related"
+      ],
+      [
+        "core_fact_opinion",
+        "related"
+      ],
+      [
+        "c1e8f75d9ecf",
+        "related"
+      ],
+      [
+        "core_comparison",
+        "related"
+      ],
+      [
+        "000da139e786",
+        "related"
+      ],
+      [
+        "core_exception",
+        "related"
+      ],
+      [
+        "core_contrast",
+        "related"
+      ],
+      [
+        "core_negation_affirm",
+        "related"
+      ],
+      [
+        "core_fact_opinion",
+        "related"
+      ],
+      [
+        "core_quantity",
+        "related"
+      ],
+      [
+        "core_quantity",
+        "generalizes"
+      ],
+      [
+        "core_context_filter",
+        "related"
+      ],
+      [
+        "core_kembalian",
+        "generalizes"
+      ],
+      [
+        "core_quantity_berapa",
+        "generalizes"
+      ],
+      [
+        "061971c384fc",
+        "generalizes"
+      ],
+      [
+        "7ca08ac2254a",
+        "related"
+      ],
+      [
+        "92d53e3fa597",
+        "related"
+      ],
+      [
+        "U_qty_test",
+        "generalizes"
+      ],
+      [
+        "U_kembalian_test",
+        "generalizes"
+      ],
+      [
+        "U_quantity_emb",
+        "generalizes"
+      ],
+      [
+        "da4161711638",
+        "generalizes"
+      ],
+      [
+        "c4ec0a76f232",
+        "generalizes"
+      ],
+      [
+        "7ada7105bbb1",
+        "generalizes"
+      ],
+      [
+        "8815a96bed63",
+        "generalizes"
+      ],
+      [
+        "1278f9c8cd78",
+        "generalizes"
+      ],
+      [
+        "20d166e1fa18",
+        "generalizes"
+      ],
+      [
+        "22b8a3ae02d4",
+        "generalizes"
+      ],
+      [
+        "c1ce247a5070",
+        "generalizes"
+      ],
+      [
+        "66c71fcc5e63",
+        "generalizes"
+      ],
+      [
+        "8058be48d31c",
+        "generalizes"
+      ],
+      [
+        "1f4932f73187",
+        "related"
+      ],
+      [
+        "core_quantity",
+        "specializes"
       ]
     ],
     "source": "self_discovered_from_observation",
     "confidence": 0.6,
     "times_applied": 0,
     "times_correct": 0,
-    "times_failed": 0
+    "times_failed": 0,
+    "members": [],
+    "lifecycle": "stable",
+    "epistemic": "observed",
+    "seed_scores": {
+      "trust": 0.5,
+      "risk": 0.3,
+      "value": 0.5,
+      "goal": 0.5,
+      "identity": 0.3
+    }
   },
   "e7111963823d": {
     "id": "e7111963823d",
@@ -1854,13 +3992,95 @@
       [
         "core_exception",
         "related"
+      ],
+      [
+        "c1e8f75d9ecf",
+        "related"
+      ],
+      [
+        "core_comparison",
+        "related"
+      ],
+      [
+        "core_comparison",
+        "specializes"
+      ],
+      [
+        "core_exception",
+        "related"
+      ],
+      [
+        "core_negation_affirm",
+        "related"
+      ],
+      [
+        "core_contrast",
+        "related"
+      ],
+      [
+        "c1e8f75d9ecf",
+        "related"
+      ],
+      [
+        "core_comparison",
+        "related"
+      ],
+      [
+        "core_comparison",
+        "specializes"
+      ],
+      [
+        "core_exception",
+        "related"
+      ],
+      [
+        "core_negation_affirm",
+        "related"
+      ],
+      [
+        "core_contrast",
+        "related"
+      ],
+      [
+        "c1e8f75d9ecf",
+        "related"
+      ],
+      [
+        "core_comparison",
+        "related"
+      ],
+      [
+        "core_comparison",
+        "specializes"
+      ],
+      [
+        "core_exception",
+        "related"
+      ],
+      [
+        "core_negation_affirm",
+        "related"
+      ],
+      [
+        "core_contrast",
+        "related"
       ]
     ],
     "source": "self_discovered_from_observation",
     "confidence": 0.6,
     "times_applied": 0,
     "times_correct": 0,
-    "times_failed": 0
+    "times_failed": 0,
+    "members": [],
+    "lifecycle": "stable",
+    "epistemic": "observed",
+    "seed_scores": {
+      "trust": 0.5,
+      "risk": 0.3,
+      "value": 0.5,
+      "goal": 0.5,
+      "identity": 0.3
+    }
   },
   "061971c384fc": {
     "id": "061971c384fc",
@@ -1948,13 +4168,119 @@
       [
         "core_quantity",
         "specializes"
+      ],
+      [
+        "91bdda04ec76",
+        "specializes"
+      ],
+      [
+        "core_quantity",
+        "specializes"
+      ],
+      [
+        "core_kembalian",
+        "generalizes"
+      ],
+      [
+        "core_quantity_berapa",
+        "generalizes"
+      ],
+      [
+        "U_qty_test",
+        "generalizes"
+      ],
+      [
+        "U_kembalian_test",
+        "generalizes"
+      ],
+      [
+        "U_quantity_emb",
+        "generalizes"
+      ],
+      [
+        "da4161711638",
+        "generalizes"
+      ],
+      [
+        "c4ec0a76f232",
+        "generalizes"
+      ],
+      [
+        "7ada7105bbb1",
+        "generalizes"
+      ],
+      [
+        "8815a96bed63",
+        "generalizes"
+      ],
+      [
+        "1278f9c8cd78",
+        "generalizes"
+      ],
+      [
+        "20d166e1fa18",
+        "generalizes"
+      ],
+      [
+        "22b8a3ae02d4",
+        "generalizes"
+      ],
+      [
+        "c1ce247a5070",
+        "generalizes"
+      ],
+      [
+        "66c71fcc5e63",
+        "generalizes"
+      ],
+      [
+        "8058be48d31c",
+        "generalizes"
+      ],
+      [
+        "core_quantity",
+        "related"
+      ],
+      [
+        "91bdda04ec76",
+        "specializes"
+      ],
+      [
+        "core_quantity",
+        "related"
+      ],
+      [
+        "core_quantity",
+        "specializes"
+      ],
+      [
+        "91bdda04ec76",
+        "specializes"
+      ],
+      [
+        "core_quantity",
+        "related"
+      ],
+      [
+        "core_quantity",
+        "specializes"
       ]
     ],
     "source": "self_discovered_from_observation",
     "confidence": 0.6,
     "times_applied": 0,
     "times_correct": 0,
-    "times_failed": 0
+    "times_failed": 0,
+    "members": [],
+    "lifecycle": "stable",
+    "epistemic": "observed",
+    "seed_scores": {
+      "trust": 0.5,
+      "risk": 0.3,
+      "value": 0.5,
+      "goal": 0.5,
+      "identity": 0.3
+    }
   },
   "7ca08ac2254a": {
     "id": "7ca08ac2254a",
@@ -2109,13 +4435,175 @@
       [
         "core_exception",
         "related"
+      ],
+      [
+        "c1e8f75d9ecf",
+        "related"
+      ],
+      [
+        "c1e8f75d9ecf",
+        "specializes"
+      ],
+      [
+        "core_comparison",
+        "related"
+      ],
+      [
+        "000da139e786",
+        "generalizes"
+      ],
+      [
+        "91bdda04ec76",
+        "related"
+      ],
+      [
+        "core_exception",
+        "related"
+      ],
+      [
+        "core_negation_affirm",
+        "related"
+      ],
+      [
+        "core_contrast",
+        "related"
+      ],
+      [
+        "92d53e3fa597",
+        "generalizes"
+      ],
+      [
+        "3ab49c9bcaae",
+        "generalizes"
+      ],
+      [
+        "92d53e3fa597",
+        "specializes"
+      ],
+      [
+        "c479c006061f",
+        "generalizes"
+      ],
+      [
+        "225109ba2b8c",
+        "generalizes"
+      ],
+      [
+        "c1e8f75d9ecf",
+        "related"
+      ],
+      [
+        "c1e8f75d9ecf",
+        "specializes"
+      ],
+      [
+        "core_comparison",
+        "related"
+      ],
+      [
+        "000da139e786",
+        "generalizes"
+      ],
+      [
+        "91bdda04ec76",
+        "related"
+      ],
+      [
+        "core_exception",
+        "related"
+      ],
+      [
+        "core_negation_affirm",
+        "related"
+      ],
+      [
+        "core_contrast",
+        "related"
+      ],
+      [
+        "1f4932f73187",
+        "specializes"
+      ],
+      [
+        "92d53e3fa597",
+        "specializes"
+      ],
+      [
+        "c479c006061f",
+        "generalizes"
+      ],
+      [
+        "225109ba2b8c",
+        "generalizes"
+      ],
+      [
+        "c1e8f75d9ecf",
+        "related"
+      ],
+      [
+        "c1e8f75d9ecf",
+        "specializes"
+      ],
+      [
+        "core_comparison",
+        "related"
+      ],
+      [
+        "000da139e786",
+        "generalizes"
+      ],
+      [
+        "91bdda04ec76",
+        "related"
+      ],
+      [
+        "core_quantity",
+        "related"
+      ],
+      [
+        "core_exception",
+        "related"
+      ],
+      [
+        "core_negation_affirm",
+        "related"
+      ],
+      [
+        "core_contrast",
+        "related"
+      ],
+      [
+        "1f4932f73187",
+        "specializes"
+      ],
+      [
+        "92d53e3fa597",
+        "specializes"
+      ],
+      [
+        "c479c006061f",
+        "generalizes"
+      ],
+      [
+        "225109ba2b8c",
+        "generalizes"
       ]
     ],
     "source": "self_discovered_from_observation",
     "confidence": 0.6,
     "times_applied": 0,
     "times_correct": 0,
-    "times_failed": 0
+    "times_failed": 0,
+    "members": [],
+    "lifecycle": "stable",
+    "epistemic": "observed",
+    "seed_scores": {
+      "trust": 0.5,
+      "risk": 0.3,
+      "value": 0.5,
+      "goal": 0.5,
+      "identity": 0.3
+    }
   },
   "92d53e3fa597": {
     "id": "92d53e3fa597",
@@ -2139,7 +4627,82 @@
     "conditions": [
       "hujan",
       "mengapa",
-      "turun"
+      "turun",
+      "karena",
+      "setelah",
+      "erosi",
+      "tidak",
+      "pohon",
+      "menahan",
+      "penebangan",
+      "tertutup",
+      "tanah",
+      "vegetasi",
+      "akar",
+      "terjadi",
+      "lagi",
+      "menghancurkan",
+      "penghubung",
+      "bisa",
+      "barang",
+      "harga",
+      "jembatan",
+      "pokok",
+      "gempa",
+      "lewat",
+      "kota",
+      "naik",
+      "kebutuhan",
+      "truk",
+      "perusahaan",
+      "cepat",
+      "sakit",
+      "menyebar",
+      "sementara",
+      "dihentikan",
+      "sehingga",
+      "menghentikan",
+      "karyawan",
+      "produksi",
+      "virus",
+      "banyak",
+      "menutupi",
+      "menghasilkan",
+      "asap",
+      "bandara",
+      "hutan",
+      "mendarat",
+      "tertunda",
+      "selama",
+      "pesawat",
+      "kebakaran",
+      "penumpang",
+      "beras",
+      "layu",
+      "tanaman",
+      "petani",
+      "desa",
+      "melanda",
+      "padi",
+      "kekeringan",
+      "pasar",
+      "drastis",
+      "meletus",
+      "pertanian",
+      "membanjiri",
+      "rusak",
+      "lava",
+      "gunung",
+      "vulkanik",
+      "lahan",
+      "lereng",
+      "mengeluarkan",
+      "mengikis",
+      "pengangkut",
+      "bumi",
+      "berjam-jam",
+      "tebal",
+      "panen"
     ],
     "condition_embedding": null,
     "edges": [
@@ -2178,13 +4741,171 @@
       [
         "7ca08ac2254a",
         "specializes"
+      ],
+      [
+        "c1e8f75d9ecf",
+        "specializes"
+      ],
+      [
+        "000da139e786",
+        "specializes"
+      ],
+      [
+        "1f4932f73187",
+        "specializes"
+      ],
+      [
+        "7ca08ac2254a",
+        "specializes"
+      ],
+      [
+        "3ab49c9bcaae",
+        "specializes"
+      ],
+      [
+        "000da139e786",
+        "generalizes"
+      ],
+      [
+        "7ca08ac2254a",
+        "generalizes"
+      ],
+      [
+        "c479c006061f",
+        "generalizes"
+      ],
+      [
+        "1f4932f73187",
+        "generalizes"
+      ],
+      [
+        "3ab49c9bcaae",
+        "generalizes"
+      ],
+      [
+        "core_comparison",
+        "related"
+      ],
+      [
+        "91bdda04ec76",
+        "related"
+      ],
+      [
+        "3ab49c9bcaae",
+        "related"
+      ],
+      [
+        "225109ba2b8c",
+        "generalizes"
+      ],
+      [
+        "c1e8f75d9ecf",
+        "specializes"
+      ],
+      [
+        "core_comparison",
+        "related"
+      ],
+      [
+        "000da139e786",
+        "generalizes"
+      ],
+      [
+        "91bdda04ec76",
+        "related"
+      ],
+      [
+        "core_quantity",
+        "related"
+      ],
+      [
+        "1f4932f73187",
+        "generalizes"
+      ],
+      [
+        "7ca08ac2254a",
+        "generalizes"
+      ],
+      [
+        "c479c006061f",
+        "generalizes"
+      ],
+      [
+        "3ab49c9bcaae",
+        "related"
+      ],
+      [
+        "3ab49c9bcaae",
+        "generalizes"
+      ],
+      [
+        "225109ba2b8c",
+        "generalizes"
+      ],
+      [
+        "c1e8f75d9ecf",
+        "generalizes"
+      ],
+      [
+        "c1e8f75d9ecf",
+        "generalizes"
+      ],
+      [
+        "core_comparison",
+        "related"
+      ],
+      [
+        "000da139e786",
+        "generalizes"
+      ],
+      [
+        "91bdda04ec76",
+        "related"
+      ],
+      [
+        "core_quantity",
+        "related"
+      ],
+      [
+        "1f4932f73187",
+        "generalizes"
+      ],
+      [
+        "7ca08ac2254a",
+        "generalizes"
+      ],
+      [
+        "c479c006061f",
+        "generalizes"
+      ],
+      [
+        "3ab49c9bcaae",
+        "related"
+      ],
+      [
+        "3ab49c9bcaae",
+        "generalizes"
+      ],
+      [
+        "225109ba2b8c",
+        "generalizes"
       ]
     ],
     "source": "self_discovered_from_observation",
     "confidence": 0.6,
     "times_applied": 0,
     "times_correct": 0,
-    "times_failed": 0
+    "times_failed": 0,
+    "members": [],
+    "lifecycle": "stable",
+    "epistemic": "observed",
+    "seed_scores": {
+      "trust": 0.5,
+      "risk": 0.3,
+      "value": 0.5,
+      "goal": 0.5,
+      "identity": 0.3
+    }
   },
   "c479c006061f": {
     "id": "c479c006061f",
@@ -2247,13 +4968,107 @@
       [
         "7ca08ac2254a",
         "specializes"
+      ],
+      [
+        "c1e8f75d9ecf",
+        "specializes"
+      ],
+      [
+        "000da139e786",
+        "specializes"
+      ],
+      [
+        "1f4932f73187",
+        "specializes"
+      ],
+      [
+        "3ab49c9bcaae",
+        "specializes"
+      ],
+      [
+        "92d53e3fa597",
+        "specializes"
+      ],
+      [
+        "7ca08ac2254a",
+        "specializes"
+      ],
+      [
+        "225109ba2b8c",
+        "specializes"
+      ],
+      [
+        "c1e8f75d9ecf",
+        "specializes"
+      ],
+      [
+        "000da139e786",
+        "specializes"
+      ],
+      [
+        "1f4932f73187",
+        "specializes"
+      ],
+      [
+        "92d53e3fa597",
+        "specializes"
+      ],
+      [
+        "7ca08ac2254a",
+        "specializes"
+      ],
+      [
+        "3ab49c9bcaae",
+        "specializes"
+      ],
+      [
+        "225109ba2b8c",
+        "specializes"
+      ],
+      [
+        "c1e8f75d9ecf",
+        "specializes"
+      ],
+      [
+        "000da139e786",
+        "specializes"
+      ],
+      [
+        "1f4932f73187",
+        "specializes"
+      ],
+      [
+        "92d53e3fa597",
+        "specializes"
+      ],
+      [
+        "7ca08ac2254a",
+        "specializes"
+      ],
+      [
+        "3ab49c9bcaae",
+        "specializes"
+      ],
+      [
+        "225109ba2b8c",
+        "specializes"
       ]
     ],
     "source": "self_discovered_from_observation",
     "confidence": 0.6,
     "times_applied": 0,
     "times_correct": 0,
-    "times_failed": 0
+    "times_failed": 0,
+    "members": [],
+    "lifecycle": "stable",
+    "epistemic": "observed",
+    "seed_scores": {
+      "trust": 0.5,
+      "risk": 0.3,
+      "value": 0.5,
+      "goal": 0.5,
+      "identity": 0.3
+    }
   },
   "U_qty_test": {
     "id": "U_qty_test",
@@ -2296,13 +5111,63 @@
       [
         "core_quantity",
         "specializes"
+      ],
+      [
+        "91bdda04ec76",
+        "specializes"
+      ],
+      [
+        "061971c384fc",
+        "specializes"
+      ],
+      [
+        "core_quantity",
+        "related"
+      ],
+      [
+        "core_quantity",
+        "specializes"
+      ],
+      [
+        "91bdda04ec76",
+        "specializes"
+      ],
+      [
+        "core_quantity",
+        "related"
+      ],
+      [
+        "core_quantity",
+        "specializes"
+      ],
+      [
+        "91bdda04ec76",
+        "specializes"
+      ],
+      [
+        "core_quantity",
+        "related"
+      ],
+      [
+        "core_quantity",
+        "specializes"
       ]
     ],
     "source": "test",
     "confidence": 0.8,
     "times_applied": 0,
     "times_correct": 0,
-    "times_failed": 0
+    "times_failed": 0,
+    "members": [],
+    "lifecycle": "stable",
+    "epistemic": "observed",
+    "seed_scores": {
+      "trust": 0.5,
+      "risk": 0.3,
+      "value": 0.5,
+      "goal": 0.5,
+      "identity": 0.3
+    }
   },
   "U_kembalian_test": {
     "id": "U_kembalian_test",
@@ -2341,13 +5206,51 @@
       [
         "core_quantity",
         "specializes"
+      ],
+      [
+        "91bdda04ec76",
+        "specializes"
+      ],
+      [
+        "061971c384fc",
+        "specializes"
+      ],
+      [
+        "core_quantity",
+        "specializes"
+      ],
+      [
+        "91bdda04ec76",
+        "specializes"
+      ],
+      [
+        "core_quantity",
+        "specializes"
+      ],
+      [
+        "91bdda04ec76",
+        "specializes"
+      ],
+      [
+        "core_quantity",
+        "specializes"
       ]
     ],
     "source": "test",
     "confidence": 0.8,
     "times_applied": 0,
     "times_correct": 0,
-    "times_failed": 0
+    "times_failed": 0,
+    "members": [],
+    "lifecycle": "stable",
+    "epistemic": "observed",
+    "seed_scores": {
+      "trust": 0.5,
+      "risk": 0.3,
+      "value": 0.5,
+      "goal": 0.5,
+      "identity": 0.3
+    }
   },
   "U_compare_test": {
     "id": "U_compare_test",
@@ -2382,13 +5285,47 @@
       [
         "core_comparison",
         "specializes"
+      ],
+      [
+        "core_comparison",
+        "related"
+      ],
+      [
+        "core_comparison",
+        "specializes"
+      ],
+      [
+        "core_comparison",
+        "related"
+      ],
+      [
+        "core_comparison",
+        "specializes"
+      ],
+      [
+        "core_comparison",
+        "related"
+      ],
+      [
+        "core_comparison",
+        "specializes"
       ]
     ],
     "source": "test",
     "confidence": 0.8,
     "times_applied": 0,
     "times_correct": 0,
-    "times_failed": 0
+    "times_failed": 0,
+    "members": [],
+    "lifecycle": "stable",
+    "epistemic": "observed",
+    "seed_scores": {
+      "trust": 0.5,
+      "risk": 0.3,
+      "value": 0.5,
+      "goal": 0.5,
+      "identity": 0.3
+    }
   },
   "U_signal_flip_test": {
     "id": "U_signal_flip_test",
@@ -2440,13 +5377,47 @@
       [
         "core_exception",
         "specializes"
+      ],
+      [
+        "core_exception",
+        "related"
+      ],
+      [
+        "core_exception",
+        "specializes"
+      ],
+      [
+        "core_exception",
+        "related"
+      ],
+      [
+        "core_exception",
+        "specializes"
+      ],
+      [
+        "core_exception",
+        "related"
+      ],
+      [
+        "core_exception",
+        "specializes"
       ]
     ],
     "source": "test",
     "confidence": 0.8,
     "times_applied": 0,
     "times_correct": 0,
-    "times_failed": 0
+    "times_failed": 0,
+    "members": [],
+    "lifecycle": "stable",
+    "epistemic": "observed",
+    "seed_scores": {
+      "trust": 0.5,
+      "risk": 0.3,
+      "value": 0.5,
+      "goal": 0.5,
+      "identity": 0.3
+    }
   },
   "U_contrast_test": {
     "id": "U_contrast_test",
@@ -2487,13 +5458,59 @@
       [
         "core_contrast",
         "specializes"
+      ],
+      [
+        "core_negation_affirm",
+        "related"
+      ],
+      [
+        "core_contrast",
+        "related"
+      ],
+      [
+        "core_contrast",
+        "specializes"
+      ],
+      [
+        "core_negation_affirm",
+        "related"
+      ],
+      [
+        "core_contrast",
+        "related"
+      ],
+      [
+        "core_contrast",
+        "specializes"
+      ],
+      [
+        "core_negation_affirm",
+        "related"
+      ],
+      [
+        "core_contrast",
+        "related"
+      ],
+      [
+        "core_contrast",
+        "specializes"
       ]
     ],
     "source": "test",
     "confidence": 0.8,
     "times_applied": 0,
     "times_correct": 0,
-    "times_failed": 0
+    "times_failed": 0,
+    "members": [],
+    "lifecycle": "stable",
+    "epistemic": "observed",
+    "seed_scores": {
+      "trust": 0.5,
+      "risk": 0.3,
+      "value": 0.5,
+      "goal": 0.5,
+      "identity": 0.3
+    }
   },
   "U_negaff_test": {
     "id": "U_negaff_test",
@@ -2532,13 +5549,47 @@
       [
         "core_negation_affirm",
         "specializes"
+      ],
+      [
+        "core_negation_affirm",
+        "related"
+      ],
+      [
+        "core_negation_affirm",
+        "specializes"
+      ],
+      [
+        "core_negation_affirm",
+        "related"
+      ],
+      [
+        "core_negation_affirm",
+        "specializes"
+      ],
+      [
+        "core_negation_affirm",
+        "related"
+      ],
+      [
+        "core_negation_affirm",
+        "specializes"
       ]
     ],
     "source": "test",
     "confidence": 0.8,
     "times_applied": 0,
     "times_correct": 0,
-    "times_failed": 0
+    "times_failed": 0,
+    "members": [],
+    "lifecycle": "stable",
+    "epistemic": "observed",
+    "seed_scores": {
+      "trust": 0.5,
+      "risk": 0.3,
+      "value": 0.5,
+      "goal": 0.5,
+      "identity": 0.3
+    }
   },
   "U_signal_flip_emb": {
     "id": "U_signal_flip_emb",
@@ -2589,13 +5640,47 @@
       [
         "core_exception",
         "specializes"
+      ],
+      [
+        "core_exception",
+        "related"
+      ],
+      [
+        "core_exception",
+        "specializes"
+      ],
+      [
+        "core_exception",
+        "related"
+      ],
+      [
+        "core_exception",
+        "specializes"
+      ],
+      [
+        "core_exception",
+        "related"
+      ],
+      [
+        "core_exception",
+        "specializes"
       ]
     ],
     "source": "test",
     "confidence": 0.8,
     "times_applied": 0,
     "times_correct": 0,
-    "times_failed": 0
+    "times_failed": 0,
+    "members": [],
+    "lifecycle": "stable",
+    "epistemic": "observed",
+    "seed_scores": {
+      "trust": 0.5,
+      "risk": 0.3,
+      "value": 0.5,
+      "goal": 0.5,
+      "identity": 0.3
+    }
   },
   "U_contrast_emb": {
     "id": "U_contrast_emb",
@@ -2634,13 +5719,59 @@
       [
         "core_contrast",
         "specializes"
+      ],
+      [
+        "core_negation_affirm",
+        "related"
+      ],
+      [
+        "core_contrast",
+        "related"
+      ],
+      [
+        "core_contrast",
+        "specializes"
+      ],
+      [
+        "core_negation_affirm",
+        "related"
+      ],
+      [
+        "core_contrast",
+        "related"
+      ],
+      [
+        "core_contrast",
+        "specializes"
+      ],
+      [
+        "core_negation_affirm",
+        "related"
+      ],
+      [
+        "core_contrast",
+        "related"
+      ],
+      [
+        "core_contrast",
+        "specializes"
       ]
     ],
     "source": "test",
     "confidence": 0.8,
     "times_applied": 0,
     "times_correct": 0,
-    "times_failed": 0
+    "times_failed": 0,
+    "members": [],
+    "lifecycle": "stable",
+    "epistemic": "observed",
+    "seed_scores": {
+      "trust": 0.5,
+      "risk": 0.3,
+      "value": 0.5,
+      "goal": 0.5,
+      "identity": 0.3
+    }
   },
   "U_quantity_emb": {
     "id": "U_quantity_emb",
@@ -2683,13 +5814,63 @@
       [
         "core_quantity",
         "specializes"
+      ],
+      [
+        "91bdda04ec76",
+        "specializes"
+      ],
+      [
+        "061971c384fc",
+        "specializes"
+      ],
+      [
+        "core_quantity",
+        "related"
+      ],
+      [
+        "core_quantity",
+        "specializes"
+      ],
+      [
+        "91bdda04ec76",
+        "specializes"
+      ],
+      [
+        "core_quantity",
+        "related"
+      ],
+      [
+        "core_quantity",
+        "specializes"
+      ],
+      [
+        "91bdda04ec76",
+        "specializes"
+      ],
+      [
+        "core_quantity",
+        "related"
+      ],
+      [
+        "core_quantity",
+        "specializes"
       ]
     ],
     "source": "test",
     "confidence": 0.8,
     "times_applied": 0,
     "times_correct": 0,
-    "times_failed": 0
+    "times_failed": 0,
+    "members": [],
+    "lifecycle": "stable",
+    "epistemic": "observed",
+    "seed_scores": {
+      "trust": 0.5,
+      "risk": 0.3,
+      "value": 0.5,
+      "goal": 0.5,
+      "identity": 0.3
+    }
   },
   "da4161711638": {
     "id": "da4161711638",
@@ -2718,12 +5899,51 @@
       "PERTANYAAN: number × number = ?"
     ],
     "condition_embedding": null,
-    "edges": [],
+    "edges": [
+      [
+        "91bdda04ec76",
+        "specializes"
+      ],
+      [
+        "061971c384fc",
+        "specializes"
+      ],
+      [
+        "core_quantity",
+        "specializes"
+      ],
+      [
+        "91bdda04ec76",
+        "specializes"
+      ],
+      [
+        "core_quantity",
+        "specializes"
+      ],
+      [
+        "91bdda04ec76",
+        "specializes"
+      ],
+      [
+        "core_quantity",
+        "specializes"
+      ]
+    ],
     "source": "composed_from_observation",
     "confidence": 0.55,
     "times_applied": 0,
     "times_correct": 0,
-    "times_failed": 0
+    "times_failed": 0,
+    "members": [],
+    "lifecycle": "stable",
+    "epistemic": "observed",
+    "seed_scores": {
+      "trust": 0.5,
+      "risk": 0.3,
+      "value": 0.5,
+      "goal": 0.5,
+      "identity": 0.3
+    }
   },
   "c4ec0a76f232": {
     "id": "c4ec0a76f232",
@@ -2753,12 +5973,51 @@
       "JAWABAN"
     ],
     "condition_embedding": null,
-    "edges": [],
+    "edges": [
+      [
+        "91bdda04ec76",
+        "specializes"
+      ],
+      [
+        "061971c384fc",
+        "specializes"
+      ],
+      [
+        "core_quantity",
+        "specializes"
+      ],
+      [
+        "91bdda04ec76",
+        "specializes"
+      ],
+      [
+        "core_quantity",
+        "specializes"
+      ],
+      [
+        "91bdda04ec76",
+        "specializes"
+      ],
+      [
+        "core_quantity",
+        "specializes"
+      ]
+    ],
     "source": "composed_from_observation",
     "confidence": 0.55,
     "times_applied": 0,
     "times_correct": 0,
-    "times_failed": 0
+    "times_failed": 0,
+    "members": [],
+    "lifecycle": "stable",
+    "epistemic": "observed",
+    "seed_scores": {
+      "trust": 0.5,
+      "risk": 0.3,
+      "value": 0.5,
+      "goal": 0.5,
+      "identity": 0.3
+    }
   },
   "7ada7105bbb1": {
     "id": "7ada7105bbb1",
@@ -2789,12 +6048,51 @@
       "NOVELTY"
     ],
     "condition_embedding": null,
-    "edges": [],
+    "edges": [
+      [
+        "91bdda04ec76",
+        "specializes"
+      ],
+      [
+        "061971c384fc",
+        "specializes"
+      ],
+      [
+        "core_quantity",
+        "specializes"
+      ],
+      [
+        "91bdda04ec76",
+        "specializes"
+      ],
+      [
+        "core_quantity",
+        "specializes"
+      ],
+      [
+        "91bdda04ec76",
+        "specializes"
+      ],
+      [
+        "core_quantity",
+        "specializes"
+      ]
+    ],
     "source": "composed_from_observation",
     "confidence": 0.55,
     "times_applied": 0,
     "times_correct": 0,
-    "times_failed": 0
+    "times_failed": 0,
+    "members": [],
+    "lifecycle": "stable",
+    "epistemic": "observed",
+    "seed_scores": {
+      "trust": 0.5,
+      "risk": 0.3,
+      "value": 0.5,
+      "goal": 0.5,
+      "identity": 0.3
+    }
   },
   "8815a96bed63": {
     "id": "8815a96bed63",
@@ -2826,12 +6124,51 @@
       "TIPE:"
     ],
     "condition_embedding": null,
-    "edges": [],
+    "edges": [
+      [
+        "91bdda04ec76",
+        "specializes"
+      ],
+      [
+        "061971c384fc",
+        "specializes"
+      ],
+      [
+        "core_quantity",
+        "specializes"
+      ],
+      [
+        "91bdda04ec76",
+        "specializes"
+      ],
+      [
+        "core_quantity",
+        "specializes"
+      ],
+      [
+        "91bdda04ec76",
+        "specializes"
+      ],
+      [
+        "core_quantity",
+        "specializes"
+      ]
+    ],
     "source": "composed_from_teaching",
     "confidence": 0.55,
     "times_applied": 0,
     "times_correct": 0,
-    "times_failed": 0
+    "times_failed": 0,
+    "members": [],
+    "lifecycle": "stable",
+    "epistemic": "observed",
+    "seed_scores": {
+      "trust": 0.5,
+      "risk": 0.3,
+      "value": 0.5,
+      "goal": 0.5,
+      "identity": 0.3
+    }
   },
   "1278f9c8cd78": {
     "id": "1278f9c8cd78",
@@ -2864,12 +6201,51 @@
       "NOVELTY"
     ],
     "condition_embedding": null,
-    "edges": [],
+    "edges": [
+      [
+        "91bdda04ec76",
+        "specializes"
+      ],
+      [
+        "061971c384fc",
+        "specializes"
+      ],
+      [
+        "core_quantity",
+        "specializes"
+      ],
+      [
+        "91bdda04ec76",
+        "specializes"
+      ],
+      [
+        "core_quantity",
+        "specializes"
+      ],
+      [
+        "91bdda04ec76",
+        "specializes"
+      ],
+      [
+        "core_quantity",
+        "specializes"
+      ]
+    ],
     "source": "composed_from_observation",
     "confidence": 0.55,
     "times_applied": 0,
     "times_correct": 0,
-    "times_failed": 0
+    "times_failed": 0,
+    "members": [],
+    "lifecycle": "stable",
+    "epistemic": "observed",
+    "seed_scores": {
+      "trust": 0.5,
+      "risk": 0.3,
+      "value": 0.5,
+      "goal": 0.5,
+      "identity": 0.3
+    }
   },
   "20d166e1fa18": {
     "id": "20d166e1fa18",
@@ -2900,12 +6276,51 @@
       "TIPE:"
     ],
     "condition_embedding": null,
-    "edges": [],
+    "edges": [
+      [
+        "91bdda04ec76",
+        "specializes"
+      ],
+      [
+        "061971c384fc",
+        "specializes"
+      ],
+      [
+        "core_quantity",
+        "specializes"
+      ],
+      [
+        "91bdda04ec76",
+        "specializes"
+      ],
+      [
+        "core_quantity",
+        "specializes"
+      ],
+      [
+        "91bdda04ec76",
+        "specializes"
+      ],
+      [
+        "core_quantity",
+        "specializes"
+      ]
+    ],
     "source": "composed_from_teaching",
     "confidence": 0.55,
     "times_applied": 0,
     "times_correct": 0,
-    "times_failed": 0
+    "times_failed": 0,
+    "members": [],
+    "lifecycle": "stable",
+    "epistemic": "observed",
+    "seed_scores": {
+      "trust": 0.5,
+      "risk": 0.3,
+      "value": 0.5,
+      "goal": 0.5,
+      "identity": 0.3
+    }
   },
   "22b8a3ae02d4": {
     "id": "22b8a3ae02d4",
@@ -2936,12 +6351,51 @@
       "TIPE"
     ],
     "condition_embedding": null,
-    "edges": [],
+    "edges": [
+      [
+        "91bdda04ec76",
+        "specializes"
+      ],
+      [
+        "061971c384fc",
+        "specializes"
+      ],
+      [
+        "core_quantity",
+        "specializes"
+      ],
+      [
+        "91bdda04ec76",
+        "specializes"
+      ],
+      [
+        "core_quantity",
+        "specializes"
+      ],
+      [
+        "91bdda04ec76",
+        "specializes"
+      ],
+      [
+        "core_quantity",
+        "specializes"
+      ]
+    ],
     "source": "composed_from_teaching",
     "confidence": 0.55,
     "times_applied": 0,
     "times_correct": 0,
-    "times_failed": 0
+    "times_failed": 0,
+    "members": [],
+    "lifecycle": "stable",
+    "epistemic": "observed",
+    "seed_scores": {
+      "trust": 0.5,
+      "risk": 0.3,
+      "value": 0.5,
+      "goal": 0.5,
+      "identity": 0.3
+    }
   },
   "c1ce247a5070": {
     "id": "c1ce247a5070",
@@ -2974,12 +6428,51 @@
       "NOVELTY"
     ],
     "condition_embedding": null,
-    "edges": [],
+    "edges": [
+      [
+        "91bdda04ec76",
+        "specializes"
+      ],
+      [
+        "061971c384fc",
+        "specializes"
+      ],
+      [
+        "core_quantity",
+        "specializes"
+      ],
+      [
+        "91bdda04ec76",
+        "specializes"
+      ],
+      [
+        "core_quantity",
+        "specializes"
+      ],
+      [
+        "91bdda04ec76",
+        "specializes"
+      ],
+      [
+        "core_quantity",
+        "specializes"
+      ]
+    ],
     "source": "composed_from_observation",
     "confidence": 0.55,
     "times_applied": 0,
     "times_correct": 0,
-    "times_failed": 0
+    "times_failed": 0,
+    "members": [],
+    "lifecycle": "stable",
+    "epistemic": "observed",
+    "seed_scores": {
+      "trust": 0.5,
+      "risk": 0.3,
+      "value": 0.5,
+      "goal": 0.5,
+      "identity": 0.3
+    }
   },
   "66c71fcc5e63": {
     "id": "66c71fcc5e63",
@@ -3008,12 +6501,51 @@
       "two numbers"
     ],
     "condition_embedding": null,
-    "edges": [],
+    "edges": [
+      [
+        "91bdda04ec76",
+        "specializes"
+      ],
+      [
+        "061971c384fc",
+        "specializes"
+      ],
+      [
+        "core_quantity",
+        "specializes"
+      ],
+      [
+        "91bdda04ec76",
+        "specializes"
+      ],
+      [
+        "core_quantity",
+        "specializes"
+      ],
+      [
+        "91bdda04ec76",
+        "specializes"
+      ],
+      [
+        "core_quantity",
+        "specializes"
+      ]
+    ],
     "source": "composed_from_observation",
     "confidence": 0.55,
     "times_applied": 0,
     "times_correct": 0,
-    "times_failed": 0
+    "times_failed": 0,
+    "members": [],
+    "lifecycle": "stable",
+    "epistemic": "observed",
+    "seed_scores": {
+      "trust": 0.5,
+      "risk": 0.3,
+      "value": 0.5,
+      "goal": 0.5,
+      "identity": 0.3
+    }
   },
   "8058be48d31c": {
     "id": "8058be48d31c",
@@ -3044,12 +6576,51 @@
       "KONTEKS"
     ],
     "condition_embedding": null,
-    "edges": [],
+    "edges": [
+      [
+        "91bdda04ec76",
+        "specializes"
+      ],
+      [
+        "061971c384fc",
+        "specializes"
+      ],
+      [
+        "core_quantity",
+        "specializes"
+      ],
+      [
+        "91bdda04ec76",
+        "specializes"
+      ],
+      [
+        "core_quantity",
+        "specializes"
+      ],
+      [
+        "91bdda04ec76",
+        "specializes"
+      ],
+      [
+        "core_quantity",
+        "specializes"
+      ]
+    ],
     "source": "composed_from_observation",
     "confidence": 0.55,
     "times_applied": 0,
     "times_correct": 0,
-    "times_failed": 0
+    "times_failed": 0,
+    "members": [],
+    "lifecycle": "stable",
+    "epistemic": "observed",
+    "seed_scores": {
+      "trust": 0.5,
+      "risk": 0.3,
+      "value": 0.5,
+      "goal": 0.5,
+      "identity": 0.3
+    }
   },
   "fbf258609542": {
     "id": "fbf258609542",
@@ -3075,11 +6646,481 @@
       "kecuali"
     ],
     "condition_embedding": null,
-    "edges": [],
+    "edges": [
+      [
+        "core_contrast",
+        "specializes"
+      ],
+      [
+        "core_contrast",
+        "specializes"
+      ],
+      [
+        "core_contrast",
+        "specializes"
+      ]
+    ],
     "source": "composed_from_teaching",
     "confidence": 0.55,
     "times_applied": 0,
     "times_correct": 0,
-    "times_failed": 0
+    "times_failed": 0,
+    "members": [],
+    "lifecycle": "stable",
+    "epistemic": "observed",
+    "seed_scores": {
+      "trust": 0.5,
+      "risk": 0.3,
+      "value": 0.5,
+      "goal": 0.5,
+      "identity": 0.3
+    }
+  },
+  "1f4932f73187": {
+    "id": "1f4932f73187",
+    "name": "entity_extract_food_sari_makanan",
+    "concept": "Perbandingan: ekstrak KUALITAS ABSTRAK, bukan tindakan literal. Sari = sehat (olahraga + makan sehat",
+    "abstraction": "Perbandingan: ekstrak KUALITAS ABSTRAK, bukan tindakan literal. Sari = sehat (olahraga + makan sehat). Dina = tidak sehat (jarang olahraga + junk food). Pola: compare actions → abstract quality.",
+    "schemas": [
+      "sari berolahraga setiap pagi dan makan makanan sehat. dina jarang berolahraga dan suka makan junk fo"
+    ],
+    "transformation": {
+      "kind": "entity_extract",
+      "trigger": {
+        "pattern": "",
+        "extract_after": "",
+        "extract_before": ""
+      },
+      "action": "Perbandingan: ekstrak KUALITAS ABSTRAK, bukan tindakan literal. Sari = sehat (olahraga + makan sehat). Dina = tidak sehat (jarang olahraga + junk food). Pola: compare actions → abstract quality.",
+      "slots": [],
+      "constraints": []
+    },
+    "conditions": [
+      "food",
+      "sari",
+      "makanan",
+      "pagi",
+      "jarang",
+      "hidup",
+      "sehat",
+      "suka",
+      "dina",
+      "berolahraga",
+      "junk",
+      "gaya",
+      "maka",
+      "perbedaan",
+      "makan",
+      "setiap"
+    ],
+    "condition_embedding": null,
+    "edges": [
+      [
+        "core_contrast",
+        "related"
+      ],
+      [
+        "c1e8f75d9ecf",
+        "specializes"
+      ],
+      [
+        "000da139e786",
+        "generalizes"
+      ],
+      [
+        "91bdda04ec76",
+        "related"
+      ],
+      [
+        "92d53e3fa597",
+        "generalizes"
+      ],
+      [
+        "c479c006061f",
+        "generalizes"
+      ],
+      [
+        "3ab49c9bcaae",
+        "generalizes"
+      ],
+      [
+        "92d53e3fa597",
+        "specializes"
+      ],
+      [
+        "225109ba2b8c",
+        "generalizes"
+      ],
+      [
+        "c1e8f75d9ecf",
+        "specializes"
+      ],
+      [
+        "000da139e786",
+        "generalizes"
+      ],
+      [
+        "91bdda04ec76",
+        "related"
+      ],
+      [
+        "core_contrast",
+        "related"
+      ],
+      [
+        "7ca08ac2254a",
+        "generalizes"
+      ],
+      [
+        "92d53e3fa597",
+        "specializes"
+      ],
+      [
+        "c479c006061f",
+        "generalizes"
+      ],
+      [
+        "3ab49c9bcaae",
+        "generalizes"
+      ],
+      [
+        "225109ba2b8c",
+        "generalizes"
+      ],
+      [
+        "core_quantity",
+        "related"
+      ],
+      [
+        "c1e8f75d9ecf",
+        "specializes"
+      ],
+      [
+        "000da139e786",
+        "generalizes"
+      ],
+      [
+        "91bdda04ec76",
+        "related"
+      ],
+      [
+        "core_quantity",
+        "related"
+      ],
+      [
+        "core_contrast",
+        "related"
+      ],
+      [
+        "7ca08ac2254a",
+        "generalizes"
+      ],
+      [
+        "92d53e3fa597",
+        "specializes"
+      ],
+      [
+        "c479c006061f",
+        "generalizes"
+      ],
+      [
+        "3ab49c9bcaae",
+        "generalizes"
+      ],
+      [
+        "225109ba2b8c",
+        "generalizes"
+      ]
+    ],
+    "source": "self_discovered_from_observation",
+    "confidence": 0.6,
+    "times_applied": 0,
+    "times_correct": 0,
+    "times_failed": 0,
+    "members": [],
+    "lifecycle": "stable",
+    "epistemic": "observed",
+    "seed_scores": {
+      "trust": 0.5,
+      "risk": 0.3,
+      "value": 0.5,
+      "goal": 0.5,
+      "identity": 0.3
+    }
+  },
+  "3ab49c9bcaae": {
+    "id": "3ab49c9bcaae",
+    "name": "entity_extract_mengeluarkan_menutupi_vulkanik",
+    "concept": "Teks eksplanasi: letusan → abu → pertanian rusak. Pola: proses alam A→B→C, cari link langsung ke per",
+    "abstraction": "Teks eksplanasi: letusan → abu → pertanian rusak. Pola: proses alam A→B→C, cari link langsung ke pertanyaan.",
+    "schemas": [
+      "gunung meletus mengeluarkan lava dan abu vulkanik. lava membanjiri desa di lereng. abu vulkanik menu"
+    ],
+    "transformation": {
+      "kind": "entity_extract",
+      "trigger": {
+        "pattern": "",
+        "extract_after": "",
+        "extract_before": ""
+      },
+      "action": "Teks eksplanasi: letusan → abu → pertanian rusak. Pola: proses alam A→B→C, cari link langsung ke pertanyaan.",
+      "slots": [],
+      "constraints": []
+    },
+    "conditions": [
+      "mengeluarkan",
+      "menutupi",
+      "vulkanik",
+      "desa",
+      "pertanian",
+      "mengapa",
+      "lava",
+      "lereng",
+      "rusak",
+      "gunung",
+      "membanjiri",
+      "lahan",
+      "meletus"
+    ],
+    "condition_embedding": null,
+    "edges": [
+      [
+        "c1e8f75d9ecf",
+        "specializes"
+      ],
+      [
+        "000da139e786",
+        "specializes"
+      ],
+      [
+        "7ca08ac2254a",
+        "specializes"
+      ],
+      [
+        "92d53e3fa597",
+        "generalizes"
+      ],
+      [
+        "c479c006061f",
+        "generalizes"
+      ],
+      [
+        "1f4932f73187",
+        "specializes"
+      ],
+      [
+        "92d53e3fa597",
+        "specializes"
+      ],
+      [
+        "92d53e3fa597",
+        "related"
+      ],
+      [
+        "225109ba2b8c",
+        "specializes"
+      ],
+      [
+        "c1e8f75d9ecf",
+        "specializes"
+      ],
+      [
+        "000da139e786",
+        "specializes"
+      ],
+      [
+        "1f4932f73187",
+        "specializes"
+      ],
+      [
+        "92d53e3fa597",
+        "related"
+      ],
+      [
+        "92d53e3fa597",
+        "specializes"
+      ],
+      [
+        "c479c006061f",
+        "generalizes"
+      ],
+      [
+        "225109ba2b8c",
+        "specializes"
+      ],
+      [
+        "c1e8f75d9ecf",
+        "specializes"
+      ],
+      [
+        "000da139e786",
+        "specializes"
+      ],
+      [
+        "1f4932f73187",
+        "specializes"
+      ],
+      [
+        "92d53e3fa597",
+        "related"
+      ],
+      [
+        "92d53e3fa597",
+        "specializes"
+      ],
+      [
+        "c479c006061f",
+        "generalizes"
+      ],
+      [
+        "225109ba2b8c",
+        "specializes"
+      ]
+    ],
+    "source": "self_discovered_from_observation",
+    "confidence": 0.6,
+    "times_applied": 0,
+    "times_correct": 0,
+    "times_failed": 0,
+    "members": [],
+    "lifecycle": "stable",
+    "epistemic": "observed",
+    "seed_scores": {
+      "trust": 0.5,
+      "risk": 0.3,
+      "value": 0.5,
+      "goal": 0.5,
+      "identity": 0.3
+    }
+  },
+  "225109ba2b8c": {
+    "id": "225109ba2b8c",
+    "name": "entity_extract_sekolah_kelas_mendirikan",
+    "concept": "Pertanyaan 'siapa' → cari nama orang di teks. Bapak Suwiryo mendirikan sekolah. Pola: who → find per",
+    "abstraction": "Pertanyaan 'siapa' → cari nama orang di teks. Bapak Suwiryo mendirikan sekolah. Pola: who → find person name in text.",
+    "schemas": [
+      "sekolah dasar negeri 3 surabaya didirikan pada tahun 1975 oleh bapak suwiryo. sekolah ini memiliki 1"
+    ],
+    "transformation": {
+      "kind": "entity_extract",
+      "trigger": {
+        "pattern": "",
+        "extract_after": "",
+        "extract_before": ""
+      },
+      "action": "Pertanyaan 'siapa' → cari nama orang di teks. Bapak Suwiryo mendirikan sekolah. Pola: who → find person name in text.",
+      "slots": [],
+      "constraints": []
+    },
+    "conditions": [
+      "sekolah",
+      "kelas",
+      "mendirikan",
+      "suwiryo",
+      "siapa",
+      "surabaya",
+      "bapak",
+      "negeri",
+      "ruang",
+      "1975",
+      "dasar",
+      "tahun",
+      "didirikan",
+      "memiliki"
+    ],
+    "condition_embedding": null,
+    "edges": [
+      [
+        "c1e8f75d9ecf",
+        "specializes"
+      ],
+      [
+        "7ca08ac2254a",
+        "specializes"
+      ],
+      [
+        "92d53e3fa597",
+        "specializes"
+      ],
+      [
+        "c479c006061f",
+        "generalizes"
+      ],
+      [
+        "1f4932f73187",
+        "specializes"
+      ],
+      [
+        "3ab49c9bcaae",
+        "generalizes"
+      ],
+      [
+        "c1e8f75d9ecf",
+        "specializes"
+      ],
+      [
+        "1f4932f73187",
+        "specializes"
+      ],
+      [
+        "92d53e3fa597",
+        "specializes"
+      ],
+      [
+        "c479c006061f",
+        "generalizes"
+      ],
+      [
+        "7ca08ac2254a",
+        "specializes"
+      ],
+      [
+        "3ab49c9bcaae",
+        "generalizes"
+      ],
+      [
+        "c1e8f75d9ecf",
+        "specializes"
+      ],
+      [
+        "core_comparison",
+        "related"
+      ],
+      [
+        "1f4932f73187",
+        "specializes"
+      ],
+      [
+        "92d53e3fa597",
+        "specializes"
+      ],
+      [
+        "c479c006061f",
+        "generalizes"
+      ],
+      [
+        "7ca08ac2254a",
+        "specializes"
+      ],
+      [
+        "3ab49c9bcaae",
+        "generalizes"
+      ]
+    ],
+    "source": "self_discovered_from_observation",
+    "confidence": 0.6,
+    "times_applied": 0,
+    "times_correct": 0,
+    "times_failed": 0,
+    "members": [],
+    "lifecycle": "stable",
+    "epistemic": "observed",
+    "seed_scores": {
+      "trust": 0.5,
+      "risk": 0.3,
+      "value": 0.5,
+      "goal": 0.5,
+      "identity": 0.3
+    }
   }
 }

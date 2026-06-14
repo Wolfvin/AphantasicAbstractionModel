@@ -1,19 +1,19 @@
 {
   "peribahasa_observed_pattern": {
     "name": "peribahasa_observed_pattern",
-    "concept": "Pattern for peribahasa discovered from 10 teaching examples",
-    "abstraction": "Pattern for peribahasa discovered from 10 teaching examples",
+    "concept": "Pattern for peribahasa discovered from 38 teaching examples",
+    "abstraction": "Pattern for peribahasa discovered from 38 teaching examples",
     "conditions": [
-      "anak",
-      "mendapat",
-      "peribahaaan",
+      "bisa",
+      "mengayuh",
       "berbuat",
-      "keras",
-      "budi",
-      "sama",
-      "sari",
-      "saling",
-      "bekerja"
+      "kemudian",
+      "tentang",
+      "menggambarkan",
+      "tepat",
+      "perahu",
+      "tersebut",
+      "demi"
     ],
     "method": [
       "Identifikasi situasi: seseorang yang lupa/melupakan → Identifikasi konteks: orang tua bekerja keras untuk anak → Identifikasi pola: usaha keras dulu → hasil baik kemudian"
@@ -36,16 +36,16 @@
     "concept": "Pattern for bahasa_kiasan discovered from 7 teaching examples",
     "abstraction": "Pattern for bahasa_kiasan discovered from 7 teaching examples",
     "conditions": [
-      "'suaranya",
-      "kalimat",
-      "berkelipkan",
-      "purnama",
-      "sedih",
+      "wajahnya",
+      "bahasa",
+      "bulan",
+      "menari-nari",
       "'wajahnya",
-      "bersinar",
+      "kota",
+      "musim",
       "ketika",
-      "langit",
-      "merunduk"
+      "menangis",
+      "bintang-bintang"
     ],
     "method": [
       "Identifikasi subjek: angin (benda mati) → Identifikasi kata kerja: menari-nari (sifat manusia) → Identifikasi kata pembanding: bagaikan"
@@ -68,16 +68,16 @@
     "concept": "Pattern for ide_pokok discovered from 6 teaching examples",
     "abstraction": "Pattern for ide_pokok discovered from 6 teaching examples",
     "conditions": [
-      "kalimat",
-      "banyak",
-      "sangat",
-      "pencemaran",
-      "informasi",
-      "'oleh",
       "minum",
+      "memiliki",
+      "teknologi",
+      "'oleh",
+      "semakin",
+      "indonesia",
       "kota",
-      "keragaman",
-      "parah"
+      "siswa",
+      "terakhirnya:",
+      "pesat."
     ],
     "method": [
       "Baca kalimat pertama: 'Kucing adalah hewan yang sangat rajin membersihkan diri' → Kalimat pertama menyatakan gagasan utama tentang kebersihan kucing → Identifikasi kata penanda kesimpulan: 'Oleh karena itu'"
@@ -100,16 +100,16 @@
     "concept": "Pattern for pertanyaan_negatif discovered from 4 teaching examples",
     "abstraction": "Pattern for pertanyaan_negatif discovered from 4 teaching examples",
     "conditions": [
-      "anak",
-      "tapi",
-      "malas,",
-      "selain",
-      "semua",
-      "hewan",
-      "jinak",
-      "siswa",
+      "siti",
       "kecuali",
-      "bukan"
+      "anak",
+      "ani.",
+      "semua",
+      "malas,",
+      "kebun",
+      "hadir",
+      "bukan",
+      "jinak"
     ],
     "method": [
       "Identifikasi kata kunci: 'kecuali' = pengecualian → Artinya: semua hadir, TAPI Ani TIDAK hadir → Temukan kata pengecualian: 'kecuali'"
@@ -131,16 +131,16 @@
     "concept": "Pattern for perbandingan discovered from 10 teaching examples",
     "abstraction": "Pattern for perbandingan discovered from 10 teaching examples",
     "conditions": [
-      "makan",
-      "besar",
-      "budi",
+      "andi",
+      "pagi",
+      "rumah",
       "raja",
-      "setiap",
       "tetapi",
-      "sangat",
       "sari",
-      "berkuasa",
-      "berolahraga"
+      "tepat",
+      "berolahraga",
+      "sangat",
+      "pendek"
     ],
     "method": [
       "Identifikasi kata 'tetapi' = penanda kontras → 'Besar tetapi sederhana' = meskipun besar, hidupnya sederhana → Identifikasi: Budi > Andi (tinggi)"
@@ -164,10 +164,10 @@
     "abstraction": "Pattern for benar_salah discovered from 1 teaching examples",
     "conditions": [
       "kalimantan.'",
-      "terletak",
       "pernyataan:",
-      "'jakarta",
-      "pulau"
+      "terletak",
+      "pulau",
+      "'jakarta"
     ],
     "method": [
       "Cek pengetahuan: Jakarta adalah ibu kota Indonesia → Jakarta terletak di Pulau Jawa, BUKAN Kalimantan"
@@ -186,10 +186,10 @@
     "concept": "Pattern for teks_argumentatif discovered from 1 teaching examples",
     "abstraction": "Pattern for teks_argumentatif discovered from 1 teaching examples",
     "conditions": [
-      "merupakan",
       "kalimat",
-      "mana",
       "argumentatif,",
+      "merupakan",
+      "mana",
       "teks"
     ],
     "method": [
@@ -209,16 +209,16 @@
     "concept": "Pattern for sikap_tokoh discovered from 4 teaching examples",
     "abstraction": "Pattern for sikap_tokoh discovered from 4 teaching examples",
     "conditions": [
-      "selalu",
-      "tapi",
-      "rani",
-      "pemarah.",
-      "dicemooh,",
-      "tetangganya",
-      "lebih",
-      "berbuat",
+      "tetap",
+      "orang",
+      "berkata",
       "meskipun",
-      "menolong"
+      "pemarah.",
+      "berbuat",
+      "tokoh",
+      "semua",
+      "menghormati",
+      "tetangganya"
     ],
     "method": [
       "Identifikasi tindakan: menolong tetangga → Identifikasi konteks: meskipun miskin (berkorban) → Identifikasi dua sumber: 'semua orang berkata' vs 'Lia tidak pernah marah'"
@@ -235,44 +235,36 @@
     "source": "self_discovered_from_teaching",
     "confidence": 0.5
   },
-  "kesan_pesan_observed_pattern": {
-    "name": "kesan_pesan_observed_pattern",
-    "concept": "Pattern for kesan_pesan discovered from 1 teaching examples",
-    "abstraction": "Pattern for kesan_pesan discovered from 1 teaching examples",
-    "conditions": [
-      "anak",
-      "belajar",
-      "rajin",
-      "tentang",
-      "cerita"
-    ],
-    "method": [
-      "Identifikasi pola: rajin belajar → menjadi juara → Pesan: kerja keras menghasilkan keberhasilan"
-    ],
+  "MORAL MESSAGE\",": {
+    "name": "MORAL MESSAGE\",",
+    "concept": "The pattern identifies that the message",
+    "abstraction": "The pattern identifies that the message",
+    "conditions": [],
+    "method": [],
     "examples": [
-      "Q: Cerita tentang anak yang rajin belajar dan akhirnya menjadi  → A: Kita harus rajin belajar agar berhasil"
+      "SOAL: Cerita tentang anak yang rajin belajar dan akhirnya menjadi juara. Apa pesan cerita?\nCARA: Identifikasi pola: rajin belajar → menjadi juara; Pesan: kerja keras menghasilkan keberhasilan; Ini ada"
     ],
     "question_types": [
       "kesan_pesan"
     ],
     "source": "self_discovered_from_teaching",
-    "confidence": 0.5
+    "confidence": 0.55
   },
   "teks_eksplanasi_observed_pattern": {
     "name": "teks_eksplanasi_observed_pattern",
     "concept": "Pattern for teks_eksplanasi discovered from 4 teaching examples",
     "abstraction": "Pattern for teks_eksplanasi discovered from 4 teaching examples",
     "conditions": [
-      "lava",
-      "karena",
-      "mengeluarkan",
+      "andi",
+      "mengikis",
+      "erosi",
+      "turun?",
       "merah",
       "punya",
-      "andi",
-      "hujan",
-      "vulkanik.",
       "kelereng",
-      "mengikis"
+      "meletus",
+      "hujan",
+      "mengeluarkan"
     ],
     "method": [
       "Identifikasi pertanyaan sebab-akibat: 'mengapa' → Cari proses: pemanasan air → penguapan → kondensasi → hujan → Identifikasi siapa yang ditanyakan: Andi"
@@ -294,10 +286,10 @@
     "concept": "Pattern for analogi discovered from 1 teaching examples",
     "abstraction": "Pattern for analogi discovered from 1 teaching examples",
     "conditions": [
-      "sakit",
-      "guru",
       "rumah",
-      "dokter"
+      "dokter",
+      "guru",
+      "sakit"
     ],
     "method": [
       "Identifikasi relasi: dokter BEKERJA DI rumah sakit → Terapkan relasi yang sama: guru BEKERJA DI ?"
@@ -316,11 +308,11 @@
     "concept": "Pattern for tone_mood discovered from 1 teaching examples",
     "abstraction": "Pattern for tone_mood discovered from 1 teaching examples",
     "conditions": [
+      "cerita",
       "anak",
       "suasana",
       "tentang",
-      "kehilangan",
-      "cerita"
+      "kehilangan"
     ],
     "method": [
       "Identifikasi peristiwa: kehilangan orang tua → Emosi yang muncul: sedih, duka, kehilangan"
@@ -339,16 +331,16 @@
     "concept": "Pattern for implisit discovered from 5 teaching examples",
     "abstraction": "Pattern for implisit discovered from 5 teaching examples",
     "conditions": [
-      "menghancurkan",
-      "gempa",
+      "andi",
+      "cepat",
+      "asap",
+      "melanda",
+      "penghubung",
       "itu.",
-      "jembatan",
-      "virus",
-      "kebakaran",
-      "kekeringan",
-      "menghasilkan",
       "kota",
-      "membawa"
+      "menghasilkan",
+      "gempa",
+      "jembatan"
     ],
     "method": [
       "Fakta eksplisit: Andi selalu bawa payung → Pertanyaan: apa yang TIDAK langsung dikatakan tapi bisa disimpulkan? → Identifikasi rantai sebab-akibat: gempa → jembatan hancur → truk tidak lewat → barang tidak sampai → harga naik"
@@ -371,9 +363,9 @@
     "concept": "Pattern for sinonim_antonim discovered from 1 teaching examples",
     "abstraction": "Pattern for sinonim_antonim discovered from 1 teaching examples",
     "conditions": [
-      "kata",
+      "'rajin'?",
       "lawan",
-      "'rajin'?"
+      "kata"
     ],
     "method": [
       "Identifikasi: lawan kata = antonim → Rajin = suka bekerja keras"
@@ -389,19 +381,19 @@
   },
   "eksplisit_observed_pattern": {
     "name": "eksplisit_observed_pattern",
-    "concept": "Pattern for eksplisit discovered from 5 teaching examples",
-    "abstraction": "Pattern for eksplisit discovered from 5 teaching examples",
+    "concept": "Pattern for eksplisit discovered from 6 teaching examples",
+    "abstraction": "Pattern for eksplisit discovered from 6 teaching examples",
     "conditions": [
-      "taman",
-      "banyak",
-      "terletak",
-      "memasak",
-      "nasi",
+      "hati",
+      "didirikan",
       "komodo",
-      "setiap",
-      "surabaya",
+      "indonesia.",
+      "sekolah",
       "kota",
-      "nasional"
+      "dasar",
+      "berduka,",
+      "tersebut",
+      "surabaya"
     ],
     "method": [
       "Pisahkan emosi dari fakta → Emosi: berduka, sedih (bukan yang ditanyakan) → Cari kata kunci: 'makanan khas'"
