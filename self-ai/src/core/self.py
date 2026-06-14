@@ -57,11 +57,14 @@ class SelfCore:
         
     @property
     def composition_layer(self):
-        """Lazy-init CompositionLayer with injector wired for introspection.
+        """Lazy-init CompositionLayer with injector and graph wired.
 
         v36: The CompositionLayer now supports explain_last_answer() via
         Introspector. This property ensures the injector is wired up
         automatically when the CompositionLayer is accessed through SelfCore.
+
+        v41: Also auto-wires the UnderstandingGraph so that
+        CompositionLayer.answer() can retrieve+inject automatically.
         """
         if self._composition_layer is None:
             from composition.layer import CompositionLayer
@@ -71,10 +74,38 @@ class SelfCore:
             # on first call to explain_last_answer().
             if self._injector is not None:
                 self._composition_layer.set_injector(self._injector)
+            # v41: Wire up graph for automatic retrieve+inject in answer()
+            self._wire_graph_to_composition()
         elif self._injector is not None and self._composition_layer._injector is None:
             # Injector was initialized after CompositionLayer — wire it now
             self._composition_layer.set_injector(self._injector)
+        # v41: Ensure graph is wired (may not have been available at init time)
+        if self._composition_layer._graph is None:
+            self._wire_graph_to_composition()
         return self._composition_layer
+
+    def _wire_graph_to_composition(self):
+        """Wire UnderstandingGraph to CompositionLayer for auto retrieve+inject.
+
+        v41: This helper attempts to get the shared UnderstandingGraph and
+        wire it to the CompositionLayer. It's called lazily because the
+        graph may not be available at init time (e.g., embedding model
+        not yet loaded). It's safe to call multiple times — it only
+        wires if both the CompositionLayer exists and graph is available.
+        """
+        if self._composition_layer is None:
+            return
+        if self._composition_layer._graph is not None:
+            return  # Already wired
+        try:
+            from derivation.understanding_builder import get_shared_graph
+            graph = get_shared_graph()
+            if graph is not None:
+                self._composition_layer.set_graph(graph)
+        except ImportError:
+            logger.debug("understanding_builder not available — graph not wired to CompositionLayer")
+        except Exception as e:
+            logger.debug("Failed to wire graph to CompositionLayer: %s", e)
 
     @property
     def composer(self):
@@ -147,6 +178,8 @@ class SelfCore:
             # v36: Wire injector to CompositionLayer for introspection
             if self._composition_layer is not None:
                 self._composition_layer.set_injector(self._injector)
+            # v41: Wire graph to CompositionLayer for auto retrieve+inject
+            self._wire_graph_to_composition()
             return self._injector
         except ImportError:
             logger.debug("unconscious module not available — injector disabled")
