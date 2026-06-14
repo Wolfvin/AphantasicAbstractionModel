@@ -163,9 +163,9 @@ def make_dummy_node(embedding_model, text: str, node_id: str = 'bench-node-1'):
         abstraction=f"Benchmark understanding about: {text}",
         schemas=[{"input": text, "output": "steered"}],
         transformation=Transformation(
-            trigger="benchmark_trigger",
+            kind="benchmark",
+            trigger={"signal": "benchmark_trigger"},
             action="steer",
-            result="semantically shifted output",
         ),
         conditions=[text],
         condition_embedding=emb_list,

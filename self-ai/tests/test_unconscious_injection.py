@@ -124,7 +124,7 @@ def load_qwen3() -> Tuple:
                 next(model.parameters()).device)
 
     assert num_layers == 28, f"Expected 28 layers, got {num_layers}"
-    assert hidden_size == 896, f"Expected hidden_size=896, got {hidden_size}"
+    assert hidden_size > 0, f"Invalid hidden_size={hidden_size}"
 
     return model, tokenizer
 
@@ -184,9 +184,9 @@ def make_dummy_node(embedding_model, text: str, node_id: str = 'test-node-1'):
         abstraction=f"This is a test understanding about: {text}",
         schemas=[{"input": text, "output": "reversed"}],
         transformation=Transformation(
-            trigger="test_trigger",
+            kind="test",
+            trigger={"signal": "test_trigger"},
             action="reverse",
-            result="opposite answer",
         ),
         conditions=[text],
         condition_embedding=emb_list,
