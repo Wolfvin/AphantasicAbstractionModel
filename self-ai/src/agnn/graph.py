@@ -1200,6 +1200,131 @@ class AGNNGraph:
         candidates.sort(key=lambda x: -x[0])
         return [node_id for _, node_id in candidates[:top_k]]
 
+    def find_seed_nodes_by_embedding(
+        self,
+        query_text: str,
+        embedder: "ModelEmbedder",
+        top_k: int = 3,
+    ) -> List[str]:
+        """Find seed nodes by embedding similarity to the query text.
+
+        This method embeds the query text and computes cosine similarity
+        against all node embeddings that already exist in the graph.
+        Nodes without embeddings are skipped (no on-the-fly computation
+        to avoid latency). If no node has an embedding, it falls back
+        to keyword-based ``find_seed_nodes``.
+
+        This solves the "semantic gap" problem: a query like
+        "siapa presiden pertama Indonesia?" will not substring-match
+        a node_id "Sukarno", but the embedding of that query may be
+        close to the embedding of the "Sukarno" node if the embedder
+        was trained on semantically similar text.
+
+        Algorithm:
+          1. Embed query_text via embedder.embed(query_text)
+          2. For each node in the graph that has a non-zero embedding:
+             - Compute cosine similarity with the query embedding
+          3. Sort by similarity descending, return top_k node_ids
+          4. If no node has an embedding → fallback to
+             find_seed_nodes(keyword=query_text, top_k=top_k)
+
+        Args:
+            query_text: The natural-language query to find seeds for.
+            embedder: A ModelEmbedder instance (real or mock) used to
+                embed the query text.
+            top_k: Maximum number of seed nodes to return.
+
+        Returns:
+            List of node_ids sorted by cosine similarity descending.
+            May be empty if no nodes match.
+        """
+        if not query_text or not query_text.strip():
+            return []
+
+        query_emb = embedder.embed(query_text)
+        query_norm = np.linalg.norm(query_emb)
+        if query_norm < 1e-8:
+            # Degenerate query embedding → fallback
+            return self.find_seed_nodes(keyword=query_text, top_k=top_k)
+
+        # Collect similarity scores for nodes that have non-zero embeddings
+        scored: List[Tuple[float, str]] = []  # (similarity, node_id)
+        has_any_embedding = False
+
+        for node_id, node in self._nodes.items():
+            node_norm = np.linalg.norm(node.embedding)
+            if node_norm < 1e-8:
+                # Node has zero/unset embedding → skip
+                continue
+            has_any_embedding = True
+            sim = float(np.dot(query_emb, node.embedding) / (query_norm * node_norm))
+            scored.append((sim, node_id))
+
+        if not has_any_embedding:
+            # No node has an embedding at all → fallback to keyword
+            logger.info(
+                "find_seed_nodes_by_embedding: no node embeddings found, "
+                "falling back to keyword matching for query='%s'",
+                query_text,
+            )
+            return self.find_seed_nodes(keyword=query_text, top_k=top_k)
+
+        # Sort by similarity descending
+        scored.sort(key=lambda x: -x[0])
+        return [node_id for _, node_id in scored[:top_k]]
+
+    def semantic_traverse(
+        self,
+        query_text: str,
+        embedder: "ModelEmbedder",
+        max_hops: int = 2,
+        top_k: int = 3,
+    ) -> List[ReasoningChain]:
+        """End-to-end semantic search + traversal in one call.
+
+        Combines embedding-based seed selection with activity-guided
+        beam search traversal:
+
+          1. Seed = find_seed_nodes_by_embedding(query_text, embedder, top_k)
+          2. For each seed, run traverse(seed_id, max_hops,
+             query_node_ids=seeds, bidirectional=True)
+          3. Return list of ReasoningChain, sorted by confidence descending
+
+        This is the high-level API that most callers should use when
+        they have a natural-language query and want reasoning chains
+        without manually picking seed nodes.
+
+        Args:
+            query_text: Natural-language query (e.g., "siapa presiden
+                pertama Indonesia?").
+            embedder: A ModelEmbedder instance for computing query
+                embeddings.
+            max_hops: Maximum traversal depth per seed.
+            top_k: Number of top seed nodes to use.
+
+        Returns:
+            List of ReasoningChain sorted by confidence (highest first).
+            May be empty if no seeds are found or no chains are produced.
+        """
+        seed_ids = self.find_seed_nodes_by_embedding(query_text, embedder, top_k)
+        if not seed_ids:
+            return []
+
+        chains: List[ReasoningChain] = []
+        for seed_id in seed_ids:
+            chain = self.traverse(
+                seed_id,
+                max_hops=max_hops,
+                query_node_ids=seed_ids,
+                bidirectional=True,
+            )
+            if chain is not None:
+                chains.append(chain)
+
+        # Sort by confidence descending
+        chains.sort(key=lambda c: -c.confidence)
+        return chains
+
     def _find_seed(self, query: str) -> Optional[AGNNNode]:
         """Find the best-matching node for a query string.
 
