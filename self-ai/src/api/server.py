@@ -177,6 +177,17 @@ class ReinforceResponse(BaseModel):
     new_confidences: dict[str, float]
 
 
+class PenalizeRequest(BaseModel):
+    question: str = Field(..., min_length=1)
+    wrong_answer: str = Field(..., min_length=1)
+
+
+class PenalizeResponse(BaseModel):
+    penalized_count: int
+    node_ids: list[str]
+    new_confidences: dict[str, float]
+
+
 class IntrospectResponse(BaseModel):
     graph_size: int
     avg_confidence: float
@@ -292,6 +303,41 @@ def reinforce(req: ReinforceRequest):
 
     return ReinforceResponse(
         reinforced_count=result.get("reinforced_count", 0),
+        node_ids=result.get("node_ids", []),
+        new_confidences=result.get("new_confidences", {}),
+    )
+
+
+@app.post("/penalize", response_model=PenalizeResponse)
+def penalize(req: PenalizeRequest):
+    """Weaken nodes that contributed to a wrong answer.
+
+    Finds nodes in the understanding graph whose experience text
+    contains the wrong_answer and decreases their confidence,
+    making them less influential in future unconscious injections.
+    Call this before learn() when correcting a wrong answer.
+    """
+    core = _ensure_core()
+    if core is None:
+        return JSONResponse(
+            status_code=503,
+            content={"error": "model not ready, retry"},
+        )
+
+    try:
+        result = core.penalize(
+            question=req.question,
+            wrong_answer=req.wrong_answer,
+        )
+    except Exception as exc:
+        logger.exception("/penalize — penalize() raised")
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"penalize failed: {exc}"},
+        )
+
+    return PenalizeResponse(
+        penalized_count=result.get("penalized_count", 0),
         node_ids=result.get("node_ids", []),
         new_confidences=result.get("new_confidences", {}),
     )
