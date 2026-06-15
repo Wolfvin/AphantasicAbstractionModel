@@ -294,18 +294,30 @@ class ReasoningChain:
         """Convert the reasoning chain to a natural-language string.
 
         Produces sentences like:
-          "harimau IS_A karnivora, karnivora CAUSES pemakan_daging"
+          "harimau → [CATEGORICAL] → karnivora, karnivora → [CAUSAL] → pemakan_daging"
         which can be fed directly to a language model as context.
 
         The verbalization uses arrow notation (→) for readability
         and includes relation types in UPPERCASE for emphasis.
+
+        For reverse traversal steps (marked with "/reverse" suffix),
+        the arrow is reversed (←) to indicate backward traversal:
+          "Indonesia ← [SPATIAL/REVERSE] ← Pulau_Bali"
         """
         if not self.steps:
             return ""
         parts = []
         for source, relation, target in self.steps:
-            rel_display = relation.upper().replace("_", " ")
-            parts.append(f"{source} → [{rel_display}] → {target}")
+            # Check for reverse traversal marker
+            is_reverse = relation.endswith("/reverse")
+            if is_reverse:
+                base_relation = relation[:-len("/reverse")]
+                rel_display = base_relation.upper().replace("_", " ") + "/REVERSE"
+                # Reverse arrow to indicate backward traversal
+                parts.append(f"{target} ← [{rel_display}] ← {source}")
+            else:
+                rel_display = relation.upper().replace("_", " ")
+                parts.append(f"{source} → [{rel_display}] → {target}")
         return ", ".join(parts)
 
     def to_dict(self) -> dict:
@@ -683,7 +695,8 @@ class AGNNGraph:
                  relation_filter: List[RelationType] = None,
                  confidence_threshold: float = 0.1,
                  query_node_ids: Optional[List[str]] = None,
-                 beam_width: int = 3) -> Optional[ReasoningChain]:
+                 beam_width: int = 3,
+                 bidirectional: bool = False) -> Optional[ReasoningChain]:
         """Traverse the graph from a query node, producing a reasoning chain.
 
         Two modes of operation:
@@ -707,6 +720,28 @@ class AGNNGraph:
           5. Among all completed chains, return the one with the highest
              node_recall against the activation map (most activated nodes visited)
 
+        Bidirectional traversal:
+          When bidirectional=True (or auto-detected), the beam search also
+          expands incoming edges (reverse traversal). This is essential for
+          queries where the answer is "behind" the seed node — e.g., seed
+          = Indonesia, answer = Bali, but edges point Bali → Indonesia.
+
+          Auto-detect logic (when bidirectional=False):
+            If no relation_filter is set AND a node's outgoing expansion
+            produces fewer candidates than beam_width, incoming edges are
+            also expanded as a fallback. This "automatic fallback" approach
+            is more elegant than a simple seed-level check because it
+            handles cases where the seed has outgoing edges but the answer
+            is still reachable only via reverse traversal.
+
+          Reverse edge representation:
+            When traversing an incoming edge in reverse, the chain step
+            uses the format: (current_label, relation_type + "/reverse",
+            source_label). For example, if the original edge is
+            Bali --[SPATIAL]--> Indonesia and we traverse from Indonesia
+            back to Bali, the chain step is:
+            ("Indonesia", "spatial/reverse", "Bali")
+
         Args:
             query: Text to match against node labels (case-insensitive substring),
                 OR a node_id when the caller already knows the seed.
@@ -722,6 +757,12 @@ class AGNNGraph:
                 during beam search. Default 3. Only used in activity-guided
                 mode. In legacy mode, all candidates are explored (greedy BFS
                 with priority queue, same as before).
+            bidirectional: If True, always expand both outgoing AND incoming
+                edges at each hop. If False (default), incoming edges are
+                only expanded as an automatic fallback when outgoing edges
+                produce fewer candidates than beam_width and no relation_filter
+                is set. This preserves backward compatibility while enabling
+                reverse traversal when needed.
 
         Returns:
             A ReasoningChain, or None if no matching seed node is found.
@@ -755,6 +796,7 @@ class AGNNGraph:
             relation_filter=relation_filter,
             confidence_threshold=confidence_threshold,
             beam_width=beam_width,
+            bidirectional=bidirectional,
         )
 
     def _traverse_activity_guided(
@@ -765,6 +807,7 @@ class AGNNGraph:
         relation_filter: Optional[List[RelationType]],
         confidence_threshold: float,
         beam_width: int,
+        bidirectional: bool = False,
     ) -> Optional[ReasoningChain]:
         """Activity-guided beam search traversal.
 
@@ -777,6 +820,13 @@ class AGNNGraph:
              for all visited nodes). This naturally favors longer chains that
              stay in the high-activation neighborhood — which is exactly the
              multi-hop reasoning path we want.
+
+        Bidirectional support:
+          When bidirectional=True, or when auto-detect triggers (outgoing
+          edges produce fewer candidates than beam_width and no
+          relation_filter is set), incoming edges are also expanded.
+          Reverse traversal steps are marked with "/reverse" in the
+          relation string.
 
         Key design decisions:
           - No global visited_paths: Each beam candidate tracks its own path
@@ -799,6 +849,9 @@ class AGNNGraph:
             relation_filter: Optional relation type filter.
             confidence_threshold: Minimum edge confidence.
             beam_width: Number of candidate paths per hop.
+            bidirectional: If True, always expand both directions. If False,
+                auto-detect: expand incoming edges when outgoing edges are
+                insufficient and no relation_filter is set.
 
         Returns:
             Best ReasoningChain found, or None.
@@ -826,6 +879,17 @@ class AGNNGraph:
         # This allows different beam candidates to explore the same edge
         # through different routes, which is essential for diverse chains.
 
+        # Determine whether auto-detect bidirectional is allowed:
+        # Only when no relation_filter is set. When a relation_filter
+        # is provided, the caller explicitly chose which edge types
+        # to follow — adding reverse edges could violate that intent
+        # and would break the relation string expectations in tests.
+        auto_bidirectional_allowed = (relation_filter is None)
+
+        # Track whether bidirectional expansion happened at the seed
+        # level, so we can widen the beam for the first hop.
+        any_bidirectional_at_seed = False
+
         while beam:
             next_beam: List = []
 
@@ -842,17 +906,12 @@ class AGNNGraph:
                         ))
                     continue
 
-                edges = self.get_edges_from(current_id)
-                if not edges and hops > 0:
-                    if chain_steps:
-                        completed_chains.append(ReasoningChain(
-                            steps=chain_steps,
-                            confidence=current_score,
-                            node_ids=node_ids,
-                        ))
-                    continue
+                total_candidates = 0  # track across both outgoing + incoming
 
-                for edge in edges:
+                # ── Expand outgoing edges ──
+                outgoing_edges = self.get_edges_from(current_id)
+
+                for edge in outgoing_edges:
                     if edge.confidence < confidence_threshold:
                         continue
                     if relation_filter and edge.relation_type not in relation_filter:
@@ -891,10 +950,107 @@ class AGNNGraph:
                         new_ids,
                     ))
                     counter += 1
+                    total_candidates += 1
 
-            # Keep only top beam_width candidates for next hop
+                # ── Expand incoming edges (bidirectional) ──
+                # Two triggers:
+                #   1. bidirectional=True: always expand incoming edges
+                #   2. Auto-detect: only at the seed level (hops==0), when
+                #      no relation_filter AND outgoing candidates from seed
+                #      < beam_width. This handles the case where the seed
+                #      node's outgoing edges don't cover all relevant nodes
+                #      and the answer is "behind" the seed (reachable only
+                #      via reverse traversal).
+                #      For hops > 0, we also try incoming when the node is
+                #      a dead end (total_candidates == 0 after outgoing).
+                should_expand_incoming = bidirectional
+
+                if not should_expand_incoming and auto_bidirectional_allowed:
+                    if hops == 0 and total_candidates < beam_width:
+                        # Seed has few outgoing candidates — also try incoming
+                        should_expand_incoming = True
+                        any_bidirectional_at_seed = True
+                    elif hops > 0 and total_candidates == 0:
+                        # Non-seed dead end — try incoming as last resort
+                        should_expand_incoming = True
+
+                if bidirectional and hops == 0:
+                    any_bidirectional_at_seed = True
+
+                if should_expand_incoming:
+                    incoming_edges = self.get_edges_to(current_id)
+                    for edge in incoming_edges:
+                        if edge.confidence < confidence_threshold:
+                            continue
+                        # For reverse traversal, check the base relation type
+                        # against the filter (if any). The "/reverse" suffix
+                        # is only for chain representation, not filtering.
+                        if relation_filter and edge.relation_type not in relation_filter:
+                            continue
+
+                        # The "source" of the original edge becomes our
+                        # traversal target when going in reverse
+                        source_node = self._nodes.get(edge.source_id)
+                        if source_node is None:
+                            continue
+
+                        # Cycle detection
+                        if edge.source_id in node_ids:
+                            continue
+
+                        # Activity-guided scoring for reverse edge.
+                        # Same formula as forward, but target is edge.source_id
+                        # (the node we're going TO in reverse).
+                        act_score = activation.get(edge.source_id, 1.0)
+                        if act_score < 1e-8:
+                            act_score = 0.01
+
+                        rel_weight = abs(_RELATION_AGGREGATION_WEIGHTS.get(edge.relation_type, 0.5))
+                        combined_score = act_score * edge.confidence * rel_weight * source_node.confidence
+
+                        # Reverse step: current_node <--[RELATION/reverse]-- source_node
+                        # In the chain, we show: current → [RELATION/REVERSE] → source
+                        current_label = self._nodes[current_id].label
+                        reverse_relation = edge.relation_type.value + "/reverse"
+                        new_steps = chain_steps + [(current_label, reverse_relation, source_node.label)]
+                        new_ids = node_ids + [edge.source_id]
+
+                        heapq.heappush(next_beam, (
+                            -combined_score,
+                            counter,
+                            edge.source_id,
+                            hops + 1,
+                            new_steps,
+                            new_ids,
+                        ))
+                        counter += 1
+                        total_candidates += 1
+
+                # If no candidates were produced at all (neither outgoing
+                # nor incoming), this path is a dead end → record as
+                # completed chain (only if we have at least one step).
+                if total_candidates == 0 and hops > 0:
+                    if chain_steps:
+                        completed_chains.append(ReasoningChain(
+                            steps=chain_steps,
+                            confidence=current_score,
+                            node_ids=node_ids,
+                        ))
+
+            # Keep only top beam_width candidates for next hop.
+            # When bidirectional expansion happened at the seed level (hops==0),
+            # we may have more candidates than beam_width. Use a wider beam
+            # to ensure reverse-traversal candidates from the seed aren't
+            # dropped — they may be essential for reaching nodes "behind"
+            # the seed that are only reachable via incoming edges.
+            effective_beam_width = beam_width
+            if any_bidirectional_at_seed:
+                # Allow enough room for all seed-level candidates
+                effective_beam_width = max(beam_width, len(next_beam))
+                any_bidirectional_at_seed = False  # Only widen for first hop
+
             beam = []
-            for item in heapq.nsmallest(min(beam_width, len(next_beam)), next_beam):
+            for item in heapq.nsmallest(min(effective_beam_width, len(next_beam)), next_beam):
                 heapq.heappush(beam, item)
 
         # Step 3: Among completed chains, pick the best one
@@ -957,7 +1113,12 @@ class AGNNGraph:
         """Find nodes whose ID or label contains the given keyword.
 
         Uses case-insensitive substring matching on both node.id and
-        node.label. Returns node IDs sorted by confidence descending,
+        node.label. Also includes direct neighbors (both incoming and
+        outgoing) of matched nodes, since a query about "Bali" might
+        need to start from a connected node like "Indonesia" if the
+        answer requires reverse traversal.
+
+        Returns node IDs sorted by confidence descending,
         limited to top_k results.
 
         This is a more robust alternative to _find_seed() for benchmark
@@ -979,6 +1140,7 @@ class AGNNGraph:
         keyword_words = keyword_lower.replace("?", "").replace(".", "").split()
 
         candidates: List[Tuple[float, str]] = []  # (confidence, node_id)
+        matched_node_ids: Set[str] = set()
 
         for node in self._nodes.values():
             id_lower = node.id.lower()
@@ -990,6 +1152,7 @@ class AGNNGraph:
             # Exact match on label (highest priority)
             if label_lower == keyword_lower or id_lower == keyword_lower:
                 candidates.append((node.confidence + 100.0, node.id))  # boost exact matches
+                matched_node_ids.add(node.id)
                 continue
 
             # Word-level match: any keyword word appears in label words or ID
@@ -1011,6 +1174,27 @@ class AGNNGraph:
 
             if matched:
                 candidates.append((node.confidence, node.id))
+                matched_node_ids.add(node.id)
+
+        # Also include direct neighbors of matched nodes — both incoming
+        # and outgoing. This helps when the query keyword matches a node
+        # but the traversal needs to start from a neighbor (e.g., query
+        # mentions "Bali" but seed should be "Indonesia" for reverse
+        # traversal to work).
+        neighbor_boost = 50.0  # Lower boost than exact match
+        for matched_id in list(matched_node_ids):
+            # Outgoing neighbors
+            for edge in self.get_edges_from(matched_id):
+                if edge.target_id not in matched_node_ids:
+                    target = self._nodes.get(edge.target_id)
+                    if target is not None:
+                        candidates.append((target.confidence + neighbor_boost, edge.target_id))
+            # Incoming neighbors
+            for edge in self.get_edges_to(matched_id):
+                if edge.source_id not in matched_node_ids:
+                    source = self._nodes.get(edge.source_id)
+                    if source is not None:
+                        candidates.append((source.confidence + neighbor_boost, edge.source_id))
 
         # Sort by confidence descending, take top_k
         candidates.sort(key=lambda x: -x[0])
