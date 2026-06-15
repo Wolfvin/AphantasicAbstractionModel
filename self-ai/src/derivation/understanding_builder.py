@@ -100,6 +100,9 @@ from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any, Tuple
 from collections import defaultdict
 
+# v37: SQLite-backed store — optional scalable persistence
+from derivation.sqlite_store import SQLiteGraphStore
+
 # v35: Governance types — dual-axis lifecycle + epistemic + compositional members
 from governance.states import (
     LifecycleState,
@@ -382,6 +385,14 @@ class UnderstandingGraph:
         self._store_path = store_path or os.path.join(
             os.path.dirname(__file__), '..', '..', 'data', 'understanding_graph.json'
         )
+
+        # v37: Choose persistence backend based on file extension.
+        # .db or .sqlite → SQLiteGraphStore (scalable, queryable)
+        # .json or no extension → existing JSON flat-file store (backward compatible)
+        self._use_sqlite = self._store_path.endswith(('.db', '.sqlite'))
+        self._sqlite_store: Optional[SQLiteGraphStore] = None
+        if self._use_sqlite:
+            self._sqlite_store = SQLiteGraphStore(self._store_path)
 
         # v26: Embedding-based retriever (bge-m3)
         # This replaces keyword-based find_matching with semantic similarity.
@@ -1963,6 +1974,10 @@ class UnderstandingGraph:
 
     def _save(self):
         """Persist graph to disk."""
+        if self._use_sqlite and self._sqlite_store is not None:
+            # v37: SQLite backend — delegate to SQLiteGraphStore
+            self._sqlite_store.save(self._nodes)
+            return
         try:
             os.makedirs(os.path.dirname(self._store_path), exist_ok=True)
             data = {nid: n.to_dict() for nid, n in self._nodes.items()}
@@ -1975,6 +1990,24 @@ class UnderstandingGraph:
 
     def _load(self):
         """Load graph from disk."""
+        if self._use_sqlite and self._sqlite_store is not None:
+            # v37: SQLite backend — load from SQLiteGraphStore
+            try:
+                data = self._sqlite_store.load()
+                for nid, nd in data.items():
+                    self._nodes[nid] = UnderstandingNode.from_dict(nd)
+                # Rebuild signal index
+                self._signal_index = defaultdict(list)
+                for nid, node in self._nodes.items():
+                    for cond in node.conditions:
+                        self._signal_index[cond.lower()].append(nid)
+                # v36: Mark clusters as dirty since we loaded new nodes
+                self._clusters_dirty = True
+                logger.info("Loaded %d understanding nodes (SQLite)", len(self._nodes))
+            except Exception as e:
+                logger.warning("Failed to load understanding graph from SQLite: %s", e)
+            return
+        # JSON flat-file backend (original behavior)
         if not os.path.exists(self._store_path):
             return
         try:
