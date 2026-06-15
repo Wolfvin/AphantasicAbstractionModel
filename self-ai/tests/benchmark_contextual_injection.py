@@ -242,6 +242,88 @@ def print_condition(label, results):
     return means
 
 
+def run_random_vector_condition(label, model, tokenizer, injector, bge, n_runs, seed=42):
+    """Condition 4: inject random normalized vector — no graph, no semantic content.
+
+    This is the make-or-break ablation control. We bypass graph retrieval
+    entirely and inject a random normalized 1024-dim vector directly into
+    the injector's _experience_vector. The hook fires as normal — the only
+    difference is the injected content is noise, not projected experience.
+
+    If this scores similarly to POPULATED_WITH_INJECTION:
+        → The effect is from hidden-state perturbation, not semantic content.
+        → Graph-based memory claims must be reframed.
+
+    If this scores similarly to BASELINE:
+        → Semantic content of the projected vector matters.
+        → Graph-based memory hypothesis is supported.
+
+    Args:
+        seed: RNG seed for reproducibility across runs.
+    """
+    correct_embs = bge.encode(
+        [tc["correct_answer"] for tc in TEST_CASES],
+        normalize_embeddings=True, show_progress_bar=False
+    )
+
+    # Build a random normalized vector with the same shape as a real injection
+    # (1024-dim, float16, on model device) — same magnitude as projected vectors
+    device = next(model.parameters()).device
+    rng = torch.Generator()
+    rng.manual_seed(seed)
+    rand_vec = torch.randn(1024, generator=rng, dtype=torch.float16, device=device)
+    rand_vec = rand_vec / (rand_vec.norm() + 1e-8)
+
+    results = []
+    for tc, correct_emb in zip(TEST_CASES, correct_embs):
+        outputs = []
+        for run_i in range(n_runs):
+            # Each run uses a different seed so we're not just repeating one vector
+            run_rng = torch.Generator()
+            run_rng.manual_seed(seed + run_i)
+            rv = torch.randn(1024, generator=run_rng, dtype=torch.float16, device=device)
+            rv = rv / (rv.norm() + 1e-8)
+
+            # Manually set the experience vector and register hook
+            injector._experience_vector = rv
+            injector._active = True
+            try:
+                layers = model.model.layers
+                hook_handle = layers[injector.hook_layer_index].register_forward_hook(
+                    injector._hook_fn
+                )
+                try:
+                    text = generate(model, tokenizer, tc["question"], **GEN_KWARGS)
+                finally:
+                    hook_handle.remove()
+            finally:
+                injector._active = False
+                injector._experience_vector = None
+
+            if not text or len(text.strip()) < 3:
+                text = generate(model, tokenizer, tc["question"],
+                                max_new_tokens=128, do_sample=True,
+                                temperature=0.7, top_p=0.9)
+            outputs.append(text)
+
+        output_embs = bge.encode(outputs, normalize_embeddings=True, show_progress_bar=False)
+        hits = [keyword_hit(o, tc["correct_keywords"]) for o in outputs]
+        alignments = [cosine_sim(e, correct_emb) for e in output_embs]
+        scores = [semantic_score(h, a) for h, a in zip(hits, alignments)]
+
+        results.append({
+            "question": tc["question"][:55],
+            "keywords": tc["correct_keywords"],
+            "outputs": outputs,
+            "keyword_hit_rate": round(sum(hits) / n_runs, 4),
+            "answer_alignment":  round(sum(alignments) / n_runs, 4),
+            "semantic_score":    round(sum(scores) / n_runs, 4),
+            "consistency":       round(1.0 - (statistics.stdev(scores) if len(scores) > 1 else 0), 4),
+        })
+
+    return results
+
+
 def main():
     # Prevent huggingface_hub from making network requests during benchmark
     os.environ.setdefault("HF_HUB_OFFLINE", "1")
@@ -329,6 +411,16 @@ def main():
     )
     with_inj_m = print_condition("POPULATED_WITH_INJECTION", with_inj_results)
 
+    # ── Condition 4: RANDOM VECTOR (ablation control) ─────────────────────────
+    logger.info("\n=== Condition 4: RANDOM VECTOR INJECTION (ablation control) ===")
+    logger.info("  Injecting random normalized 1024-dim vector — no graph, no semantics.")
+    logger.info("  Purpose: isolate whether effect is from semantic content or perturbation.")
+
+    rand_results = run_random_vector_condition(
+        "RANDOM_VECTOR", model, tokenizer, injector, bge, N_RUNS, seed=42
+    )
+    rand_m = print_condition("RANDOM_VECTOR", rand_results)
+
     # ── Summary ───────────────────────────────────────────────────────────────
     logger.info("\n=== SUMMARY ===")
     logger.info("  %-28s | hit_rate | alignment | score  | consistency", "Condition")
@@ -341,8 +433,37 @@ def main():
     logger.info("  %-28s | %8.4f | %9.4f | %6.4f | %11.4f",
                 "Populated with injection", with_inj_m["hit_rate"], with_inj_m["alignment"],
                 with_inj_m["score"], with_inj_m["consistency"])
+    logger.info("  %-28s | %8.4f | %9.4f | %6.4f | %11.4f",
+                "Random vector (ablation)", rand_m["hit_rate"], rand_m["alignment"],
+                rand_m["score"], rand_m["consistency"])
 
-    # Verdict
+    # ── Ablation verdict ─────────────────────────────────────────────────────
+    threshold = 0.03  # within 3% = "similar"
+    rand_vs_inj  = abs(rand_m["score"] - with_inj_m["score"])
+    rand_vs_base = abs(rand_m["score"] - baseline_m["score"])
+
+    if rand_vs_base <= threshold and rand_vs_inj > threshold:
+        ablation_verdict = (
+            "SCENARIO A: Random vector ~ baseline. "
+            "Semantic content of projection matters. "
+            "Graph-based memory hypothesis SUPPORTED."
+        )
+    elif rand_vs_inj <= threshold:
+        ablation_verdict = (
+            "SCENARIO B: Random vector ~ full injection. "
+            "Effect may be from hidden-state perturbation, not semantic content. "
+            "Graph-based memory claims need reframing."
+        )
+    else:
+        ablation_verdict = (
+            "AMBIGUOUS: Random vector between baseline and injection. "
+            f"rand={rand_m['score']:.4f} base={baseline_m['score']:.4f} "
+            f"inj={with_inj_m['score']:.4f}. "
+            "Further ablation needed."
+        )
+    logger.info("\n  ABLATION VERDICT: %s", ablation_verdict)
+
+    # Injection verdict
     if with_inj_m["score"] > no_inj_m["score"] > baseline_m["score"]:
         verdict = "CONTEXTUAL INJECTION WORKS — injection > graph-only > baseline"
     elif with_inj_m["score"] > baseline_m["score"]:
@@ -351,16 +472,18 @@ def main():
         verdict = "Graph retrieval helps; injection not yet better than graph-only"
     else:
         verdict = "injection not yet outperforming baseline — projection needs more training data"
-    logger.info("\n  VERDICT: %s", verdict)
+    logger.info("  INJECTION VERDICT: %s", verdict)
 
     # Save results
     out = {
-        "metric_version": "v41_contextual_injection",
+        "metric_version": "v42_ablation_random_vector",
         "n_runs": N_RUNS,
         "n_cases": len(TEST_CASES),
         "baseline": baseline_m,
         "populated_no_injection": no_inj_m,
         "populated_with_injection": with_inj_m,
+        "random_vector_ablation": rand_m,
+        "ablation_verdict": ablation_verdict,
         "verdict": verdict,
     }
     out_path = os.path.join(SCRIPT_DIR, '..', 'benchmark', 'contextual_results.json')
