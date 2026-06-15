@@ -54,6 +54,10 @@ class SelfCore:
 
         # v35: Governance engine — lifecycle + epistemic management
         self._governance = None     # GovernanceEngine (lazy)
+
+        # v37: Cached UnderstandingGraph reference for introspect()
+        # None means not yet resolved; introspect() will try get_shared_graph()
+        self._graph = None
         
     @property
     def composition_layer(self):
@@ -1089,6 +1093,119 @@ class SelfCore:
             'node_ids': penalized_ids,
             'new_confidences': new_confidences,
         }
+
+    def introspect(self) -> dict:
+        """Returns a snapshot of what SELF currently knows.
+
+        This method allows SELF to reflect on its own understanding —
+        answering questions like "how many nodes are stored?", "which nodes
+        are most confident?", and "what was learned recently?".
+
+        No model, no tokenizer, no network call — purely reads state
+        from the UnderstandingGraph.
+
+        Returns:
+            dict with keys:
+              - graph_size: int — total nodes in graph
+              - avg_confidence: float — mean confidence across all nodes (0.0 if empty)
+              - top_nodes: list[dict] — top 5 nodes by confidence, each:
+                  {id, name, confidence, source, abstraction (truncated to 100 chars)}
+              - recent_nodes: list[dict] — 5 most recent nodes by insertion order:
+                  {id, name, confidence, source}
+              - sources: dict — count per source string, e.g.
+                  {"user_correction": 3, "benchmark": 80}
+              - status: str — "empty" | "small" | "healthy"
+                  empty = graph_size == 0
+                  small = graph_size < 10
+                  healthy = graph_size >= 10
+        """
+        default = {
+            'graph_size': 0,
+            'avg_confidence': 0.0,
+            'top_nodes': [],
+            'recent_nodes': [],
+            'sources': {},
+            'status': 'empty',
+        }
+
+        # ── Step 1: Resolve the graph ──
+        # Use self._graph if already cached; otherwise try get_shared_graph().
+        try:
+            graph = self._graph
+            if graph is None:
+                from derivation.understanding_builder import get_shared_graph
+                graph = get_shared_graph()
+                self._graph = graph  # cache for future calls
+        except Exception as e:
+            logger.debug("introspect(): graph unavailable: %s", e)
+            return default
+
+        if graph is None:
+            return default
+
+        # ── Step 2: Compute statistics from graph._nodes ──
+        try:
+            nodes = graph._nodes  # dict: node_id -> UnderstandingNode
+            graph_size = len(nodes)
+
+            if graph_size == 0:
+                default['status'] = 'empty'
+                return default
+
+            # Average confidence
+            total_confidence = sum(n.confidence for n in nodes.values())
+            avg_confidence = total_confidence / graph_size
+
+            # Top 5 nodes by confidence (descending)
+            sorted_by_conf = sorted(
+                nodes.values(), key=lambda n: n.confidence, reverse=True
+            )
+            top_nodes = []
+            for node in sorted_by_conf[:5]:
+                top_nodes.append({
+                    'id': node.id,
+                    'name': node.name,
+                    'confidence': node.confidence,
+                    'source': node.source,
+                    'abstraction': node.abstraction[:100],
+                })
+
+            # 5 most recent nodes by insertion order (last items in dict)
+            # Python 3.7+ preserves dict insertion order
+            recent_nodes = []
+            recent_items = list(nodes.values())[-5:]
+            for node in recent_items:
+                recent_nodes.append({
+                    'id': node.id,
+                    'name': node.name,
+                    'confidence': node.confidence,
+                    'source': node.source,
+                })
+
+            # Source counts
+            source_counts = {}
+            for node in nodes.values():
+                src = node.source
+                source_counts[src] = source_counts.get(src, 0) + 1
+
+            # Status
+            if graph_size >= 10:
+                status = 'healthy'
+            else:
+                status = 'small'
+
+            return {
+                'graph_size': graph_size,
+                'avg_confidence': round(avg_confidence, 4),
+                'top_nodes': top_nodes,
+                'recent_nodes': recent_nodes,
+                'sources': source_counts,
+                'status': status,
+            }
+
+        except Exception as e:
+            logger.warning("introspect(): error computing stats: %s", e)
+            return default
 
     def _run_self_correction(self, text: str, question: str, wrong_answer: str,
                               correct_answer: str, answer_method: str = '',
