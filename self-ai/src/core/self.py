@@ -951,6 +951,145 @@ class SelfCore:
             'duplicate': False,
         }
 
+    def reinforce(self, question: str, confirmed_answer: str) -> dict:
+        """Strengthen nodes related to this question that led to the correct answer.
+
+        Called when a user confirms that the model's answer is correct.
+        This finds nodes in the UnderstandingGraph whose experience text
+        contains the confirmed_answer and increases their confidence,
+        making them more influential in future injections.
+
+        The reinforcement flow:
+          1. Retrieve top-k nodes relevant to the question from the graph
+          2. Filter: only reinforce nodes whose experience (abstraction)
+             contains the confirmed_answer (case-insensitive substring match)
+          3. Call graph.reinforce(node_id, step=0.08) on each matching node
+          4. Return a summary dict with counts and new confidence values
+
+        Args:
+            question: The question that was asked and confirmed correct.
+            confirmed_answer: The answer that was confirmed correct by the user.
+
+        Returns:
+            Dict with keys:
+              - reinforced_count: Number of nodes that were reinforced
+              - node_ids: List of node IDs that were reinforced
+              - new_confidences: Dict mapping node_id → new confidence value
+        """
+        # ── Step 1: Get the shared graph (graceful if unavailable) ──
+        try:
+            from derivation.understanding_builder import get_shared_graph
+            graph = get_shared_graph()
+        except ImportError:
+            logger.debug("reinforce(): UnderstandingGraph not available — returning empty")
+            return {'reinforced_count': 0, 'node_ids': [], 'new_confidences': {}}
+        except Exception as e:
+            logger.warning("reinforce(): Failed to get shared graph: %s", e)
+            return {'reinforced_count': 0, 'node_ids': [], 'new_confidences': {}}
+
+        # ── Step 2: Retrieve candidate nodes ──
+        try:
+            candidates = graph.retrieve(question, question, top_k=10, threshold=0.1)
+        except Exception as e:
+            logger.warning("reinforce(): retrieve() failed: %s", e)
+            return {'reinforced_count': 0, 'node_ids': [], 'new_confidences': {}}
+
+        if not candidates:
+            return {'reinforced_count': 0, 'node_ids': [], 'new_confidences': {}}
+
+        # ── Step 3: Filter and reinforce matching nodes ──
+        confirmed_lower = confirmed_answer.lower()
+        reinforced_ids = []
+        new_confidences = {}
+
+        for node, score in candidates:
+            if confirmed_lower in node.abstraction.lower():
+                reinforced_node = graph.reinforce(node.id, step=0.08)
+                if reinforced_node is not None:
+                    reinforced_ids.append(node.id)
+                    new_confidences[node.id] = reinforced_node.confidence
+
+        logger.info(
+            "reinforce(): question='%s...' confirmed='%s' reinforced=%d/%d candidates",
+            question[:30], confirmed_answer[:20], len(reinforced_ids), len(candidates)
+        )
+
+        return {
+            'reinforced_count': len(reinforced_ids),
+            'node_ids': reinforced_ids,
+            'new_confidences': new_confidences,
+        }
+
+    def penalize(self, question: str, wrong_answer: str) -> dict:
+        """Weaken nodes related to this question that led to the wrong answer.
+
+        Called when a user reports that the model's answer is wrong, before
+        calling learn() with the correction. This finds nodes in the
+        UnderstandingGraph whose experience text contains the wrong_answer
+        and decreases their confidence, making them less influential in
+        future injections.
+
+        The penalization flow:
+          1. Retrieve top-k nodes relevant to the question from the graph
+          2. Filter: only penalize nodes whose experience (abstraction)
+             contains the wrong_answer (case-insensitive substring match)
+          3. Call graph.penalize(node_id, step=0.1) on each matching node
+          4. Return a summary dict with counts and new confidence values
+
+        Args:
+            question: The question that was asked.
+            wrong_answer: The wrong answer that the model gave.
+
+        Returns:
+            Dict with keys:
+              - penalized_count: Number of nodes that were penalized
+              - node_ids: List of node IDs that were penalized
+              - new_confidences: Dict mapping node_id → new confidence value
+        """
+        # ── Step 1: Get the shared graph (graceful if unavailable) ──
+        try:
+            from derivation.understanding_builder import get_shared_graph
+            graph = get_shared_graph()
+        except ImportError:
+            logger.debug("penalize(): UnderstandingGraph not available — returning empty")
+            return {'penalized_count': 0, 'node_ids': [], 'new_confidences': {}}
+        except Exception as e:
+            logger.warning("penalize(): Failed to get shared graph: %s", e)
+            return {'penalized_count': 0, 'node_ids': [], 'new_confidences': {}}
+
+        # ── Step 2: Retrieve candidate nodes ──
+        try:
+            candidates = graph.retrieve(question, question, top_k=10, threshold=0.1)
+        except Exception as e:
+            logger.warning("penalize(): retrieve() failed: %s", e)
+            return {'penalized_count': 0, 'node_ids': [], 'new_confidences': {}}
+
+        if not candidates:
+            return {'penalized_count': 0, 'node_ids': [], 'new_confidences': {}}
+
+        # ── Step 3: Filter and penalize matching nodes ──
+        wrong_lower = wrong_answer.lower()
+        penalized_ids = []
+        new_confidences = {}
+
+        for node, score in candidates:
+            if wrong_lower in node.abstraction.lower():
+                penalized_node = graph.penalize(node.id, step=0.1)
+                if penalized_node is not None:
+                    penalized_ids.append(node.id)
+                    new_confidences[node.id] = penalized_node.confidence
+
+        logger.info(
+            "penalize(): question='%s...' wrong='%s' penalized=%d/%d candidates",
+            question[:30], wrong_answer[:20], len(penalized_ids), len(candidates)
+        )
+
+        return {
+            'penalized_count': len(penalized_ids),
+            'node_ids': penalized_ids,
+            'new_confidences': new_confidences,
+        }
+
     def _run_self_correction(self, text: str, question: str, wrong_answer: str,
                               correct_answer: str, answer_method: str = '',
                               answer_confidence: float = 0.0):
