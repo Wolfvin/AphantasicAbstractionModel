@@ -49,6 +49,8 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 import numpy as np
 
+from agnn.embeddings import ModelEmbedder, EmbeddingCache, embed_node, embed_nodes_batch
+
 logger = logging.getLogger(__name__)
 
 # ──────────────────────────────────────────────────────
@@ -377,6 +379,10 @@ class AGNNGraph:
         self._incoming: Dict[str, List[int]] = {}   # node_id → [edge_indices]
         self._embedding_dim = embedding_dim
         self._underlying = understanding_graph
+
+        # Embedder integration — None means fallback to random init
+        self._embedder: Optional[ModelEmbedder] = None
+        self._embedding_cache: Optional[EmbeddingCache] = None
 
         # If wrapping an UnderstandingGraph, bridge all existing nodes
         if understanding_graph is not None:
@@ -816,6 +822,121 @@ class AGNNGraph:
                     best_score = node.confidence
 
         return best
+
+    # ──────────────── Embedder Integration ────────────────
+
+    def set_embedder(self, embedder: ModelEmbedder,
+                     cache: Optional[EmbeddingCache] = None) -> None:
+        """Attach a ModelEmbedder to the graph for semantic embedding initialization.
+
+        Once an embedder is set, new nodes can be initialized with
+        model-native embeddings instead of random vectors. This replaces
+        the random initialization in add_node() when an embedder is available.
+
+        The cache is optional but recommended — it avoids re-computing
+        embeddings for the same text across multiple calls.
+
+        If the embedder's hidden_size does not match the graph's
+        embedding_dim, the embedding will be projected (truncated or
+        zero-padded) to fit.
+
+        Args:
+            embedder: A ModelEmbedder instance (real or mock).
+            cache: Optional EmbeddingCache for storing computed embeddings.
+        """
+        self._embedder = embedder
+        self._embedding_cache = cache
+        logger.info("Embedder set: model_id=%s, hidden_size=%d, cache=%s",
+                    embedder.model_id, embedder.hidden_size,
+                    "enabled" if cache is not None else "disabled")
+
+    def initialize_embeddings(self, texts: Optional[Dict[str, str]] = None) -> int:
+        """Batch-compute embeddings for nodes that have text labels.
+
+        For each node in the graph, compute its embedding using the
+        attached ModelEmbedder (if set). If an embedder is NOT set,
+        this method is a no-op — existing random embeddings are preserved.
+
+        The texts parameter allows overriding the text used for each node.
+        If not provided, each node's label is used as the text.
+
+        Args:
+            texts: Optional dict mapping node_id → text to embed.
+                If None, uses each node's label as the embedding text.
+                Useful when node labels are IDs and the actual text
+                is stored elsewhere.
+
+        Returns:
+            Number of nodes whose embeddings were initialized.
+
+        Raises:
+            RuntimeError: If no embedder has been set via set_embedder().
+        """
+        if self._embedder is None:
+            logger.warning("initialize_embeddings() called without embedder — skipping")
+            return 0
+
+        # Determine which nodes to embed
+        node_ids = list(self._nodes.keys())
+        if not node_ids:
+            return 0
+
+        # Build text list
+        text_list: List[str] = []
+        for nid in node_ids:
+            if texts and nid in texts:
+                text_list.append(texts[nid])
+            else:
+                text_list.append(self._nodes[nid].label)
+
+        # Batch-compute embeddings
+        embeddings = embed_nodes_batch(text_list, self._embedder, self._embedding_cache)
+
+        # Assign embeddings to nodes
+        count = 0
+        for i, nid in enumerate(node_ids):
+            embedding = embeddings[i]
+            # Project to graph's embedding_dim if needed
+            if len(embedding) != self._embedding_dim:
+                embedding = self._project_embedding(embedding)
+            self._nodes[nid].embedding = embedding.astype(np.float32)
+            count += 1
+
+        logger.info("Initialized embeddings for %d nodes (model_id=%s)",
+                    count, self._embedder.model_id)
+        return count
+
+    def _project_embedding(self, embedding: np.ndarray) -> np.ndarray:
+        """Project an embedding to the graph's embedding dimension.
+
+        If the embedding is larger than embedding_dim, truncate it.
+        If smaller, zero-pad it. This handles the mismatch between
+        the model's hidden_size and the graph's embedding_dim.
+
+        Truncation is a valid strategy because:
+          - For very large hidden_size (e.g., 896 for Qwen3-0.6B),
+            the graph typically uses a smaller embedding_dim (64 or 128)
+          - The first N dimensions of a mean-pooled hidden state
+            capture the most important information (PCA-like)
+          - Zero-padding for smaller embeddings preserves the
+            original values in their existing dimensions
+
+        Args:
+            embedding: The source embedding vector.
+
+        Returns:
+            Projected embedding of shape (self._embedding_dim,).
+        """
+        result = np.zeros(self._embedding_dim, dtype=np.float32)
+        copy_len = min(len(embedding), self._embedding_dim)
+        result[:copy_len] = embedding[:copy_len]
+
+        # Re-normalize after truncation/padding
+        norm = np.linalg.norm(result)
+        if norm > 1e-8:
+            result /= norm
+
+        return result
 
     # ──────────────── Bridge from UnderstandingGraph ────────────────
 
