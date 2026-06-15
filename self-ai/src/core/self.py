@@ -58,6 +58,22 @@ class SelfCore:
         # v37: Cached UnderstandingGraph reference for introspect()
         # None means not yet resolved; introspect() will try get_shared_graph()
         self._graph = None
+
+        # v49: AGNNGraph — additive layer on top of UnderstandingGraph
+        # If AGNN import/init fails, graceful degradation: SelfCore works without it.
+        self._agnn = None
+        self._agnn_available = False
+        try:
+            from agnn.graph import AGNNGraph as _AGNNGraph
+            self._agnn = _AGNNGraph(embedding_dim=1024)
+            self._agnn_available = True
+            logger.info("AGNNGraph initialised (embedding_dim=%d)", self._agnn._embedding_dim)
+        except ImportError as exc:
+            logger.warning("AGNNGraph import failed (%s). SelfCore will run without AGNN.", exc)
+        except Exception as exc:
+            logger.warning("AGNNGraph init failed (%s). Continuing without AGNN.", exc)
+            self._agnn = None
+            self._agnn_available = False
         
     @property
     def composition_layer(self):
@@ -941,10 +957,29 @@ class SelfCore:
 
         graph.add_node(node)
 
+        # ── Step 6 (v49): Mirror to AGNNGraph ──
+        if self._agnn is not None:
+            try:
+                from agnn.graph import AGNNNode, NodeType, TypedEdge, RelationType
+                agnn_node = AGNNNode(
+                    id=node_id,
+                    label=question,
+                    node_type=NodeType.RULE,  # user_correction → RULE
+                    confidence=0.6,
+                    metadata={"source": "user_correction", "experience": experience},
+                )
+                self._agnn.add_node(agnn_node)
+
+                # Infer CATEGORICAL edges from keyword overlap with existing AGNN nodes
+                self._infer_agnn_edges(node_id, experience)
+            except Exception as exc:
+                logger.warning("learn(): AGNN mirror failed for node %s: %s", node_id, exc)
+
         graph_size = graph.count()
         logger.info(
-            "learn(): stored correction as node %s (graph_size=%d, has_embedding=%s)",
-            node_id, graph_size, condition_embedding is not None
+            "learn(): stored correction as node %s (graph_size=%d, has_embedding=%s, agnn=%s)",
+            node_id, graph_size, condition_embedding is not None,
+            self._agnn is not None and node_id in self._agnn._nodes,
         )
 
         return {
@@ -1012,6 +1047,15 @@ class SelfCore:
                 if reinforced_node is not None:
                     reinforced_ids.append(node.id)
                     new_confidences[node.id] = reinforced_node.confidence
+
+                    # v49: Mirror reinforcement to AGNNGraph
+                    if self._agnn is not None:
+                        try:
+                            agnn_node = self._agnn.get_node(node.id)
+                            if agnn_node is not None:
+                                agnn_node.confidence = min(1.0, agnn_node.confidence + 0.08)
+                        except Exception as exc:
+                            logger.debug("reinforce(): AGNN mirror failed for %s: %s", node.id, exc)
 
         logger.info(
             "reinforce(): question='%s...' confirmed='%s' reinforced=%d/%d candidates",
@@ -1082,6 +1126,15 @@ class SelfCore:
                 if penalized_node is not None:
                     penalized_ids.append(node.id)
                     new_confidences[node.id] = penalized_node.confidence
+
+                    # v49: Mirror penalization to AGNNGraph
+                    if self._agnn is not None:
+                        try:
+                            agnn_node = self._agnn.get_node(node.id)
+                            if agnn_node is not None:
+                                agnn_node.confidence = max(0.0, agnn_node.confidence - 0.1)
+                        except Exception as exc:
+                            logger.debug("penalize(): AGNN mirror failed for %s: %s", node.id, exc)
 
         logger.info(
             "penalize(): question='%s...' wrong='%s' penalized=%d/%d candidates",
@@ -1201,11 +1254,122 @@ class SelfCore:
                 'recent_nodes': recent_nodes,
                 'sources': source_counts,
                 'status': status,
+                # v49: AGNN enrichment (additive — no existing fields removed)
+                'agnn_size': self._agnn.node_count() if self._agnn is not None else 0,
+                'agnn_avg_confidence': round(
+                    sum(n.confidence for n in self._agnn._nodes.values()) / max(1, self._agnn.node_count()), 4
+                ) if self._agnn is not None and self._agnn.node_count() > 0 else 0.0,
             }
 
         except Exception as e:
             logger.warning("introspect(): error computing stats: %s", e)
             return default
+
+    # ──────────────────────────────────────────────────────────────
+    # v49: AGNN integration methods
+    # ──────────────────────────────────────────────────────────────
+
+    def _infer_agnn_edges(self, new_node_id: str, new_text: str) -> None:
+        """Infer CATEGORICAL edges between *new_node_id* and existing AGNN
+        nodes that share keywords with *new_text*.
+
+        This is a simple heuristic — keyword overlap (>3 chars) →
+        CATEGORICAL edge with confidence 0.5.  Bidirectional edges
+        are created.  More sophisticated inference can replace this
+        in the future.
+        """
+        if self._agnn is None:
+            return
+
+        from agnn.graph import TypedEdge, RelationType
+
+        new_words = set(new_text.lower().split())
+        for nid, existing_node in self._agnn._nodes.items():
+            if nid == new_node_id:
+                continue
+            existing_words = set(existing_node.label.lower().split())
+            # Also check metadata experience text if available
+            exp_text = existing_node.metadata.get('experience', '')
+            if exp_text:
+                existing_words |= set(exp_text.lower().split())
+
+            overlap = new_words & existing_words
+            meaningful_overlap = [w for w in overlap if len(w) > 3]
+
+            if meaningful_overlap:
+                try:
+                    # Forward: new → existing
+                    self._agnn.add_edge(TypedEdge(
+                        source_id=new_node_id,
+                        target_id=nid,
+                        relation_type=RelationType.CATEGORICAL,
+                        confidence=0.5,
+                        context="inferred_from_keyword_overlap",
+                    ))
+                    # Backward: existing → new
+                    self._agnn.add_edge(TypedEdge(
+                        source_id=nid,
+                        target_id=new_node_id,
+                        relation_type=RelationType.CATEGORICAL,
+                        confidence=0.5,
+                        context="inferred_from_keyword_overlap",
+                    ))
+                except ValueError as exc:
+                    # Target not in graph yet — skip silently
+                    logger.debug("_infer_agnn_edges: skip edge %s→%s: %s", new_node_id, nid, exc)
+                except Exception as exc:
+                    logger.warning("_infer_agnn_edges: failed for %s→%s: %s", new_node_id, nid, exc)
+
+    def agnn_traverse(self, query: str, max_hops: int = 2) -> str:
+        """AGNN-powered traversal for context enrichment.
+
+        Calls ``AGNNGraph.traverse()`` with bidirectional=True and
+        returns the verbalized reasoning chain as a string.
+
+        This is intended as context enrichment before process() in the
+        future — providing the LLM with a reasoning chain from the
+        knowledge graph that goes beyond simple keyword matching.
+
+        Args:
+            query: Text to match against node labels.
+            max_hops: Maximum number of edges to traverse (default 2).
+
+        Returns:
+            A verbalized reasoning chain string, or empty string if
+            AGNN is unavailable or no chain is found.
+        """
+        if self._agnn is None:
+            logger.info("agnn_traverse(): AGNN not available.")
+            return ""
+        try:
+            chain = self._agnn.traverse(query, max_hops=max_hops, bidirectional=True)
+            if chain is None:
+                return ""
+            return chain.verbalize()
+        except Exception as exc:
+            logger.warning("agnn_traverse(): failed: %s", exc)
+            return ""
+
+    def adapt_agnn(self, adapter) -> None:
+        """Adapt the AGNNGraph using a SelfAdapter.
+
+        If the adapter has ``adapt_graph()``, call it to set the correct
+        embedding dimension and inject model-native embeddings.
+
+        Args:
+            adapter: A SelfAdapter instance (from agnn.adapter).
+        """
+        if self._agnn is None:
+            logger.info("adapt_agnn(): AGNN not available, nothing to adapt.")
+            return
+        if adapter is None:
+            return
+        try:
+            if hasattr(adapter, 'adapt_graph'):
+                adapter.adapt_graph(self._agnn)
+                logger.info("adapt_agnn(): AGNN adapted (embedding_dim=%d)", self._agnn._embedding_dim)
+        except Exception as exc:
+            logger.warning("adapt_agnn(): failed: %s", exc)
 
     def _run_self_correction(self, text: str, question: str, wrong_answer: str,
                               correct_answer: str, answer_method: str = '',
