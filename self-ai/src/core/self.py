@@ -74,7 +74,11 @@ class SelfCore:
             logger.warning("AGNNGraph init failed (%s). Continuing without AGNN.", exc)
             self._agnn = None
             self._agnn_available = False
-        
+
+        # v36: AGNN chain cache — set by process() before derivation,
+        # consumed by _derivation(), cleared after use.
+        self._agnn_chain_cache = None
+
     @property
     def composition_layer(self):
         """Lazy-init CompositionLayer with injector and graph wired.
@@ -433,7 +437,42 @@ class SelfCore:
 
     
     def process(self, text: str) -> dict:
-        """Process input through all 8 layers"""
+        """Process input through all 8 layers
+
+        v36: AGNN context enrichment — before derivation, agnn_traverse()
+        is called to retrieve a reasoning chain from the knowledge graph.
+        If the chain is non-empty, it is prepended to the derivation
+        prompt as [Knowledge Graph Context], giving the model richer
+        context without changing the existing pipeline.
+        """
+        # AGNN context enrichment: retrieve reasoning chain before derivation.
+        # If agnn_traverse() fails or returns empty, _agnn_chain_cache stays None
+        # and the pipeline continues unchanged (graceful degradation).
+        self._agnn_chain_cache = None
+        try:
+            # Strip trailing punctuation for AGNN seed matching.
+            # _find_seed uses substring matching, so "machine learning?"
+            # won't match "machine learning algorithms" — but
+            # "machine learning" will.
+            agnn_query = text.rstrip('?!.,;:')
+            chain = self.agnn_traverse(agnn_query, max_hops=2)
+            if chain:
+                # Truncate overly long chains to avoid token overflow
+                # on small LLMs (Qwen3-0.6B has ~8K context window;
+                # we cap the chain at 1000 chars to leave room for the
+                # question and answer).
+                max_chain_len = 1000
+                if len(chain) > max_chain_len:
+                    chain = chain[:max_chain_len] + '...'
+                    logger.info(
+                        "process(): AGNN chain truncated to %d chars",
+                        max_chain_len,
+                    )
+                self._agnn_chain_cache = chain
+                logger.info("process(): AGNN context enriched (%d chars)", len(chain))
+        except Exception as exc:
+            logger.warning("process(): agnn_traverse failed, continuing without chain: %s", exc)
+
         # Layer 1: Sensory
         sensory_result = self._sensory(text)
         
@@ -455,6 +494,9 @@ class SelfCore:
         # Layer 7: Derivation
         derivation_result = self._derivation(memory_result)
         
+        # Clear AGNN chain cache after use
+        self._agnn_chain_cache = None
+
         # Layer 8: Curiosity
         curiosity_result = self._curiosity(derivation_result)
         
@@ -643,9 +685,26 @@ class SelfCore:
 
         v28: If answer confidence is low and novelty is high,
         observe the novel input to potentially build new understanding.
+        v36: AGNN context enrichment — if _agnn_chain_cache is set by
+        process(), the reasoning chain is prepended to the text as
+        [Knowledge Graph Context] before calling derive().  This gives
+        the LLM richer context without changing the existing pipeline.
         """
         text = memory_result.get('text', '')
-        
+
+        # v36: Build enriched text with AGNN context if available.
+        # The enriched text is ONLY used for derive() — the original
+        # text stays in memory_result for other layers.
+        agnn_chain = getattr(self, '_agnn_chain_cache', None)
+        derive_text = text
+        if agnn_chain:
+            derive_text = (
+                f"[Knowledge Graph Context]\n"
+                f"{agnn_chain}\n"
+                f"Question: {text}"
+            )
+            logger.info("_derivation(): AGNN context prepended to derive text")
+
         # v32: Check if it's a question using embedding-based detection.
         # Removed hardcoded question word list — SELF detects questions semantically.
         is_question = '?' in text
@@ -679,11 +738,12 @@ class SelfCore:
 
                 # Derive answer — if injector is active, the generate()
                 # calls inside the derivation engine will be steered.
+                # v36: Use derive_text (with AGNN context) instead of raw text.
                 if injector is not None and experience_nodes:
                     with injector.active(experience_nodes):
-                        result = self.derivation_engine.derive(text, memory_result)
+                        result = self.derivation_engine.derive(derive_text, memory_result)
                 else:
-                    result = self.derivation_engine.derive(text, memory_result)
+                    result = self.derivation_engine.derive(derive_text, memory_result)
 
                 self.derivation_results.append(result)
 
