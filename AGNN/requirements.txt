@@ -1,0 +1,5 @@
+# AGNN dependencies (separate from self-ai/)
+numpy>=1.24
+torch>=2.0
+transformers>=4.40
+pytest>=7.0
