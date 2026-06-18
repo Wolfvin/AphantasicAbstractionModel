@@ -610,3 +610,122 @@ class TestAdaptAgnn:
         core = SelfCore()
         core._agnn = None
         core.adapt_agnn(MagicMock())  # Should not raise
+
+
+# ═══════════════════════════════════════════════════════════════════
+#  Test 9: process() AGNN context enrichment (feat/process-agnn-context)
+# ═══════════════════════════════════════════════════════════════════
+
+class TestProcessAgnnContext:
+    """Verify that process() enriches the derivation prompt with AGNN context.
+
+    Three scenarios:
+      1. process() with a graph that has relevant nodes
+         → the text passed to derive() contains [Knowledge Graph Context]
+      2. process() with an empty graph
+         → no [Knowledge Graph Context] in the text passed to derive()
+      3. process() when agnn_traverse() raises an exception
+         → still returns a result dict without crashing
+    """
+
+    def test_process_with_relevant_nodes_contains_agnn_context(self):
+        """When the graph has relevant nodes, derive() receives
+        [Knowledge Graph Context] prepended to the question text."""
+        from core.self import SelfCore
+        import derivation.understanding_builder as ub_module
+
+        graph = _make_graph()
+        ub_module._shared_graph = graph
+        core = SelfCore()
+
+        if core._agnn is None:
+            pytest.skip("AGNNGraph not available")
+
+        # Pre-populate the graph with nodes so agnn_traverse finds something.
+        # Note: agnn_traverse → _find_seed uses substring matching on labels,
+        # so the query must overlap with a learned label.
+        core.learn("machine learning algorithms", "wrong1", "correct1")
+        core.learn("deep learning techniques", "wrong2", "correct2")
+
+        # Mock derivation_engine.derive to capture the text argument
+        captured_text = {}
+
+        def capture_derive(text, context=None):
+            captured_text['value'] = text
+            # Return a minimal valid result so process() doesn't crash
+            return {'answer': 'test answer', 'confidence': 0.5, 'method': 'test'}
+
+        core.derivation_engine.derive = capture_derive
+
+        # Use a query that substring-matches the AGNN node labels.
+        # "machine learning" is a substring of the first label, so
+        # _find_seed will find it.
+        result = core.process("machine learning?")
+
+        # The text passed to derive() must contain [Knowledge Graph Context]
+        assert '[Knowledge Graph Context]' in captured_text.get('value', ''), \
+            "derive() should receive text with [Knowledge Graph Context] when graph has relevant nodes"
+
+        # And the original question must still be present
+        assert 'machine learning?' in captured_text.get('value', ''), \
+            "derive() text must still contain the original question"
+
+        # process() must return a dict with the same keys
+        assert isinstance(result, dict)
+        assert 'sensory' in result
+        assert 'derivation' in result
+
+    def test_process_with_empty_graph_no_agnn_context(self):
+        """When the graph is empty, derive() does NOT receive
+        [Knowledge Graph Context] in its text argument."""
+        from core.self import SelfCore
+        import derivation.understanding_builder as ub_module
+
+        graph = _make_graph()
+        ub_module._shared_graph = graph
+        core = SelfCore()
+
+        # Do NOT learn anything — graph stays empty.
+        # Mock derivation_engine.derive to capture the text argument
+        captured_text = {}
+        original_derive = core.derivation_engine.derive
+
+        def capture_derive(text, context=None):
+            captured_text['value'] = text
+            return {'answer': 'test answer', 'confidence': 0.5, 'method': 'test'}
+
+        core.derivation_engine.derive = capture_derive
+
+        result = core.process("what is something?")
+
+        # The text passed to derive() must NOT contain [Knowledge Graph Context]
+        assert '[Knowledge Graph Context]' not in captured_text.get('value', ''), \
+            "derive() should NOT receive [Knowledge Graph Context] when graph is empty"
+
+        # process() must still return a dict
+        assert isinstance(result, dict)
+
+    def test_process_agnn_traverse_exception_graceful(self):
+        """When agnn_traverse() raises an exception, process() still
+        returns a result dict without crashing."""
+        from core.self import SelfCore
+        import derivation.understanding_builder as ub_module
+
+        graph = _make_graph()
+        ub_module._shared_graph = graph
+        core = SelfCore()
+
+        # Mock agnn_traverse to raise an exception
+        def broken_traverse(query, max_hops=2):
+            raise RuntimeError("AGNN traverse exploded!")
+
+        core.agnn_traverse = broken_traverse
+
+        # process() should not raise — the exception is caught and logged
+        result = core.process("test question?")
+
+        # Must return a valid dict
+        assert isinstance(result, dict), \
+            "process() must return a dict even when agnn_traverse() raises"
+        assert 'sensory' in result
+        assert 'derivation' in result
