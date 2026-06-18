@@ -76,10 +76,14 @@ class AGNNCore:
             "limbic_system.cingulate_gyrus", "CingulateGyrus",
         )
 
-        # Model loading is lazy.
+        # Model loading is lazy. ``_model_load_attempted`` ensures we
+        # only try to load once even if the first attempt fails, so
+        # repeated ``process()`` calls don't re-attempt the (expensive)
+        # HF from_pretrained call.
         self.model = None
         self._tokenizer = None
         self._model_path = model_path
+        self._model_load_attempted = False
 
         # Episome registry - tracks every Episome returned by learn()
         # so introspect / reinforce / penalize can find them by id
@@ -107,31 +111,55 @@ class AGNNCore:
         except Exception:
             return None
 
-    def _load_model(self) -> None:
-        """Lazy-load the small LLM from ``self._model_path``.
+    # Maximum chars of the reasoning chain to include in the prompt.
+    # Chains longer than this are truncated to fit Qwen3-0.6B's context
+    # window (~8K tokens) while still leaving room for the question + answer.
+    _CHAIN_MAX_CHARS = 800
 
-        Sets ``self.model`` to a HF ``AutoModelForCausalLM`` instance
-        and ``self._tokenizer`` to the matching tokenizer on success.
-        On any failure (path missing, transformers not installed,
-        OOM, etc.) leaves ``self.model`` as ``None`` so callers fall
-        back to the no-model path.
+    def _load_model(self) -> None:
+        """Lazy-load Qwen3-0.6B via HuggingFace transformers.
+
+        Model path resolution order:
+            1. ``self._model_path`` (explicit constructor arg)
+            2. ``QWEN_PATH`` environment variable
+        If neither is set, skip loading entirely (graceful fallback).
+
+        On success: ``self.model`` = ``AutoModelForCausalLM`` instance,
+                    ``self._tokenizer`` = ``AutoTokenizer`` instance.
+        On any failure (transformers not installed, path missing, OOM,
+        etc.): ``self.model`` = ``None``, ``self._tokenizer`` = ``None``
+        so callers fall back to the no-model path.
         """
-        if not self._model_path:
+        model_path = self._model_path or os.environ.get("QWEN_PATH")
+        if not model_path:
+            # Neither explicit path nor QWEN_PATH set — skip loading.
             return
         try:
             from transformers import AutoModelForCausalLM, AutoTokenizer  # noqa: WPS433
-            self._tokenizer = AutoTokenizer.from_pretrained(self._model_path)
-            self.model = AutoModelForCausalLM.from_pretrained(self._model_path)
+            self._tokenizer = AutoTokenizer.from_pretrained(model_path)
+            self.model = AutoModelForCausalLM.from_pretrained(
+                model_path,
+                torch_dtype="auto",
+                device_map="cpu",
+            )
         except Exception:
             # Model unavailable / un-loadable - keep self.model = None.
             self.model = None
             self._tokenizer = None
 
-    def _generate(self, prompt: str) -> str:
-        """Generate text from ``prompt`` using the loaded model.
+    def _generate(self, prompt: str, max_new_tokens: int = 256) -> str:
+        """Generate text from ``prompt`` using the loaded Qwen3 model.
 
-        Falls back to returning the prompt itself on any error so the
-        caller still gets a non-empty string.
+        Args:
+            prompt: Input prompt (already formatted with the knowledge
+                graph context + question).
+            max_new_tokens: Maximum new tokens to generate (default 256).
+                The prompt tokens are NOT counted toward this limit.
+
+        Returns:
+            Generated text (prompt tokens stripped, only the new tokens
+            decoded). Falls back to returning the prompt itself on any
+            error so the caller still gets a non-empty string.
         """
         try:
             import torch  # noqa: WPS433
@@ -139,40 +167,66 @@ class AGNNCore:
             with torch.no_grad():
                 outputs = self.model.generate(
                     **inputs,
-                    max_new_tokens=100,
+                    max_new_tokens=max_new_tokens,
                     do_sample=False,
                 )
-            decoded = self._tokenizer.decode(
-                outputs[0], skip_special_tokens=True,
+            # Slice off the prompt tokens — only decode the new tokens.
+            # This avoids re-emitting the prompt in the output.
+            input_len = inputs["input_ids"].shape[1]
+            return self._tokenizer.decode(
+                outputs[0][input_len:],
+                skip_special_tokens=True,
             )
-            # Strip the prompt prefix if the model echoes it.
-            if decoded.startswith(prompt):
-                decoded = decoded[len(prompt):].lstrip()
-            return decoded.strip() or prompt
         except Exception:
             return prompt
 
     def _articulate(self, question: str, chain: str) -> str:
         """Turn a (question, chain) pair into a natural-language answer.
 
+        Prompt template::
+
+            [Knowledge Graph Context]
+            {chain (truncated to 800 chars)}
+            Q: {question}
+            A:
+
         Behavior:
-            - If ``self._model_path`` is set and the model hasn't been
-              loaded yet, attempt to load it.
+            - If a model path is available (``self._model_path`` **or**
+              the ``QWEN_PATH`` environment variable), lazy-load the
+              model on the first call. Loading is attempted **at most
+              once** — repeated calls don't re-trigger the (expensive)
+              ``from_pretrained`` call even if the first attempt failed.
             - If a model is available, generate via ``_generate``.
             - Otherwise (no path, load failed, generate failed) return
-              a short string that still surfaces the graph context so
-              the caller sees something useful.
+              the chain (truncated to 800 chars) wrapped in a short
+              note so the caller still sees the graph context. This is
+              the graceful-fallback path — ``process()`` never crashes
+              just because the model is unavailable.
         """
-        if self._model_path and self.model is None:
+        # Lazy load: only attempt once, and only if a path is available.
+        model_path_available = bool(self._model_path) or bool(
+            os.environ.get("QWEN_PATH")
+        )
+        if (
+            model_path_available
+            and self.model is None
+            and not self._model_load_attempted
+        ):
+            self._model_load_attempted = True
             self._load_model()
+
+        # Truncate the chain to stay within Qwen3-0.6B's context budget.
+        chain_truncated = (chain or "")[: self._CHAIN_MAX_CHARS]
+
         if self.model is not None and self._tokenizer is not None:
             prompt = (
-                f"[Knowledge Graph Context]\n{chain}\n\n"
+                f"[Knowledge Graph Context]\n{chain_truncated}\n"
                 f"Q: {question}\nA:"
             )
             return self._generate(prompt)
-        snippet = (chain or "")[:100]
-        return f"[Graph context: {snippet}] (model not loaded)"
+
+        # Fallback: return chain as the answer (graceful, no crash).
+        return f"[Graph context: {chain_truncated}] (model not loaded)"
 
     def _find_episome(self, episome_id: Any) -> Optional[Any]:
         """Look up an episome by id in the registry (best-effort)."""
