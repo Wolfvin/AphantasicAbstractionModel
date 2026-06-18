@@ -3,28 +3,255 @@ TRISYNAPTIC CIRCUIT: EC -> DG -> CA3 -> CA1 -> Sub (encoding pathway).
 
 Biologis: Classic hippocampal trisynaptic pathway for fast episodic encoding.
 AI: Orchestrate the 5-stage encoding pipeline.
+
+The circuit owns an :class:`EngramComplex` (which itself wraps an
+``AGNNGraph``) so that every encoded Episome is also registered as a
+graph node, with typed edges to its autoassociative neighbors (the
+neighbors CA3 finds by keyword overlap). This lets downstream
+components - :class:`SystemsConsolidation` and :class:`PapezCircuit` -
+operate on the same graph the circuit populated, without the caller
+having to manually wire the Episome into the graph.
+
+Pure Python + numpy. No torch.
 """
+
+from __future__ import annotations
+
+import os
+import sys
+from typing import Optional
+
+from engrams.episodic_engram import Episome
+from hippocampus.ca1 import CA1
+from hippocampus.ca3 import CA3
+from hippocampus.dentate_gyrus import DentateGyrus
+from hippocampus.entorhinal_cortex import EntorhinalCortex
+from hippocampus.subiculum import DEFAULT_EPISODIC_CONFIDENCE, Subiculum
+
+
+# ----------------------------------------------------------------------
+# Make self-ai/src/agnn importable for AGNNGraph / RelationType.
+# We do this lazily so the module imports cleanly even when the
+# self-ai/ tree is absent (e.g. during partial unit testing).
+# ----------------------------------------------------------------------
+
+def _resolve_agnn_graph():
+    """Import AGNNGraph + RelationType from self-ai/src/agnn/graph.py.
+
+    Adds self-ai/src to sys.path (idempotent) and returns the module.
+    Raises ImportError if the module is unavailable.
+    """
+    self_ai_src = os.path.join(
+        os.path.dirname(__file__), "..", "..", "self-ai", "src"
+    )
+    self_ai_src = os.path.abspath(self_ai_src)
+    if self_ai_src not in sys.path:
+        sys.path.insert(0, self_ai_src)
+    from agnn import graph as agnn_graph  # noqa: WPS433 (lazy import)
+    return agnn_graph
+
+
+# Mapping from the plain-string edge types used by Episome / Semesome to
+# the RelationType enum used by AGNNGraph's TypedEdge. Kept here so the
+# circuit can create typed edges in the wrapped graph without exposing
+# the enum to callers.
+_EDGE_TYPE_TO_RELATION = {
+    "CATEGORICAL": "categorical",
+    "CAUSAL": "causal",
+    "DIFFERENTIAL": "differential",
+    "FUNCTIONAL": "functional",
+    "TEMPORAL": "temporal",
+    "SPATIAL": "spatial",
+    "DISCURSIVE": "discursive",
+}
 
 
 class TrisynapticCircuit:
-    """Encoding pathway orchestrator."""
+    """Encoding pathway orchestrator.
 
-    def __init__(self, ec, dg, ca3, ca1, sub):
-        """Wire up the five hippocampal substructures."""
-        # TODO: store EC, DG, CA3, CA1, Sub references.
-        raise NotImplementedError("TrisynapticCircuit.__init__ pending wiring")
+    Owns the five hippocampal substructures and (optionally) an
+    :class:`EngramComplex` that records every encoded Episome as a
+    graph node, plus typed edges to the neighbors CA3 autoassociated
+    with it.
 
-    def encode(self, stimulus: str) -> object:
-        """
-        Run stimulus through full trisynaptic pathway.
+    Pipeline (per :meth:`encode`):
+        1. EC.normalize_input(stimulus)
+        2. DG.separate(normalized_text) -> new_id
+        3. CA3.register(new_id, text, keywords) + CA3.autoassociate(new_id)
+        4. CA1.integrate_context(stimulus, correction) -> edge_type
+        5. Sub.relay_output(new_id, text, edge_type, confidence=0.6)
+           -> Episome
 
-        Pipeline: EC.gateway_input -> DG.separate -> CA3.bind -> CA1.integrate_context -> Sub.relay_output.
+    Side effect: the Episome is added as a node to the wrapped
+    EngramComplex, with edges to its autoassociative neighbors.
+    """
+
+    def __init__(
+        self,
+        engram_complex=None,
+        ec: Optional[EntorhinalCortex] = None,
+        dg: Optional[DentateGyrus] = None,
+        ca3: Optional[CA3] = None,
+        ca1: Optional[CA1] = None,
+        sub: Optional[Subiculum] = None,
+    ) -> None:
+        """Wire up the five hippocampal substructures + engraph complex.
 
         Args:
-            stimulus: Input text.
+            engram_complex: Optional pre-existing EngramComplex. If
+                omitted, a fresh one is created. When supplied, the
+                circuit populates *that* graph, so callers can share
+                one graph across encode + consolidate + retrieve.
+            ec, dg, ca3, ca1, sub: Optional pre-configured instances of
+                each substructure. If omitted, fresh defaults are used.
+        """
+        # Lazy import so this module can be imported even when
+        # self-ai/src/agnn is not on sys.path (matches the pattern in
+        # engrams/engram_complex.py).
+        if engram_complex is None:
+            from engrams.engram_complex import EngramComplex
+            engram_complex = EngramComplex()
+        self.engram_complex = engram_complex
+
+        self.ec = ec if ec is not None else EntorhinalCortex()
+        self.dg = dg if dg is not None else DentateGyrus()
+        self.ca3 = ca3 if ca3 is not None else CA3()
+        self.ca1 = ca1 if ca1 is not None else CA1()
+        self.sub = sub if sub is not None else Subiculum()
+
+    # ------------------------------------------------------------------
+    # Encoding pipeline
+    # ------------------------------------------------------------------
+
+    def encode(self, stimulus: str, correction: str = "") -> Episome:
+        """Run ``stimulus`` through the full trisynaptic pathway.
+
+        Pipeline: EC.normalize_input -> DG.separate -> CA3.register +
+        CA3.autoassociate -> CA1.integrate_context -> Sub.relay_output.
+
+        Side effect: the resulting Episome is added as a node to the
+        wrapped EngramComplex (id = str(episome.id), label = text), and
+        a typed edge is created from the new node to each autoassociative
+        neighbor. Edge confidence is set to the new episome's confidence
+        (0.6 by default) so downstream systems-consolidation can pick
+        the "strongest" edge reliably.
+
+        Args:
+            stimulus: Input text (typically the question or wrong answer
+                being corrected).
+            correction: Optional correction text. CA1 uses both fields
+                to infer the relation type. The Episome.text stores the
+                correction when provided, else the stimulus - this is
+                the new knowledge being encoded.
 
         Returns:
-            Episome-like result with episome_id and inferred edge type.
+            The freshly encoded Episome (confidence = 0.6).
         """
-        # TODO: orchestrate 5-stage encoding pipeline.
-        raise NotImplementedError("encode() pending 5-stage pipeline")
+        # 1. EC: normalize input.
+        norm = self.ec.normalize_input(stimulus)
+        # The "fact" we encode is the correction if one was supplied,
+        # else the stimulus itself. Keywords come from the *combined*
+        # text so CA3 can still find neighbors even when the correction
+        # is short.
+        fact_text = (correction.strip() or norm["text"])  # type: ignore[union-attr]
+        # Re-normalize the fact so the stored text is canonical.
+        fact_norm = self.ec.normalize_input(fact_text)
+
+        # 2. DG: allocate a new unique ID.
+        new_id = self.dg.separate(fact_norm["text"])  # type: ignore[index]
+
+        # 3. CA3: register + autoassociate.
+        # Use the union of keywords from stimulus + correction so CA3
+        # can match against either surface form.
+        combined_keywords = list(
+            set(norm["keywords"]) | set(fact_norm["keywords"])  # type: ignore[index]
+        )
+        self.ca3.register(new_id, fact_norm["text"], combined_keywords)  # type: ignore[index]
+        neighbor_ids = self.ca3.autoassociate(new_id)
+
+        # 4. CA1: infer edge type from stimulus + correction.
+        edge_type = self.ca1.integrate_context(stimulus, correction)
+
+        # 5. Sub: build + relay the Episome.
+        episome = self.sub.relay_output(
+            episome_id=new_id,
+            text=fact_norm["text"],  # type: ignore[index]
+            edge_type=edge_type,
+            confidence=DEFAULT_EPISODIC_CONFIDENCE,
+            neighbor_ids=neighbor_ids,
+        )
+
+        # 6. Side effect: register the Episome as a graph node + edges
+        #    in the wrapped EngramComplex so downstream consolidation
+        #    and retrieval can find it.
+        self._register_in_graph(episome, neighbor_ids)
+
+        return episome
+
+    # ------------------------------------------------------------------
+    # Graph side effects
+    # ------------------------------------------------------------------
+
+    def _register_in_graph(self, episome: Episome, neighbor_ids) -> None:
+        """Add ``episome`` as a node + edges in the wrapped EngramComplex.
+
+        - Node id = str(episome.id), label = episome.text, confidence
+          = episome.confidence. Metadata carries the original int id
+          and edge_type so PapezCircuit can reconstruct a faithful
+          Episome from the graph later.
+        - For every neighbor ID, look up the neighbor's graph node
+          (by str id) and add a typed edge from the new node to it.
+
+        Fails silently (logs to stderr) if the EngramComplex cannot be
+        reached - this keeps encode() robust to environments where the
+        AGNNGraph dependency is not installed.
+        """
+        try:
+            agnn_graph = _resolve_agnn_graph()
+        except ImportError:
+            # No AGNNGraph available - skip graph side effects.
+            return
+
+        graph = self.engram_complex._graph  # EngraphComplex wraps AGNNGraph
+        AGNNNode = agnn_graph.AGNNNode
+        NodeType = agnn_graph.NodeType
+        TypedEdge = agnn_graph.TypedEdge
+        RelationType = agnn_graph.RelationType
+
+        node_id = str(episome.id)
+        # Add the new episome as a graph node (idempotent: if the node
+        # already exists, add_node just overwrites the embedding init).
+        node = AGNNNode(
+            id=node_id,
+            label=episome.text,
+            node_type=NodeType.ENTITY,
+            confidence=episome.confidence,
+            metadata={
+                "episome_id": episome.id,
+                "edge_type": episome.edge_type,
+                "type": episome.type,
+            },
+        )
+        if graph.get_node(node_id) is None:
+            graph.add_node(node)
+
+        # Add edges to each autoassociative neighbor.
+        relation_str = _EDGE_TYPE_TO_RELATION.get(
+            episome.edge_type, "categorical"
+        )
+        relation_type = RelationType(relation_str)
+        for nid in neighbor_ids:
+            target_id = str(nid)
+            if graph.get_node(target_id) is None:
+                continue
+            # Avoid duplicate edges between the same pair.
+            existing = graph.get_edges_from(node_id)
+            if any(e.target_id == target_id for e in existing):
+                continue
+            edge = TypedEdge(
+                source_id=node_id,
+                target_id=target_id,
+                relation_type=relation_type,
+                confidence=episome.confidence,
+            )
+            graph.add_edge(edge)
