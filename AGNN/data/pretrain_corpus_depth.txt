@@ -1,0 +1,1275 @@
+## POLA: CAUSAL — 6 predikat × 40 kalimat = 240 kalimat
+## predikat: menyebabkan, mengakibatkan, membuat, memicu, menghasilkan, berakibat
+
+## menyebabkan (40 kalimat)
+api menyebabkan kebakaran
+hujan menyebabkan banjir
+angin menyebabkan gelombang
+petir menyebabkan ledakan
+gempa menyebabkan reruntuhan
+letusan menyebabkan abu
+tsunami menyebabkan genangan
+erosi menyebabkan longsor
+bakteri menyebabkan infeksi
+virus menyebabkan demam
+parasit menyebabkan penyakit
+jamur menyebabkan iritasi
+racun menyebabkan keracunan
+gula menyebabkan diabetes
+kolesterol menyebabkan penyumbatan
+alkohol menyebabkan sirosis
+gesekan menyebabkan panas
+gravitasi menyebabkan jatuh
+tekanan menyebabkan ledakan
+oksidasi menyebabkan karat
+radiasi menyebabkan mutasi
+listrik menyebabkan sengatan
+magnet menyebabkan kutub
+pembakaran menyebabkan asap
+fermentasi menyebabkan alkohol
+elektrolisis menyebabkan dekomposisi
+pemanasan menyebabkan kekeringan
+pendinginan menyebabkan kondensasi
+korupsi menyebabkan kerugian
+inflasi menyebabkan kemiskinan
+pengangguran menyebabkan kriminalitas
+monopoli menyebabkan kelangkaan
+hoaks menyebabkan kepanikan
+spekulasi menyebabkan gejolak
+konsumsi menyebabkan limbah
+produksi menyebabkan polusi
+deforestasi menyebabkan banjir
+polusi menyebabkan penyakit
+kemarau menyebabkan kekeringan
+badai menyebabkan kerusakan
+
+## mengakibatkan (40 kalimat)
+api mengakibatkan kebakaran
+hujan mengakibatkan banjir
+angin mengakibatkan gelombang
+petir mengakibatkan ledakan
+gempa mengakibatkan reruntuhan
+letusan mengakibatkan abu
+tsunami mengakibatkan genangan
+erosi mengakibatkan longsor
+bakteri mengakibatkan infeksi
+virus mengakibatkan demam
+parasit mengakibatkan penyakit
+jamur mengakibatkan iritasi
+racun mengakibatkan keracunan
+gula mengakibatkan diabetes
+kolesterol mengakibatkan penyumbatan
+alkohol mengakibatkan sirosis
+gesekan mengakibatkan panas
+gravitasi mengakibatkan jatuh
+tekanan mengakibatkan ledakan
+oksidasi mengakibatkan karat
+radiasi mengakibatkan mutasi
+listrik mengakibatkan sengatan
+magnet mengakibatkan kutub
+pembakaran mengakibatkan asap
+fermentasi mengakibatkan alkohol
+elektrolisis mengakibatkan dekomposisi
+pemanasan mengakibatkan kekeringan
+pendinginan mengakibatkan kondensasi
+korupsi mengakibatkan kerugian
+inflasi mengakibatkan kemiskinan
+pengangguran mengakibatkan kriminalitas
+monopoli mengakibatkan kelangkaan
+hoaks mengakibatkan kepanikan
+spekulasi mengakibatkan gejolak
+konsumsi mengakibatkan limbah
+produksi mengakibatkan polusi
+deforestasi mengakibatkan banjir
+polusi mengakibatkan penyakit
+kemarau mengakibatkan kekeringan
+badai mengakibatkan kerusakan
+
+## membuat (40 kalimat)
+api membuat kebakaran
+hujan membuat banjir
+angin membuat gelombang
+petir membuat ledakan
+gempa membuat reruntuhan
+letusan membuat abu
+tsunami membuat genangan
+erosi membuat longsor
+bakteri membuat infeksi
+virus membuat demam
+parasit membuat penyakit
+jamur membuat iritasi
+racun membuat keracunan
+gula membuat diabetes
+kolesterol membuat penyumbatan
+alkohol membuat sirosis
+gesekan membuat panas
+gravitasi membuat jatuh
+tekanan membuat ledakan
+oksidasi membuat karat
+radiasi membuat mutasi
+listrik membuat sengatan
+magnet membuat kutub
+pembakaran membuat asap
+fermentasi membuat alkohol
+elektrolisis membuat dekomposisi
+pemanasan membuat kekeringan
+pendinginan membuat kondensasi
+korupsi membuat kerugian
+inflasi membuat kemiskinan
+pengangguran membuat kriminalitas
+monopoli membuat kelangkaan
+hoaks membuat kepanikan
+spekulasi membuat gejolak
+konsumsi membuat limbah
+produksi membuat polusi
+deforestasi membuat banjir
+polusi membuat penyakit
+kemarau membuat kekeringan
+badai membuat kerusakan
+
+## memicu (40 kalimat)
+api memicu kebakaran
+hujan memicu banjir
+angin memicu gelombang
+petir memicu ledakan
+gempa memicu reruntuhan
+letusan memicu abu
+tsunami memicu genangan
+erosi memicu longsor
+bakteri memicu infeksi
+virus memicu demam
+parasit memicu penyakit
+jamur memicu iritasi
+racun memicu keracunan
+gula memicu diabetes
+kolesterol memicu penyumbatan
+alkohol memicu sirosis
+gesekan memicu panas
+gravitasi memicu jatuh
+tekanan memicu ledakan
+oksidasi memicu karat
+radiasi memicu mutasi
+listrik memicu sengatan
+magnet memicu kutub
+pembakaran memicu asap
+fermentasi memicu alkohol
+elektrolisis memicu dekomposisi
+pemanasan memicu kekeringan
+pendinginan memicu kondensasi
+korupsi memicu kerugian
+inflasi memicu kemiskinan
+pengangguran memicu kriminalitas
+monopoli memicu kelangkaan
+hoaks memicu kepanikan
+spekulasi memicu gejolak
+konsumsi memicu limbah
+produksi memicu polusi
+deforestasi memicu banjir
+polusi memicu penyakit
+kemarau memicu kekeringan
+badai memicu kerusakan
+
+## menghasilkan (40 kalimat)
+api menghasilkan kebakaran
+hujan menghasilkan banjir
+angin menghasilkan gelombang
+petir menghasilkan ledakan
+gempa menghasilkan reruntuhan
+letusan menghasilkan abu
+tsunami menghasilkan genangan
+erosi menghasilkan longsor
+bakteri menghasilkan infeksi
+virus menghasilkan demam
+parasit menghasilkan penyakit
+jamur menghasilkan iritasi
+racun menghasilkan keracunan
+gula menghasilkan diabetes
+kolesterol menghasilkan penyumbatan
+alkohol menghasilkan sirosis
+gesekan menghasilkan panas
+gravitasi menghasilkan jatuh
+tekanan menghasilkan ledakan
+oksidasi menghasilkan karat
+radiasi menghasilkan mutasi
+listrik menghasilkan sengatan
+magnet menghasilkan kutub
+pembakaran menghasilkan asap
+fermentasi menghasilkan alkohol
+elektrolisis menghasilkan dekomposisi
+pemanasan menghasilkan kekeringan
+pendinginan menghasilkan kondensasi
+korupsi menghasilkan kerugian
+inflasi menghasilkan kemiskinan
+pengangguran menghasilkan kriminalitas
+monopoli menghasilkan kelangkaan
+hoaks menghasilkan kepanikan
+spekulasi menghasilkan gejolak
+konsumsi menghasilkan limbah
+produksi menghasilkan polusi
+deforestasi menghasilkan banjir
+polusi menghasilkan penyakit
+kemarau menghasilkan kekeringan
+badai menghasilkan kerusakan
+
+## berakibat (40 kalimat)
+api berakibat kebakaran
+hujan berakibat banjir
+angin berakibat gelombang
+petir berakibat ledakan
+gempa berakibat reruntuhan
+letusan berakibat abu
+tsunami berakibat genangan
+erosi berakibat longsor
+bakteri berakibat infeksi
+virus berakibat demam
+parasit berakibat penyakit
+jamur berakibat iritasi
+racun berakibat keracunan
+gula berakibat diabetes
+kolesterol berakibat penyumbatan
+alkohol berakibat sirosis
+gesekan berakibat panas
+gravitasi berakibat jatuh
+tekanan berakibat ledakan
+oksidasi berakibat karat
+radiasi berakibat mutasi
+listrik berakibat sengatan
+magnet berakibat kutub
+pembakaran berakibat asap
+fermentasi berakibat alkohol
+elektrolisis berakibat dekomposisi
+pemanasan berakibat kekeringan
+pendinginan berakibat kondensasi
+korupsi berakibat kerugian
+inflasi berakibat kemiskinan
+pengangguran berakibat kriminalitas
+monopoli berakibat kelangkaan
+hoaks berakibat kepanikan
+spekulasi berakibat gejolak
+konsumsi berakibat limbah
+produksi berakibat polusi
+deforestasi berakibat banjir
+polusi berakibat penyakit
+kemarau berakibat kekeringan
+badai berakibat kerusakan
+
+## POLA: FUNCTIONAL — 6 predikat × 40 kalimat = 240 kalimat
+## predikat: membutuhkan, memerlukan, bergantung pada, perlu, wajib ada, tergantung
+
+## membutuhkan (40 kalimat)
+tanaman membutuhkan air
+tanaman membutuhkan cahaya
+tanaman membutuhkan nutrisi
+pohon membutuhkan karbon
+hewan membutuhkan makanan
+hewan membutuhkan oksigen
+ikan membutuhkan air
+burung membutuhkan udara
+manusia membutuhkan air
+manusia membutuhkan makanan
+manusia membutuhkan oksigen
+manusia membutuhkan tidur
+otak membutuhkan oksigen
+jantung membutuhkan darah
+paru membutuhkan udara
+otot membutuhkan protein
+tulang membutuhkan kalsium
+sel membutuhkan energi
+sel membutuhkan oksigen
+darah membutuhkan besi
+mesin membutuhkan bensin
+mesin membutuhkan oli
+mobil membutuhkan bensin
+motor membutuhkan bensin
+komputer membutuhkan listrik
+server membutuhkan pendingin
+jaringan membutuhkan sinyal
+baterai membutuhkan listrik
+ekonomi membutuhkan modal
+pasar membutuhkan likuiditas
+industri membutuhkan material
+pabrik membutuhkan pekerja
+sekolah membutuhkan guru
+rumahsakit membutuhkan dokter
+bank membutuhkan nasabah
+negara membutuhkan pajak
+sawah membutuhkan air
+kebun membutuhkan pupuk
+proyek membutuhkan anggaran
+penelitian membutuhkan data
+
+## memerlukan (40 kalimat)
+tanaman memerlukan air
+tanaman memerlukan cahaya
+tanaman memerlukan nutrisi
+pohon memerlukan karbon
+hewan memerlukan makanan
+hewan memerlukan oksigen
+ikan memerlukan air
+burung memerlukan udara
+manusia memerlukan air
+manusia memerlukan makanan
+manusia memerlukan oksigen
+manusia memerlukan tidur
+otak memerlukan oksigen
+jantung memerlukan darah
+paru memerlukan udara
+otot memerlukan protein
+tulang memerlukan kalsium
+sel memerlukan energi
+sel memerlukan oksigen
+darah memerlukan besi
+mesin memerlukan bensin
+mesin memerlukan oli
+mobil memerlukan bensin
+motor memerlukan bensin
+komputer memerlukan listrik
+server memerlukan pendingin
+jaringan memerlukan sinyal
+baterai memerlukan listrik
+ekonomi memerlukan modal
+pasar memerlukan likuiditas
+industri memerlukan material
+pabrik memerlukan pekerja
+sekolah memerlukan guru
+rumahsakit memerlukan dokter
+bank memerlukan nasabah
+negara memerlukan pajak
+sawah memerlukan air
+kebun memerlukan pupuk
+proyek memerlukan anggaran
+penelitian memerlukan data
+
+## bergantung pada (40 kalimat)
+tanaman bergantung pada air
+tanaman bergantung pada cahaya
+tanaman bergantung pada nutrisi
+pohon bergantung pada karbon
+hewan bergantung pada makanan
+hewan bergantung pada oksigen
+ikan bergantung pada air
+burung bergantung pada udara
+manusia bergantung pada air
+manusia bergantung pada makanan
+manusia bergantung pada oksigen
+manusia bergantung pada tidur
+otak bergantung pada oksigen
+jantung bergantung pada darah
+paru bergantung pada udara
+otot bergantung pada protein
+tulang bergantung pada kalsium
+sel bergantung pada energi
+sel bergantung pada oksigen
+darah bergantung pada besi
+mesin bergantung pada bensin
+mesin bergantung pada oli
+mobil bergantung pada bensin
+motor bergantung pada bensin
+komputer bergantung pada listrik
+server bergantung pada pendingin
+jaringan bergantung pada sinyal
+baterai bergantung pada listrik
+ekonomi bergantung pada modal
+pasar bergantung pada likuiditas
+industri bergantung pada material
+pabrik bergantung pada pekerja
+sekolah bergantung pada guru
+rumahsakit bergantung pada dokter
+bank bergantung pada nasabah
+negara bergantung pada pajak
+sawah bergantung pada air
+kebun bergantung pada pupuk
+proyek bergantung pada anggaran
+penelitian bergantung pada data
+
+## perlu (40 kalimat)
+tanaman perlu air
+tanaman perlu cahaya
+tanaman perlu nutrisi
+pohon perlu karbon
+hewan perlu makanan
+hewan perlu oksigen
+ikan perlu air
+burung perlu udara
+manusia perlu air
+manusia perlu makanan
+manusia perlu oksigen
+manusia perlu tidur
+otak perlu oksigen
+jantung perlu darah
+paru perlu udara
+otot perlu protein
+tulang perlu kalsium
+sel perlu energi
+sel perlu oksigen
+darah perlu besi
+mesin perlu bensin
+mesin perlu oli
+mobil perlu bensin
+motor perlu bensin
+komputer perlu listrik
+server perlu pendingin
+jaringan perlu sinyal
+baterai perlu listrik
+ekonomi perlu modal
+pasar perlu likuiditas
+industri perlu material
+pabrik perlu pekerja
+sekolah perlu guru
+rumahsakit perlu dokter
+bank perlu nasabah
+negara perlu pajak
+sawah perlu air
+kebun perlu pupuk
+proyek perlu anggaran
+penelitian perlu data
+
+## wajib ada (40 kalimat)
+tanaman wajib ada air
+tanaman wajib ada cahaya
+tanaman wajib ada nutrisi
+pohon wajib ada karbon
+hewan wajib ada makanan
+hewan wajib ada oksigen
+ikan wajib ada air
+burung wajib ada udara
+manusia wajib ada air
+manusia wajib ada makanan
+manusia wajib ada oksigen
+manusia wajib ada tidur
+otak wajib ada oksigen
+jantung wajib ada darah
+paru wajib ada udara
+otot wajib ada protein
+tulang wajib ada kalsium
+sel wajib ada energi
+sel wajib ada oksigen
+darah wajib ada besi
+mesin wajib ada bensin
+mesin wajib ada oli
+mobil wajib ada bensin
+motor wajib ada bensin
+komputer wajib ada listrik
+server wajib ada pendingin
+jaringan wajib ada sinyal
+baterai wajib ada listrik
+ekonomi wajib ada modal
+pasar wajib ada likuiditas
+industri wajib ada material
+pabrik wajib ada pekerja
+sekolah wajib ada guru
+rumahsakit wajib ada dokter
+bank wajib ada nasabah
+negara wajib ada pajak
+sawah wajib ada air
+kebun wajib ada pupuk
+proyek wajib ada anggaran
+penelitian wajib ada data
+
+## tergantung (40 kalimat)
+tanaman tergantung air
+tanaman tergantung cahaya
+tanaman tergantung nutrisi
+pohon tergantung karbon
+hewan tergantung makanan
+hewan tergantung oksigen
+ikan tergantung air
+burung tergantung udara
+manusia tergantung air
+manusia tergantung makanan
+manusia tergantung oksigen
+manusia tergantung tidur
+otak tergantung oksigen
+jantung tergantung darah
+paru tergantung udara
+otot tergantung protein
+tulang tergantung kalsium
+sel tergantung energi
+sel tergantung oksigen
+darah tergantung besi
+mesin tergantung bensin
+mesin tergantung oli
+mobil tergantung bensin
+motor tergantung bensin
+komputer tergantung listrik
+server tergantung pendingin
+jaringan tergantung sinyal
+baterai tergantung listrik
+ekonomi tergantung modal
+pasar tergantung likuiditas
+industri tergantung material
+pabrik tergantung pekerja
+sekolah tergantung guru
+rumahsakit tergantung dokter
+bank tergantung nasabah
+negara tergantung pajak
+sawah tergantung air
+kebun tergantung pupuk
+proyek tergantung anggaran
+penelitian tergantung data
+
+## POLA: CATEGORICAL — 6 predikat × 40 kalimat = 240 kalimat
+## predikat: adalah, merupakan, termasuk, tergolong, masuk kategori, terhitung sebagai
+
+## adalah (40 kalimat)
+manusia adalah mamalia
+kucing adalah mamalia
+anjing adalah mamalia
+harimau adalah mamalia
+gajah adalah mamalia
+paus adalah mamalia
+kelelawar adalah mamalia
+monyet adalah mamalia
+buaya adalah reptil
+komodo adalah reptil
+ular adalah reptil
+kadal adalah reptil
+burung adalah aves
+elang adalah aves
+bebek adalah aves
+merpati adalah aves
+ikan adalah pisces
+hiu adalah pisces
+lele adalah pisces
+tuna adalah pisces
+udang adalah crustacea
+kepiting adalah crustacea
+cumi adalah moluska
+gurita adalah moluska
+bunga adalah tumbuhan
+pohon adalah tumbuhan
+rumput adalah tumbuhan
+padi adalah tumbuhan
+jamur adalah fungi
+ragi adalah fungi
+lumut adalah bryophyta
+paku adalah pteridophyta
+bakteri adalah monera
+virus adalah parasit
+amoeba adalah protista
+plankton adalah protista
+besi adalah logam
+emas adalah logam
+karbon adalah nonlogam
+oksigen adalah gas
+
+## merupakan (40 kalimat)
+manusia merupakan mamalia
+kucing merupakan mamalia
+anjing merupakan mamalia
+harimau merupakan mamalia
+gajah merupakan mamalia
+paus merupakan mamalia
+kelelawar merupakan mamalia
+monyet merupakan mamalia
+buaya merupakan reptil
+komodo merupakan reptil
+ular merupakan reptil
+kadal merupakan reptil
+burung merupakan aves
+elang merupakan aves
+bebek merupakan aves
+merpati merupakan aves
+ikan merupakan pisces
+hiu merupakan pisces
+lele merupakan pisces
+tuna merupakan pisces
+udang merupakan crustacea
+kepiting merupakan crustacea
+cumi merupakan moluska
+gurita merupakan moluska
+bunga merupakan tumbuhan
+pohon merupakan tumbuhan
+rumput merupakan tumbuhan
+padi merupakan tumbuhan
+jamur merupakan fungi
+ragi merupakan fungi
+lumut merupakan bryophyta
+paku merupakan pteridophyta
+bakteri merupakan monera
+virus merupakan parasit
+amoeba merupakan protista
+plankton merupakan protista
+besi merupakan logam
+emas merupakan logam
+karbon merupakan nonlogam
+oksigen merupakan gas
+
+## termasuk (40 kalimat)
+manusia termasuk mamalia
+kucing termasuk mamalia
+anjing termasuk mamalia
+harimau termasuk mamalia
+gajah termasuk mamalia
+paus termasuk mamalia
+kelelawar termasuk mamalia
+monyet termasuk mamalia
+buaya termasuk reptil
+komodo termasuk reptil
+ular termasuk reptil
+kadal termasuk reptil
+burung termasuk aves
+elang termasuk aves
+bebek termasuk aves
+merpati termasuk aves
+ikan termasuk pisces
+hiu termasuk pisces
+lele termasuk pisces
+tuna termasuk pisces
+udang termasuk crustacea
+kepiting termasuk crustacea
+cumi termasuk moluska
+gurita termasuk moluska
+bunga termasuk tumbuhan
+pohon termasuk tumbuhan
+rumput termasuk tumbuhan
+padi termasuk tumbuhan
+jamur termasuk fungi
+ragi termasuk fungi
+lumut termasuk bryophyta
+paku termasuk pteridophyta
+bakteri termasuk monera
+virus termasuk parasit
+amoeba termasuk protista
+plankton termasuk protista
+besi termasuk logam
+emas termasuk logam
+karbon termasuk nonlogam
+oksigen termasuk gas
+
+## tergolong (40 kalimat)
+manusia tergolong mamalia
+kucing tergolong mamalia
+anjing tergolong mamalia
+harimau tergolong mamalia
+gajah tergolong mamalia
+paus tergolong mamalia
+kelelawar tergolong mamalia
+monyet tergolong mamalia
+buaya tergolong reptil
+komodo tergolong reptil
+ular tergolong reptil
+kadal tergolong reptil
+burung tergolong aves
+elang tergolong aves
+bebek tergolong aves
+merpati tergolong aves
+ikan tergolong pisces
+hiu tergolong pisces
+lele tergolong pisces
+tuna tergolong pisces
+udang tergolong crustacea
+kepiting tergolong crustacea
+cumi tergolong moluska
+gurita tergolong moluska
+bunga tergolong tumbuhan
+pohon tergolong tumbuhan
+rumput tergolong tumbuhan
+padi tergolong tumbuhan
+jamur tergolong fungi
+ragi tergolong fungi
+lumut tergolong bryophyta
+paku tergolong pteridophyta
+bakteri tergolong monera
+virus tergolong parasit
+amoeba tergolong protista
+plankton tergolong protista
+besi tergolong logam
+emas tergolong logam
+karbon tergolong nonlogam
+oksigen tergolong gas
+
+## masuk kategori (40 kalimat)
+manusia masuk kategori mamalia
+kucing masuk kategori mamalia
+anjing masuk kategori mamalia
+harimau masuk kategori mamalia
+gajah masuk kategori mamalia
+paus masuk kategori mamalia
+kelelawar masuk kategori mamalia
+monyet masuk kategori mamalia
+buaya masuk kategori reptil
+komodo masuk kategori reptil
+ular masuk kategori reptil
+kadal masuk kategori reptil
+burung masuk kategori aves
+elang masuk kategori aves
+bebek masuk kategori aves
+merpati masuk kategori aves
+ikan masuk kategori pisces
+hiu masuk kategori pisces
+lele masuk kategori pisces
+tuna masuk kategori pisces
+udang masuk kategori crustacea
+kepiting masuk kategori crustacea
+cumi masuk kategori moluska
+gurita masuk kategori moluska
+bunga masuk kategori tumbuhan
+pohon masuk kategori tumbuhan
+rumput masuk kategori tumbuhan
+padi masuk kategori tumbuhan
+jamur masuk kategori fungi
+ragi masuk kategori fungi
+lumut masuk kategori bryophyta
+paku masuk kategori pteridophyta
+bakteri masuk kategori monera
+virus masuk kategori parasit
+amoeba masuk kategori protista
+plankton masuk kategori protista
+besi masuk kategori logam
+emas masuk kategori logam
+karbon masuk kategori nonlogam
+oksigen masuk kategori gas
+
+## terhitung sebagai (40 kalimat)
+manusia terhitung sebagai mamalia
+kucing terhitung sebagai mamalia
+anjing terhitung sebagai mamalia
+harimau terhitung sebagai mamalia
+gajah terhitung sebagai mamalia
+paus terhitung sebagai mamalia
+kelelawar terhitung sebagai mamalia
+monyet terhitung sebagai mamalia
+buaya terhitung sebagai reptil
+komodo terhitung sebagai reptil
+ular terhitung sebagai reptil
+kadal terhitung sebagai reptil
+burung terhitung sebagai aves
+elang terhitung sebagai aves
+bebek terhitung sebagai aves
+merpati terhitung sebagai aves
+ikan terhitung sebagai pisces
+hiu terhitung sebagai pisces
+lele terhitung sebagai pisces
+tuna terhitung sebagai pisces
+udang terhitung sebagai crustacea
+kepiting terhitung sebagai crustacea
+cumi terhitung sebagai moluska
+gurita terhitung sebagai moluska
+bunga terhitung sebagai tumbuhan
+pohon terhitung sebagai tumbuhan
+rumput terhitung sebagai tumbuhan
+padi terhitung sebagai tumbuhan
+jamur terhitung sebagai fungi
+ragi terhitung sebagai fungi
+lumut terhitung sebagai bryophyta
+paku terhitung sebagai pteridophyta
+bakteri terhitung sebagai monera
+virus terhitung sebagai parasit
+amoeba terhitung sebagai protista
+plankton terhitung sebagai protista
+besi terhitung sebagai logam
+emas terhitung sebagai logam
+karbon terhitung sebagai nonlogam
+oksigen terhitung sebagai gas
+
+## POLA: DIFFERENTIAL — 6 predikat × 40 kalimat = 240 kalimat
+## predikat: bukan, tidak sama dengan, berbeda dari, berlawanan dengan, bukan merupakan, tidak termasuk
+
+## bukan (40 kalimat)
+kelelawar bukan burung
+paus bukan ikan
+lumba-lumba bukan ikan
+ubur-ubur bukan ikan
+belut bukan reptil
+katak bukan reptil
+salamander bukan reptil
+cacing bukan serangga
+lintah bukan serangga
+laba-laba bukan serangga
+kalajengking bukan serangga
+capung bukan burung
+bunga bukan hewan
+pohon bukan hewan
+jamur bukan tumbuhan
+lumut bukan jamur
+bakteri bukan tumbuhan
+virus bukan bakteri
+amoeba bukan hewan
+plankton bukan ikan
+besi bukan kayu
+plastik bukan logam
+kaca bukan logam
+air bukan logam
+garam bukan logam
+gula bukan garam
+oksigen bukan karbon
+hidrogen bukan helium
+panas bukan suhu
+massa bukan berat
+kecepatan bukan percepatan
+energi bukan daya
+tegangan bukan arus
+frekuensi bukan amplitudo
+cahaya bukan panas
+suara bukan cahaya
+magnet bukan listrik
+gravitasi bukan magnet
+medan bukan gelombang
+kuanta bukan partikel
+
+## tidak sama dengan (40 kalimat)
+kelelawar tidak sama dengan burung
+paus tidak sama dengan ikan
+lumba-lumba tidak sama dengan ikan
+ubur-ubur tidak sama dengan ikan
+belut tidak sama dengan reptil
+katak tidak sama dengan reptil
+salamander tidak sama dengan reptil
+cacing tidak sama dengan serangga
+lintah tidak sama dengan serangga
+laba-laba tidak sama dengan serangga
+kalajengking tidak sama dengan serangga
+capung tidak sama dengan burung
+bunga tidak sama dengan hewan
+pohon tidak sama dengan hewan
+jamur tidak sama dengan tumbuhan
+lumut tidak sama dengan jamur
+bakteri tidak sama dengan tumbuhan
+virus tidak sama dengan bakteri
+amoeba tidak sama dengan hewan
+plankton tidak sama dengan ikan
+besi tidak sama dengan kayu
+plastik tidak sama dengan logam
+kaca tidak sama dengan logam
+air tidak sama dengan logam
+garam tidak sama dengan logam
+gula tidak sama dengan garam
+oksigen tidak sama dengan karbon
+hidrogen tidak sama dengan helium
+panas tidak sama dengan suhu
+massa tidak sama dengan berat
+kecepatan tidak sama dengan percepatan
+energi tidak sama dengan daya
+tegangan tidak sama dengan arus
+frekuensi tidak sama dengan amplitudo
+cahaya tidak sama dengan panas
+suara tidak sama dengan cahaya
+magnet tidak sama dengan listrik
+gravitasi tidak sama dengan magnet
+medan tidak sama dengan gelombang
+kuanta tidak sama dengan partikel
+
+## berbeda dari (40 kalimat)
+kelelawar berbeda dari burung
+paus berbeda dari ikan
+lumba-lumba berbeda dari ikan
+ubur-ubur berbeda dari ikan
+belut berbeda dari reptil
+katak berbeda dari reptil
+salamander berbeda dari reptil
+cacing berbeda dari serangga
+lintah berbeda dari serangga
+laba-laba berbeda dari serangga
+kalajengking berbeda dari serangga
+capung berbeda dari burung
+bunga berbeda dari hewan
+pohon berbeda dari hewan
+jamur berbeda dari tumbuhan
+lumut berbeda dari jamur
+bakteri berbeda dari tumbuhan
+virus berbeda dari bakteri
+amoeba berbeda dari hewan
+plankton berbeda dari ikan
+besi berbeda dari kayu
+plastik berbeda dari logam
+kaca berbeda dari logam
+air berbeda dari logam
+garam berbeda dari logam
+gula berbeda dari garam
+oksigen berbeda dari karbon
+hidrogen berbeda dari helium
+panas berbeda dari suhu
+massa berbeda dari berat
+kecepatan berbeda dari percepatan
+energi berbeda dari daya
+tegangan berbeda dari arus
+frekuensi berbeda dari amplitudo
+cahaya berbeda dari panas
+suara berbeda dari cahaya
+magnet berbeda dari listrik
+gravitasi berbeda dari magnet
+medan berbeda dari gelombang
+kuanta berbeda dari partikel
+
+## berlawanan dengan (40 kalimat)
+kelelawar berlawanan dengan burung
+paus berlawanan dengan ikan
+lumba-lumba berlawanan dengan ikan
+ubur-ubur berlawanan dengan ikan
+belut berlawanan dengan reptil
+katak berlawanan dengan reptil
+salamander berlawanan dengan reptil
+cacing berlawanan dengan serangga
+lintah berlawanan dengan serangga
+laba-laba berlawanan dengan serangga
+kalajengking berlawanan dengan serangga
+capung berlawanan dengan burung
+bunga berlawanan dengan hewan
+pohon berlawanan dengan hewan
+jamur berlawanan dengan tumbuhan
+lumut berlawanan dengan jamur
+bakteri berlawanan dengan tumbuhan
+virus berlawanan dengan bakteri
+amoeba berlawanan dengan hewan
+plankton berlawanan dengan ikan
+besi berlawanan dengan kayu
+plastik berlawanan dengan logam
+kaca berlawanan dengan logam
+air berlawanan dengan logam
+garam berlawanan dengan logam
+gula berlawanan dengan garam
+oksigen berlawanan dengan karbon
+hidrogen berlawanan dengan helium
+panas berlawanan dengan suhu
+massa berlawanan dengan berat
+kecepatan berlawanan dengan percepatan
+energi berlawanan dengan daya
+tegangan berlawanan dengan arus
+frekuensi berlawanan dengan amplitudo
+cahaya berlawanan dengan panas
+suara berlawanan dengan cahaya
+magnet berlawanan dengan listrik
+gravitasi berlawanan dengan magnet
+medan berlawanan dengan gelombang
+kuanta berlawanan dengan partikel
+
+## bukan merupakan (40 kalimat)
+kelelawar bukan merupakan burung
+paus bukan merupakan ikan
+lumba-lumba bukan merupakan ikan
+ubur-ubur bukan merupakan ikan
+belut bukan merupakan reptil
+katak bukan merupakan reptil
+salamander bukan merupakan reptil
+cacing bukan merupakan serangga
+lintah bukan merupakan serangga
+laba-laba bukan merupakan serangga
+kalajengking bukan merupakan serangga
+capung bukan merupakan burung
+bunga bukan merupakan hewan
+pohon bukan merupakan hewan
+jamur bukan merupakan tumbuhan
+lumut bukan merupakan jamur
+bakteri bukan merupakan tumbuhan
+virus bukan merupakan bakteri
+amoeba bukan merupakan hewan
+plankton bukan merupakan ikan
+besi bukan merupakan kayu
+plastik bukan merupakan logam
+kaca bukan merupakan logam
+air bukan merupakan logam
+garam bukan merupakan logam
+gula bukan merupakan garam
+oksigen bukan merupakan karbon
+hidrogen bukan merupakan helium
+panas bukan merupakan suhu
+massa bukan merupakan berat
+kecepatan bukan merupakan percepatan
+energi bukan merupakan daya
+tegangan bukan merupakan arus
+frekuensi bukan merupakan amplitudo
+cahaya bukan merupakan panas
+suara bukan merupakan cahaya
+magnet bukan merupakan listrik
+gravitasi bukan merupakan magnet
+medan bukan merupakan gelombang
+kuanta bukan merupakan partikel
+
+## tidak termasuk (40 kalimat)
+kelelawar tidak termasuk burung
+paus tidak termasuk ikan
+lumba-lumba tidak termasuk ikan
+ubur-ubur tidak termasuk ikan
+belut tidak termasuk reptil
+katak tidak termasuk reptil
+salamander tidak termasuk reptil
+cacing tidak termasuk serangga
+lintah tidak termasuk serangga
+laba-laba tidak termasuk serangga
+kalajengking tidak termasuk serangga
+capung tidak termasuk burung
+bunga tidak termasuk hewan
+pohon tidak termasuk hewan
+jamur tidak termasuk tumbuhan
+lumut tidak termasuk jamur
+bakteri tidak termasuk tumbuhan
+virus tidak termasuk bakteri
+amoeba tidak termasuk hewan
+plankton tidak termasuk ikan
+besi tidak termasuk kayu
+plastik tidak termasuk logam
+kaca tidak termasuk logam
+air tidak termasuk logam
+garam tidak termasuk logam
+gula tidak termasuk garam
+oksigen tidak termasuk karbon
+hidrogen tidak termasuk helium
+panas tidak termasuk suhu
+massa tidak termasuk berat
+kecepatan tidak termasuk percepatan
+energi tidak termasuk daya
+tegangan tidak termasuk arus
+frekuensi tidak termasuk amplitudo
+cahaya tidak termasuk panas
+suara tidak termasuk cahaya
+magnet tidak termasuk listrik
+gravitasi tidak termasuk magnet
+medan tidak termasuk gelombang
+kuanta tidak termasuk partikel
+
+## POLA: TEMPORAL — 6 predikat × 40 kalimat = 240 kalimat
+## predikat: setelah, sebelum, ketika, saat, kemudian, lalu
+
+## setelah (40 kalimat)
+hujan setelah panas
+banjir setelah hujan
+pelangi setelah hujan
+petir setelah mendung
+pagi setelah malam
+siang setelah pagi
+sore setelah siang
+malam setelah sore
+fajar setelah gelap
+senja setelah terang
+malam setelah fajar
+pagi setelah senja
+kemarau setelah hujan
+dingin setelah panas
+basah setelah kering
+beku setelah cair
+uap setelah embun
+embun setelah pagi
+mendidih setelah cair
+membeku setelah dingin
+tunas setelah benih
+bunga setelah kuncup
+buah setelah bunga
+panen setelah tanam
+gempa setelah getaran
+tsunami setelah gelombang
+letusan setelah magma
+longsor setelah hujan
+oksidasi setelah karat
+pembakaran setelah abu
+fermentasi setelah alkohol
+pendinginan setelah kondensasi
+gugur setelah musim
+migrasi setelah musim
+hibernasi setelah dingin
+berbuah setelah berbunga
+mutasi setelah radiasi
+infeksi setelah bakteri
+demam setelah infeksi
+sembuh setelah perawatan
+
+## sebelum (40 kalimat)
+hujan sebelum panas
+banjir sebelum hujan
+pelangi sebelum hujan
+petir sebelum mendung
+pagi sebelum malam
+siang sebelum pagi
+sore sebelum siang
+malam sebelum sore
+fajar sebelum gelap
+senja sebelum terang
+malam sebelum fajar
+pagi sebelum senja
+kemarau sebelum hujan
+dingin sebelum panas
+basah sebelum kering
+beku sebelum cair
+uap sebelum embun
+embun sebelum pagi
+mendidih sebelum cair
+membeku sebelum dingin
+tunas sebelum benih
+bunga sebelum kuncup
+buah sebelum bunga
+panen sebelum tanam
+gempa sebelum getaran
+tsunami sebelum gelombang
+letusan sebelum magma
+longsor sebelum hujan
+oksidasi sebelum karat
+pembakaran sebelum abu
+fermentasi sebelum alkohol
+pendinginan sebelum kondensasi
+gugur sebelum musim
+migrasi sebelum musim
+hibernasi sebelum dingin
+berbuah sebelum berbunga
+mutasi sebelum radiasi
+infeksi sebelum bakteri
+demam sebelum infeksi
+sembuh sebelum perawatan
+
+## ketika (40 kalimat)
+hujan ketika panas
+banjir ketika hujan
+pelangi ketika hujan
+petir ketika mendung
+pagi ketika malam
+siang ketika pagi
+sore ketika siang
+malam ketika sore
+fajar ketika gelap
+senja ketika terang
+malam ketika fajar
+pagi ketika senja
+kemarau ketika hujan
+dingin ketika panas
+basah ketika kering
+beku ketika cair
+uap ketika embun
+embun ketika pagi
+mendidih ketika cair
+membeku ketika dingin
+tunas ketika benih
+bunga ketika kuncup
+buah ketika bunga
+panen ketika tanam
+gempa ketika getaran
+tsunami ketika gelombang
+letusan ketika magma
+longsor ketika hujan
+oksidasi ketika karat
+pembakaran ketika abu
+fermentasi ketika alkohol
+pendinginan ketika kondensasi
+gugur ketika musim
+migrasi ketika musim
+hibernasi ketika dingin
+berbuah ketika berbunga
+mutasi ketika radiasi
+infeksi ketika bakteri
+demam ketika infeksi
+sembuh ketika perawatan
+
+## saat (40 kalimat)
+hujan saat panas
+banjir saat hujan
+pelangi saat hujan
+petir saat mendung
+pagi saat malam
+siang saat pagi
+sore saat siang
+malam saat sore
+fajar saat gelap
+senja saat terang
+malam saat fajar
+pagi saat senja
+kemarau saat hujan
+dingin saat panas
+basah saat kering
+beku saat cair
+uap saat embun
+embun saat pagi
+mendidih saat cair
+membeku saat dingin
+tunas saat benih
+bunga saat kuncup
+buah saat bunga
+panen saat tanam
+gempa saat getaran
+tsunami saat gelombang
+letusan saat magma
+longsor saat hujan
+oksidasi saat karat
+pembakaran saat abu
+fermentasi saat alkohol
+pendinginan saat kondensasi
+gugur saat musim
+migrasi saat musim
+hibernasi saat dingin
+berbuah saat berbunga
+mutasi saat radiasi
+infeksi saat bakteri
+demam saat infeksi
+sembuh saat perawatan
+
+## kemudian (40 kalimat)
+hujan kemudian panas
+banjir kemudian hujan
+pelangi kemudian hujan
+petir kemudian mendung
+pagi kemudian malam
+siang kemudian pagi
+sore kemudian siang
+malam kemudian sore
+fajar kemudian gelap
+senja kemudian terang
+malam kemudian fajar
+pagi kemudian senja
+kemarau kemudian hujan
+dingin kemudian panas
+basah kemudian kering
+beku kemudian cair
+uap kemudian embun
+embun kemudian pagi
+mendidih kemudian cair
+membeku kemudian dingin
+tunas kemudian benih
+bunga kemudian kuncup
+buah kemudian bunga
+panen kemudian tanam
+gempa kemudian getaran
+tsunami kemudian gelombang
+letusan kemudian magma
+longsor kemudian hujan
+oksidasi kemudian karat
+pembakaran kemudian abu
+fermentasi kemudian alkohol
+pendinginan kemudian kondensasi
+gugur kemudian musim
+migrasi kemudian musim
+hibernasi kemudian dingin
+berbuah kemudian berbunga
+mutasi kemudian radiasi
+infeksi kemudian bakteri
+demam kemudian infeksi
+sembuh kemudian perawatan
+
+## lalu (40 kalimat)
+hujan lalu panas
+banjir lalu hujan
+pelangi lalu hujan
+petir lalu mendung
+pagi lalu malam
+siang lalu pagi
+sore lalu siang
+malam lalu sore
+fajar lalu gelap
+senja lalu terang
+malam lalu fajar
+pagi lalu senja
+kemarau lalu hujan
+dingin lalu panas
+basah lalu kering
+beku lalu cair
+uap lalu embun
+embun lalu pagi
+mendidih lalu cair
+membeku lalu dingin
+tunas lalu benih
+bunga lalu kuncup
+buah lalu bunga
+panen lalu tanam
+gempa lalu getaran
+tsunami lalu gelombang
+letusan lalu magma
+longsor lalu hujan
+oksidasi lalu karat
+pembakaran lalu abu
+fermentasi lalu alkohol
+pendinginan lalu kondensasi
+gugur lalu musim
+migrasi lalu musim
+hibernasi lalu dingin
+berbuah lalu berbunga
+mutasi lalu radiasi
+infeksi lalu bakteri
+demam lalu infeksi
+sembuh lalu perawatan
+
