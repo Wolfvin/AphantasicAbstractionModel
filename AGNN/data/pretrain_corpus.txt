@@ -1,0 +1,2122 @@
+## POLA: SVO dasar — agent + verb + concrete object
+## jumlah: 270 | domain: ['alam', 'cuaca', 'ekonomi', 'fisika', 'makanan', 'olahraga', 'pertanian', 'sosial', 'teknologi', 'tubuh_manusia']
+
+petani merawat tanaman
+polisi mengatur lalu lintas
+atlet lompat melompati mistar
+petani menyemprot pupuk
+atlet lari memulai lomba
+pilot menghindari badai
+koki memotong daging
+komodo menerkam kambing
+teknisi membersihkan kipas
+ketua RW memimpin musyawarah
+penyadap menyadap karet
+peternak menimbang ayam
+ibu mencampur gula
+karyawan menghadiri rapat
+fisikawan mengukur tegangan
+biawak memangsa katak
+koki menggoreng ayam
+pelayan mengantarkan pesanan
+petugas mengamati radar
+perusahaan merilis laporan
+cacing menggali tanah
+programmer mengeksekusi query
+user memperbarui aplikasi
+dosen memutar kompas
+perusahaan membayar pajak
+lumba-lumba menangkap ikan
+fisioterapis melatih otot
+user meng-upload file
+polisi menginterogasi saksi
+ibu memasak nasi
+barista menggiling biji kopi
+broker membeli obligasi
+harimau memangsa rusa
+pemain tenis memukul bola
+siswa membawa jas hujan
+pemain melakukan pemanasan
+dokter gigi mencabut gigi
+dokter bedah mengangkat tumor
+bank menyalurkan kredit
+ibu menaburi gula
+camat mengumumkan kebijakan
+pemain badminton memukul shuttlecock
+pemain tenis melakukan servis
+penjaga gawang menggagalkan tendangan
+teknisi menyalakan generator
+importir memesan barang
+polisi menangkap pencuri
+mahasiswa mengikuti kuliah
+warga menyiapkan payung
+petani membajak sawah
+pedagang menentukan harga
+petani menjual sayur
+pembudidaya menyetor benih
+pengguna mengklik tombol
+mahasiswa menyalakan osiloskop
+bajing memakan kacang
+koki membalur kecap
+nelayan menangkap ikan
+pemilih mencontreng gambar
+kucing mengejar tikus
+sysadmin menutup port
+terapis memijat punggung
+petani memetik tomat
+pemain basket mencetak three pointer
+singa mengejar zebra
+petani menunda panen
+pilot mengubah rute
+peternak menyortir telur
+BMKG merilis peringatan
+bank menahan jaminan
+klien membayar tagihan
+lebah mengisap nektar
+dokter kulit mengangkat kutil
+nelayan mengikuti prakiraan
+striker menendang bola
+peneliti memutar prisma
+meteorolog mencatat suhu
+manajer menandatangani kontrak
+ilmuwan memanaskan logam
+hiu memangsa anjing laut
+pesilat menendang lawan
+programmer menjalankan script
+pilot mendaratkan pesawat
+ayam mematuk cacing
+eksportir mengirim kontainer
+pengacara membela klien
+teknisi mengukur kuat arus
+pemegang saham menerima dividen
+user menghubungkan WiFi
+camat mengantar bantuan
+penjual membungkus gorengan
+sysadmin mengamati log
+dokter menjahit luka
+ahli gizi menyarankan diet
+pemain voli membendung smash
+petani menutup greenhouse
+pelatih memberi instruksi
+programmer memformat disk
+admin menyetel firewall
+paus menelan krill
+siswa mengikuti upacara
+kelelawar memakan buah
+pelayan menyajikan kopi
+anak mengunyah permen
+perusahaan menggaji karyawan
+ibu mencampur santan
+ibu menyaring kuah
+developer menguji fitur
+ahli fisika menkalibrasi kalorimeter
+pedagang membayar sewa
+ahli bedah mencangkok organ
+teknisi mengkalibrasi alat
+psikolog menanyakan perasaan
+perawat menyuntik pasien
+nelayan menarik perahu
+dokter memeriksa tenggorokan
+petani memanen padi
+siswa membawa buku
+sapi memakan rumput
+koperasi membagikan SHU
+nelayan menjaring ikan
+pelari maraton menyelesaikan lomba
+elang menyambar ayam
+fisikawan menjatuhkan beban
+ular piton menelan katak
+teknisi mengganti baterai
+eksportir menerima devisa
+investor menanamkan modal
+petani mencangkul tanah
+buaya menyergap rusa
+anak menjilat sendok
+pemain basket melempar bola
+peternak memberi pakan
+petani menanam padi
+admin memantau trafik
+admin mengkonfigurasi router
+peneliti mengkalibrasi sensor
+gajah minum air
+teknisi memutar saklar
+hakim membacakan putusan
+nasabah menabung uang
+trader membeli valas
+pesepakbola mengumpan bola
+devops meng-orchestrate container
+striker mencetak gol
+programmer menulis kode
+warga menyampaikan aspirasi
+pelari memecahkan rekor
+petani memasang mulsa
+koki mencampurkan susu
+petani menutup atap
+peternak mengandangkan sapi
+siswa merangkai rangkaian listrik
+fisioterapis memulihkan sendi
+ahli memantau awan
+perenang meluncur air
+burung pipit memakan biji
+pelayan menyajikan makanan
+data engineer memproses dataset
+designer merancang antarmuka
+dokter meresepkan antibiotik
+wartawan mewawancarai narasumber
+ahli radiologi memotret paru-paru
+developer mendeploy aplikasi
+pedagang melayani pembeli
+petugas mengukur curah hujan
+koki memarut kelapa
+koki mengukus bakpao
+kiper menahan bola
+pasien menelan obat
+investor membeli saham
+kambing memakan daun
+dokter memeriksa pasien
+penjual menuangkan teh
+notaris mengesahkan dokumen
+teknisi memeriksa CPU
+nelayan kembali ke darat
+peternak memerah susu
+ahli memantau angin
+fisioterapis memijat leher
+guru mengajar siswa
+pebasket melakukan dribble
+pedagang menjual barang
+pembina menyemangati siswa
+UMKM mengajukan pinjaman
+petani mengeringkan gabah
+panitia menyelenggarakan acara
+petani menjual hasil panen
+bupati menandatangani surat
+dosen mendemonstrasikan difraksi
+musang mencuri ayam
+dokter THT membersihkan telinga
+perawat mengukur tensi
+anak makan roti
+penyu menggali pasir
+dosen menguji mahasiswa
+pejalan menghindari genangan
+siswa menyalakan lampu pijar
+pembeli mencicipi sup
+optometris memeriksa mata
+petugas mengirim peringatan dini
+petani menyingi rumput
+petani mengairi sawah
+barista menyeduh kopi
+petugas bandara menunda penerbangan
+fisikawan menembakkan proton
+teknisi mengganti RAM
+programmer merancang API
+judoka mengunci lawan
+pembalap menyalip lawan
+fisikawan menembak partikel alfa
+petani menanam bibit
+petani memupuk pohon
+peternak memberi obat cacing
+ahli akupunktur menusukkan jarum
+bebek mencari siput
+dosen memutar kenop
+developer membuat akun
+ahli gizi memantau asupan kalori
+admin membackup data
+developer merilis versi baru
+user membuka browser
+developer memperbaiki bug
+bidan menimbang bayi
+mahasiswa mencatat periode getaran
+jaksa menuntut terdakwa
+siswa mengukur suhu
+relawan membagikan sembako
+sysadmin merestart server
+bank menerbitkan kartu
+peternak lele memberi pelet
+peneliti mencatat frekuensi
+anjing menggonggong pencuri
+petani merawat bibit
+koki mengaduk adonan
+teknisi memasang kabel
+kera memetik pisang
+dosen menyalakan laser
+perenang menyentuh dinding
+kiper menangkap bola
+ahli mencatat tekanan udara
+admin menginstal aplikasi
+ketua RT mengumpulkan iuran
+kupu-kupu mencari nektar
+pemilik kapal menambatkan kapal
+atlet tolak peluru melempar peluru
+hakim menghukum terdakwa
+psikiater meresepkan obat penenang
+pedagang menawarkan diskon
+ibu merebus sayur
+ilmuwan mengamati elektron
+perawat mengganti infus
+beruang mencari madu
+dokter mendengarkan denyut jantung
+nelayan menarik jaring
+rusa merumput daun muda
+wasit meniup peluit
+ibu menanak nasi
+dokter menekan perut
+penjual sate membakar sate
+pejabat meresmikan gedung
+ahli cuaca memprediksi hujan
+pemain voli melakukan smash
+koki mengiris bawang
+petani memangkas cabang
+pebasket mencetak dunk
+petani mengumpulkan cabai
+peneliti mengamati peluruhan isotop
+koki memanggang ikan
+koki membumbui sop
+
+## POLA: Causal — X menyebabkan/mengakibatkan/membuat Y
+## jumlah: 260 | domain: ['alam', 'cuaca', 'ekonomi', 'fisika', 'makanan', 'olahraga', 'pertanian', 'sosial', 'teknologi', 'tubuh_manusia']
+
+cabai banyak sering menyebabkan mulut terasa pedas
+bakteri masuk sering membuat infeksi terjadi
+penawaran berlebih cenderung menimbulkan harga turun
+harga naik cenderung mengakibatkan protes warga
+penawaran berlebih dapat menyebabkan harga turun
+kurs melemah dapat memicu impor mahal
+garam berlebih memunculkan rasa asin
+gaya diterapkan cenderung menyebabkan benda bergerak
+kelebihan gula dapat menyebabkan diabetes
+dehidrasi cenderung membuat pusing
+hoaks menyebar menyebabkan kepanikan massal
+pertumbuhan ekonomi sering menimbulkan lapangan kerja baru
+banjir bandang sering membuat rumah hanyut
+embun menebal cenderung mengakibatkan jalan licin
+korupsi terungkap mengakibatkan kesalahpahaman publik
+dehidrasi sering menimbulkan pusing
+kurang air sering membuat daun menguning
+pengangguran tinggi memicu kriminalitas naik
+inflasi tinggi cenderung mengakibatkan daya beli turun
+makanan basi dapat menyebabkan keracunan
+tekanan rendah sering memicu badai terbentuk
+hoaks menyebar memunculkan kepanikan massal
+pupuk berlebih dapat mengakibatkan tanaman layu
+isotop meluruh mendatangkan radiasi keluar
+angin kencang memunculkan pohon tumbang
+pemanasan dilupakan menyebabkan tarik otot
+kurs menguat cenderung menyebabkan ekspor kurang kompetitif
+dehidrasi saat lomba mendatangkan kram perut
+pengangguran tinggi cenderung memicu kriminalitas naik
+gula dimakan dapat memicu energi naik sementara
+listrik mengalir menyebabkan lampu menyala
+permintaan tinggi dapat memicu harga naik
+bakteri masuk memicu infeksi terjadi
+panas dipindahkan menimbulkan suhu naik
+tegangan listrik tinggi sering menimbulkan percikan api
+hujan terus-menerus memunculkan tanah longsor
+korupsi terungkap dapat menimbulkan kesalahpahaman publik
+malware masuk mengakibatkan data bocor
+tekanan rendah menyebabkan badai terbentuk
+inflasi tinggi dapat mengakibatkan daya beli turun
+panas dipindahkan sering membuat suhu naik
+tanah longsor menyebabkan jalanan terputus
+malware masuk memicu data bocor
+hama menyerang memicu panen gagal
+malware masuk memunculkan data bocor
+kurang tidur membuat mata panda
+gula dimakan dapat membuat energi naik sementara
+tekanan rendah cenderung menimbulkan badai terbentuk
+permintaan tinggi sering menimbulkan harga naik
+hoaks menyebar mengakibatkan kepanikan massal
+permintaan tinggi mendatangkan harga naik
+update gagal membuat bootloop
+kurang sinar matahari sering memicu tanaman tumbuh kerdil
+tegangan listrik tinggi dapat mengakibatkan percikan api
+gaya diterapkan dapat menyebabkan benda bergerak
+bakteri masuk sering menimbulkan infeksi terjadi
+makanan basi sering membuat keracunan
+siram terlalu sering cenderung menimbulkan akar membusuk
+panas dipindahkan dapat menyebabkan suhu naik
+cahaya menembus kaca cenderung menyebabkan refraksi terjadi
+kelebihan garam sering membuat hipertensi
+hoaks menyebar cenderung membuat kepanikan massal
+hama menyerang menyebabkan panen gagal
+kemarau panjang cenderung menimbulkan kebakaran hutan
+malware masuk menimbulkan data bocor
+pertumbuhan ekonomi sering menyebabkan lapangan kerja baru
+pemanasan dilupakan cenderung menimbulkan tarik otot
+gelombang panas cenderung menyebabkan kekeringan
+atom memancarkan foton cenderung menyebabkan cahaya terlihat
+banjir bandang dapat menyebabkan rumah hanyut
+isotop meluruh sering mengakibatkan radiasi keluar
+medan magnet berubah cenderung menyebabkan arus induksi muncul
+pengangguran tinggi membuat kriminalitas naik
+awan terbentuk sering menyebabkan hujan turun
+kurang tidur cenderung menimbulkan mata panda
+kebakaran hutan menyebabkan kabut asap
+penawaran berlebih memunculkan harga turun
+panas dipindahkan menyebabkan suhu naik
+atom memancarkan foton dapat memicu cahaya terlihat
+dehidrasi saat lomba menimbulkan kram perut
+resesi global cenderung membuat PHK massal
+cahaya mengenai cermin dapat mengakibatkan pemantulan terjadi
+permintaan tinggi mengundang harga naik
+merokok dapat mengakibatkan kanker paru
+hama menyerang dapat memicu panen gagal
+klik link phishing memicu akun diretas
+kurang tidur sering mengakibatkan mata panda
+garam berlebih cenderung mengakibatkan rasa asin
+konektor longgar dapat membuat koneksi terputus
+isotop meluruh memicu radiasi keluar
+kurang sinar matahari sering mengakibatkan tanaman tumbuh kerdil
+hoaks menyebar cenderung memicu kepanikan massal
+tanah tidak subur sering menimbulkan hasil panen menurun
+pupuk berlebih dapat membuat tanaman layu
+salju mencair sering memicu sungai meluap
+kurang tidur menimbulkan mata panda
+angin kencang membuat pohon tumbang
+petir menyambar dapat menimbulkan pohon terbakar
+penawaran berlebih memicu harga turun
+awan terbentuk sering mengakibatkan hujan turun
+malware masuk membuat data bocor
+harga naik mengundang protes warga
+dehidrasi membuat pusing
+baterai habis dapat menyebabkan ponsel mati
+latihan berlebihan mendatangkan cedera otot
+tekanan rendah memunculkan badai terbentuk
+hoaks menyebar sering menimbulkan kepanikan massal
+banjir bandang mendatangkan rumah hanyut
+konektor longgar dapat mengakibatkan koneksi terputus
+bakteri masuk mengakibatkan infeksi terjadi
+bakteri masuk dapat menyebabkan infeksi terjadi
+atom memancarkan foton sering membuat cahaya terlihat
+cahaya menembus kaca dapat memicu refraksi terjadi
+medan magnet berubah sering mengakibatkan arus induksi muncul
+olahraga berlebih dapat memicu nyeri otot
+cahaya mengenai cermin sering membuat pemantulan terjadi
+gelombang panas mengakibatkan kekeringan
+atom memancarkan foton mengakibatkan cahaya terlihat
+hujan terus-menerus sering menimbulkan tanah longsor
+atom memancarkan foton membuat cahaya terlihat
+bakteri masuk sering menyebabkan infeksi terjadi
+pertumbuhan ekonomi membuat lapangan kerja baru
+garam berlebih sering menimbulkan rasa asin
+paparan matahari memunculkan kulit terbakar
+kelebihan gula dapat mengakibatkan diabetes
+medan magnet berubah menyebabkan arus induksi muncul
+hoaks menyebar mengundang kepanikan massal
+kurang air dapat menyebabkan daun menguning
+gula berlebih memunculkan rasa manis
+salju mencair cenderung mengakibatkan sungai meluap
+embun menebal memicu jalan licin
+tanah longsor dapat mengakibatkan jalanan terputus
+inflasi tinggi menimbulkan daya beli turun
+inflasi tinggi dapat menyebabkan daya beli turun
+pemanasan dilupakan sering membuat tarik otot
+klik link phishing menimbulkan akun diretas
+pupuk berlebih cenderung membuat tanaman layu
+hoaks menyebar cenderung menyebabkan kepanikan massal
+pupuk berlebih cenderung mengakibatkan tanaman layu
+pengangguran tinggi dapat memicu kriminalitas naik
+awan terbentuk dapat mengakibatkan hujan turun
+banjir bandang cenderung menyebabkan rumah hanyut
+klik link phishing cenderung menimbulkan akun diretas
+suhu CPU naik memicu thermal throttling
+hujan terus-menerus cenderung membuat tanah longsor
+penawaran berlebih cenderung menyebabkan harga turun
+atom memancarkan foton sering menyebabkan cahaya terlihat
+kelebihan garam dapat mengakibatkan hipertensi
+resesi global dapat memicu PHK massal
+klik link phishing sering mengakibatkan akun diretas
+banjir bandang menyebabkan rumah hanyut
+korupsi terungkap cenderung menimbulkan kesalahpahaman publik
+tsunami dapat mengakibatkan kerusakan garis pantai
+embun menebal sering menimbulkan jalan licin
+medan magnet berubah sering menyebabkan arus induksi muncul
+malware masuk dapat mengakibatkan data bocor
+cahaya mengenai cermin sering memicu pemantulan terjadi
+siram terlalu sering cenderung membuat akar membusuk
+malware masuk cenderung memicu data bocor
+latihan berlebihan sering memicu cedera otot
+makanan basi mendatangkan keracunan
+kurs melemah dapat menyebabkan impor mahal
+embun menebal dapat mengakibatkan jalan licin
+hujan deras sering menimbulkan banjir
+pupuk berlebih memunculkan tanaman layu
+merokok dapat memicu kanker paru
+siram terlalu sering memunculkan akar membusuk
+embun menebal mendatangkan jalan licin
+cabai banyak cenderung memicu mulut terasa pedas
+pemanasan dilupakan cenderung menyebabkan tarik otot
+tanah tidak subur membuat hasil panen menurun
+merokok sering menimbulkan kanker paru
+isotop meluruh cenderung membuat radiasi keluar
+gula berlebih cenderung membuat rasa manis
+hujan terus-menerus mendatangkan tanah longsor
+permintaan tinggi cenderung menyebabkan harga naik
+dehidrasi memunculkan pusing
+olahraga berlebih memunculkan nyeri otot
+kebijakan kontroversial memicu demo mahasiswa
+tegangan listrik tinggi memicu percikan api
+gula berlebih cenderung mengakibatkan rasa manis
+gaya diterapkan dapat memicu benda bergerak
+minum alkohol dapat memicu kerusakan hati
+gempa bumi sering menimbulkan tsunami
+update gagal cenderung menimbulkan bootloop
+atom memancarkan foton dapat membuat cahaya terlihat
+kurang tidur memunculkan mata panda
+resesi global cenderung menyebabkan PHK massal
+awan terbentuk dapat membuat hujan turun
+kurs menguat sering menimbulkan ekspor kurang kompetitif
+cuka diteteskan sering menyebabkan rasa asam
+tanah tidak subur dapat mengakibatkan hasil panen menurun
+suku bunga naik cenderung membuat kredit melambat
+resesi global cenderung memicu PHK massal
+tekanan rendah memicu badai terbentuk
+embun menebal mengakibatkan jalan licin
+pengangguran tinggi mengundang kriminalitas naik
+kebakaran hutan sering menyebabkan kabut asap
+update gagal memicu bootloop
+suhu udara naik dapat mengakibatkan penguapan meningkat
+resesi global cenderung mengakibatkan PHK massal
+kurang air dapat membuat daun menguning
+hama menyerang dapat mengakibatkan panen gagal
+tanah longsor sering membuat jalanan terputus
+update gagal dapat memicu bootloop
+hujan deras mengundang banjir
+tekanan rendah membuat badai terbentuk
+update gagal mengakibatkan bootloop
+penguapan meningkat cenderung mengakibatkan awan terbentuk
+infeksi terjadi sering menyebabkan demam muncul
+hujan deras sering menyebabkan banjir
+listrik mengalir cenderung memicu lampu menyala
+hoaks menyebar memicu kepanikan massal
+pemanasan dilupakan sering menimbulkan tarik otot
+suhu udara naik menyebabkan penguapan meningkat
+awan terbentuk dapat menyebabkan hujan turun
+kurang air dapat menimbulkan daun menguning
+korupsi terungkap menyebabkan kesalahpahaman publik
+banjir bandang memicu rumah hanyut
+infeksi terjadi dapat mengakibatkan demam muncul
+baterai habis cenderung memicu ponsel mati
+baterai habis mengakibatkan ponsel mati
+kurang sinar matahari dapat membuat tanaman tumbuh kerdil
+tanah tidak subur cenderung menyebabkan hasil panen menurun
+embun menebal dapat memicu jalan licin
+cuka diteteskan dapat mengakibatkan rasa asam
+garam berlebih dapat menimbulkan rasa asin
+kelebihan gula dapat membuat diabetes
+embun menebal menimbulkan jalan licin
+erupsi gunung sering menyebabkan hujan abu
+hujan deras cenderung membuat banjir
+makanan basi sering menimbulkan keracunan
+hama menyerang mengundang panen gagal
+kurang tidur dapat menimbulkan mata panda
+kebakaran hutan dapat memicu kabut asap
+siram terlalu sering dapat mengakibatkan akar membusuk
+pertumbuhan ekonomi cenderung membuat lapangan kerja baru
+kurs melemah cenderung mengakibatkan impor mahal
+garam berlebih membuat rasa asin
+petir menyambar cenderung membuat pohon terbakar
+minum alkohol cenderung menimbulkan kerusakan hati
+kelebihan gula cenderung memicu diabetes
+pertumbuhan ekonomi sering memicu lapangan kerja baru
+dehidrasi saat lomba dapat membuat kram perut
+merokok sering menyebabkan kanker paru
+cuka diteteskan memicu rasa asam
+gula dimakan sering membuat energi naik sementara
+konektor longgar cenderung memicu koneksi terputus
+klik link phishing menyebabkan akun diretas
+sistem overload dapat mengakibatkan server down
+pengangguran tinggi cenderung menimbulkan kriminalitas naik
+tekanan rendah dapat mengakibatkan badai terbentuk
+makanan basi cenderung membuat keracunan
+kebijakan kontroversial sering mengakibatkan demo mahasiswa
+infeksi terjadi dapat membuat demam muncul
+klik link phishing dapat memicu akun diretas
+kelebihan gula cenderung menimbulkan diabetes
+demam tinggi sering mengakibatkan kejang
+tanah tidak subur menimbulkan hasil panen menurun
+penawaran berlebih mengakibatkan harga turun
+
+## POLA: Functional — X membutuhkan/memerlukan/bergantung pada Y
+## jumlah: 260 | domain: ['alam', 'cuaca', 'ekonomi', 'fisika', 'makanan', 'olahraga', 'pertanian', 'sosial', 'teknologi', 'tubuh_manusia']
+
+telepon genggam memerlukan sinyal radio
+smartphone membutuhkan baterai
+nasi goreng selalu memerlukan nasi
+demokrasi bergantung pada partisipasi warga
+tumbuhan tak bisa lepas dari karbon dioksida
+otak pada dasarnya membutuhkan oksigen
+lebah tak bisa lepas dari nektar
+adonan kue selalu membutuhkan telur
+sekolah bersandar pada guru
+mobil listrik butuh baterai
+AI membutuhkan data latih
+paru-paru bersandar pada udara
+udang bergantung pada air payau
+adonan kue mutlak bergantung pada telur
+tumbuhan berlandaskan air
+bank membutuhkan nasabah
+tumbuhan pasti tergantung pada air
+jantung mutlak memerlukan darah
+otot pasti bergantung pada glukosa
+pankreas mutlak memerlukan enzim pencernaan
+investasi membutuhkan iklim bisnis
+jantung perlukan darah
+wirausaha berlandaskan inovasi
+investasi perlukan iklim bisnis
+otak wajib memerlukan oksigen
+tumbuhan wajib bergantung pada air
+tumbuhan wajib tergantung pada air
+nasi goreng pada dasarnya memerlukan nasi
+kuah sop bergantung pada kaldu
+perenang perlukan oksigen
+ikan mutlak memerlukan oksigen terlarut
+jagung berlandaskan lahan
+badai tak bisa lepas dari tekanan rendah
+pankreas selalu membutuhkan enzim pencernaan
+pedagang perlukan pelanggan
+kapal selam perlukan oksigen
+perusahaan bertumpu pada karyawan
+adonan kue tergantung pada mentega
+kopi selalu membutuhkan air panas
+teh selalu bergantung pada daun teh
+ikan memerlukan oksigen terlarut
+kelenjar tiroid membutuhkan yodium
+smartphone memerlukan sinyal seluler
+demokrasi bertumpu pada partisipasi warga
+sambal pada dasarnya memerlukan terasi
+tumbuhan bersandar pada cahaya matahari
+cabai memerlukan sinarmatahari penuh
+sambal selalu membutuhkan cabai
+hewan wajib bergantung pada makanan
+AI bergantung pada data latih
+manusia wajib bergantung pada air
+manusia mutlak bergantung pada air
+jantung bersandar pada darah
+pebasket bertumpu pada tinggi badan
+kuah sop mutlak memerlukan kaldu
+ginjal berlandaskan air
+ikan pasti memerlukan oksigen terlarut
+sambal membutuhkan cabai
+mikroskop elektron bersandar pada medan magnet
+jantung pasti membutuhkan darah
+perusahaan tak bisa lepas dari modal
+nasi goreng pasti tergantung pada bawang
+sambal pasti tergantung pada terasi
+sambal wajib memerlukan cabai
+lebah pada dasarnya tergantung pada nektar
+hewan wajib tergantung pada makanan
+tumbuhan mutlak membutuhkan karbon dioksida
+blockchain tak bisa lepas dari node terdistribusi
+rumah sakit tak bisa lepas dari tenaga medis
+salju memerlukan suhu di bawah nol
+pebasket memerlukan tinggi badan
+model neural tak bisa lepas dari GPU
+sambal pasti memerlukan terasi
+tulang selalu bergantung pada kalsium
+otak tergantung pada oksigen
+nasi goreng pada dasarnya bergantung pada bawang
+smartphone butuh sinyal seluler
+pemain sepakbola bertumpu pada stamina
+kulit bersandar pada vitamin D
+kupu-kupu pasti tergantung pada bunga
+tulang mutlak memerlukan kalsium
+sambal selalu tergantung pada cabai
+lampu pijar membutuhkan listrik
+hewan selalu bergantung pada makanan
+atlet lompat galah bertumpu pada galah lentur
+kelenjar tiroid berlandaskan yodium
+tumbuhan mutlak bergantung pada cahaya matahari
+sambal pasti bergantung pada cabai
+pembalap membutuhkan konsentrasi
+pasar membutuhkan pembeli dan penjual
+panel surya bergantung pada cahaya matahari
+pemain sepakbola perlukan stamina
+mesin uap butuh uap air
+sambal wajib bergantung pada terasi
+kulit pasti memerlukan vitamin D
+lebah tergantung pada nektar
+burung pemakan serangga tergantung pada populasi serangga
+kopi perlukan naungan
+sel darah merah pasti memerlukan zat besi
+pemangsa selalu tergantung pada mangsa
+otak pasti memerlukan oksigen
+lebah memerlukan nektar
+nasi goreng membutuhkan bawang
+UMKM bergantung pada pinjaman modal
+petinju memerlukan refleks
+cabai membutuhkan sinarmatahari penuh
+kuah sop tak bisa lepas dari kaldu
+badai tergantung pada tekanan rendah
+jaringan WiFi tak bisa lepas dari router
+aplikasi web tak bisa lepas dari database
+investasi berlandaskan iklim bisnis
+ikan perlukan oksigen terlarut
+model neural butuh GPU
+sambal mutlak tergantung pada terasi
+padi butuh pupuk
+hewan perlukan makanan
+pankreas perlukan enzim pencernaan
+kelenjar tiroid selalu membutuhkan yodium
+ginjal mutlak membutuhkan air
+adonan kue perlukan tepung
+kelenjar tiroid memerlukan yodium
+manusia berlandaskan air
+padi bersandar pada pupuk
+ikan tak bisa lepas dari oksigen terlarut
+koperasi tak bisa lepas dari simpanan anggota
+kulit mutlak membutuhkan vitamin D
+generator listrik bersandar pada gaya mekanik
+ginjal bertumpu pada air
+tumbuhan mutlak bergantung pada karbon dioksida
+keluarga bergantung pada komunikasi
+manusia pada dasarnya bergantung pada air
+adonan kue perlukan telur
+lebah berlandaskan nektar
+nasi goreng berlandaskan nasi
+adonan kue selalu memerlukan telur
+kulit selalu membutuhkan vitamin D
+adonan kue wajib bergantung pada telur
+ikan selalu membutuhkan oksigen terlarut
+jaringan WiFi bergantung pada router
+kupu-kupu pada dasarnya tergantung pada bunga
+otot wajib bergantung pada glukosa
+teh tak bisa lepas dari daun teh
+mobil listrik tak bisa lepas dari baterai
+bank perlukan nasabah
+ikan mutlak tergantung pada oksigen terlarut
+tumbuhan membutuhkan air
+ternak sapi perlukan air minum
+sambal selalu memerlukan terasi
+lebah bergantung pada nektar
+AI bersandar pada data latih
+teh wajib bergantung pada daun teh
+model neural bersandar pada GPU
+perusahaan membutuhkan modal
+lebah selalu tergantung pada nektar
+pebasket berlandaskan tinggi badan
+sambal wajib bergantung pada cabai
+lele tak bisa lepas dari kolam dengan aerasi
+tim butuh kerja sama
+tumbuhan pada dasarnya bergantung pada karbon dioksida
+nasi goreng bertumpu pada bawang
+tim memerlukan kerja sama
+sambal selalu memerlukan cabai
+pemangsa pasti tergantung pada mangsa
+pankreas mutlak membutuhkan enzim pencernaan
+tumbuhan berlandaskan karbon dioksida
+atlet lompat galah tak bisa lepas dari galah lentur
+rumah sakit bersandar pada tenaga medis
+adonan kue berlandaskan mentega
+smartphone tergantung pada sinyal seluler
+perusahaan berlandaskan modal
+nasi goreng bersandar pada bawang
+sel darah merah selalu bergantung pada zat besi
+tumbuhan butuh air
+ikan mutlak bergantung pada oksigen terlarut
+kopi selalu tergantung pada air panas
+ekspor berlandaskan permintaan luar negeri
+lampu pijar berlandaskan listrik
+kopi butuh naungan
+pemangsa pasti bergantung pada mangsa
+nasi goreng wajib tergantung pada nasi
+perusahaan bergantung pada modal
+aplikasi web berlandaskan server
+tumbuhan perlukan karbon dioksida
+ginjal wajib memerlukan air
+jaringan WiFi bersandar pada router
+sawit bertumpu pada curah hujan tinggi
+otak butuh oksigen
+adonan kue wajib memerlukan mentega
+nasi goreng perlukan bawang
+petir bersandar pada perbedaan muatan
+adonan kue tak bisa lepas dari telur
+kopi membutuhkan air panas
+kuah sop perlukan kaldu
+manusia tak bisa lepas dari air
+kopi bergantung pada naungan
+paru-paru tak bisa lepas dari udara
+hewan tergantung pada makanan
+negara bertumpu pada warga negara
+perusahaan tak bisa lepas dari karyawan
+impor butuh devisa
+ekspor bersandar pada permintaan luar negeri
+kupu-kupu membutuhkan bunga
+nasi goreng selalu tergantung pada bawang
+otak selalu membutuhkan oksigen
+tulang wajib memerlukan kalsium
+kincir angin tergantung pada angin
+blockchain perlukan node terdistribusi
+cabai tak bisa lepas dari sinarmatahari penuh
+udang bertumpu pada air payau
+kupu-kupu mutlak tergantung pada bunga
+tumbuhan berlandaskan cahaya matahari
+kupu-kupu berlandaskan bunga
+kiper bergantung pada refleks cepat
+keluarga berlandaskan komunikasi
+negara perlukan warga negara
+perenang membutuhkan oksigen
+koperasi tergantung pada simpanan anggota
+adonan kue berlandaskan tepung
+sekolah bertumpu pada guru
+petir berlandaskan perbedaan muatan
+nasi goreng pada dasarnya memerlukan bawang
+pemilu tergantung pada pemilih
+telepon genggam butuh sinyal radio
+kelenjar tiroid pasti tergantung pada yodium
+pelari maraton memerlukan cadangan karbohidrat
+pemangsa pada dasarnya tergantung pada mangsa
+tulang mutlak membutuhkan kalsium
+wirausaha bergantung pada inovasi
+tumbuhan perlukan cahaya matahari
+burung pemakan serangga pada dasarnya bergantung pada populasi serangga
+pemain sepakbola berlandaskan stamina
+jantung pasti bergantung pada darah
+panel surya tergantung pada cahaya matahari
+aplikasi web bersandar pada database
+paru-paru mutlak bergantung pada udara
+kuah sop pasti membutuhkan kaldu
+laptop bersandar pada listrik
+tumbuhan pasti memerlukan karbon dioksida
+cabai perlukan sinarmatahari penuh
+paru-paru wajib tergantung pada udara
+UMKM bersandar pada pinjaman modal
+adonan kue mutlak tergantung pada tepung
+pemilu memerlukan pemilih
+ekspor membutuhkan permintaan luar negeri
+mesin uap perlukan uap air
+burung pemakan serangga pasti tergantung pada populasi serangga
+jantung mutlak tergantung pada darah
+adonan kue mutlak tergantung pada mentega
+pasar saham bersandar pada investor
+hewan mutlak membutuhkan makanan
+kulit pasti membutuhkan vitamin D
+kupu-kupu butuh bunga
+tulang pasti membutuhkan kalsium
+sambal bergantung pada cabai
+sambal butuh cabai
+otak wajib bergantung pada oksigen
+adonan kue perlukan mentega
+kulit perlukan vitamin D
+kabut bersandar pada kelembapan tinggi
+negara butuh warga negara
+
+## POLA: Categorical — X adalah/merupakan/termasuk Y
+## jumlah: 260 | domain: ['alam', 'cuaca', 'ekonomi', 'fisika', 'makanan', 'olahraga', 'pertanian', 'sosial', 'teknologi', 'tubuh_manusia']
+
+teh termasuk tanaman perkebunan
+basket adalah olahraga beregu
+tenis dapat diklasifikasikan sebagai olahraga raket
+otak berkategori organ sistem saraf
+proton termasuk partikel subatomik bermuatan positif
+jaksa termasuk penuntut umum
+UMKM dapat diklasifikasikan sebagai sektor usaha mikro
+Linux merupakan sistem operasi open source
+kupu-kupu masuk golongan serangga
+gula pasir termasuk pemanis buatan
+roti merupakan sumber karbohidrat
+Python terhitung sebagai bahasa pemrograman tingkat tinggi
+tempe dapat diklasifikasikan sebagai sumber protein nabati
+Python tergolong ke dalam bahasa pemrograman tingkat tinggi
+suku bunga masuk kategori instrumen kebijakan moneter
+suku bunga adalah instrumen kebijakan moneter
+notaris tergolong ke dalam pejabat umum
+mentega masuk golongan lemak hewani
+guru tergolong tenaga pendidik
+reksa dana merupakan wadah investasi kolektif
+notaris merupakan pejabat umum
+awan stratus tergolong ke dalam awan berlapis
+balap mobil tergolong olahraga motor
+platelet masuk kategori keping darah
+suara berkategori gelombang mekanik longitudinal
+ion tergolong atom bermuatan
+obligasi tergolong ke dalam instrumen utang
+jantung dapat diklasifikasikan sebagai organ otot
+sawit dapat diklasifikasikan sebagai tanaman perkebunan
+tomat berkategori tanaman hortikultura
+boson Higgs merupakan partikel pemberi massa
+renang merupakan olahraga akuatik
+cacing dapat diklasifikasikan sebagai invertebrata
+cacing tergolong invertebrata
+SSD termasuk penyimpanan data
+saham masuk golongan instrumen pasar modal
+embun masuk golongan kondensasi pagi hari
+GPU terhitung sebagai prosesor grafis
+balap sepeda adalah olahraga ketahanan
+kopi masuk kategori tanaman perkebunan
+gula pasir terhitung sebagai pemanis buatan
+listrik tergolong ke dalam aliran muatan
+DPR adalah lembaga legislatif
+atom adalah unit terkecil unsur
+balap mobil termasuk olahraga motor
+madu tergolong pemanis alami
+minyak sawit tergolong lemak nabati
+tentara dapat diklasifikasikan sebagai pertahanan negara
+kunyit masuk kategori rempah obat
+telur terhitung sebagai sumber protein
+renang terhitung sebagai olahraga akuatik
+dokter adalah tenaga medis
+presiden adalah kepala negara
+embun masuk kategori kondensasi pagi hari
+tempe masuk golongan sumber protein nabati
+CPU dapat diklasifikasikan sebagai otak komputer
+saham tergolong ke dalam instrumen pasar modal
+hujan es merupakan presipitasi padat
+madu merupakan pemanis alami
+cloud adalah layanan komputasi terdistribusi
+tahu adalah sumber protein nabati
+hidung adalah indra penciuman
+buaya termasuk reptil
+pajak tergolong sumber penerimaan negara
+boson Higgs berkategori partikel pemberi massa
+nasi berkategori sumber karbohidrat
+magnet tergolong benda bermedan magnet
+Linux tergolong sistem operasi open source
+otak terhitung sebagai organ sistem saraf
+angin puting beliung dapat diklasifikasikan sebagai pusaran angin berkekuatan tinggi
+bulu tangkis masuk kategori olahraga raket
+presiden terhitung sebagai kepala negara
+tempe tergolong ke dalam sumber protein nabati
+voli adalah olahraga beregu
+sepakbola terhitung sebagai olahraga beregu
+cahaya masuk kategori gelombang elektromagnetik
+SSD adalah penyimpanan data
+mata tergolong ke dalam indra penglihatan
+karet tergolong tanaman perkebunan
+gula pasir adalah pemanis buatan
+mata terhitung sebagai indra penglihatan
+awan stratus merupakan awan berlapis
+jantung termasuk organ otot
+kulit berkategori organ terbesar tubuh
+hakim merupakan penegak hukum
+polisi termasuk penegak hukum
+keju masuk golongan produk olahan susu
+obligasi berkategori instrumen utang
+pupuk kompos berkategori pupuk organik
+plankton terhitung sebagai mikroorganisme
+virus terhitung sebagai mikroorganisme sub-seluler
+balap mobil dapat diklasifikasikan sebagai olahraga motor
+pemilu berkategori mekanisme demokrasi
+alga berkategori organisme autotrof
+pupuk urea berkategori pupuk anorganik
+anjing merupakan mamalia
+basket termasuk olahraga beregu
+neuron berkategori sel saraf
+pajak merupakan sumber penerimaan negara
+jantung tergolong ke dalam organ otot
+cacing adalah invertebrata
+cabai masuk kategori tanaman hortikultura
+telinga masuk kategori indra pendengaran
+jamur tergolong ke dalam organisme eukariotik
+buaya terhitung sebagai reptil
+router tergolong perangkat jaringan
+pupuk kompos dapat diklasifikasikan sebagai pupuk organik
+balap mobil berkategori olahraga motor
+pemilu adalah mekanisme demokrasi
+paru-paru dapat diklasifikasikan sebagai organ pernapasan
+bulu tangkis berkategori olahraga raket
+guru termasuk tenaga pendidik
+kupu-kupu adalah serangga
+dokter tergolong ke dalam tenaga medis
+cabai merupakan tanaman hortikultura
+blockchain berkategori buku besar terdistribusi
+sawit tergolong tanaman perkebunan
+pohon terhitung sebagai tumbuhan berkayu
+DPR terhitung sebagai lembaga legislatif
+hujan es berkategori presipitasi padat
+nasi masuk kategori sumber karbohidrat
+kurs masuk golongan nilai tukar mata uang
+cahaya termasuk gelombang elektromagnetik
+cabai terhitung sebagai rempah pedas
+ion adalah atom bermuatan
+HDD adalah penyimpanan data mekanik
+suara termasuk gelombang mekanik longitudinal
+roti terhitung sebagai sumber karbohidrat
+saham berkategori instrumen pasar modal
+tinju merupakan olahraga bela diri
+mentega termasuk lemak hewani
+blockchain termasuk buku besar terdistribusi
+pupuk urea termasuk pupuk anorganik
+ikan masuk golongan hewan vertebrata
+tahu tergolong sumber protein nabati
+lidah merupakan indra pengecap
+tahu terhitung sebagai sumber protein nabati
+ion berkategori atom bermuatan
+eritrosit merupakan sel darah merah
+karet dapat diklasifikasikan sebagai tanaman perkebunan
+molekul tergolong ke dalam gabungan atom
+jantung masuk kategori organ otot
+alga adalah organisme autotrof
+UMKM terhitung sebagai sektor usaha mikro
+lumut masuk golongan tumbuhan non-pembuluh
+tinju dapat diklasifikasikan sebagai olahraga bela diri
+minyak sawit terhitung sebagai lemak nabati
+mentega terhitung sebagai lemak hewani
+otak masuk kategori organ sistem saraf
+Python masuk golongan bahasa pemrograman tingkat tinggi
+lumut tergolong ke dalam tumbuhan non-pembuluh
+hati adalah organ pencernaan
+platelet merupakan keping darah
+karate dapat diklasifikasikan sebagai olahraga bela diri
+pupuk kompos terhitung sebagai pupuk organik
+jaksa berkategori penuntut umum
+tenis tergolong olahraga raket
+keju berkategori produk olahan susu
+judo adalah olahraga bela diri
+teh tergolong ke dalam tanaman perkebunan
+bakteri tergolong ke dalam organisme prokariotik
+lidah masuk kategori indra pengecap
+suku bunga masuk golongan instrumen kebijakan moneter
+proton masuk golongan partikel subatomik bermuatan positif
+eritrosit berkategori sel darah merah
+angin puting beliung masuk golongan pusaran angin berkekuatan tinggi
+daging tergolong ke dalam sumber protein
+smartphone berkategori komputer saku
+kura-kura merupakan reptil
+ion masuk kategori atom bermuatan
+GPU berkategori prosesor grafis
+pengacara tergolong ke dalam pembela hukum
+inflasi masuk golongan indikator makroekonomi
+lidah berkategori indra pengecap
+boson Higgs adalah partikel pemberi massa
+smartphone tergolong ke dalam komputer saku
+kulit tergolong ke dalam organ terbesar tubuh
+UMKM masuk golongan sektor usaha mikro
+buaya adalah reptil
+neutron masuk golongan partikel subatomik netral
+pengacara masuk golongan pembela hukum
+electron terhitung sebagai partikel subatomik bermuatan negatif
+neuron termasuk sel saraf
+virus tergolong mikroorganisme sub-seluler
+kupu-kupu tergolong serangga
+atom terhitung sebagai unit terkecil unsur
+tempe adalah sumber protein nabati
+platelet tergolong keping darah
+daging tergolong sumber protein
+polisi berkategori penegak hukum
+salju dapat diklasifikasikan sebagai presipitasi padat
+jamur masuk golongan organisme eukariotik
+leukosit masuk golongan sel darah putih
+proton masuk kategori partikel subatomik bermuatan positif
+kopi termasuk tanaman perkebunan
+teh dapat diklasifikasikan sebagai tanaman perkebunan
+suara terhitung sebagai gelombang mekanik longitudinal
+plankton tergolong ke dalam mikroorganisme
+kunyit berkategori rempah obat
+jagung termasuk tanaman serealia
+sepakbola dapat diklasifikasikan sebagai olahraga beregu
+karate tergolong ke dalam olahraga bela diri
+salju termasuk presipitasi padat
+tenis tergolong ke dalam olahraga raket
+cacing termasuk invertebrata
+hakim tergolong ke dalam penegak hukum
+AI masuk golongan sistem cerdas buatan
+minyak sawit merupakan lemak nabati
+roti masuk kategori sumber karbohidrat
+smartphone terhitung sebagai komputer saku
+pajak masuk golongan sumber penerimaan negara
+wartawan tergolong tenaga media
+obligasi adalah instrumen utang
+Python masuk kategori bahasa pemrograman tingkat tinggi
+mentega dapat diklasifikasikan sebagai lemak hewani
+suku bunga tergolong instrumen kebijakan moneter
+roti berkategori sumber karbohidrat
+awan sirus masuk golongan awan tinggi berbulu
+cacing terhitung sebagai invertebrata
+awan kumolonimbus dapat diklasifikasikan sebagai awan badai
+awan kumolonimbus masuk kategori awan badai
+tinju masuk kategori olahraga bela diri
+cabai adalah rempah pedas
+keju dapat diklasifikasikan sebagai produk olahan susu
+bakteri tergolong organisme prokariotik
+roti masuk golongan sumber karbohidrat
+hujan es masuk kategori presipitasi padat
+polisi masuk golongan penegak hukum
+Python berkategori bahasa pemrograman tingkat tinggi
+embun berkategori kondensasi pagi hari
+Python adalah bahasa pemrograman tingkat tinggi
+cahaya terhitung sebagai gelombang elektromagnetik
+telinga masuk golongan indra pendengaran
+tinju berkategori olahraga bela diri
+presiden masuk golongan kepala negara
+reksa dana berkategori wadah investasi kolektif
+kulit masuk kategori organ terbesar tubuh
+boson Higgs masuk kategori partikel pemberi massa
+blockchain dapat diklasifikasikan sebagai buku besar terdistribusi
+pupuk urea masuk kategori pupuk anorganik
+listrik masuk kategori aliran muatan
+CPU berkategori otak komputer
+suku bunga tergolong ke dalam instrumen kebijakan moneter
+cloud berkategori layanan komputasi terdistribusi
+smartphone adalah komputer saku
+cahaya merupakan gelombang elektromagnetik
+padi merupakan tanaman serealia
+dokter merupakan tenaga medis
+jantung tergolong organ otot
+kura-kura adalah reptil
+alga terhitung sebagai organisme autotrof
+Linux masuk golongan sistem operasi open source
+pemilu merupakan mekanisme demokrasi
+lebah tergolong ke dalam serangga
+jahe masuk golongan rempah obat
+renang dapat diklasifikasikan sebagai olahraga akuatik
+magnet masuk kategori benda bermedan magnet
+tempe tergolong sumber protein nabati
+RAM masuk golongan memori sementara
+paku-pakuan masuk kategori tumbuhan pembuluh
+
+## POLA: State + adjective — X + sifat
+## jumlah: 260 | domain: ['alam', 'cuaca', 'ekonomi', 'fisika', 'makanan', 'olahraga', 'pertanian', 'sosial', 'teknologi', 'tubuh_manusia']
+
+platina sebenarnya mulia
+karbon tampak stabil
+darah memang kental
+GPU high-end itu kuat
+HDD cukup rapuh
+cuka begitu asam
+bunga tampak harum
+handuk olahraga begitu cepat kering
+bunga sangat harum
+pada dasarnya radiasi gamma berbahaya
+kunyit terasa pahit
+gula sebenarnya manis
+bibit unggul sebenarnya produktif
+besi tampak keras
+cangkul tergolong kuat
+secara alami serat optik cepat
+kayu tergolong kuat
+batu tergolong keras
+RAM besar terlihat responsif
+air raksa terasa cair
+emas begitu mulia
+SSD tergolong cepat
+karet tampak isolator
+teh sangat sepat
+urat bersifat elastis
+secara alami cahaya laser koheren
+norma cukup mengikat
+bibit unggul tampak produktif
+badai terlalu destruktif
+duri kaktus bersifat tajam
+angin sangat dingin
+hujan deras terlihat basah
+otak begitu kompleks
+angin laut terlihat segar
+sinar matahari siang sangat terik
+botol minum memang tahan banting
+gula begitu manis
+botol minum terlalu tahan banting
+kopi hitam bersifat pahit
+cabai itu pedas
+badai terlihat destruktif
+garam terasa asin
+cokelat tergolong manis
+WiFi lama tergolong lambat
+bambu begitu lentur
+botol minum cukup tahan banting
+pada dasarnya rapat formal
+durian terlihat harum
+greenhouse terlalu terkontrol
+udara pegunungan memang sejuk
+radiasi gamma sangat berbahaya
+karbon begitu stabil
+emas tergolong mulia
+secara alami RAM besar responsif
+jeruk nipis memang asam
+traktor cukup berat
+jeruk nipis sangat asam
+secara alami duri kaktus tajam
+pupuk kandang cukup subur
+obligasi pemerintah memang aman
+kabel tembaga memang konduktif
+pada dasarnya kayu padat
+obligasi pemerintah tampak aman
+helm balap sangat kokoh
+sinar matahari pagi begitu hangat
+kapas sebenarnya lembut
+nasi panas memang pulen
+cuka bersifat asam
+badai sebenarnya destruktif
+es sangat dingin
+sukuk begitu rendah risiko
+karbon terasa stabil
+kulit sebenarnya halus
+platina tergolong mulia
+kompos terlalu hijau
+secara alami karbon stabil
+badai tergolong destruktif
+jahe begitu hangat
+CPU lawas sangat lambat
+jeruk nipis terlihat asam
+konektor USB-C tampak praktis
+air raksa bersifat cair
+daun tampak hijau
+pada dasarnya duri kaktus tajam
+secara alami baterai lipo ringan
+jahe itu hangat
+pada dasarnya RAM besar responsif
+cokelat cukup manis
+bambu sebenarnya lentur
+laut begitu asin
+pemilu cukup rutin
+mulsa sangat pelindung
+cuka itu asam
+GPU high-end terasa kuat
+konektor USB-C cukup praktis
+kontrak tergolong legal
+garam terlihat asin
+demo terlalu ekspresif
+cleats sepakbola terlalu kuat
+rambut sebenarnya lembut
+pada dasarnya angin laut segar
+kurs stabil itu menguntungkan
+koneksi 5G begitu stabil
+cangkul tampak kuat
+inflasi tinggi cukup merusak
+kerupuk sangat renyah
+utang luar negeri itu memberatkan
+kapas terlihat lembut
+cabai sangat pedas
+salju cukup putih
+utang luar negeri terlalu memberatkan
+cahaya laser tergolong koheren
+HDD terlihat rapuh
+kayu terlihat kuat
+hujan deras terlalu basah
+urat begitu elastis
+kompos begitu hijau
+pada dasarnya GPU high-end kuat
+sabit bersifat tajam
+kunyit terlihat pahit
+laut sangat asin
+batu tampak keras
+konektor USB-C terasa praktis
+CPU lawas tampak lambat
+serat optik sebenarnya cepat
+perjanjian terasa sah
+helm balap begitu kokoh
+karet itu isolator
+darah tampak kental
+kayu sangat padat
+kunyit cukup pahit
+sinar matahari siang terasa terik
+pemilu terlihat rutin
+otot terlihat kenyal
+laut terlihat dalam
+jantung terasa vital
+air sangat jernih
+api sebenarnya panas
+urat memang elastis
+angin laut tampak segar
+kabut pagi begitu tebal
+kayu sebenarnya kuat
+angin laut memang segar
+sarung tangan kiper terlihat lengket
+durian bersifat harum
+greenhouse sangat terkontrol
+bola basket sangat memantul
+pada dasarnya lidah sensitif
+cahaya laser itu koheren
+pada dasarnya deflasi berbahaya
+cangkul sangat kuat
+salju memang putih
+GPU high-end terlalu kuat
+secara alami laut dalam
+udara pegunungan terlalu sejuk
+reksa dana pasar uang terlihat likuid
+platina cukup mulia
+pada dasarnya garam asin
+tanah cukup lembap
+sinar matahari siang memang terik
+secara alami udara pantai lembap
+udara kota sangat kotor
+garam sangat asin
+tradisi itu sakral
+angin gunung memang dingin
+shuttlecock begitu ringan
+cangkul cukup kuat
+jeruk nipis cukup asam
+bambu bersifat lentur
+utang luar negeri tergolong memberatkan
+secara alami adat kuat
+sinar matahari pagi sebenarnya hangat
+perjanjian tergolong sah
+kulit tergolong halus
+karbon cukup stabil
+sepatu lari sangat ringan
+laut tampak asin
+sinar matahari pagi terlalu hangat
+greenhouse begitu terkontrol
+kapas memang lembut
+WiFi lama cukup lambat
+hukum tergolong tegas
+tembaga terasa konduktif
+air raksa sebenarnya cair
+devisa surplus itu positif
+rambut terlihat lembut
+irigasi tergolong teratur
+kompos sangat hijau
+angin memang dingin
+air mata terasa asin
+urat itu elastis
+kesepakatan tampak mengikat
+adat tampak kuat
+shuttlecock tergolong ringan
+kontrak tampak legal
+angin gunung sebenarnya dingin
+uranium memang radioaktif
+pemerintahan itu berwenang
+jahe terasa hangat
+jeruk nipis sebenarnya asam
+GPU high-end sebenarnya kuat
+teh terlihat sepat
+secara alami urat elastis
+pada dasarnya sukuk rendah risiko
+tembaga terlihat konduktif
+botol minum bersifat tahan banting
+pada dasarnya angin gunung dingin
+daun sangat hijau
+keringat begitu asin
+pemilu tampak rutin
+otak terasa kompleks
+pada dasarnya hujan rintik lembut
+laut memang dalam
+handuk olahraga sebenarnya cepat kering
+cahaya laser terasa koheren
+bibit unggul sangat produktif
+secara alami garam asin
+otot bersifat kenyal
+devisa surplus terlalu positif
+kurs stabil terasa menguntungkan
+secara alami obligasi pemerintah aman
+kayu itu padat
+SSD sebenarnya cepat
+RAM besar sebenarnya responsif
+kerupuk cukup renyah
+GPU high-end bersifat kuat
+WiFi lama itu lambat
+bambu cukup lentur
+secara alami angin dingin
+helm balap bersifat kokoh
+koneksi 5G sangat stabil
+CPU lawas bersifat lambat
+emas bersifat mulia
+konektor USB-C tergolong praktis
+pada dasarnya daun hijau
+secara alami kulit halus
+pada dasarnya batu keras
+kurs stabil begitu menguntungkan
+karet sangat isolator
+jahe sebenarnya hangat
+sepatu lari memang ringan
+SSD terlalu cepat
+HDD sangat rapuh
+helm balap cukup kokoh
+tembaga sangat konduktif
+raket carbon terasa ringan
+obligasi pemerintah tergolong aman
+ajir bambu sangat ringan
+jahe sangat hangat
+serat optik terlihat cepat
+mulsa tergolong pelindung
+deflasi bersifat berbahaya
+kontrak terasa legal
+pada dasarnya kompos hijau
+botol minum itu tahan banting
+reksa dana pasar uang terasa likuid
+cokelat tampak manis
+otak terlihat kompleks
+jahe cukup hangat
+platina terlihat mulia
+
+## POLA: Negation — X bukan/tidak Y
+## jumlah: 260 | domain: ['alam', 'cuaca', 'ekonomi', 'fisika', 'makanan', 'mixed', 'olahraga', 'pertanian', 'sosial', 'teknologi', 'tubuh_manusia']
+
+ubur-ubur bukanlah ikan
+SSD tidak termasuk memori sementara
+cokelat bukanlah permen
+secara umum kecap tidak termasuk saus tomat
+secara teknis pajak bukan sumbangan sukarela
+secara umum jagung tidak termasuk tanaman hortikultura
+secara teknis salju bukan hujan air
+sebenarnya bintang laut bukan ikan
+faktanya ubi jalar bukan sayuran biasa
+koperasi bukanlah perseroan
+sebenarnya cabai bukan serealia
+sebenarnya jamur bukan tumbuhan
+renang tidak termasuk olahraga darat
+siklon tidak termasuk angin biasa
+reksa dana bukan deposito tunggal
+tenis bukanlah olahraga beregu
+compiler bukan interpreter, justru penerjemah ke kode mesin
+kentang bukan sayuran biasa, melainkan umbi-umbian
+menurut ahli, hakim bukan penuntut umum
+cacing bukan serangga, melainkan annelida
+faktanya elektron bukan partikel bermuatan positif
+faktanya DPR bukan lembaga eksekutif
+menurut klasifikasi, subsidi bukan pajak
+menurut ahli, pajak bukan sumbangan sukarela
+kurs bukan harga barang
+menurut ahli, bola lampu bukan sumber energi primer
+GPU bukan perangkat penyimpanan
+terong tidak termasuk sayuran
+cloud bukan perangkat fisik
+sebenarnya notaris bukan pengacara
+secara umum sepakbola tidak termasuk olahraga raket
+menurut ahli, jagung bukan sayuran
+badai bukan hujan biasa
+mentimun bukanlah sayuran
+pemilu bukanlah acara hiburan
+deflasi bukan kenaikan harga
+menurut ahli, Linux bukan aplikasi
+batu bukan konduktor listrik, melainkan isolator
+Python tidak tergolong aplikasi web
+menurut ahli, compiler bukan interpreter
+pemilu bukan acara hiburan, melainkan mekanisme demokrasi
+pajak tidak termasuk sumbangan sukarela
+menurut klasifikasi, siklon bukan angin biasa
+secara umum sake tidak termasuk arak lokal
+menurut klasifikasi, deflasi bukan kenaikan harga
+pupuk urea bukan pupuk organik
+paus tidak tergolong ikan
+faktanya maraton bukan lari jarak pendek
+faktanya pupuk urea bukan pupuk organik
+tolak peluru bukan lari estafet
+faktanya saham bukan utang
+GPU tidak tergolong CPU
+cacing tidak tergolong serangga
+pajak bukan sumbangan sukarela, melainkan kewajiban negara
+menurut ahli, bakteri bukan hewan
+pupuk kompos bukanlah pupuk anorganik
+suara bukan gelombang elektromagnetik, melainkan gelombang mekanik
+DPR tidak termasuk lembaga eksekutif
+menurut ahli, presiden bukan anggota legislatif
+CPU tidak tergolong perangkat penyimpanan
+plankton sama sekali bukan spesies tunggal
+menurut ahli, subsidi bukan pajak
+kecap bukan saus tomat
+secara teknis hati bukan organ pernapasan
+sebenarnya kulit bukan organ dalam
+cahaya bukan gelombang mekanik, melainkan gelombang elektromagnetik
+secara umum lumut tidak termasuk tumbuhan berpembuluh
+sebenarnya AI bukan manusia
+siklon bukanlah angin biasa
+secara umum pupuk urea tidak termasuk pupuk organik
+reksa dana tidak tergolong deposito tunggal
+menurut ahli, batu bukan konduktor listrik
+secara umum molekul tidak termasuk atom tunggal
+menurut klasifikasi, pankreas bukan kelenjar ludah
+lompat galah tidak tergolong olahraga perairan
+labu bukan sayuran, melainkan buah
+menurut ahli, pemilu bukan acara hiburan
+secara umum pemilu tidak termasuk acara hiburan
+menurut ahli, deflasi bukan kenaikan harga
+menurut klasifikasi, panel surya bukan sumber cahaya
+faktanya dividen bukan bunga pinjaman
+secara teknis SSD bukan memori sementara
+secara teknis lambung bukan organ ekskresi
+subsidi bukan pajak, justru bantuan harga
+faktanya badai bukan hujan biasa
+dividen sama sekali bukan bunga pinjaman
+molekul sama sekali bukan atom tunggal
+renang tidak tergolong olahraga darat
+padi bukan tanaman hortikultura, justru serealia
+menurut ahli, pupuk kompos bukan pupuk anorganik
+router bukan perangkat input output, justru perangkat jaringan
+faktanya labu bukan sayuran
+obligasi sama sekali bukan instrumen kepemilikan
+kalajengking bukan serangga, melainkan arachnida
+faktanya batu bukan konduktor listrik
+menurut ahli, siklon bukan angin biasa
+menurut klasifikasi, angin bukan cahaya
+menurut ahli, ubi jalar bukan sayuran biasa
+menurut ahli, koperasi bukan perseroan
+polisi bukan tentara
+secara teknis sawit bukan tanaman hortikultura
+sake tidak tergolong arak lokal
+lompat galah bukanlah olahraga perairan
+menurut ahli, reksa dana bukan deposito tunggal
+menurut ahli, notaris bukan pengacara
+angin bukan cahaya
+salju bukan hujan air
+reksa dana tidak termasuk deposito tunggal
+secara umum terasi tidak termasuk saus
+faktanya renang bukan olahraga darat
+obligasi bukanlah instrumen kepemilikan
+AI bukanlah manusia
+gravitasi bukanlah gaya kontak
+secara umum obligasi tidak termasuk instrumen kepemilikan
+salju tidak tergolong hujan air
+paru-paru sama sekali bukan organ sirkulasi
+menurut ahli, jamur bukan tumbuhan
+menurut ahli, dividen bukan bunga pinjaman
+DPR bukan lembaga eksekutif
+polybag tidak tergolong pot tanah liat
+renang sama sekali bukan olahraga darat
+secara teknis limpa bukan organ pernapasan
+menurut klasifikasi, paus bukan ikan
+jagung tidak tergolong tanaman hortikultura
+faktanya smartphone bukan hanya telepon
+lambung bukanlah organ ekskresi
+pupuk kompos bukan pupuk anorganik
+secara umum inflasi tidak termasuk kenaikan pendapatan
+hakim bukan penuntut umum
+sebenarnya badai bukan hujan biasa
+pankreas bukan kelenjar ludah, justru kelenjar pencernaan
+secara umum bola lampu tidak termasuk sumber energi primer
+sawit bukan tanaman hortikultura, justru perkebunan
+menurut klasifikasi, cabai bukan serealia
+sebenarnya angin bukan cahaya
+cahaya bukanlah gelombang mekanik
+router tidak tergolong perangkat input output
+mentimun tidak tergolong sayuran
+faktanya koperasi bukan perseroan
+secara teknis hakim bukan penuntut umum
+SSD bukan memori sementara
+obligasi bukan instrumen kepemilikan, melainkan instrumen utang
+badai bukan hujan biasa, justru sistem tekanan rendah ekstrem
+sebenarnya polybag bukan pot tanah liat
+secara teknis renang bukan olahraga darat
+secara umum koperasi tidak termasuk perseroan terbatas
+limpa bukan organ pernapasan, justru organ limfoid
+cangkul bukan alat mekanis, melainkan alat tradisional
+gravitasi tidak termasuk gaya kontak
+lambung tidak tergolong organ ekskresi
+faktanya presiden bukan anggota legislatif
+maraton tidak termasuk lari jarak pendek
+menurut ahli, maraton bukan lari jarak pendek
+faktanya lumut bukan tumbuhan berpembuluh
+atom bukanlah partikel terkecil
+paru-paru bukan organ sirkulasi, melainkan organ pernapasan
+secara umum Python tidak termasuk aplikasi web
+balap mobil sama sekali bukan olahraga ketahanan
+subsidi sama sekali bukan pajak
+menurut ahli, GPU bukan perangkat penyimpanan
+menurut klasifikasi, kepiting bukan ikan
+hujan es tidak tergolong salju
+jagung bukan tanaman hortikultura
+embun bukan hujan
+pajak bukan sumbangan sukarela
+plankton bukanlah spesies tunggal
+pupuk kompos tidak tergolong pupuk anorganik
+secara teknis RAM bukan penyimpanan permanen
+cangkul tidak tergolong alat mekanis
+trakea bukan pembuluh darah, melainkan saluran pernapasan
+secara teknis eritrosit bukan sel saraf
+lambung tidak termasuk organ ekskresi
+petir bukan kilat cahaya
+lompat galah tidak termasuk olahraga perairan
+smartphone bukan hanya telepon, melainkan komputer saku
+neutron bukanlah partikel bermuatan
+secara teknis inflasi bukan kenaikan pendapatan
+lumba-lumba sama sekali bukan ikan
+faktanya reksa dana bukan deposito tunggal
+sebenarnya jaksa bukan hakim
+menurut klasifikasi, lompat galah bukan olahraga perairan
+kabut bukanlah awan tinggi
+panel surya bukan sumber cahaya, melainkan konverter cahaya ke listrik
+panel surya bukan sumber cahaya
+GPU sama sekali bukan perangkat penyimpanan
+ubi jalar tidak tergolong sayuran biasa
+compiler tidak tergolong interpreter
+secara umum Linux tidak termasuk aplikasi
+kurs tidak tergolong harga barang
+judo bukan olahraga rebound
+secara teknis saham bukan utang
+jamur bukan tumbuhan
+faktanya greenhouse bukan lahan terbuka
+padi sama sekali bukan tanaman hortikultura
+menurut klasifikasi, DPR bukan lembaga eksekutif
+terong sama sekali bukan sayuran
+Linux tidak termasuk aplikasi
+lumut bukanlah tumbuhan berpembuluh
+sebenarnya virus bukan sel hidup
+kurs bukan harga barang, melainkan nilai tukar mata uang
+secara umum RAM tidak termasuk penyimpanan permanen
+bakteri bukanlah hewan
+terasi sama sekali bukan saus
+secara umum jagung tidak termasuk sayuran
+menurut klasifikasi, bola lampu bukan sumber energi primer
+sebenarnya bola lampu bukan sumber energi primer
+greenhouse sama sekali bukan lahan terbuka
+menurut klasifikasi, renang bukan olahraga darat
+mentimun bukan sayuran, justru buah
+faktanya siklon bukan angin biasa
+menurut klasifikasi, sprint 100m bukan lari jarak jauh
+panel surya tidak termasuk sumber cahaya
+secara teknis subsidi bukan pajak
+menurut klasifikasi, gravitasi bukan gaya kontak
+kalajengking bukanlah serangga
+sebenarnya limpa bukan organ pernapasan
+secara teknis cabai bukan serealia
+secara umum ikan tidak termasuk mamalia
+secara teknis AI bukan manusia
+GPU bukan CPU, justru prosesor grafis
+badai bukan hujan biasa, melainkan sistem tekanan rendah ekstrem
+menurut klasifikasi, compiler bukan interpreter
+secara umum kura-kura tidak termasuk amfibi
+DPR bukanlah lembaga eksekutif
+menurut klasifikasi, limpa bukan organ pernapasan
+kura-kura tidak termasuk amfibi
+secara teknis terasi bukan saus
+cahaya bukan gelombang mekanik
+CPU bukan perangkat penyimpanan, justru unit pengolah
+secara teknis pankreas bukan kelenjar ludah
+menurut klasifikasi, polybag bukan pot tanah liat
+terasi bukan saus, justru fermentasi udang
+neuron bukanlah sel darah
+judo tidak termasuk olahraga rebound
+hati bukan organ pernapasan, melainkan organ pencernaan
+sebenarnya lumut bukan tumbuhan berpembuluh
+salju sama sekali bukan hujan air
+sebenarnya DPR bukan lembaga eksekutif
+inflasi bukan kenaikan pendapatan
+lumut sama sekali bukan tumbuhan berpembuluh
+atom tidak termasuk partikel terkecil
+badai sama sekali bukan hujan biasa
+dividen tidak tergolong bunga pinjaman
+subsidi tidak termasuk pajak
+menurut klasifikasi, sake bukan arak lokal
+menurut ahli, cabai bukan serealia
+menurut klasifikasi, neutron bukan partikel bermuatan
+neutron tidak termasuk partikel bermuatan
+pankreas bukan kelenjar ludah, melainkan kelenjar pencernaan
+tenis tidak termasuk olahraga beregu
+greenhouse bukan lahan terbuka
+pupuk urea tidak termasuk pupuk organik
+jagung bukan sayuran, justru serealia
+sprint 100m bukanlah lari jarak jauh
+petir bukanlah kilat cahaya
+sebenarnya renang bukan olahraga darat
+menurut klasifikasi, balap mobil bukan olahraga ketahanan
+jamur bukan tumbuhan, justru fungi
+deflasi bukan kenaikan harga, justru penurunan harga umum
+menurut ahli, balap mobil bukan olahraga ketahanan
+
+## POLA: Temporal — setelah/sebelum/ketika X, Y terjadi
+## jumlah: 260 | domain: ['alam', 'cuaca', 'ekonomi', 'fisika', 'makanan', 'olahraga', 'pertanian', 'sosial', 'teknologi', 'tubuh_manusia']
+
+sebelum suporter bertepuk, pelari mendekati garis finish
+tatkala bibit ditanam, tanaman mulai tumbuh
+sementara cabai berbuah, harga turun
+selagi terluka, darah mengalir
+begitu clic phishing, akun terkunci
+saat pasar dibuka, investor memantau layar
+begitu cahaya menembus prisma, warna terurai
+sebelum IHSG bergerak, pengumuman suku bunga
+sejak clic phishing, akun terkunci
+ketika begadang semalaman, mata terasa berat
+selagi router reboot, internet kembali
+begitu makan terlalu banyak, perut terasa kembung
+sementara cahaya mengenai cermin, pantulan terjadi
+saat tombol power ditekan, laptop menyala
+sementara suhu CPU naik, kipas berputar cepat
+tatkala terluka, darah mengalir
+sejak daging dimasak, warnanya berubah
+sejak suhu naik tinggi, penguapan cepat
+sebelum petani mengandalkan irigasi, iklim kering
+sementara tombol power ditekan, laptop menyala
+sejak terluka, darah mengalir
+setelah bibit ditanam, tanaman mulai tumbuh
+sebelum layar menampilkan logo, sistem boot
+sejak laporan keuangan terbit, saham bergerak naik
+sejak pelari mendekati garis finish, suporter bertepuk
+sejak cabai digiling, aroma pedas menyebar
+setelah mangsa muncul, predator mengejar
+sebelum perut terasa kembung, makan terlalu banyak
+setelah daging dibekukan, tekstur mengeras
+selagi cahaya mengenai cermin, pantulan terjadi
+setelah musim gugur tiba, daun berjatuhan
+tatkala upload selesai, notifikasi muncul
+sebelum warga mengantri, bantuan turun
+ketika peluit panjang, pertandingan tamat
+selagi tidur cukup, tubuh terasa segar
+sejak saklar ditekan, lampu menyala
+selagi padi menguning, panen siap dilakukan
+sebelum internet kembali, router reboot
+ketika festival digelar, warga berdatangan
+saat cedera terjadi, perawat masuk lapangan
+ketika gula dipanaskan, karamel terbentuk
+saat rapat dimulai, peserta duduk tenang
+saat pelari mendekati garis finish, suporter bertepuk
+setelah begadang semalaman, mata terasa berat
+sebelum pemutusan hubungan kerja dilakukan, eksportir rugi
+setelah kredit macet, bank menyita jaminan
+setelah pengumuman suku bunga, IHSG bergerak
+tatkala set pertama selesai, pemain istirahat
+setelah kurang minum, tenggorokan kering
+begitu tidur cukup, tubuh terasa segar
+saat gula dipanaskan, karamel terbentuk
+sementara paparan sinar UV, kulit menggelap
+setelah peluit panjang, pertandingan tamat
+saat kebijakan baru terbit, warga membaca detail
+setelah clic phishing, akun terkunci
+setelah set pertama selesai, pemain istirahat
+begitu teh didiamkan, rasa semakin pekat
+saat bibit ditanam, tanaman mulai tumbuh
+begitu pemilu dilaksanakan, rakyat memberikan suara
+sementara hujan turun, petani tidak menyiram
+begitu sinyal hilang, video buffer
+setelah olahraga berat, denyut nadi naik
+saat kredit macet, bank menyita jaminan
+sebelum darah mengalir, terluka
+sementara tidur cukup, tubuh terasa segar
+tatkala musim semi datang, bunga bermekaran
+sebelum rasa pusing mereda, obat diminum
+ketika cabai digiling, aroma pedas menyebar
+saat kurang minum, tenggorokan kering
+tatkala pelatih memberi instruksi, pemain mengeksekusi
+tatkala festival digelar, warga berdatangan
+sementara right issue dilakukan, harga saham tertekan
+begitu kurang minum, tenggorokan kering
+selagi kredit macet, bank menyita jaminan
+tatkala angin berhembus kencang, pohon bergoyang
+begitu isotop meluruh, radiasi terlepas
+begitu musim hama berlalu, panen membaik
+begitu tekanan udara rendah, badai terbentuk
+selagi suhu naik, benda memuai
+ketika cabai berbuah, harga turun
+ketika gol tercipta, suporter bersorak
+sementara cabai digiling, aroma pedas menyebar
+ketika padi menguning, panen siap dilakukan
+sementara hoaks tersebar, kepanikan muncul
+setelah suhu turun, benda menyusut
+selagi peluit panjang, pertandingan tamat
+begitu kemarau melanda, sungai mengering
+ketika kopi disedu, aroma menguar
+selagi matahari terik, kulit terbakar
+sejak kecelakaan terjadi, polisi tiba
+sebelum laptop menyala, tombol power ditekan
+ketika matahari terbenam, malam menjelang
+begitu festival digelar, warga berdatangan
+ketika roti dipanggang, aroma harum menyebar
+tatkala teh didiamkan, rasa semakin pekat
+ketika kecelakaan terjadi, polisi tiba
+begitu kopi disedu, aroma menguar
+selagi daging dimasak, warnanya berubah
+setelah gula dipanaskan, karamel terbentuk
+begitu salju mencair, air sungai naik
+begitu suhu turun, benda menyusut
+begitu gaya diterapkan, benda bergerak
+tatkala tidur cukup, tubuh terasa segar
+tatkala keputusan diumumkan, publik bereaksi
+saat set pertama selesai, pemain istirahat
+sejak paparan sinar UV, kulit menggelap
+sejak hujan turun, tanaman menjadi segar
+selagi rapat dimulai, peserta duduk tenang
+tatkala petir menyambar, hewan berlarian
+selagi clic phishing, akun terkunci
+sementara gol tercipta, suporter bersorak
+ketika kredit macet, bank menyita jaminan
+sejak rapat dimulai, peserta duduk tenang
+sebelum aroma pedas menyebar, cabai digiling
+sejak musim hama berlalu, panen membaik
+sejak eksportir rugi, pemutusan hubungan kerja dilakukan
+sementara kecelakaan terjadi, polisi tiba
+ketika rapat dimulai, peserta duduk tenang
+begitu UMKM untung, ekspansi dijalankan
+tatkala sinyal hilang, video buffer
+ketika cahaya menembus prisma, warna terurai
+saat hujan turun, petani tidak menyiram
+setelah UMKM untung, ekspansi dijalankan
+tatkala suhu turun, benda menyusut
+tatkala update selesai, sistem restart
+sebelum benda memuai, suhu naik
+sejak cedera terjadi, perawat masuk lapangan
+setelah tanaman layu, petani menyiram lebih
+begitu pasar dibuka, investor memantau layar
+saat isotop meluruh, radiasi terlepas
+sejak cabai berbuah, harga turun
+tatkala cabai berbuah, harga turun
+tatkala buah dipotong, aroma segar tercium
+begitu bantuan turun, warga mengantri
+sementara panen tiba, petani sibuk memanen
+setelah terluka, darah mengalir
+sebelum pelaku pasar menyesuaikan posisi, data inflasi rilis
+saat begadang semalaman, mata terasa berat
+selagi musim gugur tiba, daun berjatuhan
+setelah kecelakaan terjadi, polisi tiba
+sementara isotop meluruh, radiasi terlepas
+tatkala pupuk diberi, daun menghijau
+setelah makan pedas, tubuh berkeringat
+sebelum petani menyiram lebih, tanaman layu
+begitu kredit macet, bank menyita jaminan
+saat suhu turun, benda menyusut
+sejak klik tombol, aplikasi terbuka
+selagi iklim kering, petani mengandalkan irigasi
+selagi klik tombol, aplikasi terbuka
+sebelum foton dipancarkan, atom tereksitasi
+saat suhu CPU naik, kipas berputar cepat
+begitu cokelat dilelehkan, tekstur menjadi lembut
+sebelum bank menyita jaminan, kredit macet
+sebelum akun terkunci, clic phishing
+setelah tidur cukup, tubuh terasa segar
+tatkala padi menguning, panen siap dilakukan
+sejak atom tereksitasi, foton dipancarkan
+ketika pasar dibuka, investor memantau layar
+tatkala suhu naik tinggi, penguapan cepat
+sebelum tekstur menjadi lembut, cokelat dilelehkan
+setelah eksportir rugi, pemutusan hubungan kerja dilakukan
+sementara pasar dibuka, investor memantau layar
+sejak suhu turun, benda menyusut
+begitu matahari terik, kulit terbakar
+ketika tekanan udara rendah, badai terbentuk
+ketika terinfeksi virus, suhu tubuh naik
+ketika cokelat dilelehkan, tekstur menjadi lembut
+selagi salju mencair, air sungai naik
+tatkala matahari terbit, burung berkicau
+sejak router reboot, internet kembali
+saat tidur cukup, tubuh terasa segar
+tatkala laporan keuangan terbit, saham bergerak naik
+sebelum lampu menyala, listrik dialirkan
+setelah kurs melemah, importir gelisah
+sebelum mata terasa berat, begadang semalaman
+ketika harga naik, warga berdemo
+setelah router reboot, internet kembali
+sementara atom tereksitasi, foton dipancarkan
+tatkala salju mencair, air sungai naik
+ketika clic phishing, akun terkunci
+sementara matahari terik, kulit terbakar
+begitu upload selesai, notifikasi muncul
+sebelum tanaman mulai tumbuh, bibit ditanam
+sebelum pertandingan tamat, peluit panjang
+sejak right issue dilakukan, harga saham tertekan
+saat kemarau melanda, sungai mengering
+setelah obat diminum, rasa pusing mereda
+selagi pasar dibuka, investor memantau layar
+tatkala musim hama berlalu, panen membaik
+tatkala tanaman layu, petani menyiram lebih
+sejak matahari terbit, burung berkicau
+tatkala sistem boot, layar menampilkan logo
+begitu terinfeksi virus, suhu tubuh naik
+ketika dividen dibagikan, pemegang saham menerima dana
+sementara awan gelat bergerak, hujan akan turun
+selagi paparan sinar UV, kulit menggelap
+selagi suhu CPU naik, kipas berputar cepat
+sebelum panen siap dilakukan, padi menguning
+setelah isotop meluruh, radiasi terlepas
+setelah saklar ditekan, lampu menyala
+ketika perdebatan memanas, isu menyebar
+sementara kurang minum, tenggorokan kering
+tatkala petir sambar, guntur menggelegar
+sejak kabut menebal, jarak pandang menurun
+sebelum sungai mengering, kemarau melanda
+selagi petir menyambar, hewan berlarian
+ketika daging dibekukan, tekstur mengeras
+sejak pasar dibuka, investor memantau layar
+selagi kopi disedu, aroma menguar
+begitu harga naik, warga berdemo
+sementara kemarau melanda, sungai mengering
+begitu telur direbus, putih telur mengeras
+sementara gula dipanaskan, karamel terbentuk
+selagi hujan turun, tanaman menjadi segar
+begitu hujan deras mengguyur, sungai meluap
+ketika pertandingan usai, pemain berjabat tangan
+sejak hoaks tersebar, kepanikan muncul
+sementara baterai GPS habis, data latihan hilang
+tatkala makan terlalu banyak, perut terasa kembung
+tatkala cokelat dilelehkan, tekstur menjadi lembut
+sejak kurang minum, tenggorokan kering
+sebelum penguapan cepat, suhu naik tinggi
+setelah baterai melemah, layar meredup
+selagi sinyal hilang, video buffer
+begitu perdebatan memanas, isu menyebar
+saat daging dibekukan, tekstur mengeras
+sementara klik tombol, aplikasi terbuka
+sementara peluit panjang, pertandingan tamat
+selagi saklar ditekan, lampu menyala
+saat telur direbus, putih telur mengeras
+tatkala tombol power ditekan, laptop menyala
+ketika teh didiamkan, rasa semakin pekat
+begitu dividen dibagikan, pemegang saham menerima dana
+sementara petir sambar, guntur menggelegar
+sebelum tenggorokan kering, kurang minum
+setelah sinyal hilang, video buffer
+sebelum warna terurai, cahaya menembus prisma
+saat latihan dimulai, pemanasan dilakukan
+sejak set pertama selesai, pemain istirahat
+tatkala matahari terik, kulit terbakar
+sementara pengumuman suku bunga, IHSG bergerak
+sejak teh didiamkan, rasa semakin pekat
+selagi pemilu dilaksanakan, rakyat memberikan suara
+sebelum rakyat memberikan suara, pemilu dilaksanakan
+setelah hoaks tersebar, kepanikan muncul
+saat mangsa muncul, predator mengejar
+sejak kebijakan baru terbit, warga membaca detail
+begitu daging dibekukan, tekstur mengeras
+begitu hoaks tersebar, kepanikan muncul
+saat suhu naik tinggi, penguapan cepat
+sejak petir menyambar, hewan berlarian
+sebelum harga turun, cabai berbuah
+begitu hujan turun, tanaman menjadi segar
+sebelum pelangi muncul, hujan reda
+sejak listrik dialirkan, lampu menyala
+sejak kemarau melanda, sungai mengering
+sejak angin berhembus kencang, pohon bergoyang
+selagi suhu turun drastis, embun terbentuk
+ketika tidur cukup, tubuh terasa segar
+sebelum isu menyebar, perdebatan memanas
+
+## POLA: Multi-clause / sebab-akibat kompleks
+## jumlah: 260 | domain: ['alam', 'cuaca', 'ekonomi', 'fisika', 'makanan', 'olahraga', 'pertanian', 'sosial', 'teknologi', 'tubuh_manusia']
+
+modal mudah diakses sehingga UMKM berkembang
+mentimun memuai, lantaran direndam air tawar
+lonjakan trafik tak terduga; makanya server down
+banyak perangkat terhubung, akibatnya WiFi terputus-putus
+penonton bersorak, sebab gol penentu tercipta
+otot kaki terasa nyeri karena latihan lari berlebihan
+hujan turun memicu jalan basah
+bila hujan reda dan matahari muncul, pelangi terbentang
+kasus korupsi terungkap membuat kepercayaan publik menurun
+karena kurang tidur tiga malam, kepala terasa pusing
+kepercayaan publik menurun karena kasus korupsi terungkap
+banyak perangkat terhubung memicu WiFi terputus-putus
+tekanan darah naik terjadi karena stres berlebih
+petani rugi, sebab harga jual anjlok
+kurang menjaga mulut, akibatnya napas berbau
+adonan tidak mengembang, lantaran telur kurang dikocok
+badai mendekat, akibatnya penerbangan ditunda
+kalau lari pagi terlalu jauh, maka saya ngos-ngosan
+latihan ditunda karena hujan deras
+seandainya kebakaran hutan meluas, kabut asap menutupi kota
+bila kebakaran hutan meluas, kabut asap menutupi kota
+aplikasi crash, sebab bug di versi terbaru
+begitu gelombang panas melanda, suhu kota melonjak
+akibat RAM penuh, laptop lemot
+napas berbau, lantaran kurang menjaga mulut
+lari pagi terlalu jauh membuat saya ngos-ngosan
+karena kram perut, pelari terhenti
+jalanan licin karena salju turun
+kekacauan pasar global menyebabkan IHSG anjlok
+kuorum tidak tercapai, akibatnya rapat ditunda
+karena lari pagi terlalu jauh, akhirnya saya ngos-ngosan
+lonjakan trafik tak terduga menyebabkan server down
+pita baja memudar, sebab dipanaskan di api
+dibiarkan semalam di suhu ruang membuat nasi jadi basi
+lari pagi terlalu jauh menyebabkan saya ngos-ngosan
+akibat badai mendekat, penerbangan ditunda
+data bocor, lantaran karyawan keliru share link
+kurs melemah memicu impor berkurang
+kertas tersangkut sehingga printer macet
+direndam air garam; makanya mentimun menyusut
+kue mengembang terjadi karena ragi bekerja sempurna
+hujan deras memicu latihan ditunda
+karena sepi pembeli, toko tutup
+akar lapuk; makanya pohon tumbang
+selama hutan terganggu, hewan kekurangan makan
+akibat bunga mekar, lebah berdengung di taman
+tekanan darah naik, sebab stres berlebih
+tetangga menjadi renggang, sebab perselisihan batas tanah
+begadang di depan layar membuat mata terasa berat
+pelanggaran keras terjadi sehingga wasit memberi kartu merah
+selama kurang menjaga mulut, napas berbau
+harga bahan bakar naik menyebabkan warga berdemo
+hewan kekurangan makan, sebab hutan terganggu
+karena dipanaskan di api, akhirnya pita baja memudar
+asalkan harimau mendekat, rusa kabur
+karena hutan terganggu, hewan kekurangan makan
+karena salah klik tombol, akhirnya file terhapus
+RAM penuh memicu laptop lemot
+banyak perangkat terhubung sehingga WiFi terputus-putus
+perusahaan bangkrut terjadi karena utang menumpuk
+sumber air mengering, akibatnya hewan bermigrasi
+akibat gaya gravitasi bekerja, batu jatuh ke bawah
+kalau harimau mendekat, maka rusa kabur
+gaya gravitasi bekerja menyebabkan batu jatuh ke bawah
+berat badan naik karena asupan kalori berlebih
+lebah berdengung di taman terjadi karena bunga mekar
+karena pelaku pasar menghindari risiko, rupiah melemah
+anggaran subsidi dipangkas, akibatnya harga BBM naik
+UMKM berkembang, sebab modal mudah diakses
+karena gaya gravitasi bekerja, akhirnya batu jatuh ke bawah
+akibat musim paceklik, tikus menyerang sawah
+jika alergi makanan laut, pasti kulit memerah
+asalkan badai mendekat, penerbangan ditunda
+karena cahaya dibiaskan tetes air, pelangi terbentuk
+bandara ditutup karena jarak pandang sangat rendah
+ragi bekerja sempurna, akibatnya kue mengembang
+jika lari pagi terlalu jauh, pasti saya ngos-ngosan
+hujan deras, akibatnya latihan ditunda
+hewan bermigrasi, lantaran sumber air mengering
+warga berdemo, sebab harga bahan bakar naik
+karena hama menyerang, panen gagal
+asalkan bunga mekar, lebah berdengung di taman
+kesuburan tanah menurun membuat lahan diistirahatkan
+karena asupan kalori berlebih, berat badan naik
+jika asupan kalori berlebih, pasti berat badan naik
+akibat angin kencang, pohon bergoyang
+header mencurigakan; makanya email masuk spam
+karena hujan diperkirakan datang, kopi dipanen lebih awal
+kurs melemah sehingga impor berkurang
+tenggorokan terasa perih karena banyak minum es
+karena harga jual anjlok, akhirnya petani rugi
+akibat kurang disiram, tanaman layu
+karena fact-check dilakukan wartawan, isu hoaks diluruskan
+kebakaran hutan meluas; makanya kabut asap menutupi kota
+jika hujan turun, pasti jalan basah
+kalau curah hujan tinggi, maka tanah longsor menimbun jalan
+fact-check dilakukan wartawan membuat isu hoaks diluruskan
+akibat anggaran subsidi dipangkas, harga BBM naik
+kalau angin kencang, maka pohon bergoyang
+utang menumpuk sehingga perusahaan bangkrut
+pelangi terbentuk karena cahaya dibiaskan tetes air
+karena banyak minum es, tenggorokan terasa perih
+air tercemar membuat ikan mati mengapung
+karena gaya listrik statis, akhirnya balon melekat di dinding
+akibat harga kebutuhan melonjak, daya beli turun
+WiFi terputus-putus, sebab banyak perangkat terhubung
+musim paceklik, akibatnya tikus menyerang sawah
+perselisihan batas tanah menyebabkan tetangga menjadi renggang
+teh terlalu pekat, sebab diseduh terlalu lama
+gotong royong terlaksana karena kebiasaan turun-temurun
+kurang tidur tiga malam sehingga kepala terasa pusing
+telur kurang dikocok; makanya adonan tidak mengembang
+hutan terganggu membuat hewan kekurangan makan
+rupiah melemah terjadi karena pelaku pasar menghindari risiko
+tertinggal di dalam mobil sehingga cokelat meleleh
+cabai berbuah lebat, lantaran pollinasi berjalan baik
+rekor pecah, sebab latihan keras lima tahun
+karena kebakaran hutan meluas, kabut asap menutupi kota
+kalau sumber air mengering, maka hewan bermigrasi
+seandainya bunga mekar, lebah berdengung di taman
+karena kebijakan kampus tidak dipatuhi, mahasiswa menduduki gedung
+badai mendekat sehingga penerbangan ditunda
+karena suhu oven terlalu tinggi, akhirnya roti hangus
+bila akar lapuk, pohon tumbang
+gotong royong terlaksana, lantaran kebiasaan turun-temurun
+akibat hujan diperkirakan datang, kopi dipanen lebih awal
+akibat pertahanan lawan lengah, striker mencetak gol
+akibat tidak ada medium perambatan, suara tidak terdengar di luar angkasa
+napas berbau terjadi karena kurang menjaga mulut
+perusahaan merugi sehingga PHK dilakukan
+hujan turun, akibatnya jalan basah
+petisi ditandatangani ribuan orang terjadi karena isu viral di media sosial
+rekor pecah terjadi karena latihan keras lima tahun
+selama jarak pandang sangat rendah, bandara ditutup
+karena header mencurigakan, akhirnya email masuk spam
+selama tekanan udara rendah, awan tebal menggantung
+angin kencang membuat pohon bergoyang
+kurang tidur tiga malam memicu kepala terasa pusing
+penonton bersorak terjadi karena gol penentu tercipta
+aplikasi berjalan di latar, akibatnya baterai cepat habis
+suhu kota melonjak, lantaran gelombang panas melanda
+hujan reda dan matahari muncul sehingga pelangi terbentang
+seandainya hujan turun, jalan basah
+salah klik tombol memicu file terhapus
+modal mudah diakses menyebabkan UMKM berkembang
+jika salju turun, pasti jalanan licin
+salju turun; makanya jalanan licin
+kalau asupan kalori berlebih, maka berat badan naik
+kalau tekanan udara rendah, maka awan tebal menggantung
+akibat garam ditambah berlebih, kuah terlalu asin
+alergi makanan laut menyebabkan kulit memerah
+akibat sumber air mengering, hewan bermigrasi
+kabut asap menutupi kota terjadi karena kebakaran hutan meluas
+mentimun memuai terjadi karena direndam air tawar
+karena harimau mendekat, akhirnya rusa kabur
+kiper gagal menyelamatkan, lantaran tendangan terlalu keras
+akibat kasus korupsi terungkap, kepercayaan publik menurun
+seandainya stres berlebih, tekanan darah naik
+server down karena lonjakan trafik tak terduga
+banyak minum es membuat tenggorokan terasa perih
+kurang disiram menyebabkan tanaman layu
+latihan keras lima tahun; makanya rekor pecah
+WiFi terputus-putus terjadi karena banyak perangkat terhubung
+bunga mekar memicu lebah berdengung di taman
+tanpa badai mendekat, mustahil penerbangan ditunda
+password salah berkali-kali sehingga akun terkunci
+udara dingin di malam sebelumnya; makanya embun menebal di pagi hari
+seandainya latihan lari berlebihan, otot kaki terasa nyeri
+embun menebal di pagi hari, lantaran udara dingin di malam sebelumnya
+karena kertas tersangkut, akhirnya printer macet
+data bocor karena karyawan keliru share link
+seandainya akar lapuk, pohon tumbang
+kesuburan tanah menurun memicu lahan diistirahatkan
+password salah berkali-kali; makanya akun terkunci
+bila jarak pandang sangat rendah, bandara ditutup
+tanpa kebakaran hutan meluas, mustahil kabut asap menutupi kota
+karena saklar ditekan, akhirnya lampu menyala
+gol penentu tercipta sehingga penonton bersorak
+lari pagi terlalu jauh, akibatnya saya ngos-ngosan
+perselisihan batas tanah memicu tetangga menjadi renggang
+akibat dipanaskan di api, pita baja memudar
+karena anggaran subsidi dipangkas, akhirnya harga BBM naik
+akibat kebakaran hutan meluas, kabut asap menutupi kota
+jika udara dingin di malam sebelumnya, pasti embun menebal di pagi hari
+bug di versi terbaru memicu aplikasi crash
+cahaya dibiaskan tetes air menyebabkan pelangi terbentuk
+seandainya angin kencang, pohon bergoyang
+jika jarak pandang sangat rendah, pasti bandara ditutup
+perusahaan bangkrut karena utang menumpuk
+salah klik tombol menyebabkan file terhapus
+begadang di depan layar sehingga mata terasa berat
+gaya listrik statis; makanya balon melekat di dinding
+karena kekurangan unsur hara, daun menguning
+karena garam ditambah berlebih, kuah terlalu asin
+banyak minum es; makanya tenggorokan terasa perih
+karena hujan turun, jalan basah
+isu mendesak di masyarakat menyebabkan DPR meluncurkan undang-undang baru
+kurang tidur tiga malam, akibatnya kepala terasa pusing
+kekacauan pasar global sehingga IHSG anjlok
+asalkan angin kencang, pohon bergoyang
+akibat kram perut, pelari terhenti
+akibat salju turun, jalanan licin
+cokelat meleleh karena tertinggal di dalam mobil
+direndam air tawar membuat mentimun memuai
+warga berdemo karena harga bahan bakar naik
+karena harga jual anjlok, petani rugi
+pertahanan lawan lengah, akibatnya striker mencetak gol
+balon melekat di dinding terjadi karena gaya listrik statis
+isu mendesak di masyarakat membuat DPR meluncurkan undang-undang baru
+daun menguning, sebab kekurangan unsur hara
+perusahaan merugi; makanya PHK dilakukan
+hujan deras mengguyur tiga hari sehingga banjir merendam kampung
+pelaku pasar menghindari risiko, akibatnya rupiah melemah
+muatan listrik atmosfer tinggi sehingga petir menyambar pohon
+burung berkicau terjadi karena fajar menyingsing
+kebakaran hutan meluas memicu kabut asap menutupi kota
+utang menumpuk membuat perusahaan bangkrut
+akibat bug di versi terbaru, aplikasi crash
+jalan basah karena hujan turun
+mendarat salah menyebabkan pemain keseleo
+napas berbau karena kurang menjaga mulut
+cabai berbuah lebat terjadi karena pollinasi berjalan baik
+akibat hujan reda dan matahari muncul, pelangi terbentang
+harga bahan bakar naik; makanya warga berdemo
+bug di versi terbaru; makanya aplikasi crash
+tanpa harimau mendekat, mustahil rusa kabur
+latihan lari berlebihan membuat otot kaki terasa nyeri
+selama sumber air mengering, hewan bermigrasi
+suhu oven terlalu tinggi menyebabkan roti hangus
+akibat kebijakan kampus tidak dipatuhi, mahasiswa menduduki gedung
+impor berkurang, sebab kurs melemah
+karena pollinasi berjalan baik, cabai berbuah lebat
+tanpa muatan listrik atmosfer tinggi, mustahil petir menyambar pohon
+tetangga menjadi renggang, lantaran perselisihan batas tanah
+udara dingin di malam sebelumnya sehingga embun menebal di pagi hari
+panen gagal di sentra produksi membuat harga cabai melonjak
+karena kertas tersangkut, printer macet
+karena akar lapuk, akhirnya pohon tumbang
+karena saklar ditekan, lampu menyala
+petir menyambar pohon karena muatan listrik atmosfer tinggi
+latihan lari berlebihan menyebabkan otot kaki terasa nyeri
+akibat header mencurigakan, email masuk spam
+burung berkicau karena fajar menyingsing
+mentimun menyusut, lantaran direndam air garam
+dimasak dengan api kecil; makanya daging menjadi empuk
+mendarat salah memicu pemain keseleo
+harga kebutuhan melonjak sehingga daya beli turun
+gaya gravitasi bekerja sehingga batu jatuh ke bawah
+striker mencetak gol, sebab pertahanan lawan lengah
+lampu menyala karena saklar ditekan
+kurang disiram, akibatnya tanaman layu
+susu kelapa ditambah, akibatnya kuah sup kental
+lampu menyala terjadi karena saklar ditekan
+asalkan air tercemar, ikan mati mengapung
+begitu hujan reda dan matahari muncul, pelangi terbentang
+bila salju turun, jalanan licin
+data bocor terjadi karena karyawan keliru share link
+bandara ditutup, lantaran jarak pandang sangat rendah
+karena hujan deras mengguyur tiga hari, akhirnya banjir merendam kampung
+tenggorokan terasa perih, lantaran banyak minum es
+
