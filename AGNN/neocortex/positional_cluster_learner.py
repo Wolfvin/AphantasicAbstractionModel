@@ -318,6 +318,74 @@ _INSPECT_TOP_OBJECTS = 15
 
 
 # ----------------------------------------------------------------------
+# Connector-signal detection parameters
+# ----------------------------------------------------------------------
+#
+# This module separates structurally different actions even when their
+# object sets overlap heavily. The textbook case (cluster 62 in the
+# combined pretrain corpus):
+#
+#     "kucing adalah mamalia"      -> action immediately followed by object
+#     "kucing berbeda dari reptil" -> action followed by a CONNECTOR
+#                                     ("dari"/"dengan"/"sebagai") and
+#                                     THEN the object
+#
+# Both actions take taxonomy nouns (mamalia, reptil, ikan, ...) as
+# objects, so weighted Jaccard on object distributions merges them
+# into one cluster — even though they are structurally different
+# predicate types (affirmation-of-category vs contrast-of-category).
+#
+# The connector signal is detected PURELY from position+frequency
+# statistics, with NO hardcoded list of "negation words" or
+# "connector words". The detection contract:
+#
+#   1. For every (action, object) observation, also record the token
+#      (if any) that sits immediately after the action and before the
+#      object — the "between-first" slot. Direct (no-token) is recorded
+#      as None.
+#
+#   2. A token is a "corpus-wide connector" if:
+#        - it appears in the between-first slot at least
+#          ``_CONNECTOR_MIN_BETWEEN_COUNT`` times across the corpus
+#          (so a one-off noun-as-between-token doesn't qualify); AND
+#        - it NEVER appears as an object of any action in the corpus
+#          (so a real object noun that sometimes sits mid-sentence
+#          doesn't qualify — only grammar-only tokens like prepositions
+#          and complementizers make the cut).
+#
+#   3. An action has ``has_connector=True`` if some corpus-wide
+#      connector token occupies the between-first slot in >=
+#      ``_CONNECTOR_RATE_THRESHOLD`` of the action's observations.
+#
+# The two-step filter (corpus-wide detection + per-action rate) is what
+# keeps the detection zero-bias:
+#   - Step 2 says "this token is grammar, not an object" — decided
+#     globally, not by meaning.
+#   - Step 3 says "this action routinely takes a connector" — decided
+#     per-action, not by meaning.
+#
+# Neither step consults a list of "negation words" or "connector
+# words". A token like "dari" qualifies because (a) it sits in the
+# between-first slot many times and (b) no sentence in the corpus
+# treats "dari" itself as an object — pure positional evidence.
+
+# Minimum corpus-wide between-first count for a token to be considered
+# a connector candidate. Tokens that show up once or twice in the
+# between-first slot are likely sentence-specific noun phrases, not
+# grammar.
+_CONNECTOR_MIN_BETWEEN_COUNT = 3
+
+# Per-action rate threshold: a connector token must occupy the
+# between-first slot in at least this fraction of the action's
+# observations for the action to be flagged has_connector=True.
+# 0.5 = majority of usages. We don't require 100% because real corpora
+# have variant phrasings ("X berbeda dengan Y" / "X berbeda dari Y")
+# and we want the signal to fire as long as the connector is the
+# dominant pattern.
+_CONNECTOR_RATE_THRESHOLD = 0.5
+
+
+# ----------------------------------------------------------------------
 # Learner
 # ----------------------------------------------------------------------
 
@@ -364,6 +432,23 @@ class PositionalClusterLearner:
     action_clusters: Dict[int, Set[str]] = field(default_factory=dict)
     cluster_labels: Dict[int, RelationType] = field(default_factory=dict)
 
+    # Connector-signal state (added by the cluster-62 fix). See the
+    # "_CONNECTOR_*" constants above for the detection contract.
+    #
+    # action_connector_signature: {action_token: bool} — True when the
+    #   action routinely takes a connector token between it and its
+    #   object. Used by _cluster_actions() as a structural split key
+    #   so that structurally-different actions (e.g. "adalah" direct
+    #   vs "berbeda" + connector) cannot merge even when their object
+    #   distributions have high weighted-Jaccard similarity.
+    #
+    # connector_tokens: set of corpus-wide connector tokens discovered
+    #   during train(). Exposed for inspection/debugging — classify()
+    #   does not consult it. Persisted to JSON so loaded learners keep
+    #   the same clustering contract.
+    action_connector_signature: Dict[str, bool] = field(default_factory=dict)
+    connector_tokens: Set[str] = field(default_factory=set)
+
     # ------------------------------------------------------------------
     # Convenience views
     # ------------------------------------------------------------------
@@ -397,10 +482,18 @@ class PositionalClusterLearner:
             2. For every SVO-shaped sentence (>= 3 tokens), extract
                (action, object) by CURRENT position (index 1 = action,
                index 2 or -1 = object) and bump action_object_freq.
+               Also record the "between-first" token (if any) for the
+               connector-signal detector.
             3. Filter actions with >= min_action_observations.
-            4. Cluster those actions by Jaccard similarity of their
-               object sets (greedy agglomerative merge).
-            5. Reset cluster_labels (labelling must be redone after
+            4. Compute the connector signature (action_connector_signature
+               + corpus-wide connector_tokens set) from the between-first
+               observations. See _CONNECTOR_* constants for the
+               detection contract.
+            5. Cluster those actions by Jaccard similarity of their
+               object sets (greedy agglomerative merge), SPLIT FIRST
+               by has_connector so structurally different actions never
+               merge.
+            6. Reset cluster_labels (labelling must be redone after
                re-training because cluster_ids may shift).
 
         Failure contract: empty / single-token lines are skipped
@@ -409,6 +502,15 @@ class PositionalClusterLearner:
         """
         if not corpus_lines:
             return
+
+        # Per-action between-first observations. Each entry is
+        # {action: {between_first_token_or_None: count}}. We accumulate
+        # this alongside action_object_freq so the connector detector
+        # has the raw positional evidence it needs without re-parsing
+        # the corpus.
+        action_between: Dict[str, Dict[Optional[str], int]] = defaultdict(
+            lambda: defaultdict(int)
+        )
 
         # Phase 1+2: positional frequencies + action/object co-occurrence.
         for line in corpus_lines:
@@ -425,11 +527,26 @@ class PositionalClusterLearner:
                 if action_token and object_token:
                     obj_bucket = self.action_object_freq.setdefault(action_token, {})
                     obj_bucket[object_token] = obj_bucket.get(object_token, 0) + 1
+                    # Connector-signal evidence: record the token (or
+                    # None) that sits immediately after the action and
+                    # before the object. Used by _compute_connector_signature
+                    # to build action_connector_signature + connector_tokens.
+                    between_token = self._extract_between_token(
+                        tokens, action_token, object_token
+                    )
+                    action_between[action_token][between_token] += 1
 
-        # Phase 3+4: cluster actions by similarity of object distributions.
+        # Phase 3: compute the connector signature from the
+        # between-first observations. This populates
+        # action_connector_signature (per-action bool) and
+        # connector_tokens (corpus-wide grammar-token set).
+        self._compute_connector_signature(action_between)
+
+        # Phase 4+5: cluster actions by similarity of object
+        # distributions, split first by has_connector.
         self._cluster_actions()
 
-        # Phase 5: reset labels (cluster_ids may have shifted; old
+        # Phase 6: reset labels (cluster_ids may have shifted; old
         # labels are no longer meaningful). The human must call
         # label_clusters() again after re-training.
         self.cluster_labels = {}
@@ -441,15 +558,26 @@ class PositionalClusterLearner:
             1. Build the set of "clusterable" actions: those with at
                least ``min_action_observations`` total co-occurrence
                counts.
-            2. Initialise each cluster as a singleton {action} with
+            2. **Connector split** (new): partition the clusterable
+               actions into two groups by their
+               ``action_connector_signature`` value — has_connector=True
+               vs has_connector=False. The two groups are clustered
+               INDEPENDENTLY and can never merge across the split.
+               This is the structural-signal fix for cluster 62:
+               "adalah" (direct object) and "berbeda" (connector +
+               object) end up in different clusters even though their
+               object distributions overlap on taxonomy nouns.
+            3. Initialise each cluster as a singleton {action} with
                its object *count map* (not just the set).
-            3. Greedy pass: for every pair of clusters, compute the
-               *weighted* Jaccard similarity of the merged object
-               count maps. If >= similarity_threshold, merge them.
-            4. Repeat passes until no merge happens (fixpoint).
-            5. Assign cluster_ids (0, 1, 2, ...). Actions that did
-               not meet the min_observations bar get cluster_id = -1
-               (unclustered).
+            4. Greedy pass: for every pair of clusters *within the
+               same connector group*, compute the *weighted* Jaccard
+               similarity of the merged object count maps. If >=
+               similarity_threshold, merge them.
+            5. Repeat passes until no merge happens (fixpoint).
+            6. Assign cluster_ids (0, 1, 2, ...) across both groups
+               (no-connector group first, then with-connector group).
+               Actions that did not meet the min_observations bar get
+               cluster_id = -1 (unclustered).
 
         Why *weighted* Jaccard instead of plain Jaccard on sets?
         Plain Jaccard treats every object token equally: a one-off
@@ -466,6 +594,21 @@ class PositionalClusterLearner:
         threshold 0.25; the new implementation uses weighted Jaccard
         on count maps with threshold 0.13 (see
         ``_DEFAULT_SIMILARITY_THRESHOLD`` for the rationale).
+
+        Why split by has_connector BEFORE clustering (not after)?
+        If we clustered first and then split, synonyms like
+        "adalah"/"merupakan" (both has_connector=False) would already
+        be in the same cluster — the split would be a no-op for them,
+        which is correct. But "adalah" (no connector) and "berbeda"
+        (with connector) would also be in the same cluster (because
+        their object distributions are similar), and the split would
+        then fracture that cluster along the connector line —
+        producing the desired separation but only as a post-hoc
+        patch. Splitting first makes the structural signal a
+        first-class clustering constraint: actions with different
+        connector signatures are never even *considered* for merging,
+        which is the correct semantics (they are structurally
+        different predicate types).
         """
         # Reset previous clustering.
         self.cluster_id_of = {}
@@ -479,45 +622,33 @@ class PositionalClusterLearner:
             if total >= self.min_action_observations:
                 clusterable[action] = dict(objs)
 
-        if clusterable:
-            # Initial clusters: each action in its own cluster.
-            # Each cluster is (set_of_actions, dict_of_object_counts).
-            clusters: List[Tuple[Set[str], Dict[str, int]]] = [
-                ({action}, dict(objs)) for action, objs in clusterable.items()
-            ]
+        # Connector split: partition clusterable actions by their
+        # action_connector_signature value. Default is False (covers
+        # the case where train() was called on a learner that somehow
+        # has action_object_freq populated but not
+        # action_connector_signature — e.g. via direct mutation in
+        # tests; preserves backward compatibility).
+        no_connector_actions: Dict[str, Dict[str, int]] = {}
+        with_connector_actions: Dict[str, Dict[str, int]] = {}
+        for action, objs in clusterable.items():
+            if self.action_connector_signature.get(action, False):
+                with_connector_actions[action] = objs
+            else:
+                no_connector_actions[action] = objs
 
-            # Greedy agglomerative merge until fixpoint.
-            merged = True
-            while merged and len(clusters) > 1:
-                merged = False
-                # Find the best pair to merge (highest weighted Jaccard
-                # above threshold).
-                best_i, best_j, best_sim = -1, -1, -1.0
-                for i in range(len(clusters)):
-                    for j in range(i + 1, len(clusters)):
-                        sim = self._weighted_jaccard(
-                            clusters[i][1], clusters[j][1]
-                        )
-                        if sim >= self.similarity_threshold and sim > best_sim:
-                            best_sim = sim
-                            best_i, best_j = i, j
-                if best_i >= 0:
-                    # Merge cluster j into cluster i. Aggregate object
-                    # counts so the merged cluster's distribution is the
-                    # sum of its members'.
-                    actions_i, objs_i = clusters[best_i]
-                    actions_j, objs_j = clusters[best_j]
-                    actions_i.update(actions_j)
-                    for obj, count in objs_j.items():
-                        objs_i[obj] = objs_i.get(obj, 0) + count
-                    clusters.pop(best_j)
-                    merged = True
+        # Cluster each group independently, then concatenate the
+        # resulting cluster lists so cluster_ids are assigned
+        # monotonically across both groups.
+        all_clusters: List[Tuple[Set[str], Dict[str, int]]] = []
+        for group in (no_connector_actions, with_connector_actions):
+            group_clusters = self._cluster_action_group(group)
+            all_clusters.extend(group_clusters)
 
-            # Assign cluster_ids.
-            for cluster_id, (actions, _objs) in enumerate(clusters):
-                self.action_clusters[cluster_id] = actions
-                for action in actions:
-                    self.cluster_id_of[action] = cluster_id
+        # Assign cluster_ids across the concatenated group clusters.
+        for cluster_id, (actions, _objs) in enumerate(all_clusters):
+            self.action_clusters[cluster_id] = actions
+            for action in actions:
+                self.cluster_id_of[action] = cluster_id
 
         # Mark unclustered actions with cluster_id = -1. This includes
         # both actions below min_action_observations (excluded from
@@ -532,6 +663,218 @@ class PositionalClusterLearner:
         for action in self.action_object_freq:
             if action not in self.cluster_id_of:
                 self.cluster_id_of[action] = -1
+
+    def _cluster_action_group(
+        self, actions_objs: Dict[str, Dict[str, int]]
+    ) -> List[Tuple[Set[str], Dict[str, int]]]:
+        """Run the greedy agglomerative merge on one connector group.
+
+        Returns a list of (set_of_actions, dict_of_object_counts) —
+        the merged clusters for this group. Empty list if the group
+        has no actions.
+
+        This is the same algorithm the previous _cluster_actions()
+        ran on the full clusterable set; we now run it per-group so
+        the connector signature acts as a hard partition before
+        similarity-based merging.
+        """
+        if not actions_objs:
+            return []
+
+        # Initial clusters: each action in its own cluster.
+        # Each cluster is (set_of_actions, dict_of_object_counts).
+        clusters: List[Tuple[Set[str], Dict[str, int]]] = [
+            ({action}, dict(objs)) for action, objs in actions_objs.items()
+        ]
+
+        # Greedy agglomerative merge until fixpoint.
+        merged = True
+        while merged and len(clusters) > 1:
+            merged = False
+            # Find the best pair to merge (highest weighted Jaccard
+            # above threshold).
+            best_i, best_j, best_sim = -1, -1, -1.0
+            for i in range(len(clusters)):
+                for j in range(i + 1, len(clusters)):
+                    sim = self._weighted_jaccard(
+                        clusters[i][1], clusters[j][1]
+                    )
+                    if sim >= self.similarity_threshold and sim > best_sim:
+                        best_sim = sim
+                        best_i, best_j = i, j
+            if best_i >= 0:
+                # Merge cluster j into cluster i. Aggregate object
+                # counts so the merged cluster's distribution is the
+                # sum of its members'.
+                actions_i, objs_i = clusters[best_i]
+                actions_j, objs_j = clusters[best_j]
+                actions_i.update(actions_j)
+                for obj, count in objs_j.items():
+                    objs_i[obj] = objs_i.get(obj, 0) + count
+                clusters.pop(best_j)
+                merged = True
+
+        return clusters
+
+    # ------------------------------------------------------------------
+    # Connector-signal detection (cluster-62 fix)
+    # ------------------------------------------------------------------
+
+    def _compute_connector_signature(
+        self, action_between: Dict[str, Dict[Optional[str], int]]
+    ) -> None:
+        """Populate ``action_connector_signature`` and ``connector_tokens``.
+
+        Two-phase detection (see ``_CONNECTOR_*`` constants for the
+        contract):
+
+          Phase A — corpus-wide connector discovery:
+            For every token that appears in the between-first slot
+            (the slot immediately after the action and before the
+            object), check whether it qualifies as a corpus-wide
+            connector. A token qualifies when:
+              - it occupies the between-first slot at least
+                ``_CONNECTOR_MIN_BETWEEN_COUNT`` times across the
+                corpus (so one-off nouns don't qualify); AND
+              - it NEVER appears as an object of any action in the
+                corpus (so real object nouns that sometimes sit
+                mid-sentence don't qualify — only grammar-only
+                tokens like prepositions / complementizers).
+
+            The set of qualifying tokens becomes ``self.connector_tokens``.
+
+          Phase B — per-action signature:
+            For every action with at least one observation, find the
+            most common between-first token. If that token is a
+            corpus-wide connector AND it occupies >=
+            ``_CONNECTOR_RATE_THRESHOLD`` of the action's
+            observations, the action's signature is True; otherwise
+            False.
+
+        Reset contract: this method overwrites both fields from
+        scratch, so it is safe to call on every train() (no stale
+        entries from a previous corpus survive).
+        """
+        self.action_connector_signature = {}
+        self.connector_tokens = set()
+
+        if not action_between:
+            return
+
+        # Phase A: corpus-wide connector discovery.
+        #
+        # Count (a) how often each token appears in the between-first
+        # slot (across all actions), and (b) how often each token
+        # appears as an object (across all actions). A token is a
+        # corpus-wide connector when (a) >= _CONNECTOR_MIN_BETWEEN_COUNT
+        # AND (b) == 0.
+        between_first_counts: Dict[str, int] = defaultdict(int)
+        for action, between_map in action_between.items():
+            for tok, count in between_map.items():
+                if tok is None:
+                    continue
+                between_first_counts[tok] += count
+
+        object_counts: Dict[str, int] = defaultdict(int)
+        for action, objs in self.action_object_freq.items():
+            for obj, count in objs.items():
+                object_counts[obj] += count
+
+        for tok, bcount in between_first_counts.items():
+            if bcount < _CONNECTOR_MIN_BETWEEN_COUNT:
+                continue
+            if object_counts.get(tok, 0) > 0:
+                # This token sometimes appears as an object — it's a
+                # real noun that happens to sit mid-sentence in some
+                # multi-word-object sentences. Not a connector.
+                continue
+            self.connector_tokens.add(tok)
+
+        # Phase B: per-action has_connector signature.
+        for action, between_map in action_between.items():
+            total = sum(between_map.values())
+            if total == 0:
+                self.action_connector_signature[action] = False
+                continue
+            # Find the most common non-None between-first token.
+            best_tok: Optional[str] = None
+            best_count = 0
+            for tok, count in between_map.items():
+                if tok is None:
+                    continue
+                if count > best_count:
+                    best_tok = tok
+                    best_count = count
+            if best_tok is None:
+                # Only None entries — action is always direct.
+                self.action_connector_signature[action] = False
+                continue
+            rate = best_count / total
+            has_connector = (
+                rate >= _CONNECTOR_RATE_THRESHOLD
+                and best_tok in self.connector_tokens
+            )
+            self.action_connector_signature[action] = has_connector
+
+    @staticmethod
+    def _extract_between_token(
+        tokens: List[str],
+        action_token: str,
+        object_token: str,
+    ) -> Optional[str]:
+        """Return the token (or None) sitting between action and object.
+
+        Given a token list and the (action, object) pair extracted by
+        :meth:`_extract_action_object`, find the first token that sits
+        strictly between the action's position and the object's
+        position. This is the "between-first" slot used by the
+        connector-signal detector.
+
+        Returns:
+            - None if action is immediately followed by object (no
+              between token). This is the "direct" pattern, e.g.
+              "kucing adalah mamalia" → action="adalah",
+              object="mamalia", between=None.
+            - The first between token otherwise, e.g.
+              "kucing berbeda dari reptil" → action="berbeda",
+              object="reptil", between="dari".
+
+        Edge cases:
+            - If action or object is not found in tokens, returns None
+              (no positional evidence to extract).
+            - If action and object are adjacent (no tokens between),
+              returns None.
+            - The object is assumed to be the LAST token (matches
+              :meth:`_extract_action_object`'s contract). We search
+              for object from the end so a token that appears both
+              mid-sentence and as the object is correctly identified
+              as the object.
+        """
+        if not tokens or not action_token or not object_token:
+            return None
+        # Find the action index (first occurrence).
+        try:
+            ai = tokens.index(action_token)
+        except ValueError:
+            return None
+        # Find the object index (last occurrence — _extract_action_object
+        # uses tokens[-1] as the object).
+        oi = len(tokens) - 1
+        if oi <= ai:
+            return None
+        if tokens[oi] != object_token:
+            # Defensive: the object_token passed in doesn't match the
+            # last token. Fall back to last-index-of search.
+            try:
+                oi = tokens.index(object_token, ai + 1)
+            except ValueError:
+                return None
+            if oi <= ai:
+                return None
+        between = tokens[ai + 1:oi]
+        if not between:
+            return None
+        return between[0]
 
     @staticmethod
     def _jaccard(a: Set[str], b: Set[str]) -> float:
@@ -609,11 +952,22 @@ class PositionalClusterLearner:
     def inspect_cluster_details(
         self, top_objects: int = _INSPECT_TOP_OBJECTS
     ) -> Dict[int, Dict[str, object]]:
-        """Richer cluster view: actions + top objects + label (if any).
+        """Richer cluster view: actions + top objects + label + connector.
 
         Returns ``{cluster_id: {"actions": [...], "top_objects": [...],
-        "label": Optional[str]}}``. The ``label`` is the RelationType
-        name if label_clusters() has named this cluster, else None.
+        "label": Optional[str], "has_connector": bool}}``. The
+        ``label`` is the RelationType name if label_clusters() has
+        named this cluster, else None. The ``has_connector`` field is
+        True if every action in the cluster has
+        ``action_connector_signature[action] == True`` (i.e. the
+        cluster was produced by the with-connector partition of
+        ``_cluster_actions``); False otherwise. This is the
+        human-readable signal that lets the user verify the
+        structural split is doing its job — e.g. cluster 62 from the
+        combined corpus used to mix "adalah" (no connector) and
+        "berbeda" (with connector); after the fix, the two predicates
+        live in different clusters and the ``has_connector`` field
+        makes the split visible at a glance.
 
         Args:
             top_objects: How many object tokens (sorted by total
@@ -631,6 +985,14 @@ class PositionalClusterLearner:
             top_objs = sorted(
                 obj_totals.items(), key=lambda kv: (-kv[1], kv[0])
             )[:top_objects]
+            # Connector signature for the cluster: True if every
+            # action in the cluster has has_connector=True. Mixed
+            # clusters (which shouldn't happen given the split-first
+            # contract, but we report defensively) show False.
+            has_connector = bool(actions) and all(
+                self.action_connector_signature.get(a, False)
+                for a in actions
+            )
             out[cluster_id] = {
                 "actions": actions,
                 "top_objects": [obj for obj, _ in top_objs],
@@ -639,6 +1001,7 @@ class PositionalClusterLearner:
                     if cluster_id in self.cluster_labels
                     else None
                 ),
+                "has_connector": has_connector,
             }
         return out
 
@@ -795,8 +1158,18 @@ class PositionalClusterLearner:
               "action_object_freq":  {"menyebabkan": {"panas": 2, ...}, ...},
               "cluster_id_of":       {"makan": 0, "minum": 0, ...},
               "action_clusters":     {"0": ["makan", "minum", ...], ...},
-              "cluster_labels":      {"0": "CAUSAL", ...}    # may be empty
+              "cluster_labels":      {"0": "CAUSAL", ...},    # may be empty
+              "action_connector_signature": {"berbeda": true, "adalah": false, ...},
+              "connector_tokens":    ["dari", "dengan", "sebagai", ...]
             }
+
+        The ``action_connector_signature`` and ``connector_tokens``
+        fields are persisted so a loaded learner reproduces the same
+        clustering contract (actions flagged has_connector=True
+        continue to be partitioned into the with-connector group on
+        any subsequent re-train). Older save files (pre-cluster-62
+        fix) lack these fields and load() backfills them as empty /
+        False — backward compatible.
 
         Atomic write: temp file + os.replace. Parent dirs created on
         demand. Same pattern as SemanticRoleClassifier.save.
@@ -825,6 +1198,8 @@ class PositionalClusterLearner:
                 str(cid): rt.name
                 for cid, rt in self.cluster_labels.items()
             },
+            "action_connector_signature": dict(self.action_connector_signature),
+            "connector_tokens": sorted(self.connector_tokens),
         }
 
         parent = os.path.dirname(os.path.abspath(path))
@@ -928,6 +1303,22 @@ class PositionalClusterLearner:
             except KeyError:
                 # Unknown relation type from a future version. Skip.
                 continue
+
+        # action_connector_signature: {action: bool}
+        # Backward-compat: older save files (pre-cluster-62 fix) lack
+        # this field. The empty default (set by the dataclass) is the
+        # correct backfill — _cluster_actions treats absent entries as
+        # has_connector=False, matching the pre-fix clustering
+        # behaviour for legacy saves.
+        for act, flag in raw.get("action_connector_signature", {}).items():
+            if isinstance(act, str) and isinstance(flag, bool):
+                learner.action_connector_signature[act] = flag
+
+        # connector_tokens: list[str] -> set[str]
+        # Same backward-compat note as above.
+        for tok in raw.get("connector_tokens", []):
+            if isinstance(tok, str):
+                learner.connector_tokens.add(tok)
 
         return learner
 
