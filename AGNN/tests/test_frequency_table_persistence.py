@@ -246,9 +246,18 @@ def _import_agnn_core():
 
 
 def test_agnn_core_with_persist_path_propagates_to_classifier(tmp_path_str: str):
-    """AGNNCore(classifier_persist_path=P) wires P into the classifier."""
+    """AGNNCore(classifier_persist_path=P) wires P into the classifier.
+
+    Note: this test exercises the legacy SemanticRoleClassifier path, so
+    it explicitly passes ``use_cluster_learner=False`` to opt out of the
+    PositionalClusterLearner (which is the new default and does not use
+    a persist_path).
+    """
     AGNNCore = _import_agnn_core()
-    core = AGNNCore(classifier_persist_path=tmp_path_str)
+    core = AGNNCore(
+        classifier_persist_path=tmp_path_str,
+        use_cluster_learner=False,
+    )
     if core.graph is None or core.trisynaptic is None:
         pytest.skip("EngramComplex (self-ai/src/agnn) not available")
     assert core.trisynaptic.role_classifier.persist_path == tmp_path_str
@@ -262,9 +271,17 @@ def test_agnn_core_persistence_survives_across_instances(tmp_path_str: str):
     Instance 2 is then constructed with the same path -> its
     classifier's frequency_table is loaded from the file and matches
     what instance 1 wrote.
+
+    Note: this test exercises the legacy SemanticRoleClassifier path, so
+    it explicitly passes ``use_cluster_learner=False`` to opt out of the
+    PositionalClusterLearner (which is the new default and does not use
+    a persist_path).
     """
     AGNNCore = _import_agnn_core()
-    core1 = AGNNCore(classifier_persist_path=tmp_path_str)
+    core1 = AGNNCore(
+        classifier_persist_path=tmp_path_str,
+        use_cluster_learner=False,
+    )
     if core1.graph is None or core1.trisynaptic is None:
         pytest.skip("EngramComplex (self-ai/src/agnn) not available")
 
@@ -282,7 +299,10 @@ def test_agnn_core_persistence_survives_across_instances(tmp_path_str: str):
     assert on_disk.get("is a", {}).get("CATEGORICAL") == 1
 
     # Instance 2: should auto-load on construction.
-    core2 = AGNNCore(classifier_persist_path=tmp_path_str)
+    core2 = AGNNCore(
+        classifier_persist_path=tmp_path_str,
+        use_cluster_learner=False,
+    )
     assert core2.trisynaptic is not None
     classifier2 = core2.trisynaptic.role_classifier
     assert classifier2.frequency_table.get("causes", {}).get(
@@ -294,9 +314,15 @@ def test_agnn_core_persistence_survives_across_instances(tmp_path_str: str):
 
 
 def test_agnn_core_default_classifier_persist_path_is_none():
-    """AGNNCore() with no classifier_persist_path -> no persistence."""
+    """AGNNCore() with no classifier_persist_path -> no persistence.
+
+    Note: this test exercises the legacy SemanticRoleClassifier path, so
+    it explicitly passes ``use_cluster_learner=False`` to opt out of the
+    PositionalClusterLearner (which is the new default and does not use
+    a persist_path).
+    """
     AGNNCore = _import_agnn_core()
-    core = AGNNCore()
+    core = AGNNCore(use_cluster_learner=False)
     assert core._classifier_persist_path is None
     if core.trisynaptic is not None:
         assert core.trisynaptic.role_classifier.persist_path is None
