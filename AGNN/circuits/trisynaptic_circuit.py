@@ -27,6 +27,7 @@ from hippocampus.ca3 import CA3
 from hippocampus.dentate_gyrus import DentateGyrus
 from hippocampus.entorhinal_cortex import EntorhinalCortex
 from hippocampus.subiculum import DEFAULT_EPISODIC_CONFIDENCE, Subiculum
+from neocortex.semantic_role_classifier import RelationType, SemanticRoleClassifier
 
 
 # ----------------------------------------------------------------------
@@ -94,6 +95,7 @@ class TrisynapticCircuit:
         ca3: Optional[CA3] = None,
         ca1: Optional[CA1] = None,
         sub: Optional[Subiculum] = None,
+        role_classifier: Optional[SemanticRoleClassifier] = None,
     ) -> None:
         """Wire up the five hippocampal substructures + engraph complex.
 
@@ -104,6 +106,15 @@ class TrisynapticCircuit:
                 one graph across encode + consolidate + retrieve.
             ec, dg, ca3, ca1, sub: Optional pre-configured instances of
                 each substructure. If omitted, fresh defaults are used.
+            role_classifier: Optional pre-configured
+                :class:`SemanticRoleClassifier`. If omitted, a fresh
+                one is created. The classifier infers the RelationType
+                of each encoded edge from the correction text so BA 44
+                can fire the right deductive rule (CAUSAL_CHAIN,
+                CATEGORICAL_TRANSITIVITY, etc.) downstream. The
+                classifier is stateful (it carries a frequency table)
+                so sharing one across encodes lets the system learn
+                over time.
         """
         # Lazy import so this module can be imported even when
         # self-ai/src/agnn is not on sys.path (matches the pattern in
@@ -118,6 +129,17 @@ class TrisynapticCircuit:
         self.ca3 = ca3 if ca3 is not None else CA3()
         self.ca1 = ca1 if ca1 is not None else CA1()
         self.sub = sub if sub is not None else Subiculum()
+        # Phase 3: SemanticRoleClassifier replaces CA1 as the primary
+        # edge-type inferrer. CA1 is still kept around for backward
+        # compatibility (existing tests exercise it directly) and as a
+        # fallback when the classifier returns CATEGORICAL on an
+        # unknown predicate - in that case CA1's cue-word scan may
+        # still pick up a more specific type from the surrounding
+        # stimulus text.
+        self.role_classifier = (
+            role_classifier if role_classifier is not None
+            else SemanticRoleClassifier()
+        )
 
     # ------------------------------------------------------------------
     # Encoding pipeline
@@ -169,8 +191,42 @@ class TrisynapticCircuit:
         self.ca3.register(new_id, fact_norm["text"], combined_keywords)  # type: ignore[index]
         neighbor_ids = self.ca3.autoassociate(new_id)
 
-        # 4. CA1: infer edge type from stimulus + correction.
-        edge_type = self.ca1.integrate_context(stimulus, correction)
+        # 4. Infer edge type. Phase 3: prefer the SemanticRoleClassifier
+        #    over CA1 - the classifier does proper SPO parsing, seed
+        #    matching, negation detection, and frequency-table learning,
+        #    so it can correctly classify "X tidak menyebabkan Y" as
+        #    DIFFERENTIAL instead of CAUSAL (CA1's bag-of-words scan
+        #    cannot tell predicate cues from object cues, so the
+        #    "menyebabkan" token always fires CAUSAL regardless of the
+        #    preceding negation).
+        #
+        #    The classifier returns a RelationType enum member; we
+        #    store its ``.name`` (e.g. "CAUSAL") on the Episome so the
+        #    existing _EDGE_TYPE_TO_RELATION mapping in
+        #    _register_in_graph keeps working - that mapping already
+        #    accepts the upper-case string form.
+        #
+        #    Failure contract: classify() never throws and always
+        #    returns at least CATEGORICAL, so we don't need a
+        #    try/except here. We do fall back to CA1 when the
+        #    classifier returns CATEGORICAL on a non-empty correction
+        #    - in that case CA1's stimulus-text scan may pick up a
+        #    more specific cue ("causes" in the question rather than
+        #    the correction) and we want to honor that signal too.
+        #    This dual path preserves every existing test's expectation
+        #    while still letting the classifier drive the new CAUSAL /
+        #    DIFFERENTIAL / TEMPORAL / DISCURSIVE cases.
+        relation = self.role_classifier.classify(correction or stimulus)
+        edge_type = relation.name
+        if (relation == RelationType.CATEGORICAL
+                and correction.strip()):
+            # Classifier fell back to default. Give CA1 one more shot
+            # at the combined stimulus + correction text - its cue
+            # list includes tokens ("causes", "requires") that may
+            # appear in the stimulus half of the input.
+            ca1_type = self.ca1.integrate_context(stimulus, correction)
+            if ca1_type != "CATEGORICAL":
+                edge_type = ca1_type
 
         # 5. Sub: build + relay the Episome.
         episome = self.sub.relay_output(
