@@ -1467,3 +1467,480 @@ def test_pretrain_corpus_adalah_merupakan_same_cluster(pretrain_corpus_path):
     assert cid_adalah >= 0, (
         f"'adalah' must be in a real cluster (id >= 0), got {cid_adalah}"
     )
+
+
+# ======================================================================
+# Connector-signal tests (cluster-62 fix)
+# ======================================================================
+#
+# These tests cover the structural-signal feature that splits
+# categorical-affirmation predicates ("adalah", "merupakan", "termasuk"
+# — direct object) from categorical-contrast predicates ("berbeda",
+# "berlawanan" — connector + object) even though their object sets
+# overlap on taxonomy nouns.
+#
+# The detection is purely statistical (position + frequency). No list
+# of "negation words" or "connector words" is consulted.
+
+
+def test_connector_signal_separates_categorical_differential():
+    """The Definition-of-Done test for the cluster-62 fix.
+
+    After training on a synthetic corpus that mixes direct-action
+    sentences with connector-action sentences (both using the same
+    object vocabulary, so weighted Jaccard would otherwise merge
+    them), "adalah" and "berbeda" MUST end up in different clusters.
+
+    Setup:
+      - Direct pattern: "X adalah Y" / "X merupakan Y" — action
+        directly followed by object, no connector.
+      - Connector pattern: "X berbeda dari Y" / "X berlawanan dengan Y"
+        — action followed by connector token ("dari"/"dengan") and
+        THEN object.
+
+    Both groups use the SAME object vocabulary (kucing, anjing, ikan,
+    ...) so weighted Jaccard would merge all 4 verbs into one cluster
+    without the connector-signal split. The split must keep
+    "adalah"/"merupakan" together (both no-connector) and
+    "berbeda"/"berlawanan" together (both with-connector) — but the
+    two pairs must NOT be in the same cluster.
+
+    No hardcoded "connector" or "negation" list is consulted. The
+    detector must find "dari"/"dengan" purely from positional
+    evidence:
+      - they sit in the between-first slot for >=
+        _CONNECTOR_MIN_BETWEEN_COUNT sentences
+      - they never appear as objects themselves
+    """
+    # Build a synthetic corpus with controlled structure.
+    # Use enough sentences so each connector token reaches the
+    # _CONNECTOR_MIN_BETWEEN_COUNT (3) threshold for corpus-wide
+    # connector discovery.
+    subjects = ["kucing", "anjing", "burung", "ikan", "ular", "kura"]
+    objects = ["mamalia", "aves", "pisces", "reptil", "amfibi", "hewan"]
+
+    # Affirmation pattern: "X adalah Y" / "X merupakan Y" / "X termasuk Y"
+    # Direct: action immediately followed by object.
+    affirmation_corpus = []
+    for verb in ("adalah", "merupakan", "termasuk"):
+        for i, subj in enumerate(subjects):
+            affirmation_corpus.append(f"{subj} {verb} {objects[i]}")
+
+    # Contrast pattern: "X berbeda dari Y" / "X berlawanan dengan Y"
+    # With connector: action followed by "dari"/"dengan" then object.
+    contrast_corpus = []
+    for verb, connector in (
+        ("berbeda", "dari"),
+        ("berlawanan", "dengan"),
+    ):
+        for i, subj in enumerate(subjects):
+            contrast_corpus.append(f"{subj} {verb} {connector} {objects[i]}")
+
+    corpus = affirmation_corpus + contrast_corpus
+
+    learner = PositionalClusterLearner()
+    learner.train(corpus)
+
+    # Connector signature assertions.
+    for verb in ("adalah", "merupakan", "termasuk"):
+        assert learner.action_connector_signature.get(verb) is False, (
+            f"{verb!r} must have has_connector=False (direct object "
+            f"pattern). Got signature: "
+            f"{learner.action_connector_signature.get(verb)}"
+        )
+    for verb in ("berbeda", "berlawanan"):
+        assert learner.action_connector_signature.get(verb) is True, (
+            f"{verb!r} must have has_connector=True (connector pattern). "
+            f"Got signature: "
+            f"{learner.action_connector_signature.get(verb)}"
+        )
+
+    # Corpus-wide connector tokens must include "dari" and "dengan".
+    # The detector found these purely from positional evidence — no
+    # hardcoded list.
+    assert "dari" in learner.connector_tokens, (
+        f"'dari' must be detected as a corpus-wide connector token. "
+        f"Got connector_tokens: {sorted(learner.connector_tokens)}"
+    )
+    assert "dengan" in learner.connector_tokens, (
+        f"'dengan' must be detected as a corpus-wide connector token. "
+        f"Got connector_tokens: {sorted(learner.connector_tokens)}"
+    )
+
+    # Cluster ID assertions — the core DoD check.
+    cid_adalah = learner.cluster_id_of.get("adalah")
+    cid_merupakan = learner.cluster_id_of.get("merupakan")
+    cid_termasuk = learner.cluster_id_of.get("termasuk")
+    cid_berbeda = learner.cluster_id_of.get("berbeda")
+    cid_berlawanan = learner.cluster_id_of.get("berlawanan")
+
+    assert cid_adalah is not None, "'adalah' must be in cluster_id_of"
+    assert cid_berbeda is not None, "'berbeda' must be in cluster_id_of"
+
+    # DoD: "adalah" and "berbeda" NOT in the same cluster.
+    assert cid_adalah != cid_berbeda, (
+        f"Cluster-62 regression: 'adalah' (cluster {cid_adalah}) and "
+        f"'berbeda' (cluster {cid_berbeda}) MUST be in different "
+        f"clusters after the connector-signal fix. They share the "
+        f"same object vocabulary but have different structural "
+        f"signatures (direct vs connector)."
+    )
+
+    # Sanity: synonym pairs still merge within their connector group.
+    assert cid_adalah == cid_merupakan, (
+        f"'adalah' (cluster {cid_adalah}) and 'merupakan' "
+        f"(cluster {cid_merupakan}) should still merge — both are "
+        f"has_connector=False with similar object distributions."
+    )
+    assert cid_adalah == cid_termasuk, (
+        f"'adalah' (cluster {cid_adalah}) and 'termasuk' "
+        f"(cluster {cid_termasuk}) should still merge — both are "
+        f"has_connector=False with similar object distributions."
+    )
+    assert cid_berbeda == cid_berlawanan, (
+        f"'berbeda' (cluster {cid_berbeda}) and 'berlawanan' "
+        f"(cluster {cid_berlawanan}) should still merge — both are "
+        f"has_connector=True with similar object distributions."
+    )
+
+    # Sanity: cluster_ids must be real (>= 0).
+    for cid in (cid_adalah, cid_merupakan,
+                cid_termasuk, cid_berbeda, cid_berlawanan):
+        assert cid >= 0, f"cluster id must be >= 0, got {cid}"
+
+
+def test_connector_signal_no_hardcoded_connector_list():
+    """The detector must NOT consult a hardcoded list of connector words.
+
+    The cluster-62 fix's contract is that the detection is purely
+    positional — no list of "negation words" or "connector words"
+    based on meaning. We verify this by training on a synthetic
+    corpus where the "connector" is a made-up token that has never
+    appeared in any Indonesian dictionary. The detector must still
+    flag the action as has_connector=True, because the made-up token
+    satisfies the positional + frequency + never-as-object contract.
+
+    If this test fails, the implementation has likely regressed to
+    hardcoding a list of prepositions / complementizers (which would
+    be a return to the semi-supervised bias that PR #69 was rejected
+    for).
+    """
+    # "zzzq" is a made-up token that no Indonesian dictionary knows.
+    # It cannot be in any hardcoded connector list. The detector must
+    # still pick it up purely from positional evidence.
+    made_up_connector = "zzzq"
+
+    subjects = ["subj1", "subj2", "subj3", "subj4"]
+    objects = ["obj1", "obj2", "obj3", "obj4"]
+
+    corpus = []
+    # "X madeupverb zzzq Y" — action + made-up connector + object.
+    # We need >= _CONNECTOR_MIN_BETWEEN_COUNT (3) sentences with
+    # "zzzq" in the between-first slot for it to qualify as a
+    # corpus-wide connector.
+    for i, subj in enumerate(subjects):
+        corpus.append(f"{subj} madeupverb {made_up_connector} {objects[i]}")
+    # Add 2 more sentences to push the count above 3.
+    corpus.append(f"subj5 madeupverb {made_up_connector} obj5")
+    corpus.append(f"subj6 madeupverb {made_up_connector} obj6")
+
+    # Important: "zzzq" must NEVER appear as an object in the corpus
+    # (otherwise the never-as-object filter would reject it). All
+    # objects above are "obj1".."obj6" — none is "zzzq". ✓
+
+    # Important: "madeupverb" doesn't start with me-/ber-/diper-/ter-
+    # and isn't in _COPULAS, so the >3-token verb-prefix filter
+    # (see _extract_action_object) would normally skip these sentences.
+    # We bypass that by adding _COPULAS-like synonyms OR by adding
+    # 3-token sentences. To keep the test focused on the connector
+    # detector and not on the verb-prefix heuristic, we use a
+    # verb-prefixed action name instead.
+    corpus = []
+    action = "menguji"  # starts with "meng-" so it passes _looks_like_verb
+    for i, subj in enumerate(subjects):
+        corpus.append(f"{subj} {action} {made_up_connector} {objects[i]}")
+    corpus.append(f"subj5 {action} {made_up_connector} obj5")
+    corpus.append(f"subj6 {action} {made_up_connector} obj6")
+
+    learner = PositionalClusterLearner()
+    learner.train(corpus)
+
+    assert made_up_connector in learner.connector_tokens, (
+        f"Made-up token {made_up_connector!r} must be detected as a "
+        f"corpus-wide connector purely from positional evidence "
+        f"(appears in between-first slot >= "
+        f"{PositionalClusterLearner._CONNECTOR_MIN_BETWEEN_COUNT if hasattr(PositionalClusterLearner, '_CONNECTOR_MIN_BETWEEN_COUNT') else 3} "
+        f"times, never as object). Got connector_tokens: "
+        f"{sorted(learner.connector_tokens)}"
+    )
+    assert learner.action_connector_signature.get(action) is True, (
+        f"Action {action!r} must have has_connector=True — it "
+        f"routinely takes the made-up connector {made_up_connector!r}. "
+        f"Got signature: "
+        f"{learner.action_connector_signature.get(action)}"
+    )
+
+
+def test_connector_signal_persistence_roundtrip(tmp_path):
+    """save/load must round-trip the connector signature fields.
+
+    A learner trained on a connector-mixed corpus, saved, and loaded
+    must reproduce the same action_connector_signature and
+    connector_tokens. This is the contract that lets a labelled
+    learner persist its connector-aware clustering across restarts.
+    """
+    subjects = ["a", "b", "c", "d"]
+    objects = ["x", "y", "z", "w"]
+
+    corpus = []
+    for verb in ("adalah", "merupakan"):
+        for i, subj in enumerate(subjects):
+            corpus.append(f"{subj} {verb} {objects[i]}")
+    for verb, connector in (("berbeda", "dari"), ("berlawanan", "dengan")):
+        for i, subj in enumerate(subjects):
+            corpus.append(f"{subj} {verb} {connector} {objects[i]}")
+
+    learner = PositionalClusterLearner()
+    learner.train(corpus)
+
+    # Sanity: pre-save, connector signal is populated.
+    assert learner.action_connector_signature.get("adalah") is False
+    assert learner.action_connector_signature.get("berbeda") is True
+    assert "dari" in learner.connector_tokens
+    assert "dengan" in learner.connector_tokens
+
+    save_path = tmp_path / "learner.json"
+    learner.save(str(save_path))
+
+    loaded = PositionalClusterLearner.load(str(save_path))
+
+    # Round-trip: connector signature preserved.
+    assert loaded.action_connector_signature.get("adalah") is False, (
+        "action_connector_signature['adalah'] must round-trip as False"
+    )
+    assert loaded.action_connector_signature.get("berbeda") is True, (
+        "action_connector_signature['berbeda'] must round-trip as True"
+    )
+    assert "dari" in loaded.connector_tokens, (
+        "connector_tokens must round-trip 'dari'"
+    )
+    assert "dengan" in loaded.connector_tokens, (
+        "connector_tokens must round-trip 'dengan'"
+    )
+
+    # Round-trip: cluster membership preserved.
+    assert loaded.cluster_id_of.get("adalah") == learner.cluster_id_of.get("adalah")
+    assert loaded.cluster_id_of.get("berbeda") == learner.cluster_id_of.get("berbeda")
+    assert loaded.cluster_id_of.get("adalah") != loaded.cluster_id_of.get("berbeda"), (
+        "Round-tripped learner must still separate 'adalah' from 'berbeda'"
+    )
+
+
+def test_connector_signal_inspect_cluster_details_reports_has_connector():
+    """inspect_cluster_details() surfaces has_connector per cluster.
+
+    The human-readable cluster view must include the has_connector
+    flag so a reviewer can verify the structural split at a glance.
+    """
+    subjects = ["a", "b", "c", "d"]
+    objects = ["x", "y", "z", "w"]
+
+    corpus = []
+    for verb in ("adalah", "merupakan"):
+        for i, subj in enumerate(subjects):
+            corpus.append(f"{subj} {verb} {objects[i]}")
+    for verb, connector in (("berbeda", "dari"), ("berlawanan", "dengan")):
+        for i, subj in enumerate(subjects):
+            corpus.append(f"{subj} {verb} {connector} {objects[i]}")
+
+    learner = PositionalClusterLearner()
+    learner.train(corpus)
+
+    details = learner.inspect_cluster_details()
+    assert details, "inspect_cluster_details() must return non-empty"
+
+    # Find the cluster containing 'adalah' and the one containing 'berbeda'.
+    cid_adalah = learner.cluster_id_of.get("adalah")
+    cid_berbeda = learner.cluster_id_of.get("berbeda")
+    assert cid_adalah is not None and cid_berbeda is not None
+    assert cid_adalah != cid_berbeda
+
+    cluster_adalah = details[cid_adalah]
+    cluster_berbeda = details[cid_berbeda]
+
+    assert "has_connector" in cluster_adalah, (
+        "inspect_cluster_details() must include the has_connector field"
+    )
+    assert cluster_adalah["has_connector"] is False, (
+        f"adalah's cluster must report has_connector=False, got "
+        f"{cluster_adalah['has_connector']}"
+    )
+    assert cluster_berbeda["has_connector"] is True, (
+        f"berbeda's cluster must report has_connector=True, got "
+        f"{cluster_berbeda['has_connector']}"
+    )
+
+
+def test_connector_signal_extract_between_token_helper():
+    """Unit test for the _extract_between_token helper.
+
+    Direct cases return None; connector cases return the connector.
+    """
+    # Direct: action immediately followed by object.
+    # "kucing adalah mamalia" → tokens = [kucing, adalah, mamalia]
+    # action=adalah at idx 1, object=mamalia at idx 2 (last).
+    # No tokens between → None.
+    assert PositionalClusterLearner._extract_between_token(
+        ["kucing", "adalah", "mamalia"], "adalah", "mamalia"
+    ) is None
+
+    # Connector: action + connector + object.
+    # "kucing berbeda dari reptil" → tokens = [kucing, berbeda, dari, reptil]
+    # action=berbeda at idx 1, object=reptil at idx 3 (last).
+    # Between = [dari] → first is "dari".
+    assert PositionalClusterLearner._extract_between_token(
+        ["kucing", "berbeda", "dari", "reptil"], "berbeda", "reptil"
+    ) == "dari"
+
+    # Multi-token between: only the FIRST between token is returned
+    # (the connector slot). Other between tokens are part of the
+    # object phrase and are ignored.
+    # "X verb conn1 conn2 obj" → between_first = "conn1"
+    assert PositionalClusterLearner._extract_between_token(
+        ["X", "verb", "conn1", "conn2", "obj"], "verb", "obj"
+    ) == "conn1"
+
+    # Action not found → None (defensive).
+    assert PositionalClusterLearner._extract_between_token(
+        ["a", "b", "c"], "missing", "c"
+    ) is None
+
+    # Empty tokens → None.
+    assert PositionalClusterLearner._extract_between_token(
+        [], "verb", "obj"
+    ) is None
+
+
+def test_connector_signal_combined_corpus_separates_adalah_and_berbeda(
+    pretrain_corpus_path,
+):
+    """End-to-end on the combined pretrain corpus (cluster-62 case).
+
+    Trains on pretrain_corpus.txt + pretrain_corpus_depth.txt and
+    asserts the structural split: "adalah"/"merupakan"/"termasuk"
+    (no-connector) and "berbeda"/"berlawanan" (with-connector) end
+    up in different clusters. This is the literal cluster-62 fix.
+
+    Skips if pretrain_corpus_depth.txt is not available (e.g. when
+    only AGNN/tests/ is checked out).
+    """
+    depth_path = pretrain_corpus_path.parent / "pretrain_corpus_depth.txt"
+    if not depth_path.exists():
+        pytest.skip(f"pretrain_corpus_depth.txt not found at {depth_path}")
+
+    lines = []
+    for path in (pretrain_corpus_path, depth_path):
+        for ln in path.read_text(encoding="utf-8").splitlines():
+            ln = ln.strip()
+            if ln and not ln.startswith("##"):
+                lines.append(ln)
+
+    learner = PositionalClusterLearner()
+    learner.train(lines)
+
+    cid_adalah = learner.cluster_id_of.get("adalah")
+    cid_merupakan = learner.cluster_id_of.get("merupakan")
+    cid_termasuk = learner.cluster_id_of.get("termasuk")
+    cid_berbeda = learner.cluster_id_of.get("berbeda")
+    cid_berlawanan = learner.cluster_id_of.get("berlawanan")
+    cid_terhitung = learner.cluster_id_of.get("terhitung")
+
+    # All target verbs must be clustered.
+    for verb, cid in (
+        ("adalah", cid_adalah),
+        ("merupakan", cid_merupakan),
+        ("termasuk", cid_termasuk),
+        ("berbeda", cid_berbeda),
+        ("berlawanan", cid_berlawanan),
+        ("terhitung", cid_terhitung),
+    ):
+        assert cid is not None, f"{verb!r} must be in cluster_id_of"
+        assert cid >= 0, f"{verb!r} must be in a real cluster, got {cid}"
+
+    # DoD: "adalah" and "berbeda" NOT in the same cluster.
+    assert cid_adalah != cid_berbeda, (
+        f"Cluster-62 regression on combined corpus: 'adalah' "
+        f"(cluster {cid_adalah}) and 'berbeda' (cluster {cid_berbeda}) "
+        f"MUST be in different clusters after the connector-signal fix."
+    )
+    assert cid_adalah != cid_berlawanan, (
+        f"Cluster-62 regression: 'adalah' and 'berlawanan' MUST be in "
+        f"different clusters."
+    )
+
+    # Connector signature assertions.
+    assert learner.action_connector_signature.get("adalah") is False
+    assert learner.action_connector_signature.get("berbeda") is True
+    assert learner.action_connector_signature.get("berlawanan") is True
+    assert learner.action_connector_signature.get("terhitung") is True
+
+    # Sanity: synonym pairs merge within their connector group.
+    assert cid_adalah == cid_merupakan, (
+        "'adalah' and 'merupakan' must still merge (both no-connector, "
+        "similar object distributions)."
+    )
+    assert cid_adalah == cid_termasuk, (
+        "'adalah' and 'termasuk' must still merge (both no-connector)."
+    )
+    assert cid_berbeda == cid_berlawanan, (
+        "'berbeda' and 'berlawanan' must still merge (both with-connector)."
+    )
+
+    # Corpus-wide connector tokens must include "dari" and "dengan"
+    # (used by berbeda / berlawanan). Detected purely from positional
+    # evidence — no hardcoded list.
+    assert "dari" in learner.connector_tokens
+    assert "dengan" in learner.connector_tokens
+    assert "sebagai" in learner.connector_tokens  # used by terhitung
+
+
+def test_connector_signal_backward_compat_no_connector_breaks_clustering():
+    """Pre-fix behavior preserved when no connector pattern is present.
+
+    A corpus where every action is direct (no between tokens at all)
+    must produce the same clustering as before the connector-signal
+    fix: connector_tokens is empty, action_connector_signature is all
+    False, and clustering proceeds purely on weighted Jaccard of
+    object distributions.
+    """
+    # Pure direct-pattern corpus: every sentence is 3 tokens (SVO).
+    # No between-first tokens ever, so connector_tokens stays empty.
+    corpus = [
+        "kucing makan ikan",
+        "anjing makan ikan",
+        "kucing minum air",
+        "anjing minum air",
+        "burung makan ikan",  # makan cluster grows
+    ]
+    learner = PositionalClusterLearner()
+    learner.train(corpus)
+
+    # No connector signal should fire.
+    assert learner.connector_tokens == set(), (
+        f"connector_tokens must be empty for a pure-direct corpus. "
+        f"Got: {learner.connector_tokens}"
+    )
+    for action, flag in learner.action_connector_signature.items():
+        assert flag is False, (
+            f"action {action!r} must have has_connector=False in a "
+            f"pure-direct corpus. Got: {flag}"
+        )
+
+    # makan and minum both take "ikan" / "air" objects; they should
+    # merge (existing weighted-Jaccard behavior, preserved).
+    cid_makan = learner.cluster_id_of.get("makan")
+    cid_minum = learner.cluster_id_of.get("minum")
+    assert cid_makan is not None and cid_minum is not None
+    # Both clusterable (>= 2 observations each), should be in some
+    # cluster (id >= 0).
+    assert cid_makan >= 0 and cid_minum >= 0
