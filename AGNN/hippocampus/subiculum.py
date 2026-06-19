@@ -14,7 +14,7 @@ hippocampus with confidence = 0.6 (labile phase).
 
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from engrams.episodic_engram import Episome
 
@@ -51,6 +51,7 @@ class Subiculum:
         edge_type: str,
         confidence: float = DEFAULT_EPISODIC_CONFIDENCE,
         neighbor_ids: Optional[List[int]] = None,
+        causal_anchors: Tuple[Tuple[str, str], ...] = (),
     ) -> Episome:
         """Construct and relay an Episome to the neocortex.
 
@@ -70,6 +71,16 @@ class Subiculum:
             neighbor_ids: Optional list of neighbor IDs found by CA3.
                 Not stored on the Episome (the dataclass has no such
                 field) but kept available for the caller via the log.
+            causal_anchors: Phase 1 — tuple of ``(relation_type, target)``
+                pairs extracted from the correction text by
+                ``CausalAnchorBuilder``. Stored on the Episome's
+                ``causal_anchors`` field (Layer 3 of the aphantasic
+                node representation). Empty tuple (the default) means
+                "no causal anchors extractable" — e.g. for a
+                CATEGORICAL correction like "X adalah Y" or for a
+                single-token correction like "api". The default keeps
+                this method backward-compatible with existing callers
+                that don't pass the new kwarg.
 
         Returns:
             The freshly constructed Episome.
@@ -87,6 +98,7 @@ class Subiculum:
             text=text,
             confidence=confidence,
             edge_type=edge_type,
+            causal_anchors=causal_anchors,
         )
         self.output_log.append(episome)
         return episome

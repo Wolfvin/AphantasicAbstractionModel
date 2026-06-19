@@ -27,6 +27,7 @@ from hippocampus.ca3 import CA3
 from hippocampus.dentate_gyrus import DentateGyrus
 from hippocampus.entorhinal_cortex import EntorhinalCortex
 from hippocampus.subiculum import DEFAULT_EPISODIC_CONFIDENCE, Subiculum
+from neocortex.causal_anchor_builder import CausalAnchorBuilder
 from neocortex.semantic_role_classifier import RelationType, SemanticRoleClassifier
 
 
@@ -162,6 +163,18 @@ class TrisynapticCircuit:
         else:
             self.role_classifier = SemanticRoleClassifier()
 
+        # Phase 1 (Aphantasic Node Representation): the causal anchor
+        # builder extracts (relation_type, target) pairs from the
+        # correction text so each Episome carries its Layer-3 causal
+        # structure alongside the surface text (Layer 1) and the
+        # amodal definition (Layer 2, populated lazily by
+        # DefinitionExtractor in AGNNCore). The builder borrows the
+        # same role_classifier we just constructed so the SPO parse
+        # + relation typing stays consistent with edge-type inference
+        # above. The builder is stateless (it holds no mutable state
+        # of its own), so sharing it across encode() calls is safe.
+        self.causal_anchor_builder = CausalAnchorBuilder(self.role_classifier)
+
     # ------------------------------------------------------------------
     # Encoding pipeline
     # ------------------------------------------------------------------
@@ -249,6 +262,34 @@ class TrisynapticCircuit:
             if ca1_type != "CATEGORICAL":
                 edge_type = ca1_type
 
+        # Phase 1: extract causal anchors (Layer 3 of the aphantasic
+        # node representation). The builder reuses the SPO parse from
+        # the same role_classifier we just used for edge-type inference,
+        # so the anchors and the edge type are always consistent. The
+        # builder returns an empty tuple for CATEGORICAL corrections
+        # (e.g. "X adalah Y") — those carry identity, not cause-effect,
+        # and aphantasics prioritise cause-effect (Monzel 2024).
+        # ``correction or stimulus`` matches the classify() call above
+        # so the anchors are derived from the same text the edge type
+        # was inferred from.
+        #
+        # We pass the pre-computed ``relation`` so the builder does NOT
+        # call ``classify()`` a second time — that would double-bump
+        # the classifier's frequency table (one bump from the
+        # edge-type classify above, one bump from the builder's own
+        # classify). The pre-computed relation is the source of truth
+        # here: the edge_type we just inferred IS the relation.
+        # Note: when CA1 overrode the classifier's CATEGORICAL fallback
+        # above (``edge_type = ca1_type``), we still pass the original
+        # ``relation`` to the builder — the builder only emits anchors
+        # for CAUSAL/FUNCTIONAL/DIFFERENTIAL, and CA1's override only
+        # fires when the classifier returned CATEGORICAL, so passing
+        # the original CATEGORICAL relation correctly suppresses
+        # anchor extraction in that case.
+        causal_anchors = self.causal_anchor_builder.build(
+            correction or stimulus, relation=relation,
+        )
+
         # 5. Sub: build + relay the Episome.
         episome = self.sub.relay_output(
             episome_id=new_id,
@@ -256,6 +297,7 @@ class TrisynapticCircuit:
             edge_type=edge_type,
             confidence=DEFAULT_EPISODIC_CONFIDENCE,
             neighbor_ids=neighbor_ids,
+            causal_anchors=causal_anchors,
         )
 
         # 6. Side effect: register the Episome as a graph node + edges
@@ -298,6 +340,13 @@ class TrisynapticCircuit:
         node_id = str(episome.id)
         # Add the new episome as a graph node (idempotent: if the node
         # already exists, add_node just overwrites the embedding init).
+        # Phase 1: metadata now also carries the causal_anchors tuple
+        # (Layer 3 of the aphantasic node representation) so downstream
+        # retrieval + articulation can read it back from the graph
+        # without needing to re-parse the correction text. The anchors
+        # are stored as a list of [relation_type, target] pairs (JSON-
+        # serializable) — the Episome field is a tuple-of-tuples, but
+        # AGNNNode.metadata is a plain dict so we convert.
         node = AGNNNode(
             id=node_id,
             label=episome.text,
@@ -307,6 +356,9 @@ class TrisynapticCircuit:
                 "episome_id": episome.id,
                 "edge_type": episome.edge_type,
                 "type": episome.type,
+                "causal_anchors": [
+                    [rel, tgt] for rel, tgt in episome.causal_anchors
+                ],
             },
         )
         if graph.get_node(node_id) is None:

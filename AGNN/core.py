@@ -19,6 +19,24 @@ import sys
 from typing import Any, Dict, List, Optional
 
 
+# Phase 1 (Aphantasic Node Representation): import the two new helper
+# modules at module-load time so ``AGNNCore.__init__`` can construct
+# them eagerly. We wrap the imports in try/except so a missing
+# dependency (e.g. a future rename) doesn't break AGNNCore construction
+# — Phase 1 falls back to the pre-Phase-1 surface-form-only chain if
+# either helper is unavailable. The fallback is graceful: the
+# articulate prompt loses its DEFINISI/RELASI sections but the
+# KONSEP + Q/A structure (and all 197 existing tests) keep working.
+try:
+    from neocortex.aphantasic_chain_formatter import AphantasicChainFormatter
+    from neocortex.definition_extractor import DefinitionExtractor
+    _PHASE1_AVAILABLE = True
+except Exception:  # noqa: BLE001
+    AphantasicChainFormatter = None  # type: ignore[assignment,misc]
+    DefinitionExtractor = None  # type: ignore[assignment,misc]
+    _PHASE1_AVAILABLE = False
+
+
 # ----------------------------------------------------------------------
 # Make sibling AGNN subpackages importable when ``core`` is loaded as
 # ``AGNN.core`` (repo root on sys.path) or as ``core`` (AGNN/ on
@@ -93,6 +111,16 @@ class AGNNCore:
         "ada di konteks. Jawab dalam bahasa yang sama dengan "
         "pertanyaan."
     )
+
+    # Phase 1 (Aphantasic Node Representation): cumulative confidence
+    # delta above which a node's amodal definition is invalidated and
+    # re-generated on the next articulate call. The user-confirmed
+    # value is 0.3 — reasoning: "reinforce berarti konsep berkembang,
+    # definisi lama mungkin sudah terlalu sempit." Three reinforces
+    # (+0.3) cross this threshold; two reinforces (+0.2) do not. The
+    # threshold is a class constant so tests can read it without
+    # hard-coding the magic number.
+    _DEFINITION_INVALIDATE_THRESHOLD: float = 0.3
 
     def __init__(
         self,
@@ -187,6 +215,44 @@ class AGNNCore:
         # bypasses ``_articulate``) behaves like pre-Phase-0.
         # ``_articulate`` overwrites this on every call.
         self._active_system_message: Optional[str] = None
+
+        # Phase 1 (Aphantasic Node Representation): the definition
+        # extractor owns the cross-Episome text-hash cache. Lazy
+        # generation happens in ``_articulate`` — we don't generate
+        # definitions at ``learn()`` time because (a) the user may
+        # learn many facts in a burst and blocking 0.5–2 s per node
+        # is poor UX, and (b) most nodes are never articulated. The
+        # extractor borrows ``self.model`` + ``self._tokenizer`` on
+        # each call, so it picks up the lazy-loaded model
+        # automatically. When Phase 1 imports failed at module load
+        # time (``_PHASE1_AVAILABLE == False``), ``_definition_extractor``
+        # is None and ``_articulate`` falls back to the pre-Phase-1
+        # surface-form-only chain.
+        self._definition_extractor = (
+            DefinitionExtractor() if _PHASE1_AVAILABLE else None
+        )
+
+        # Phase 1: the chain formatter is stateless, but we hold one
+        # instance per AGNNCore so the rendering limits (max surface
+        # chars, max anchors per node) can be configured per-brain in
+        # the future without touching the formatter's constructor.
+        self._chain_formatter = (
+            AphantasicChainFormatter() if _PHASE1_AVAILABLE else None
+        )
+
+        # Phase 1: per-node cumulative reinforce delta tracker. Used
+        # by ``reinforce()`` to decide when to invalidate the cached
+        # amodal definition. ``{episome_id: cumulative_delta}`` where
+        # cumulative_delta is the *positive* sum of all reinforce()
+        # calls on that node since the last definition invalidation
+        # (penalize() does not subtract — only growth triggers
+        # re-generation, mirroring the user's reasoning: "reinforce
+        # berarti konsep berkembang"). When the delta crosses
+        # ``_DEFINITION_INVALIDATE_THRESHOLD``, ``reinforce()`` calls
+        # ``_definition_extractor.invalidate(text)``, resets the
+        # delta to 0, and sets ``episome.definition_dirty = True`` so
+        # the next ``_articulate`` re-generates the definition.
+        self._reinforce_deltas: Dict[Any, float] = {}
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -442,6 +508,149 @@ class AGNNCore:
         # Fallback: return chain as the answer (graceful, no crash).
         return f"[Graph context: {chain_truncated}] (model not loaded)"
 
+    # ------------------------------------------------------------------
+    # Phase 1 (Aphantasic Node Representation) — 3-layer articulate
+    # ------------------------------------------------------------------
+
+    def _articulate_aphantasic(
+        self,
+        question: str,
+        episomes: List[Any],
+        semesomes: Optional[List[Any]] = None,
+    ) -> str:
+        """Articulate with the 3-layer aphantasic chain format.
+
+        This is the Phase 1 counterpart to ``_articulate``. Where
+        ``_articulate`` reads a pre-formatted ``chain`` string,
+        ``_articulate_aphantasic`` takes the *retrieved episomes* +
+        *semesomes* and builds the chain itself via
+        ``AphantasicChainFormatter``, after lazily populating each
+        episome's ``amodal_definition`` (Layer 2) via
+        ``DefinitionExtractor``.
+
+        The 3-layer chain (KONSEP / DEFINISI / RELASI) is then passed
+        to ``_articulate`` as its ``chain`` argument, so all the
+        Phase 0 machinery (system message anchor, _generate chat
+        template, prompt-structure tests) keeps working unchanged.
+
+        Lazy generation contract:
+          - For each retrieved episome, if ``amodal_definition`` is
+            empty OR ``definition_dirty`` is True, call
+            ``DefinitionExtractor.extract(text, model, tokenizer,
+            force_refresh=definition_dirty)`` and store the result
+            back on the episome.
+          - Reset ``definition_dirty = False`` after a successful
+            extract (even if the extract returned empty — we don't
+            want to retry on every articulate call when the model is
+            unavailable).
+          - If Phase 1 helpers are unavailable (``_definition_extractor
+            is None`` or ``_chain_formatter is None``), fall back to
+            the pre-Phase-1 chain format (join episome.text with
+            " -> "). This keeps AGNNCore robust to a broken Phase 1
+            import.
+
+        Args:
+            question: User query.
+            episomes: Retrieved Episome instances (typically 3–5 from
+                PapezCircuit). When empty, returns an empty string.
+            semesomes: Optional Semesome edges between the episomes.
+                Currently passed through to the formatter for future
+                use (the formatter renders Layer 3 from
+                ``Episome.causal_anchors``, not from semesomes).
+
+        Returns:
+            The articulated answer string. Falls back to
+            ``_articulate(question, fallback_chain)`` when Phase 1
+            helpers are unavailable or when the formatter returns an
+            empty string (e.g. all episomes have empty text).
+        """
+        if not episomes:
+            return ""
+
+        # Phase 1 unavailable → degrade gracefully to pre-Phase-1 path.
+        # We build the chain as the " -> "-joined episome texts (the
+        # same format ``process()`` uses for its non-deductive
+        # fallback) and delegate to ``_articulate``. This preserves
+        # the Phase 0 system message anchor while skipping the
+        # DEFINISI/RELASI sections.
+        if self._definition_extractor is None or self._chain_formatter is None:
+            fallback_chain = " -> ".join(
+                getattr(e, "text", str(e))[:50] for e in episomes
+            )
+            return self._articulate(question, fallback_chain)
+
+        # Lazy-populate Layer 2 (amodal_definition) on each retrieved
+        # episome. We do this BEFORE formatting so the formatter sees
+        # the freshest definitions. ``force_refresh`` is True when
+        # the episome's ``definition_dirty`` flag is set (i.e.
+        # ``reinforce()`` crossed the invalidate threshold since the
+        # last generation).
+        for epi in episomes:
+            self._populate_definition(epi)
+
+        # Format the 3-layer chain (KONSEP / DEFINISI / RELASI).
+        chain = self._chain_formatter.format(episomes, semesomes or [])
+        if not chain:
+            # Formatter returned empty (e.g. all episomes had empty
+            # text). Fall back to the pre-Phase-1 join so the
+            # articulate prompt still gets *something*.
+            chain = " -> ".join(
+                getattr(e, "text", str(e))[:50] for e in episomes
+            )
+
+        # Delegate to ``_articulate`` for the actual generation. This
+        # reuses the Phase 0 system message, the prompt-template
+        # structure, and the model-loading machinery — Phase 1 only
+        # changes the *body* of the [Knowledge Graph Context] block.
+        return self._articulate(question, chain)
+
+    def _populate_definition(self, episome: Any) -> None:
+        """Lazily populate ``episome.amodal_definition`` if needed.
+
+        Called by ``_articulate_aphantasic`` for each retrieved
+        episome before formatting. Three cases:
+          1. ``amodal_definition`` is non-empty AND ``definition_dirty``
+             is False → cache hit, do nothing.
+          2. ``amodal_definition`` is empty → first-time generation,
+             call ``DefinitionExtractor.extract(force_refresh=False)``.
+          3. ``definition_dirty`` is True → invalidate was requested
+             by ``reinforce()``, call ``extract(force_refresh=True)``
+             and reset the dirty flag.
+
+        Failure contract: any exception (model not loaded, generation
+        error, extractor missing) leaves ``amodal_definition`` as-is
+        and resets ``definition_dirty`` to False so we don't retry on
+        every articulate call. The formatter will then omit the
+        DEFINISI line for this node (graceful degradation).
+        """
+        if self._definition_extractor is None:
+            return
+        try:
+            dirty = bool(getattr(episome, "definition_dirty", False))
+            current = getattr(episome, "amodal_definition", "") or ""
+            if current and not dirty:
+                return  # cache hit
+            force = dirty
+            definition = self._definition_extractor.extract(
+                text=getattr(episome, "text", ""),
+                model=self.model,
+                tokenizer=self._tokenizer,
+                force_refresh=force,
+            )
+            if definition:
+                episome.amodal_definition = definition
+            # Reset the dirty flag regardless of whether the extract
+            # succeeded — we don't want to retry on every call if
+            # the model is unavailable.
+            episome.definition_dirty = False
+        except Exception:  # noqa: BLE001
+            # Best-effort: leave the episome as-is. The formatter
+            # will omit the DEFINISI line if amodal_definition is empty.
+            try:
+                episome.definition_dirty = False
+            except Exception:  # noqa: BLE001
+                pass
+
     def _find_episome(self, episome_id: Any) -> Optional[Any]:
         """Look up an episome by id in the registry (best-effort)."""
         try:
@@ -672,8 +881,25 @@ class AGNNCore:
             )
             chain_confidence = 0.5
 
-        # 4. Articulate the answer.
-        answer = self._articulate(question, chain)
+        # 4. Articulate the answer. Phase 1: when the Phase 1 helpers
+        #    (DefinitionExtractor + AphantasicChainFormatter) are
+        #    available, take the aphantasic path — it lazily populates
+        #    each retrieved episome's amodal_definition (Layer 2) and
+        #    formats the chain into the 3-layer KONSEP/DEFINISI/RELASI
+        #    structure that disambiguates ``api``/``API`` and
+        #    ``air``/``air`` at the node level. When Phase 1 helpers
+        #    are unavailable (e.g. import failed at module load), fall
+        #    back to the pre-Phase-1 path: pass the already-built
+        #    ``chain`` string to ``_articulate``. The fallback
+        #    preserves the Phase 0 system message anchor — only the
+        #    DEFINISI/RELASI sections are skipped.
+        if (
+            self._definition_extractor is not None
+            and self._chain_formatter is not None
+        ):
+            answer = self._articulate_aphantasic(question, episomes, semesomes)
+        else:
+            answer = self._articulate(question, chain)
         return {
             "answer": answer,
             "chain": chain,
@@ -805,6 +1031,19 @@ class AGNNCore:
         Biologis: Dopamine (mesolimbic) -> strengthen synapses.
         AI: ``confidence += 0.1`` (capped at 1.0).
 
+        Phase 1 (Aphantasic Node Representation): also tracks the
+        cumulative positive delta per node. When the delta crosses
+        ``_DEFINITION_INVALIDATE_THRESHOLD`` (default 0.3, i.e. three
+        reinforces), the node's cached amodal definition is
+        invalidated — ``DefinitionExtractor.invalidate(text)`` drops
+        the cross-Episome cache entry, ``episome.definition_dirty`` is
+        set to True so the next ``_articulate_aphantasic`` call
+        re-generates the definition via ``force_refresh=True``, and
+        the cumulative delta resets to 0. Reasoning (user-confirmed):
+        "reinforce berarti konsep berkembang, definisi lama mungkin
+        sudah terlalu sempit." Penalize does NOT subtract from the
+        delta — only growth triggers re-generation.
+
         Args:
             episome_id: Node to reinforce.
         """
@@ -817,6 +1056,34 @@ class AGNNCore:
             )
             # Mirror onto the graph node so retrieval sees the new value.
             self._mirror_confidence_to_graph(epi)
+
+            # Phase 1: track cumulative positive delta + invalidate
+            # the cached definition when the threshold is crossed.
+            # Skip when Phase 1 helpers are unavailable (e.g. import
+            # failed at module load) — the delta tracker stays empty
+            # and the behavior reduces to pre-Phase-1.
+            if self._definition_extractor is not None:
+                try:
+                    current_delta = self._reinforce_deltas.get(
+                        episome_id, 0.0
+                    ) + self._REINFORCE_DELTA
+                    if current_delta >= self._DEFINITION_INVALIDATE_THRESHOLD:
+                        # Crossed the threshold — invalidate the cache
+                        # and mark the episome dirty so the next
+                        # articulate call re-generates the definition.
+                        self._definition_extractor.invalidate(
+                            getattr(epi, "text", "")
+                        )
+                        epi.definition_dirty = True
+                        # Reset the delta — the next invalidation
+                        # cycle starts fresh from here.
+                        self._reinforce_deltas[episome_id] = 0.0
+                    else:
+                        self._reinforce_deltas[episome_id] = current_delta
+                except Exception:  # noqa: BLE001
+                    # Best-effort: don't let the invalidation logic
+                    # break the core reinforce() contract.
+                    pass
         except Exception:
             pass
 
