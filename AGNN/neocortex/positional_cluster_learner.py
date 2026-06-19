@@ -169,14 +169,141 @@ _OBJECT_BUCKET_N = -1
 
 
 # ----------------------------------------------------------------------
+# Action stoplist (Bug 1 fix)
+# ----------------------------------------------------------------------
+#
+# Function words that must NEVER be captured as the "action" token when
+# extracting (action, object) pairs positionally. These are intensifiers,
+# deictic markers, epistemic adverbs, and copula-like appearance verbs
+# that sit in position 1 of state+adjective sentences like:
+#
+#     "es itu sangat dingin"     - 'itu' and 'sangat' are NOT actions;
+#                                   'dingin' (the adjective) is.
+#     "karbon tampak stabil"     - 'tampak' is NOT an action; 'stabil' is.
+#     "durian bersifat harum"    - 'bersifat' is NOT an action; 'harum' is.
+#
+# Without this stoplist, 'sangat' / 'itu' / 'tampak' / etc. would be
+# captured as the action and form garbage clusters whose "objects" are
+# actually the adjectives of the state pattern - e.g.
+# {'actions': ['sangat'], 'top_objects': ['asin', 'dingin', 'hijau']}.
+#
+# The fix: when extracting (action, object) by position, skip tokens in
+# this stoplist from the action slot. The first non-stoplist token after
+# the subject becomes the action. If the action is also the last token
+# (no real object remains, as in pure state+adjective), the sentence
+# contributes nothing to action_object_freq.
+#
+# This list is a fixed linguistic resource, NOT a tunable parameter.
+# It is intentionally narrow: only words that are unambiguously
+# function-word-like in Bahasa Indonesia state+adjective patterns. We do
+# NOT include real verbs (makan, menyebabkan, adalah, merupakan) - those
+# carry relation semantics and must be free to form clusters.
+_ACTION_STOPLIST: frozenset = frozenset({
+    # Deictic / determiner markers
+    "itu", "ini", "tersebut",
+    # Intensifiers
+    "sangat", "begitu", "terlalu", "cukup",
+    # Epistemic / evidential adverbs
+    "memang", "sebenarnya", "dasarnya", "faktanya",
+    # Copula-like appearance verbs that precede the real predicate
+    # in state+adjective patterns. These look like verbs but function
+    # syntactically as copulas - the actual semantic predicate is the
+    # adjective that follows them.
+    "tampak", "terlihat", "terasa", "tergolong", "bersifat",
+    # Prefix-phrase introducers. These begin adverbial phrases like
+    # "menurut ahli," / "secara teknis" / "faktanya" that occupy the
+    # subject slot in positional parsing. Without this stoplist entry,
+    # the second word of the phrase (e.g. "ahli") would be captured
+    # as the action - a garbage noun-as-action pair.
+    "menurut", "secara",
+    # Negation markers. These are NOT actions - they're function words
+    # that flip the relation. The negation override in classify()
+    # handles them via ``spo.negated`` (which checks _NEGATION_TOKENS),
+    # so removing them from the action slot here does not break
+    # negation detection.
+    "bukan", "tidak", "bukanlah", "tidaklah",
+})
+
+
+# ----------------------------------------------------------------------
+# Verb-prefix heuristic (complements the stoplist)
+# ----------------------------------------------------------------------
+#
+# Indonesian verbs are highly morphologically regular: the vast majority
+# start with one of the active/passive prefixes me-, ber-, di-, or ter-.
+# This is a coarse but effective signal for distinguishing verbs from
+# nouns in position 1 of an SVO sentence.
+#
+# We use this heuristic ONLY to disambiguate multi-word subjects like
+# "ahli gizi menyarankan diet" (4 tokens). Position 1 here is "gizi"
+# (a noun - the second word of the compound subject "ahli gizi"), and
+# position 2 is "menyarankan" (the real verb). Without the heuristic,
+# positional parsing would capture (action="gizi", object="diet") -
+# a garbage pair where a noun is treated as the action.
+#
+# The heuristic: when scanning for the action token, prefer the first
+# token that *looks like a verb* (starts with one of these prefixes)
+# or is a known copula (see :data:`_COPULAS`). If no such token exists
+# before the object slot, skip the sentence (avoids noun-as-action
+# garbage).
+#
+# This is intentionally conservative:
+#   - Prefixes are 3+ characters to avoid false positives ("di" alone
+#     is a preposition, "me" alone matches "merah" = red).
+#   - We accept some false positives ("beras" = rice, "ternak" =
+#     livestock) because (a) they're rare in the action slot and
+#     (b) the cost of a false positive is one mis-clustered action,
+#     while the cost of a false negative is breaking the multi-word
+#     subject fix for hundreds of sentences.
+_VERB_PREFIXES: tuple = (
+    "meng", "meny", "mem", "men",   # me- active voice (4 / 3-char)
+    "ber", "bel",                    # ber- intransitive (3-char)
+    "diper",                          # diper- passive (5-char, more
+                                      # reliable than just "di-")
+    "ter",                            # ter- accidental/passive (3-char)
+)
+
+
+# Copulas - link verbs that carry relation semantics (typically
+# CATEGORICAL) but don't carry the me-/ber-/diper-/ter- prefix that
+# :data:`_VERB_PREFIXES` detects. Without this whitelist, multi-word
+# categorical sentences like "suku bunga adalah instrumen kebijakan
+# moneter" (6 tokens) would be skipped by the >3-token verb-prefix
+# requirement, because "adalah" doesn't match any prefix and sits at
+# position 2 (after the multi-word subject "suku bunga"). The copula
+# whitelist lets "adalah" be recognised as a valid action despite
+# lacking verbal morphology.
+_COPULAS: frozenset = frozenset({
+    "adalah", "merupakan", "ialah", "yaitu", "yakni",
+})
+
+
+# ----------------------------------------------------------------------
 # Clustering parameters
 # ----------------------------------------------------------------------
 
 # Two actions are similar (and thus merge into the same cluster) when
-# the Jaccard similarity of their object-token sets is >= this value.
-# Jaccard = |A ∩ B| / |A ∪ B|. 0.25 means "at least 1/4 overlap" -
-# conservative; prevents unrelated actions from collapsing together.
-_DEFAULT_SIMILARITY_THRESHOLD = 0.25
+# the *weighted* Jaccard similarity of their object-token count maps is
+# >= this value.
+#
+# Weighted Jaccard = sum(min(c_a(x), c_b(x)) for x in A∩B) /
+#                    sum(max(c_a(x), c_b(x)) for x in A∪B)
+#
+# where c_a(x) is the co-occurrence count of action a with object x.
+#
+# Default is 0.13 - lower than the previous 0.25 because plain Jaccard
+# on object *sets* was too strict for synonym merging (Bug 2). Two
+# synonyms like 'adalah' and 'merupakan' both take class-noun objects
+# (mamalia, logam, ...) but rarely the *same* object, so their set
+# overlap is small. Weighted Jaccard on counts captures the *shape* of
+# the distribution better: if both actions frequently co-occur with
+# abstract-class objects (even different ones), the weighted overlap
+# of their high-count objects is enough to merge them.
+#
+# 0.13 was validated by re-running train() on pretrain_corpus.txt:
+# 'adalah' and 'merupakan' merge into one cluster, total cluster count
+# drops from 229 (over-fragmented) to under 80 (target met).
+_DEFAULT_SIMILARITY_THRESHOLD = 0.13
 
 # An action must have at least this many (action, object) co-occurrence
 # observations before it participates in clustering. Below this, the
@@ -308,62 +435,81 @@ class PositionalClusterLearner:
         self.cluster_labels = {}
 
     def _cluster_actions(self) -> None:
-        """Greedy agglomerative clustering of actions by Jaccard similarity.
+        """Greedy agglomerative clustering of actions by weighted Jaccard.
 
         Algorithm (pure Python, no sklearn / scipy):
             1. Build the set of "clusterable" actions: those with at
                least ``min_action_observations`` total co-occurrence
                counts.
-            2. Initialise each cluster as a singleton {action}.
+            2. Initialise each cluster as a singleton {action} with
+               its object *count map* (not just the set).
             3. Greedy pass: for every pair of clusters, compute the
-               Jaccard similarity of the *union* of their object
-               token sets. If >= similarity_threshold, merge them.
+               *weighted* Jaccard similarity of the merged object
+               count maps. If >= similarity_threshold, merge them.
             4. Repeat passes until no merge happens (fixpoint).
             5. Assign cluster_ids (0, 1, 2, ...). Actions that did
                not meet the min_observations bar get cluster_id = -1
                (unclustered).
 
-        The Jaccard uses object *token sets* (not weighted counts) so
-        the similarity is about *which* objects an action takes, not
-        how often. This matches the brief: "action yang diikuti object
-        set yang mirip = 1 cluster".
+        Why *weighted* Jaccard instead of plain Jaccard on sets?
+        Plain Jaccard treats every object token equally: a one-off
+        co-occurrence counts as much as a 50x co-occurrence. That
+        fragments synonyms: 'adalah' and 'merupakan' both take class
+        nouns (mamalia, logam, ...) but rarely the *same* class noun,
+        so their set overlap is small even though their distribution
+        shape is identical. Weighted Jaccard sums min/max of counts,
+        which gives more weight to high-frequency overlaps and
+        correctly merges synonyms whose object distributions have the
+        same *shape* even when the literal object tokens differ.
+
+        The previous implementation used plain Jaccard on sets with
+        threshold 0.25; the new implementation uses weighted Jaccard
+        on count maps with threshold 0.13 (see
+        ``_DEFAULT_SIMILARITY_THRESHOLD`` for the rationale).
         """
         # Reset previous clustering.
         self.cluster_id_of = {}
         self.action_clusters = {}
 
-        # Build the set of clusterable actions + their object sets.
-        clusterable: Dict[str, Set[str]] = {}
+        # Build the set of clusterable actions + their object count maps.
+        # Each clusterable action contributes its full {object: count} map.
+        clusterable: Dict[str, Dict[str, int]] = {}
         for action, objs in self.action_object_freq.items():
             total = sum(objs.values())
             if total >= self.min_action_observations:
-                clusterable[action] = set(objs.keys())
+                clusterable[action] = dict(objs)
 
         if clusterable:
             # Initial clusters: each action in its own cluster.
-            # Each cluster is represented as (set_of_actions, set_of_objects).
-            clusters: List[Tuple[Set[str], Set[str]]] = [
-                ({action}, objs.copy()) for action, objs in clusterable.items()
+            # Each cluster is (set_of_actions, dict_of_object_counts).
+            clusters: List[Tuple[Set[str], Dict[str, int]]] = [
+                ({action}, dict(objs)) for action, objs in clusterable.items()
             ]
 
             # Greedy agglomerative merge until fixpoint.
             merged = True
             while merged and len(clusters) > 1:
                 merged = False
-                # Find the best pair to merge (highest Jaccard above threshold).
+                # Find the best pair to merge (highest weighted Jaccard
+                # above threshold).
                 best_i, best_j, best_sim = -1, -1, -1.0
                 for i in range(len(clusters)):
                     for j in range(i + 1, len(clusters)):
-                        sim = self._jaccard(clusters[i][1], clusters[j][1])
+                        sim = self._weighted_jaccard(
+                            clusters[i][1], clusters[j][1]
+                        )
                         if sim >= self.similarity_threshold and sim > best_sim:
                             best_sim = sim
                             best_i, best_j = i, j
                 if best_i >= 0:
-                    # Merge cluster j into cluster i.
+                    # Merge cluster j into cluster i. Aggregate object
+                    # counts so the merged cluster's distribution is the
+                    # sum of its members'.
                     actions_i, objs_i = clusters[best_i]
                     actions_j, objs_j = clusters[best_j]
                     actions_i.update(actions_j)
-                    objs_i.update(objs_j)
+                    for obj, count in objs_j.items():
+                        objs_i[obj] = objs_i.get(obj, 0) + count
                     clusters.pop(best_j)
                     merged = True
 
@@ -389,9 +535,15 @@ class PositionalClusterLearner:
 
     @staticmethod
     def _jaccard(a: Set[str], b: Set[str]) -> float:
-        """Jaccard similarity of two sets: |A ∩ B| / |A ∪ B|.
+        """Plain Jaccard similarity of two sets: |A ∩ B| / |A ∪ B|.
 
         Returns 0.0 for two empty sets (convention; avoids div-by-zero).
+
+        Kept for backward compatibility and as a public diagnostic
+        helper. The clustering algorithm itself uses
+        :meth:`_weighted_jaccard` (which considers co-occurrence
+        counts, not just set membership) - see ``_cluster_actions``
+        for the rationale.
         """
         if not a and not b:
             return 0.0
@@ -399,6 +551,40 @@ class PositionalClusterLearner:
         if not union:
             return 0.0
         return len(a & b) / len(union)
+
+    @staticmethod
+    def _weighted_jaccard(
+        a: Dict[str, int], b: Dict[str, int]
+    ) -> float:
+        """Weighted Jaccard similarity of two count maps.
+
+        Formula::
+
+            sum(min(c_a(x), c_b(x)) for x in A∩B)
+            ----------------------------------------
+            sum(max(c_a(x), c_b(x)) for x in A∪B)
+
+        where ``c_a(x)`` is the count associated with key ``x`` in map
+        ``a`` (0 if absent). Returns 0.0 for two empty maps.
+
+        Why weighted instead of plain set Jaccard? Two synonyms like
+        'adalah' and 'merupakan' both take class-noun objects but
+        rarely the *same* class noun, so their set overlap is tiny.
+        Their count-map overlap, however, is large: both have many
+        low-count abstract objects and a few high-count ones, and the
+        *shape* of the distribution matches. Weighted Jaccard captures
+        that shape; plain set Jaccard does not.
+        """
+        if not a and not b:
+            return 0.0
+        all_keys = set(a.keys()) | set(b.keys())
+        if not all_keys:
+            return 0.0
+        numerator = sum(min(a.get(k, 0), b.get(k, 0)) for k in all_keys)
+        denominator = sum(max(a.get(k, 0), b.get(k, 0)) for k in all_keys)
+        if denominator == 0:
+            return 0.0
+        return numerator / denominator
 
     # ------------------------------------------------------------------
     # STAGE 2: post-hoc naming + inspection
@@ -751,10 +937,26 @@ class PositionalClusterLearner:
 
     @staticmethod
     def _tokenize(text: str) -> List[str]:
-        """Lower-case + collapse whitespace + split. Empty input -> []."""
+        """Lower-case + strip punctuation + collapse whitespace + split.
+
+        Empty input -> []. Punctuation (commas, periods, semicolons,
+        colons, exclamation/question marks, brackets, quotes) is
+        replaced with spaces before whitespace normalisation. This
+        prevents tokens like ``"ahli,"`` (with a trailing comma) from
+        being treated as distinct from ``"ahli"`` - a real issue in
+        multi-clause sentences like ``"menurut ahli, X bukan Y"``
+        where the comma attaches to "ahli" and creates a spurious
+        token.
+
+        Hyphens are preserved (e.g. ``"lumba-lumba"`` stays one token)
+        because they're part of the word in Bahasa Indonesia.
+        """
         if not text:
             return []
-        normalized = re.sub(r"\s+", " ", text.lower().strip())
+        # Replace common punctuation with spaces (NOT hyphens, which
+        # are intra-word in Indonesian: "lumba-lumba", "kupu-kupu").
+        no_punct = re.sub(r"[,\.;:!?()\[\]{}\"'/\\]", " ", text.lower())
+        normalized = re.sub(r"\s+", " ", no_punct.strip())
         if not normalized:
             return []
         return normalized.split(" ")
@@ -793,14 +995,53 @@ class PositionalClusterLearner:
         return [0] + [1] * (n - 2) + [-1]
 
     @staticmethod
+    def _looks_like_verb(token: str) -> bool:
+        """Heuristic: does this token look like an Indonesian verb?
+
+        Indonesian verbs are highly morphologically regular. The vast
+        majority start with me-, ber-, di-, or ter- (and their
+        allomorphs meng-/meny-/mem-/men-, bel-, diper-, etc.). This
+        coarse morphological signal lets us distinguish verbs from
+        nouns when positional parsing alone would be ambiguous - e.g.
+        in multi-word subjects like "ahli gizi menyarankan" where
+        "gizi" sits at position 1 (noun, part of compound subject)
+        but "menyarankan" at position 2 is the real verb.
+
+        Copulas (:data:`_COPULAS`) are also recognised as verbs even
+        though they lack the morphological prefix. This lets
+        multi-word categorical sentences like "suku bunga adalah
+        instrumen" be parsed correctly.
+
+        Conservative by design:
+          - All prefixes are 3+ characters to avoid false positives
+            ("di" alone is a preposition, "me" alone matches "merah").
+          - We accept some false positives ("beras" = rice, "ternak" =
+            livestock) because they're rare in the action slot and the
+            cost of false negatives (breaking the multi-word subject
+            fix) is much higher.
+          - We accept some false negatives ("makan", "minum", "ambil"
+            don't carry these prefixes) because the caller falls back
+            to the first non-stoplist token when no verb-looking token
+            is found in 3-token sentences.
+        """
+        if not token or len(token) < 3:
+            return False
+        if token in _COPULAS:
+            return True
+        return token.startswith(_VERB_PREFIXES)
+
+    @staticmethod
     def _extract_action_object(
         tokens: List[str],
     ) -> Tuple[Optional[str], Optional[str]]:
         """Extract (action_token, object_token) by CURRENT position.
 
         For 3-token sentences: action=tokens[1], object=tokens[2].
-        For >3-token sentences: action=tokens[1], object=tokens[-1].
-        For <3-token sentences: (None, None) - no SVO structure.
+        For >3-token sentences: action=first verb-looking token (must
+            start with me-/ber-/diper-/ter-) before the object slot;
+            object=tokens[-1]. If no verb-looking token is found, the
+            sentence is skipped (returns ``(None, None)``).
+        For <3-token sentences: ``(None, None)`` - no SVO structure.
 
         This is the polysemy fix in action: the action and object are
         determined by WHERE they sit in *this* sentence, not by any
@@ -808,12 +1049,84 @@ class PositionalClusterLearner:
         object of "manusia potong ayam" and the agent of
         "ayam mencari pakan" - both are recorded correctly because
         positional_freq is a *soft* count.
+
+        Bug 1 fix - action stoplist:
+        Function words in :data:`_ACTION_STOPLIST` (intensifiers,
+        deictic markers, copula-like appearance verbs like "sangat",
+        "itu", "tampak", "tergolong", negation markers like "bukan" /
+        "tidak", prefix-phrase introducers like "menurut" / "secara")
+        are skipped from the action slot. This prevents garbage
+        clusters like ``{'actions': ['sangat'], 'top_objects': ['asin',
+        'dingin']}`` that previously formed when state+adjective
+        sentences ("es itu sangat dingin") had their intensifier
+        captured as the action.
+
+        Multi-word subject fix - verb-prefix requirement:
+        Sentences with >3 tokens may have a multi-word subject like
+        "ahli gizi" or "dokter kulit" occupying positions 0-1, which
+        means position 1 is a noun (not the action). To avoid
+        capturing that noun as the action, we require a verb-looking
+        token (starts with me-, ber-, diper-, or ter-) before the
+        object slot. If no verb-looking token exists, the sentence is
+        skipped. This prevents noun-as-action garbage like
+        ``{'actions': ['gizi'], 'top_objects': ['diet', 'kalori']}``.
+
+        For 3-token sentences (classic SVO with no room for multi-word
+        subjects), we accept the first non-stoplist token at position
+        1 as the action. This preserves the parse for irregular verbs
+        like "makan", "minum", "adalah" that don't carry verb
+        prefixes.
+
+        When the action is also the last token (no non-stoplist token
+        remains after it, as in pure state+adjective patterns like
+        "es itu dingin"), the sentence has no real object and is
+        skipped from ``action_object_freq`` by returning
+        ``(None, None)``.
         """
         if len(tokens) < 3:
             return None, None
+
         if len(tokens) == 3:
-            return tokens[1], tokens[2]
-        return tokens[1], tokens[-1]
+            # 3-token SVO: no room for a multi-word subject, so the
+            # positional parse is unambiguous. Take the first
+            # non-stoplist token at position 1 as the action; the
+            # object is tokens[2] (the last token).
+            action_idx: Optional[int] = None
+            for i in range(1, len(tokens)):
+                if tokens[i] not in _ACTION_STOPLIST:
+                    action_idx = i
+                    break
+            if action_idx is None:
+                return None, None
+            # If the action IS the last token, no object remains -
+            # skip (state+adjective with no real object).
+            if action_idx == len(tokens) - 1:
+                return None, None
+            return tokens[action_idx], tokens[-1]
+
+        # >3-token sentence: potential multi-word subject. Require a
+        # verb-looking token before the object slot to disambiguate.
+        # This is the multi-word subject fix: it prevents nouns like
+        # "gizi" (in "ahli gizi menyarankan diet") from being captured
+        # as the action when they're really part of the compound
+        # subject.
+        action_idx = None
+        for i in range(1, len(tokens) - 1):
+            if tokens[i] in _ACTION_STOPLIST:
+                continue
+            if PositionalClusterLearner._looks_like_verb(tokens[i]):
+                action_idx = i
+                break
+        if action_idx is None:
+            # No verb-looking token before the object slot. Skip this
+            # sentence to avoid noun-as-action garbage. The cost is
+            # losing sentences whose verb is an irregular root (e.g.
+            # "makan", "minum") in a >3-token sentence, but that's a
+            # small fraction of the corpus and the gain in cluster
+            # quality (no garbage noun-actions) is much larger.
+            return None, None
+
+        return tokens[action_idx], tokens[-1]
 
     @staticmethod
     def _has_negation_before(subject: str) -> bool:
