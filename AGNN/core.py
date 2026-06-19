@@ -37,6 +37,30 @@ except Exception:  # noqa: BLE001
     _PHASE1_AVAILABLE = False
 
 
+# Cluster learner integration: load the labelled
+# PositionalClusterLearner state at module load time so AGNNCore can
+# use it as a drop-in role_classifier replacement. The state file is
+# generated once by ``neocortex.bootstrap_classifier.save_default_state``
+# and committed to the repo so every environment boots with the same
+# cluster mapping. When the file is missing or fails to load, we fall
+# back to None - AGNNCore then uses the legacy SemanticRoleClassifier
+# (no behaviour change).
+#
+# Import is wrapped in try/except so this module loads cleanly even if
+# the bootstrap_classifier or positional_cluster_learner modules are
+# unavailable (e.g. during partial unit testing of just AGNN/core.py).
+try:
+    from neocortex.bootstrap_classifier import (
+        DEFAULT_STATE_PATH as _CLUSTER_LEARNER_STATE_PATH,
+        load_default_state as _load_cluster_learner_state,
+    )
+    _CLUSTER_LEARNER_AVAILABLE = True
+except Exception:  # noqa: BLE001
+    _CLUSTER_LEARNER_AVAILABLE = False
+    _CLUSTER_LEARNER_STATE_PATH = None  # type: ignore[assignment]
+    _load_cluster_learner_state = None  # type: ignore[assignment]
+
+
 # ----------------------------------------------------------------------
 # Make sibling AGNN subpackages importable when ``core`` is loaded as
 # ``AGNN.core`` (repo root on sys.path) or as ``core`` (AGNN/ on
@@ -126,6 +150,8 @@ class AGNNCore:
         self,
         model_path: Optional[str] = None,
         classifier_persist_path: Optional[str] = None,
+        use_cluster_learner: bool = True,
+        cluster_learner_state_path: Optional[str] = None,
     ):
         """
         Initialize brain-inspired memory system.
@@ -147,11 +173,53 @@ class AGNNCore:
                 identical to the pre-persistence AGNNCore. The path is
                 propagated down through ``TrisynapticCircuit`` to the
                 ``SemanticRoleClassifier`` instance it owns.
+            use_cluster_learner: When True (the default), AGNNCore
+                loads the labelled :class:`PositionalClusterLearner`
+                from ``cluster_learner_state_path`` (or the default
+                path ``AGNN/data/cluster_learner_state.json``) and
+                passes it to :class:`TrisynapticCircuit` as the
+                ``role_classifier``. The cluster learner is a drop-in
+                replacement for :class:`SemanticRoleClassifier` - it
+                implements the same ``classify(text) -> RelationType``
+                and ``spo(text) -> SPO`` contract - but its
+                classifications come from the zero-bias positional
+                clusters discovered on the pretrain corpus, not from
+                hand-authored seed keywords. When the state file is
+                missing or fails to load, AGNNCore falls back to the
+                legacy :class:`SemanticRoleClassifier` (no behaviour
+                change). When False, the cluster learner is bypassed
+                entirely and AGNNCore behaves identically to the
+                pre-cluster-learner version.
+            cluster_learner_state_path: Optional path to a JSON state
+                file for the cluster learner. ``None`` (the default)
+                uses ``AGNN/data/cluster_learner_state.json`` (the
+                file committed to the repo by
+                ``neocortex.bootstrap_classifier.save_default_state``).
+                Only consulted when ``use_cluster_learner=True``.
         """
         # Component wiring. Each component is wrapped in try/except so
         # AGNNCore can still be constructed even if a sibling component
         # raises on init (e.g. NotImplementedError skeleton).
         self.graph = self._safe_init("engrams.engram_complex", "EngramComplex")
+
+        # Cluster learner integration: when use_cluster_learner=True,
+        # try to load the labelled PositionalClusterLearner from the
+        # state file. On any failure (file missing, corrupt, module
+        # unavailable), fall back to None - TrisynapticCircuit will
+        # then construct a fresh SemanticRoleClassifier (legacy
+        # behaviour). This is the "graceful degradation" contract: a
+        # missing state file never crashes AGNNCore.
+        cluster_learner = None
+        if use_cluster_learner and _CLUSTER_LEARNER_AVAILABLE:
+            try:
+                state_path = (
+                    cluster_learner_state_path
+                    or _CLUSTER_LEARNER_STATE_PATH
+                )
+                if state_path is not None:
+                    cluster_learner = _load_cluster_learner_state(state_path)
+            except Exception:
+                cluster_learner = None
 
         # TrisynapticCircuit gets the classifier_persist_path so the
         # SemanticRoleClassifier it constructs can load + auto-save
@@ -160,10 +228,21 @@ class AGNNCore:
         # circuit kwargs stay empty (matching the pre-persistence
         # behaviour) so the test suite's "EngramComplex not available"
         # skip path keeps working.
+        #
+        # When cluster_learner is not None, we pass it as
+        # role_classifier - TrisynapticCircuit will use it as the
+        # primary edge-type inferrer (it has the same classify()/spo()
+        # contract as SemanticRoleClassifier). In that case we DO NOT
+        # also pass classifier_persist_path, because TrisynapticCircuit
+        # only consults that path when constructing a fresh
+        # SemanticRoleClassifier (which it won't do when given a
+        # pre-built role_classifier).
         trisynaptic_kwargs: Dict[str, Any] = {}
         if self.graph is not None:
             trisynaptic_kwargs["engram_complex"] = self.graph
-        if classifier_persist_path is not None:
+        if cluster_learner is not None:
+            trisynaptic_kwargs["role_classifier"] = cluster_learner
+        elif classifier_persist_path is not None:
             trisynaptic_kwargs["classifier_persist_path"] = (
                 classifier_persist_path
             )
@@ -200,6 +279,18 @@ class AGNNCore:
         # can inspect it (useful for tests + debugging). When None,
         # no persistence is active.
         self._classifier_persist_path = classifier_persist_path
+
+        # Cluster learner integration: record which role_classifier
+        # TrisynapticCircuit is actually using. Tests check this to
+        # verify the cluster learner was loaded (or not). The
+        # ``_cluster_learner`` attribute is the loaded
+        # PositionalClusterLearner instance (or None when the legacy
+        # SemanticRoleClassifier is in use). The
+        # ``_use_cluster_learner_requested`` attribute records the
+        # caller's intent - useful for the test that verifies
+        # ``use_cluster_learner=False`` falls back identically.
+        self._cluster_learner = cluster_learner
+        self._use_cluster_learner_requested = use_cluster_learner
 
         # Phase 0: per-instance override of the articulate system
         # message. ``None`` (the default) means "use the class-level
