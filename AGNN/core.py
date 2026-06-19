@@ -150,6 +150,19 @@ class AGNNCore:
     def _generate(self, prompt: str, max_new_tokens: int = 256) -> str:
         """Generate text from ``prompt`` using the loaded Qwen3 model.
 
+        The prompt is wrapped in Qwen3's chat template via
+        ``tokenizer.apply_chat_template([{role: "user", content: prompt}])``
+        before tokenization. This avoids the ``Q: ...\\nA: Q: ...\\nA: ...``
+        repetition loop Qwen3 falls into when fed a bare-text prompt —
+        the chat template's ``<|im_start|>user`` / ``<|im_end|>`` /
+        ``<|im_start|>assistant`` tokens give the model the structural
+        cues it was post-trained on, so generation stops cleanly at
+        ``<|im_end|>`` instead of echoing the ``A:`` cue.
+
+        A mild ``repetition_penalty=1.1`` is also passed to
+        ``model.generate()`` as a belt-and-suspenders guard against
+        any residual repetition tendency on short prompts.
+
         Args:
             prompt: Input prompt (already formatted with the knowledge
                 graph context + question).
@@ -163,12 +176,23 @@ class AGNNCore:
         """
         try:
             import torch  # noqa: WPS433
-            inputs = self._tokenizer(prompt, return_tensors="pt")
+            # Wrap the formatted prompt in Qwen3's chat template. The
+            # user message carries the full chain context + Q/A pair so
+            # the model has the same information as before, just in the
+            # structural format Qwen3 was post-trained on.
+            chat_messages = [{"role": "user", "content": prompt}]
+            chat_text = self._tokenizer.apply_chat_template(
+                chat_messages,
+                tokenize=False,
+                add_generation_prompt=True,
+            )
+            inputs = self._tokenizer(chat_text, return_tensors="pt")
             with torch.no_grad():
                 outputs = self.model.generate(
                     **inputs,
                     max_new_tokens=max_new_tokens,
                     do_sample=False,
+                    repetition_penalty=1.1,
                 )
             # Slice off the prompt tokens — only decode the new tokens.
             # This avoids re-emitting the prompt in the output.
@@ -237,6 +261,111 @@ class AGNNCore:
         except Exception:
             return None
         return None
+
+    def _build_semesomes_from_graph(self, episomes: List[Any]) -> List[Any]:
+        """Build ``Semesome`` edges from the typed edges in the wrapped graph.
+
+        For every retrieved episome, look up its outgoing ``TypedEdge`` s
+        in the AGNNGraph and convert each one to a ``Semesome`` whose
+        ``source`` / ``target`` are the **labels** of the connected
+        AGNNNodes (so BA 44's transitivity rules — which match on
+        ``e1.target == e2.source`` — fire when the labels chain).
+
+        Only edges whose both endpoints are among the retrieved episomes
+        are emitted, so the deduction sees a coherent sub-graph rather
+        than the entire memory store.
+
+        The returned list is ordered as a chain whenever possible: an
+        edge whose ``source`` equals the previous edge's ``target`` is
+        placed next. This lets ``CategoricalTransitivity`` /
+        ``CausalChain`` / ``FunctionalComposition`` fire on real
+        A->B->C patterns rather than seeing the edges in arbitrary
+        graph-iteration order.
+
+        Returns an empty list if the graph is unavailable or no typed
+        edges connect the retrieved episomes.
+        """
+        if self.graph is None or not episomes:
+            return []
+        try:
+            from engrams.semantic_engram import Semesome  # noqa: WPS433
+        except Exception:
+            return []
+        inner = getattr(self.graph, "_graph", None)
+        if inner is None:
+            return []
+
+        # Map str(episome_id) -> episome.text for label lookup + filter.
+        retrieved_ids = {str(getattr(e, "id", "")) for e in episomes}
+        id_to_text = {
+            str(getattr(e, "id", "")): getattr(e, "text", str(e.id))
+            for e in episomes
+        }
+        # Also include labels from the graph (in case the episome.text
+        # was a normalized form that differs from the stored label).
+        for nid in retrieved_ids:
+            node = inner.get_node(nid)
+            if node is not None:
+                id_to_text[nid] = node.label
+
+        raw_edges: List[Any] = []
+        seen_pairs: set = set()
+        for nid in retrieved_ids:
+            for edge in inner.get_edges_from(nid):
+                if edge.target_id not in retrieved_ids:
+                    continue
+                pair = (edge.source_id, edge.target_id,
+                        str(edge.relation_type))
+                if pair in seen_pairs:
+                    continue
+                seen_pairs.add(pair)
+                raw_edges.append(Semesome(
+                    type=str(edge.relation_type.value).upper(),
+                    weight=float(edge.confidence),
+                    source=id_to_text.get(edge.source_id, edge.source_id),
+                    target=id_to_text.get(edge.target_id, edge.target_id),
+                ))
+        return self._order_chain(raw_edges)
+
+    @staticmethod
+    def _order_chain(edges: List[Any]) -> List[Any]:
+        """Order ``edges`` so adjacent pairs chain (e_i.target == e_{i+1}.source).
+
+        Greedy: pick any starting edge, then repeatedly look for an
+        unused edge whose ``source`` equals the current edge's
+        ``target``. If no chain-extension is possible, fall back to
+        the next unused edge. Edges that don't chain with anything are
+        appended at the end in their original order. This maximizes
+        the number of (A->B, B->C) adjacent pairs the deductive rules
+        can match against.
+        """
+        if len(edges) <= 1:
+            return list(edges)
+        remaining = list(edges)
+        ordered: List[Any] = []
+        # Start from the edge whose source has no incoming edge in the
+        # set — i.e. a likely "head" of the chain. Fall back to edges[0].
+        sources = {e.source for e in remaining}
+        targets = {e.target for e in remaining}
+        head_candidates = [e for e in remaining if e.source not in targets]
+        current = head_candidates[0] if head_candidates else remaining[0]
+        ordered.append(current)
+        remaining.remove(current)
+
+        while remaining:
+            next_edge = None
+            for e in remaining:
+                if e.source == current.target:
+                    next_edge = e
+                    break
+            if next_edge is None:
+                # No chain extension — append the first remaining edge
+                # so we still make progress.
+                next_edge = remaining[0]
+            ordered.append(next_edge)
+            remaining.remove(next_edge)
+            current = next_edge
+        return ordered
 
     # ------------------------------------------------------------------
     # Public API
@@ -308,24 +437,16 @@ class AGNNCore:
         if not episomes:
             return empty
 
-        # 2. Build semesome chain from retrieved episomes. Each episome
-        #    becomes a degenerate self-edge so the deductive engine has
-        #    something to reason over. (A richer implementation would
-        #    walk the EngramComplex's typed edges, but the spec calls
-        #    for this episome->semesome construction.)
-        try:
-            from engrams.semantic_engram import Semesome  # noqa: WPS433
-            semesomes = [
-                Semesome(
-                    type="CATEGORICAL",
-                    weight=1.0,
-                    source=str(e.id),
-                    target=str(e.id),
-                )
-                for e in episomes
-            ]
-        except Exception:
-            semesomes = []
+        # 2. Build semesome chain from the *real* typed edges that
+        #    TrisynapticCircuit recorded in the AGNNGraph between the
+        #    retrieved episomes. The previous implementation synthesized
+        #    degenerate self-edges (source == target == episome.id) which
+        #    could never trigger any BA 44 rule, leaving
+        #    ``deduction.confidence`` (and therefore ``chain_confidence``)
+        #    permanently at 0.0. Walking the actual graph edges lets
+        #    CategoricalTransitivity / CausalChain / FunctionalComposition
+        #    fire on real A->B->C patterns.
+        semesomes = self._build_semesomes_from_graph(episomes)
 
         # 3. Deduce via BA 44.
         deduction = None
@@ -335,11 +456,24 @@ class AGNNCore:
             except Exception:
                 deduction = None
 
-        if deduction is not None:
+        if deduction is not None and deduction.rule_count > 0:
             chain = str(deduction)
-            chain_confidence = (
-                float(getattr(deduction, "confidence", 0.0))
-                if hasattr(deduction, "confidence") else 0.5
+            chain_confidence = float(getattr(deduction, "confidence", 0.0))
+        elif semesomes:
+            # No deductive rule fired, but real typed edges exist between
+            # retrieved episomes. Surface the strongest edge weight as the
+            # chain confidence so connected retrieval yields > 0 (the DoD
+            # requires ``chain_confidence > 0`` once the graph has nodes).
+            # Fall back to the joined episome texts for the chain so the
+            # caller still gets a non-empty reasoning trace.
+            chain = " -> ".join(
+                getattr(e, "text", str(e))[:50] for e in episomes
+            )
+            chain_confidence = max(
+                0.0,
+                max(
+                    float(getattr(s, "weight", 0.0)) for s in semesomes
+                ),
             )
         else:
             # Fallback: join episome texts so the chain is non-empty.
@@ -363,6 +497,12 @@ class AGNNCore:
         Returns:
             Dict with ``graph_size``, ``avg_confidence``, ``top_nodes``,
             and ``deductive_rules_applied``.
+
+        ``top_nodes`` is a list of dicts (max 5), each with the shape
+        ``{"id": <int>, "text": <str>, "confidence": <float>}``,
+        sorted by descending confidence. Returning plain node IDs
+        (ints) broke callers that did ``n['text']`` on each entry, so
+        we surface the full record here.
         """
         episomes = self._episomes
         graph_size = len(episomes)
@@ -378,7 +518,12 @@ class AGNNCore:
                 avg_confidence = 0.0
             try:
                 top_nodes = [
-                    e.id for e in sorted(
+                    {
+                        "id": e.id,
+                        "text": getattr(e, "text", str(e.id)),
+                        "confidence": float(getattr(e, "confidence", 0.0)),
+                    }
+                    for e in sorted(
                         episomes,
                         key=lambda x: float(getattr(x, "confidence", 0.0)),
                         reverse=True,

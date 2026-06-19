@@ -128,7 +128,15 @@ def _make_fake_inputs(prompt: str):
 
 
 class _FakeTokenizer:
-    """Fake HF tokenizer for ``_generate()`` tests."""
+    """Fake HF tokenizer for ``_generate()`` tests.
+
+    Supports the three methods ``_generate`` exercises on a real Qwen3
+    tokenizer: ``__call__`` (tokenize), ``decode`` (detokenize), and
+    ``apply_chat_template`` (wrap a messages list in chat format).
+    The chat-template stub returns the first message's ``content``
+    verbatim so tests that capture the prompt still see the original
+    formatted string (e.g. ``[Knowledge Graph Context]...Q: ...\\nA:``).
+    """
 
     def __init__(self, decode_output: str = "generated answer"):
         self._decode_output = decode_output
@@ -141,6 +149,17 @@ class _FakeTokenizer:
     def decode(self, token_ids, skip_special_tokens=True):
         self.calls.append(("decode", token_ids))
         return self._decode_output
+
+    def apply_chat_template(self, messages, tokenize=False,
+                            add_generation_prompt=True, **kwargs):
+        self.calls.append(("apply_chat_template", messages))
+        # Return the user message content as the "chat-formatted" text.
+        # This keeps tests focused on _generate's contract (decoded
+        # output, max_new_tokens forwarding, fallback-on-error) rather
+        # than on Qwen3-specific chat tokenization.
+        if not messages:
+            return ""
+        return str(messages[0].get("content", ""))
 
 
 class _FakeModel:
