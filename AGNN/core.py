@@ -783,12 +783,35 @@ class AGNNCore:
 
         Returns:
             Dict with ``node_id``, ``confidence``, ``graph_size``.
+            Phase 2 additions:
+              - ``definition_conflict``: a :class:`DefinitionConflict`
+                dataclass (or ``None``) describing any cross-node
+                definition conflict detected at learn time. See
+                ``_check_definition_conflict`` for the detection
+                contract. ``None`` means "no conflict detected"
+                (either no surface collision, or the new episome's
+                definition has not been generated yet — the lazy
+                populate path will check again at articulate time).
+              - ``surface_collision``: bool — True if there is at
+                least one pre-existing Episome with the same surface
+                text (Layer 1). This is a *signal*, not a *conflict*:
+                a collision is a precondition for a definition
+                conflict, but a collision without divergent
+                definitions is fine (e.g. the user is reinforcing the
+                same fact). Callers can use this flag to trigger
+                eager definition generation if they want an immediate
+                conflict check.
         """
         # Default fallback if trisynaptic circuit is unavailable.
         fallback: Dict[str, Any] = {
             "node_id": None,
             "confidence": 0.0,
             "graph_size": len(self._episomes),
+            # Phase 2: keep the fallback shape consistent with the
+            # success path so callers don't have to special-case
+            # ``None`` returns.
+            "definition_conflict": None,
+            "surface_collision": False,
         }
         if self.trisynaptic is None:
             return fallback
@@ -804,11 +827,101 @@ class AGNNCore:
 
         # Track in the registry.
         self._episomes.append(episome)
+
+        # Phase 2: check for cross-node definition conflict. The
+        # check compares the new episome's (text, amodal_definition)
+        # against every pre-existing episome with the same surface
+        # text. Because amodal definitions are generated lazily at
+        # articulate time, the new episome's definition is almost
+        # always empty at learn time → the check returns None and
+        # surfaces the collision via ``surface_collision=True``. The
+        # actual conflict (if any) will be detected later when both
+        # definitions have been populated. Callers that want an
+        # immediate check can call ``_populate_definition`` on the
+        # new episome before calling ``learn`` again.
+        conflict, surface_collision = self._check_definition_conflict(episome)
+
         return {
             "node_id": episome.id,
             "confidence": float(episome.confidence),
             "graph_size": len(self._episomes),
+            # Phase 2: surface the conflict for the caller. ``None``
+            # means "no conflict detected *yet*" — see docstring.
+            "definition_conflict": conflict,
+            "surface_collision": surface_collision,
         }
+
+    # ------------------------------------------------------------------
+    # Phase 2 — cross-node definition consistency check
+    # ------------------------------------------------------------------
+
+    def _check_definition_conflict(
+        self,
+        new_episome: Any,
+    ) -> tuple:
+        """Check ``new_episome`` against pre-existing episomes for conflicts.
+
+        Called by ``learn()`` after the new episome is appended to the
+        registry. Scans every pre-existing episome whose surface text
+        matches ``new_episome.text`` (normalized) and runs
+        ``CingulateGyrus.detect_definition_conflict`` on each pair.
+
+        Returns:
+            Tuple ``(conflict, surface_collision)``:
+              - ``conflict``: the first :class:`DefinitionConflict`
+                with ``detected=True``, or ``None`` if no conflict
+                was detected. We return the *first* conflict rather
+                than a list because the typical case is 0 or 1
+                pre-existing episome with the same surface — a list
+                would add API surface for no real benefit. Callers
+                that want the full conflict log can read
+                ``self.cingulate.definition_conflict_log``.
+              - ``surface_collision``: True if at least one
+                pre-existing episome shares the new episome's
+                surface text (regardless of whether a definition
+                conflict was detected). Used to surface the
+                "lazy-populate-pending" case to the caller.
+
+        Failure contract:
+            Any exception in the conflict checker is swallowed and
+            logged — a broken CingulateGyrus must not crash
+            ``learn()``. Returns ``(None, False)`` in that case.
+        """
+        if self.cingulate is None:
+            return (None, False)
+        try:
+            # Normalize the new episome's surface for the collision
+            # check. We use the same lower-case + collapse logic as
+            # ``CingulateGyrus._normalize_surface`` so the collision
+            # set matches what the conflict checker considers "same".
+            new_text_norm = " ".join(
+                (getattr(new_episome, "text", "") or "").lower().split()
+            )
+            if not new_text_norm:
+                return (None, False)
+
+            surface_collision = False
+            first_conflict = None
+            for existing in self._episomes:
+                # Skip the new episome itself (it's already in the
+                # registry at this point — learn() appends before
+                # calling this method).
+                if existing is new_episome:
+                    continue
+                existing_text_norm = " ".join(
+                    (getattr(existing, "text", "") or "").lower().split()
+                )
+                if existing_text_norm != new_text_norm:
+                    continue
+                surface_collision = True
+                result = self.cingulate.detect_definition_conflict(
+                    new_episome, existing
+                )
+                if result.detected and first_conflict is None:
+                    first_conflict = result
+            return (first_conflict, surface_collision)
+        except Exception:  # noqa: BLE001
+            return (None, False)
 
     def process(self, question: str) -> Dict[str, Any]:
         """
