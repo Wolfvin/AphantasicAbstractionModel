@@ -45,7 +45,11 @@ class AGNNCore:
     # How much a single reinforce()/penalize() call nudges confidence.
     _REINFORCE_DELTA = 0.1
 
-    def __init__(self, model_path: Optional[str] = None):
+    def __init__(
+        self,
+        model_path: Optional[str] = None,
+        classifier_persist_path: Optional[str] = None,
+    ):
         """
         Initialize brain-inspired memory system.
 
@@ -56,14 +60,39 @@ class AGNNCore:
                 with a small note. Model loading is lazy: we only
                 attempt to load the model on the first
                 :meth:`_articulate` call.
+            classifier_persist_path: Optional path to a JSON file used
+                to persist the :class:`SemanticRoleClassifier`'s
+                frequency table across process restarts. When the file
+                exists at init time, its contents are loaded; after
+                every confident ``classify()`` call (triggered by
+                ``learn()``), the table is re-saved atomically. ``None``
+                (the default) disables all persistence - behaviour is
+                identical to the pre-persistence AGNNCore. The path is
+                propagated down through ``TrisynapticCircuit`` to the
+                ``SemanticRoleClassifier`` instance it owns.
         """
         # Component wiring. Each component is wrapped in try/except so
         # AGNNCore can still be constructed even if a sibling component
         # raises on init (e.g. NotImplementedError skeleton).
         self.graph = self._safe_init("engrams.engram_complex", "EngramComplex")
+
+        # TrisynapticCircuit gets the classifier_persist_path so the
+        # SemanticRoleClassifier it constructs can load + auto-save
+        # its frequency table. We only pass it when we have a graph
+        # to wire the circuit with - if the graph init failed, the
+        # circuit kwargs stay empty (matching the pre-persistence
+        # behaviour) so the test suite's "EngramComplex not available"
+        # skip path keeps working.
+        trisynaptic_kwargs: Dict[str, Any] = {}
+        if self.graph is not None:
+            trisynaptic_kwargs["engram_complex"] = self.graph
+        if classifier_persist_path is not None:
+            trisynaptic_kwargs["classifier_persist_path"] = (
+                classifier_persist_path
+            )
         self.trisynaptic = self._safe_init(
             "circuits.trisynaptic_circuit", "TrisynapticCircuit",
-            kwargs={"engram_complex": self.graph} if self.graph is not None else {},
+            kwargs=trisynaptic_kwargs,
         )
         self.papez = self._safe_init("circuits.papez_circuit", "PapezCircuit")
         self.deductive = self._safe_init(
@@ -89,6 +118,11 @@ class AGNNCore:
         # so introspect / reinforce / penalize can find them by id
         # without depending on the (graph-only) EngramComplex API.
         self._episomes: List[Any] = []
+
+        # Remember the requested classifier persist path so callers
+        # can inspect it (useful for tests + debugging). When None,
+        # no persistence is active.
+        self._classifier_persist_path = classifier_persist_path
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -678,10 +712,26 @@ class AGNNCore:
 _core: Optional[AGNNCore] = None
 
 
-def init_brain(model_path: Optional[str] = None) -> AGNNCore:
-    """Initialize AGNNCore (brain) and store as module-level singleton."""
+def init_brain(
+    model_path: Optional[str] = None,
+    classifier_persist_path: Optional[str] = None,
+) -> AGNNCore:
+    """Initialize AGNNCore (brain) and store as module-level singleton.
+
+    Args:
+        model_path: Optional path to the small LLM used for
+            articulation. Forwarded to ``AGNNCore.__init__``.
+        classifier_persist_path: Optional path to a JSON file used to
+            persist the SemanticRoleClassifier's frequency table
+            across process restarts. Forwarded to
+            ``AGNNCore.__init__``. ``None`` (default) keeps the
+            pre-persistence behaviour.
+    """
     global _core
-    _core = AGNNCore(model_path=model_path)
+    _core = AGNNCore(
+        model_path=model_path,
+        classifier_persist_path=classifier_persist_path,
+    )
     return _core
 
 
