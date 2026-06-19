@@ -39,13 +39,36 @@ Failure contract
   dependency. When the real ``RelationType`` is importable, the public
   ``RelationType`` symbol re-exports it (so ``classify`` returns the
   canonical enum used everywhere else).
+
+Persistence
+-----------
+Passing ``persist_path=<file>`` to the constructor makes the
+classifier load its frequency table from that file on init (when the
+file exists) and re-save it atomically after every confident
+``classify()`` call that bumps the table. ``persist_path=None`` (the
+default) preserves the pre-persistence behaviour exactly - no file
+IO happens. ``save(path)`` and ``load(path)`` (classmethod) expose
+the same machinery explicitly for callers that want one-shot
+serialisation.
+
+JSON format::
+
+    {"menyebabkan": {"CAUSAL": 5, "CATEGORICAL": 1},
+     "adalah":      {"CATEGORICAL": 12}}
+
+Keys are normalised predicate strings, values map the RelationType
+member's ``.name`` to an integer count. Unknown relation-type names
+in the file (e.g. from a future version that adds new RelationTypes)
+are silently skipped rather than crashing the load.
 """
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import sys
+import tempfile
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict, List, Optional, Tuple
@@ -212,6 +235,8 @@ class SemanticRoleClassifier:
     Public API:
         classify(text) -> RelationType
         spo(text)      -> SPO                  # expose the parse
+        save(path)     -> None                 # one-shot serialise
+        load(path)     -> SemanticRoleClassifier   # classmethod
 
     State:
         frequency_table: {predicate_normalized: {RelationType: count}}
@@ -220,18 +245,60 @@ class SemanticRoleClassifier:
                           time. Once one type reaches
                           ``override_threshold`` for a predicate, that
                           type wins over the seed rules.
+        persist_path:    Optional path to a JSON file. When set, the
+                          classifier loads the frequency table from
+                          this file on init (when it exists) and
+                          re-saves it atomically after every confident
+                          classify() call that bumps the table. ``None``
+                          (the default) disables all file IO - behaviour
+                          is identical to the pre-persistence
+                          SemanticRoleClassifier.
 
     Args:
         override_threshold: How many counts a single type must reach in
             the frequency table before it overrides the seed rules.
             Defaults to 3 (matches the spec: "count >= 3 for one type
             -> override seed rules").
+        persist_path: Optional path to a JSON file used to persist the
+            frequency table across process restarts. When the file
+            exists at init time, its contents are loaded into
+            ``frequency_table``. When ``None`` (default), no file IO
+            happens at all - matching the pre-persistence behaviour
+            exactly.
     """
 
     override_threshold: int = _DEFAULT_OVERRIDE_THRESHOLD
     frequency_table: Dict[str, Dict[RelationType, int]] = field(
         default_factory=dict
     )
+    persist_path: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        """Auto-load the frequency table when ``persist_path`` is set.
+
+        We do this in ``__post_init__`` rather than ``__init__`` so the
+        dataclass machinery still works (dataclass-generated ``__init__``
+        just assigns fields; ``__post_init__`` is the standard hook for
+        post-construction logic).
+
+        Failure contract: any error during load is swallowed - the
+        classifier falls back to an empty frequency table rather than
+        crashing. This matches the no-throw contract of ``classify()``.
+        """
+        if self.persist_path:
+            try:
+                loaded = self._load_frequency_table(self.persist_path)
+                # Merge over the default empty table so explicit
+                # field assignments (e.g. in tests) still win.
+                for pred, counts in loaded.items():
+                    bucket = self.frequency_table.setdefault(pred, {})
+                    for rt, n in counts.items():
+                        bucket[rt] = bucket.get(rt, 0) + n
+            except Exception:
+                # Couldn't load (file missing, corrupt JSON, permission
+                # error, etc.) - start with whatever frequency_table was
+                # already set to (usually empty). classify() still works.
+                pass
 
     # ------------------------------------------------------------------
     # Public API
@@ -265,6 +332,11 @@ class SemanticRoleClassifier:
         Failure contract: any exception during parsing or matching is
         swallowed and CATEGORICAL is returned. This matches the
         no-throw contract the rest of AGNN depends on.
+
+        Persistence: when ``self.persist_path`` is set, the frequency
+        table is re-saved atomically to disk after every confident
+        call that bumps it. Save failures are swallowed - the
+        classification result still flows back to the caller.
         """
         try:
             spo = self.spo(text)
@@ -303,7 +375,163 @@ class SemanticRoleClassifier:
         # Bump the frequency table so future calls can override.
         bucket = self.frequency_table.setdefault(predicate_norm, {})
         bucket[relation_type] = bucket.get(relation_type, 0) + 1
+
+        # Auto-save the bumped table when persistence is configured.
+        # Failures are swallowed - the classification result is what
+        # matters; persistence is best-effort.
+        if self.persist_path:
+            try:
+                self._save_frequency_table_atomic(self.persist_path)
+            except Exception:
+                pass
+
         return relation_type
+
+    # ------------------------------------------------------------------
+    # Persistence
+    # ------------------------------------------------------------------
+
+    def save(self, path: str) -> None:
+        """Serialise the frequency table to ``path`` as JSON.
+
+        Atomic write: the JSON is written to a sibling temp file first,
+        then ``os.replace``'d onto the target path. ``os.replace`` is
+        atomic on POSIX and Windows, so a crash mid-write never leaves
+        a half-written file at ``path`` - the worst case is the temp
+        file being orphaned, which the next successful save will
+        overwrite.
+
+        Directory creation: parent directories are created on demand
+        (``mkdir -p`` semantics) so callers can pass paths into
+        not-yet-existing folders.
+
+        Format::
+
+            {"menyebabkan": {"CAUSAL": 5, "CATEGORICAL": 1},
+             "adalah":      {"CATEGORICAL": 12}}
+
+        Args:
+            path: Filesystem path to write. Overwritten if it exists.
+        """
+        self._save_frequency_table_atomic(path)
+
+    @classmethod
+    def load(cls, path: str) -> "SemanticRoleClassifier":
+        """Build a fresh classifier whose frequency_table is loaded from ``path``.
+
+        Equivalent to ``SemanticRoleClassifier(persist_path=path)`` but
+        explicit about intent. When the file does not exist or cannot
+        be parsed, a fresh classifier with an empty table is returned
+        (no crash) - matching the no-throw contract of ``classify()``.
+
+        The returned instance has ``persist_path=path`` set, so any
+        future confident ``classify()`` call will re-save the table to
+        the same path. Pass ``persist_path=None`` to the constructor
+        instead if you want a one-shot load with no auto-save.
+
+        Args:
+            path: Filesystem path to read.
+
+        Returns:
+            A new ``SemanticRoleClassifier`` with the loaded
+            frequency table.
+        """
+        return cls(persist_path=path)
+
+    @staticmethod
+    def _load_frequency_table(
+        path: str,
+    ) -> Dict[str, Dict[RelationType, int]]:
+        """Read ``path`` and rebuild the {predicate: {RelationType: int}} dict.
+
+        Unknown relation-type names (e.g. "FOO" from a future version)
+        are silently skipped rather than crashing the load. This keeps
+        forward compatibility: an old binary loading a newer on-disk
+        table still gets every relation type it knows about.
+
+        Raises:
+            FileNotFoundError: when ``path`` does not exist. Callers
+                that want graceful fallback should catch this.
+            json.JSONDecodeError: when the file exists but is not
+                valid JSON. Same caller contract.
+        """
+        with open(path, "r", encoding="utf-8") as f:
+            raw = json.load(f)
+        if not isinstance(raw, dict):
+            return {}
+        out: Dict[str, Dict[RelationType, int]] = {}
+        for pred, counts in raw.items():
+            if not isinstance(pred, str) or not isinstance(counts, dict):
+                continue
+            bucket: Dict[RelationType, int] = {}
+            for rt_name, n in counts.items():
+                if not isinstance(rt_name, str) or not isinstance(n, int):
+                    continue
+                try:
+                    rt = RelationType[rt_name]
+                except KeyError:
+                    # Unknown relation type (e.g. from a newer version
+                    # of AGNN that added new RelationTypes). Skip
+                    # silently so the load does not crash.
+                    continue
+                bucket[rt] = n
+            if bucket:
+                out[pred] = bucket
+        return out
+
+    def _save_frequency_table_atomic(self, path: str) -> None:
+        """Write the frequency table to ``path`` atomically.
+
+        Implementation: dump JSON to a temp file in the same directory
+        as ``path`` (so the rename stays intra-filesystem and is
+        atomic), then ``os.replace`` it onto ``path``. Parent
+        directories are created on demand.
+
+        The JSON uses ``sort_keys=True`` and an indent of 2 for stable
+        diffs - re-saving an unchanged table produces a byte-identical
+        file, which is friendly to version control and rsync.
+        """
+        # Normalise to a JSON-serialisable shape: {predicate:
+        # {relation_type_name: count}}.
+        serialisable: Dict[str, Dict[str, int]] = {}
+        for pred, counts in self.frequency_table.items():
+            serialisable[pred] = {
+                rt.name: int(n) for rt, n in counts.items()
+            }
+
+        parent = os.path.dirname(os.path.abspath(path))
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+
+        # Named/Named-ish temp file in the SAME directory as the target
+        # so the final os.replace is a same-filesystem rename (atomic
+        # on POSIX and Windows). We don't use NamedTemporaryFile's
+        # delete=True because we want to close + rename, not close +
+        # auto-delete.
+        fd, tmp_path = tempfile.mkstemp(
+            prefix=".agnn_freq_",
+            suffix=".tmp",
+            dir=parent or ".",
+        )
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(serialisable, f, sort_keys=True, indent=2)
+                f.write("\n")  # trailing newline = friendly to editors/git
+            # os.replace is atomic on the same filesystem on POSIX and
+            # Windows. This is the only write that touches the final
+            # path - any crash before this line leaves the old file
+            # intact, any crash after leaves the new file intact.
+            os.replace(tmp_path, path)
+        except Exception:
+            # Best-effort cleanup of the temp file if anything failed
+            # before the rename. Swallow the cleanup error too - we
+            # don't want to mask the original exception with a
+            # secondary one.
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
 
     def spo(self, text: str) -> SPO:
         """Parse ``text`` into Subject-Predicate-Object.

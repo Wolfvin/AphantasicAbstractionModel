@@ -96,6 +96,7 @@ class TrisynapticCircuit:
         ca1: Optional[CA1] = None,
         sub: Optional[Subiculum] = None,
         role_classifier: Optional[SemanticRoleClassifier] = None,
+        classifier_persist_path: Optional[str] = None,
     ) -> None:
         """Wire up the five hippocampal substructures + engraph complex.
 
@@ -115,6 +116,15 @@ class TrisynapticCircuit:
                 classifier is stateful (it carries a frequency table)
                 so sharing one across encodes lets the system learn
                 over time.
+            classifier_persist_path: Optional path to a JSON file for
+                persisting the role classifier's frequency table
+                across process restarts. Only used when
+                ``role_classifier`` is None (i.e. when we are
+                constructing a fresh classifier); when the caller
+                supplies their own ``role_classifier``, that instance's
+                own ``persist_path`` is what governs its IO. ``None``
+                (the default) means no persistence - matching the
+                pre-persistence behaviour exactly.
         """
         # Lazy import so this module can be imported even when
         # self-ai/src/agnn is not on sys.path (matches the pattern in
@@ -136,10 +146,21 @@ class TrisynapticCircuit:
         # unknown predicate - in that case CA1's cue-word scan may
         # still pick up a more specific type from the surrounding
         # stimulus text.
-        self.role_classifier = (
-            role_classifier if role_classifier is not None
-            else SemanticRoleClassifier()
-        )
+        #
+        # Worker 2: when the caller does not supply a role_classifier,
+        # we honour classifier_persist_path by passing it down to the
+        # fresh SemanticRoleClassifier. When the caller DOES supply a
+        # role_classifier, that instance is used as-is - the caller is
+        # responsible for its own persist_path (this avoids
+        # double-wiring two paths to the same file).
+        if role_classifier is not None:
+            self.role_classifier = role_classifier
+        elif classifier_persist_path is not None:
+            self.role_classifier = SemanticRoleClassifier(
+                persist_path=classifier_persist_path
+            )
+        else:
+            self.role_classifier = SemanticRoleClassifier()
 
     # ------------------------------------------------------------------
     # Encoding pipeline
