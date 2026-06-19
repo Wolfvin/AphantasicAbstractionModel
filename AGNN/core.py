@@ -45,6 +45,55 @@ class AGNNCore:
     # How much a single reinforce()/penalize() call nudges confidence.
     _REINFORCE_DELTA = 0.1
 
+    # Phase 0 (Aphantasic Articulation Anchor): default system message
+    # sent to Qwen3 alongside the user prompt in ``_articulate()``.
+    #
+    # This is the root-cause fix for the ``api``/``API`` and
+    # ``air``/``air`` disambiguation failures reported during testing.
+    # The previous implementation only sent a single user message
+    # (``[Knowledge Graph Context]\n{chain}\nQ: {question}\nA:``) with
+    # no system message at all. Without a system message anchoring the
+    # language and the role of the context, Qwen3-0.6B fell back to its
+    # English tech-corpus prior and read ``api`` as "Application
+    # Programming Interface" and ``air`` as the English noun for the
+    # atmospheric gas — even when the surrounding chain was Indonesian.
+    #
+    # The system message below anchors three things:
+    #   1. Role: the model narrates from a knowledge graph, not from
+    #      its own parametric memory — this suppresses hallucination
+    #      and the ``Q: ... A: Q: ... A:`` repetition loop.
+    #   2. Language: tokens in the ``[Knowledge Graph Context]`` block
+    #      are Bahasa Indonesia unless explicitly tagged otherwise.
+    #      This is what disambiguates ``api`` (ID: fire) from ``API``
+    #      (EN: programming interface) and ``air`` (ID: water) from
+    #      ``air`` (EN: atmospheric gas).
+    #   3. Output contract: every claim must trace back to a node in
+    #      the context; no invented facts.
+    #
+    # The message is deliberately short (well under 200 tokens) so it
+    # fits comfortably in Qwen3-0.6B's ~8K context window alongside
+    # the truncated chain (max 800 chars) and the Q/A pair. It is also
+    # phrased so that ``/no_think`` (the default Qwen3 mode for
+    # non-reasoning tasks like articulation) keeps the model in
+    # direct-generation mode rather than Long-CoT.
+    #
+    # Callers can override this per-instance by setting
+    # ``core._system_message = "..."`` after construction. ``None``
+    # disables the system message entirely (restoring the pre-Phase-0
+    # single-message behaviour) — useful for ablation tests.
+    _ARTICULATE_SYSTEM_MESSAGE: str = (
+        "Kamu adalah asisten penalaran berbasis knowledge graph. "
+        "Konteks di bawah adalah data graf pengetahuan, bukan teks "
+        "naratif bebas. Token dalam blok [Knowledge Graph Context] "
+        "adalah istilah dalam Bahasa Indonesia kecuali jika ditandai "
+        "lain. Jangan menginterpretasikan ulang token sebagai kata "
+        "Inggris (misalnya 'api' = fenomena pembakaran, bukan "
+        "'Application Programming Interface'; 'air' = cairan untuk "
+        "minum, bukan gas di atmosfer). Sebutkan hanya fakta yang "
+        "ada di konteks. Jawab dalam bahasa yang sama dengan "
+        "pertanyaan."
+    )
+
     def __init__(
         self,
         model_path: Optional[str] = None,
@@ -124,6 +173,21 @@ class AGNNCore:
         # no persistence is active.
         self._classifier_persist_path = classifier_persist_path
 
+        # Phase 0: per-instance override of the articulate system
+        # message. ``None`` (the default) means "use the class-level
+        # ``_ARTICULATE_SYSTEM_MESSAGE``". Set to a non-None string to
+        # override, or set to an empty string ``""`` to explicitly
+        # disable the system message (restoring pre-Phase-0 behaviour
+        # for ablation). See ``_articulate`` for the resolution order.
+        self._system_message: Optional[str] = None
+
+        # Phase 0: the system message stashed by ``_articulate`` for
+        # the real ``_generate`` to pick up. Initialised to ``None``
+        # so the first ``_generate`` call (e.g. from a test that
+        # bypasses ``_articulate``) behaves like pre-Phase-0.
+        # ``_articulate`` overwrites this on every call.
+        self._active_system_message: Optional[str] = None
+
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
@@ -181,7 +245,12 @@ class AGNNCore:
             self.model = None
             self._tokenizer = None
 
-    def _generate(self, prompt: str, max_new_tokens: int = 256) -> str:
+    def _generate(
+        self,
+        prompt: str,
+        max_new_tokens: int = 256,
+        system_message: Optional[str] = None,
+    ) -> str:
         """Generate text from ``prompt`` using the loaded Qwen3 model.
 
         The prompt is wrapped in Qwen3's chat template via
@@ -197,24 +266,74 @@ class AGNNCore:
         ``model.generate()`` as a belt-and-suspenders guard against
         any residual repetition tendency on short prompts.
 
+        Phase 0 (Aphantasic Articulation Anchor):
+            When a system message is supplied — either via the
+            ``system_message`` keyword argument **or** via the
+            ``self._active_system_message`` instance attribute set by
+            ``_articulate()`` — it is prepended to the chat messages
+            as a ``{role: "system"}`` entry before the user message.
+            This is the root-cause fix for the ``api``/``API`` and
+            ``air``/``air`` disambiguation failures: the system message
+            anchors the language and the model's role so Qwen3-0.6B
+            does not fall back to its English tech-corpus prior when
+            reading Indonesian tokens.
+
+            Resolution order for the system message:
+              1. Explicit ``system_message`` keyword argument (highest
+                 priority — callers can override per-call).
+              2. ``self._active_system_message`` instance attribute
+                 (set by ``_articulate`` so existing tests that mock
+                 ``_generate`` with a 2-arg lambda still work — the
+                 mock never sees the keyword).
+              3. ``None`` (no system message, pre-Phase-0 behaviour).
+
+            When the resolved system message is ``None`` or empty, the
+            call builds a single-message chat, preserving backward
+            compatibility with callers that invoke
+            ``_generate(prompt)`` or
+            ``_generate(prompt, max_new_tokens=N)`` without the new
+            keyword or attribute.
+
         Args:
             prompt: Input prompt (already formatted with the knowledge
                 graph context + question).
             max_new_tokens: Maximum new tokens to generate (default 256).
                 The prompt tokens are NOT counted toward this limit.
+            system_message: Optional system message to prepend to the
+                chat. ``None`` (the default) falls back to
+                ``self._active_system_message``. Pass an empty string
+                ``""`` to explicitly disable the system message even
+                if the instance attribute is set (ablation path).
 
         Returns:
             Generated text (prompt tokens stripped, only the new tokens
             decoded). Falls back to returning the prompt itself on any
             error so the caller still gets a non-empty string.
         """
+        # Resolve the system message: explicit kwarg > instance attr > None.
+        if system_message is None:
+            system_message = getattr(self, "_active_system_message", None)
         try:
             import torch  # noqa: WPS433
             # Wrap the formatted prompt in Qwen3's chat template. The
             # user message carries the full chain context + Q/A pair so
             # the model has the same information as before, just in the
             # structural format Qwen3 was post-trained on.
-            chat_messages = [{"role": "user", "content": prompt}]
+            #
+            # Phase 0: when a system_message is resolved, prepend it as
+            # a {role: "system"} entry. This gives Qwen3 the language +
+            # role anchor it needs to disambiguate Indonesian tokens
+            # like "api"/"air" without falling back to its English
+            # tech-corpus prior. When system_message is None/empty,
+            # build a single-message chat (pre-Phase-0 behaviour) so
+            # existing callers and tests are unaffected.
+            if system_message:
+                chat_messages = [
+                    {"role": "system", "content": system_message},
+                    {"role": "user", "content": prompt},
+                ]
+            else:
+                chat_messages = [{"role": "user", "content": prompt}]
             chat_text = self._tokenizer.apply_chat_template(
                 chat_messages,
                 tokenize=False,
@@ -241,12 +360,37 @@ class AGNNCore:
     def _articulate(self, question: str, chain: str) -> str:
         """Turn a (question, chain) pair into a natural-language answer.
 
-        Prompt template::
+        Prompt template (user message; unchanged from pre-Phase-0)::
 
             [Knowledge Graph Context]
             {chain (truncated to 800 chars)}
             Q: {question}
             A:
+
+        Phase 0 (Aphantasic Articulation Anchor):
+            Before calling ``_generate``, this method resolves the
+            system message and stashes it on
+            ``self._active_system_message`` so the real ``_generate``
+            prepends it as a ``{role: "system"}`` chat entry.
+
+            Resolution order:
+              1. ``self._system_message`` if it is a non-empty string
+                 (per-instance override set by callers).
+              2. ``self._system_message == ""`` → empty string is an
+                 explicit "disable" signal → no system message is sent
+                 (ablation / pre-Phase-0 behaviour).
+              3. ``self._system_message is None`` (the default) →
+                 fall back to the class-level
+                 ``_ARTICULATE_SYSTEM_MESSAGE`` (the Indonesian anchor
+                 that fixes the ``api``/``API`` and ``air``/``air``
+                 disambiguation failures).
+
+            The system message is stashed on the instance attribute
+            (rather than passed as a keyword argument) so existing
+            tests that mock ``_generate`` with a 2-arg lambda like
+            ``lambda prompt, max_new_tokens=256: ...`` continue to
+            work unchanged — the mock never receives the new keyword,
+            but the real ``_generate`` reads the attribute.
 
         Behavior:
             - If a model path is available (``self._model_path`` **or**
@@ -272,6 +416,18 @@ class AGNNCore:
         ):
             self._model_load_attempted = True
             self._load_model()
+
+        # Phase 0: resolve the system message and stash it for
+        # ``_generate`` to pick up. See the docstring above for the
+        # resolution order. We always set the attribute (even to None
+        # or "") so a previous call's value doesn't leak into this one.
+        if self._system_message is not None:
+            # Per-instance override: "" means explicit disable, any
+            # other non-None string is the override content.
+            self._active_system_message = self._system_message
+        else:
+            # Default: use the class-level Indonesian anchor.
+            self._active_system_message = self._ARTICULATE_SYSTEM_MESSAGE
 
         # Truncate the chain to stay within Qwen3-0.6B's context budget.
         chain_truncated = (chain or "")[: self._CHAIN_MAX_CHARS]
