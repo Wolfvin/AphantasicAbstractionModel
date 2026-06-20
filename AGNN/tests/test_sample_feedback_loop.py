@@ -139,9 +139,13 @@ def trained_learner() -> PositionalClusterLearner:
     learner.train(corpus)
 
     # Label the 3 clusters we expect to form.
-    inspect = learner.inspect_clusters()
+    # NB: uses inspect_cluster_details() (the canonical API); the
+    # singular inspect_clusters() helper was removed in dead-code-audit
+    # §3.2.
+    inspect = learner.inspect_cluster_details()
     label_map = {}
-    for cid, actions in inspect.items():
+    for cid, cluster in inspect.items():
+        actions = cluster["actions"]
         if "menyebabkan" in actions or "memicu" in actions:
             label_map[cid] = RelationType.CAUSAL
         elif "membutuhkan" in actions or "memerlukan" in actions:

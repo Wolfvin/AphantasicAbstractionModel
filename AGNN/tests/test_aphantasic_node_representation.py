@@ -437,15 +437,44 @@ def test_causal_anchor_builder_no_double_bump_when_relation_supplied():
     )
 
 
-def test_causal_anchor_builder_falls_back_to_classify_without_relation():
-    """When ``relation`` is None, builder calls classify() itself.
+def test_causal_anchor_builder_relation_is_required():
+    """``build()`` requires a pre-computed ``relation`` argument.
 
-    This is the backward-compat path for direct builder use (e.g.
-    tests that don't have a pre-computed relation).
+    Replaces ``test_causal_anchor_builder_falls_back_to_classify_without_relation``
+    (dead-code-audit §3.4): the ``relation is None`` fallback branch
+    in ``CausalAnchorBuilder.build()`` was production-dead —
+    ``TrisynapticCircuit.encode()`` always passes a pre-computed
+    relation. The branch has been removed and ``relation`` is now a
+    required parameter.
+
+    Contract pinned by this test:
+      * Calling ``build()`` without ``relation`` raises ``TypeError``
+        (the Python signature enforces it; no ``None`` default).
+      * Calling ``build()`` with ``relation`` never calls
+        ``classifier.classify()`` — the supplied relation is used
+        directly. (This is the same no-double-bump property pinned by
+        ``test_causal_anchor_builder_no_double_bump_when_relation_supplied``,
+        re-stated here from the "no fallback" angle to make the
+        post-removal contract explicit.)
     """
     classifier = SemanticRoleClassifier()
     builder = CausalAnchorBuilder(classifier)
 
+    import inspect as _inspect
+
+    sig = _inspect.signature(builder.build)
+    params = sig.parameters
+    assert "relation" in params, "build() must accept a `relation` parameter"
+    assert (
+        params["relation"].default is _inspect.Parameter.empty
+    ), "build(relation=...) must be required — no default, no None fallback"
+
+    # Calling build() without relation raises TypeError (no fallback
+    # to classify()).
+    with pytest.raises(TypeError):
+        builder.build("api menyebabkan panas")
+
+    # And build() with relation does NOT call classify().
     call_count = {"n": 0}
     original_classify = classifier.classify
 
@@ -455,9 +484,10 @@ def test_causal_anchor_builder_falls_back_to_classify_without_relation():
 
     classifier.classify = counting_classify
 
-    builder.build("api menyebabkan panas")  # relation=None
-    assert call_count["n"] == 1, (
-        "build() without relation must call classify() exactly once"
+    builder.build("api menyebabkan panas", relation=RelationType.CAUSAL)
+    assert call_count["n"] == 0, (
+        "build(relation=...) must NOT call classifier.classify() — "
+        "the relation is supplied by the caller; no fallback path."
     )
 
 

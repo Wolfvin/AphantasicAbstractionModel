@@ -23,7 +23,7 @@ Definition of Done covered:
     6. test_persistence_with_labels            - save/load preserves
        cluster_labels.
 
-Plus supplementary tests for inspect_clusters, fallback composition,
+Plus supplementary tests for inspect_cluster_details, fallback composition,
 and the position-bucketing helpers.
 
 Run:
@@ -205,13 +205,15 @@ def test_train_builds_unnamed_clusters(
         assert isinstance(cid, int)
         assert cid >= 0
 
-    # inspect_clusters() returns Dict[int, List[str]] with no labels.
-    inspection = learner.inspect_clusters()
+    # inspect_cluster_details() returns Dict[int, Dict[str, object]]
+    # with "actions" key (no labels yet — see label_clusters()).
+    inspection = learner.inspect_cluster_details()
     assert isinstance(inspection, dict)
-    for cid, actions in inspection.items():
+    for cid, cluster in inspection.items():
         assert isinstance(cid, int)
-        assert isinstance(actions, list)
-        assert all(isinstance(a, str) for a in actions)
+        assert isinstance(cluster, dict)
+        assert isinstance(cluster["actions"], list)
+        assert all(isinstance(a, str) for a in cluster["actions"])
 
 
 def test_train_zero_bias_no_human_seeds(
@@ -711,23 +713,32 @@ def test_persistence_atomic_write(
 
 
 # ======================================================================
-# Supplementary: inspect_clusters / inspect_cluster_details
+# Supplementary: inspect_cluster_details (the canonical cluster view)
 # ======================================================================
 
 
-def test_inspect_clusters_returns_readable_view(
+def test_inspect_cluster_details_returns_readable_view(
     learner: PositionalClusterLearner, mixed_corpus: list
 ):
-    """inspect_clusters() returns {cluster_id: [action_tokens]} for human review."""
+    """inspect_cluster_details() returns the canonical human-readable view.
+
+    Replaces the old ``test_inspect_clusters_returns_readable_view``
+    which exercised the now-removed singular
+    ``PositionalClusterLearner.inspect_clusters()`` (dead-code-audit
+    §3.2). The richer ``inspect_cluster_details()`` is the canonical
+    inspection API; ``bootstrap_classifier.py`` uses it as well.
+    """
     learner.train(mixed_corpus)
-    inspection = learner.inspect_clusters()
+    inspection = learner.inspect_cluster_details()
 
     assert isinstance(inspection, dict)
     assert len(inspection) >= 1
 
-    for cid, actions in inspection.items():
+    for cid, cluster in inspection.items():
         assert isinstance(cid, int)
         assert cid >= 0
+        assert isinstance(cluster, dict)
+        actions = cluster["actions"]
         assert isinstance(actions, list)
         assert len(actions) >= 1
         assert all(isinstance(a, str) for a in actions)
@@ -793,14 +804,28 @@ def test_compute_buckets_edge_cases():
     assert PositionalClusterLearner._compute_buckets(2) == [0, 1]
 
 
-def test_jaccard_similarity():
-    """Jaccard: |A ∩ B| / |A ∪ B|."""
-    j = PositionalClusterLearner._jaccard
-    assert j(set(), set()) == 0.0
-    assert j({"a"}, set()) == 0.0
-    assert j({"a"}, {"a"}) == 1.0
-    assert j({"a", "b"}, {"b", "c"}) == 1 / 3  # |{b}| / |{a,b,c}|
-    assert j({"a", "b", "c"}, {"a", "b", "c"}) == 1.0
+def test_weighted_jaccard_basic_set_equivalents():
+    """Weighted Jaccard on count maps: sum(min) / sum(max) over union of keys.
+
+    Replaces the old ``test_jaccard_similarity`` which exercised the
+    now-removed ``PositionalClusterLearner._jaccard`` (dead-code-audit
+    §3.1). The plain set-Jaccard helper was dead in production (the
+    clustering algorithm uses ``_weighted_jaccard`` exclusively); this
+    test keeps coverage of the Jaccard *concept* on the helper that is
+    actually live, using count maps that are set-equivalent (each key
+    has count 1).
+    """
+    wj = PositionalClusterLearner._weighted_jaccard
+    # Empty maps -> 0.0 (matches the old "two empty sets -> 0.0" case).
+    assert wj({}, {}) == 0.0
+    # One-sided -> 0.0 (matches "j({a}, set()) == 0.0").
+    assert wj({"a": 1}, {}) == 0.0
+    # Identical singletons -> 1.0 (matches "j({a},{a}) == 1.0").
+    assert wj({"a": 1}, {"a": 1}) == 1.0
+    # Partial overlap of singletons: |{b}| / |{a,b,c}| = 1/3.
+    assert wj({"a": 1, "b": 1}, {"b": 1, "c": 1}) == 1 / 3
+    # Identical sets -> 1.0.
+    assert wj({"a": 1, "b": 1, "c": 1}, {"a": 1, "b": 1, "c": 1}) == 1.0
 
 
 # ======================================================================
@@ -1469,7 +1494,13 @@ def test_weighted_jaccard_formula():
     #   weighted       = 10/(10+1+1) = 10/12 = 0.833...
     # This is the key insight: weighted Jaccard amplifies high-count
     # overlaps, which is exactly what lets adalah+merupakan merge.
-    plain = PositionalClusterLearner._jaccard({"a", "b"}, {"a", "c"})
+    #
+    # NB: ``PositionalClusterLearner._jaccard`` (the plain set-Jaccard
+    # helper) was removed in dead-code-audit §3.1 — the clustering
+    # algorithm uses ``_weighted_jaccard`` exclusively. The plain
+    # value (1/3) is computed inline here from the set form
+    # |{a}| / |{a,b,c}| = 1/3.
+    plain = 1 / 3
     weighted = wj({"a": 10, "b": 1}, {"a": 10, "c": 1})
     assert weighted > plain, (
         f"Weighted Jaccard ({weighted}) should be > plain Jaccard "
