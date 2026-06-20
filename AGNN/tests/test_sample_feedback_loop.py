@@ -796,3 +796,261 @@ def test_sample_feedback_loop_cli_generates_sentences_noninteractively():
         if generated >= 3:
             break
     assert generated >= 1, "Must generate at least one sentence"
+
+
+# ======================================================================
+# Issue #95 regression — CLI pre-seeds the graph before sampling
+# so apply_feedback actually applies.
+# ======================================================================
+
+
+def test_cli_seeds_graph_before_sampling_so_feedback_applies(
+    trained_learner: PositionalClusterLearner,
+):
+    """Issue #95 regression test.
+
+    As shipped before this PR, ``sample_feedback_loop.py`` constructed
+    an ``AGNNCore(use_cluster_learner=False)`` with zero learned facts,
+    so every ``apply_feedback()`` call returned
+    ``{"applied": False, "reason": "no_matching_edge"}`` and the entire
+    RLHF loop was silently a no-op.
+
+    This test verifies the fix: after the CLI's pre-seeding pass
+    (``_seed_graph_for_feedback``), ``apply_feedback`` on the SAME
+    sentences the CLI would generate actually returns
+    ``applied=True`` for a non-empty subset of them.
+
+    The DoD test contract:
+      1. Build a core the same way the CLI does (use_cluster_learner=False
+         + inject the learner).
+      2. Call the CLI's seeding helper directly.
+      3. Generate sentences from eligible clusters.
+      4. Apply ``"good"`` verdict to every sentence.
+      5. Assert at least 1 of N verdicts returned ``applied=True``.
+    """
+    if not _agnn_graph_available():
+        pytest.skip("AGNNGraph (self-ai/src/agnn) not available")
+
+    # Load the CLI module the same way the other CLI tests do.
+    cli_path = _AGGN_ROOT / "sample_feedback_loop.py"
+    spec = _ilu.spec_from_file_location(
+        "sample_feedback_loop_module_issue95", cli_path,
+    )
+    cli_module = _ilu.module_from_spec(spec)
+    sys.modules["sample_feedback_loop_module_issue95"] = cli_module
+    spec.loader.exec_module(cli_module)
+
+    learner = trained_learner
+    eligible_cids = cli_module._eligible_cluster_ids(learner, min_actions=2)
+    assert len(eligible_cids) > 0, (
+        "Trained learner must have >= 1 labelled cluster with >= 2 actions "
+        "for this test to exercise the seeding path"
+    )
+
+    # Build a core exactly the way the CLI does (line ~398-400 of
+    # sample_feedback_loop.py). use_cluster_learner=False because the
+    # CLI injects its own loaded learner instance afterwards.
+    core = AGNNCore(use_cluster_learner=False)
+    # The CLI requires the AGNNGraph; skip if it's missing.
+    if core.graph is None:
+        pytest.skip("EngramComplex (self-ai/src/agnn) not available")
+    core._cluster_learner = learner
+
+    # Snapshot the empty-graph state for a sanity assertion later.
+    pre_seed_node_count = len(getattr(core.graph._graph, "_nodes", {}))
+    pre_seed_edge_count = 0
+    for nid in list(getattr(core.graph._graph, "_nodes", {}).keys()):
+        pre_seed_edge_count += sum(
+            1 for _ in core.graph._graph.get_edges_from(nid)
+        )
+    assert pre_seed_node_count == 0, (
+        "Graph must be empty before seeding — fixture leak?"
+    )
+    assert pre_seed_edge_count == 0, (
+        "Graph must have 0 edges before seeding — fixture leak?"
+    )
+
+    # Run the CLI's seeding pass with the same rng + eligible_cids
+    # the sampling loop will use. This is exactly what main() does
+    # between constructing the core and starting the loop.
+    import random
+    rng_for_seeding = random.Random(42)
+    seeded_edges = cli_module._seed_graph_for_feedback(
+        core, learner, eligible_cids, rng_for_seeding,
+    )
+    assert seeded_edges > 0, (
+        "Seeding must add at least 1 edge for a learner with labelled "
+        "eligible clusters; otherwise the CLI still ships broken."
+    )
+
+    # Now generate sentences (same rng + eligible_cids) and apply
+    # ``good`` to each — this is exactly what the CLI does in its
+    # main loop after a user types ``good`` at every prompt.
+    rng = random.Random(42)
+    sentences = []
+    for cid in eligible_cids:
+        s = learner.sample_sentence(cid, rng=rng)
+        if s is not None:
+            sentences.append(s)
+    assert len(sentences) > 0, "Must generate at least one sentence"
+
+    applied_count = 0
+    for s in sentences:
+        result = core.apply_feedback(s, "good")
+        assert isinstance(result, dict), (
+            f"apply_feedback must return a dict; got {type(result)}"
+        )
+        assert "applied" in result, (
+            f"apply_feedback result must have 'applied' key; got {result}"
+        )
+        if result["applied"]:
+            applied_count += 1
+            # Sanity: when applied, edges_stamped must be >= 1 and
+            # reason must be "ok" (the documented success code).
+            assert result["edges_stamped"] >= 1, (
+                f"applied=True but edges_stamped={result['edges_stamped']} "
+                f"for sentence {s!r}"
+            )
+            assert result["reason"] == "ok", (
+                f"applied=True but reason={result['reason']!r} "
+                f"(expected 'ok') for sentence {s!r}"
+            )
+
+    # The DoD contract: at least 1 of N feedback verdicts must
+    # actually apply. Before the fix this was always 0/N.
+    assert applied_count >= 1, (
+        f"Expected >= 1 applied feedback out of {len(sentences)} sentences; "
+        f"got 0. The CLI is still silently no-op'ing — issue #95 not fixed. "
+        f"Sentences: {sentences}"
+    )
+    # Tighter assertion: we expect EVERY sentence sampled from a
+    # labelled cluster + seeded edge to apply. If this regresses to
+    # "some apply, some don't", we want to know.
+    assert applied_count == len(sentences), (
+        f"Expected all {len(sentences)} seeded sentences to apply feedback; "
+        f"only {applied_count} did. Sentences + results:"
+        + "\n".join(
+            f"  {s!r}" for s in sentences
+        )
+    )
+
+
+def test_cli_seeds_graph_idempotent_on_reseed(
+    trained_learner: PositionalClusterLearner,
+):
+    """Calling ``_seed_graph_for_feedback`` twice with the same rng
+    must NOT double-add edges.
+
+    The CLI only calls it once, but the idempotency contract is part
+    of the function's docstring and is essential if the function is
+    ever called from a long-running process that re-seeds on config
+    reload. The test asserts that the second call adds 0 new edges.
+    """
+    if not _agnn_graph_available():
+        pytest.skip("AGNNGraph (self-ai/src/agnn) not available")
+
+    cli_path = _AGGN_ROOT / "sample_feedback_loop.py"
+    spec = _ilu.spec_from_file_location(
+        "sample_feedback_loop_module_idem", cli_path,
+    )
+    cli_module = _ilu.module_from_spec(spec)
+    sys.modules["sample_feedback_loop_module_idem"] = cli_module
+    spec.loader.exec_module(cli_module)
+
+    learner = trained_learner
+    eligible_cids = cli_module._eligible_cluster_ids(learner, min_actions=2)
+
+    core = AGNNCore(use_cluster_learner=False)
+    if core.graph is None:
+        pytest.skip("EngramComplex (self-ai/src/agnn) not available")
+    core._cluster_learner = learner
+
+    import random
+    first_pass = cli_module._seed_graph_for_feedback(
+        core, learner, eligible_cids, random.Random(42),
+    )
+    second_pass = cli_module._seed_graph_for_feedback(
+        core, learner, eligible_cids, random.Random(42),
+    )
+    assert first_pass > 0, "First seeding pass must add edges"
+    assert second_pass == 0, (
+        f"Second seeding pass with same rng must be a no-op; "
+        f"got {second_pass} new edges (idempotency broken)"
+    )
+
+
+def test_cli_seeds_graph_skips_unlabelled_clusters():
+    """``_seed_graph_for_feedback`` must skip clusters whose
+    ``cluster_labels`` entry is None.
+
+    This guards the issue #95 follow-up where we also filtered
+    ``_eligible_cluster_ids`` to labelled clusters only. Even if a
+    caller passes a mix of labelled + unlabelled cids (e.g. a future
+    CLI flag that overrides the filter), the seeding function itself
+    must not waste edges on actions whose verdict will always return
+    ``action_unclustered``.
+    """
+    if not _agnn_graph_available():
+        pytest.skip("AGNNGraph (self-ai/src/agnn) not available")
+
+    cli_path = _AGGN_ROOT / "sample_feedback_loop.py"
+    spec = _ilu.spec_from_file_location(
+        "sample_feedback_loop_module_unlabelled", cli_path,
+    )
+    cli_module = _ilu.module_from_spec(spec)
+    sys.modules["sample_feedback_loop_module_unlabelled"] = cli_module
+    spec.loader.exec_module(cli_module)
+
+    # Build a learner where ONE cluster is labelled and ONE is not,
+    # both with >= 2 actions.
+    corpus = [
+        "api menyebabkan panas",
+        "hujan menyebabkan banjir",
+        "gesekan menyebabkan panas",
+        "manusia berkebun sayur",
+        "petani berkebun padi",
+    ]
+    learner = PositionalClusterLearner()
+    learner.train(corpus)
+
+    # Find the cluster containing 'menyebabkan' (will be labelled CAUSAL)
+    # and the cluster containing 'berkebun' (will be left unlabelled).
+    causal_cid = None
+    unlabelled_cid = None
+    for cid, actions in learner.action_clusters.items():
+        if "menyebabkan" in actions:
+            causal_cid = cid
+        elif "berkebun" in actions:
+            unlabelled_cid = cid
+    assert causal_cid is not None, "Test corpus must form a CAUSAL cluster"
+    assert unlabelled_cid is not None, "Test corpus must form an unlabelled cluster"
+    assert causal_cid != unlabelled_cid
+
+    learner.label_clusters({causal_cid: RelationType.CAUSAL})
+
+    core = AGNNCore(use_cluster_learner=False)
+    if core.graph is None:
+        pytest.skip("EngramComplex (self-ai/src/agnn) not available")
+    core._cluster_learner = learner
+
+    # Pass BOTH cids to the seeding function. It should only seed
+    # edges for the labelled one.
+    import random
+    seeded = cli_module._seed_graph_for_feedback(
+        core, learner, [causal_cid, unlabelled_cid], random.Random(42),
+    )
+    assert seeded >= 1, (
+        "Seeding must add at least 1 edge for the labelled cluster"
+    )
+
+    # Count edges in the graph: should equal `seeded` (each labelled
+    # cluster adds exactly 1 edge in this corpus), with NO edge for
+    # the unlabelled cluster.
+    inner = core.graph._graph
+    total_edges = 0
+    for nid in list(inner._nodes.keys()):
+        total_edges += sum(1 for _ in inner.get_edges_from(nid))
+    assert total_edges == seeded, (
+        f"Graph has {total_edges} edges but seeding reported {seeded}; "
+        f"the unlabelled cluster must NOT have added any"
+    )
