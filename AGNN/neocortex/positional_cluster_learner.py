@@ -539,6 +539,107 @@ _CONNECTOR_RATE_THRESHOLD = 0.5
 
 
 # ----------------------------------------------------------------------
+# MODIFIER (adverb / intensifier) discovery
+# ----------------------------------------------------------------------
+#
+# Tokens like 'sangat', 'begitu', 'terlalu', 'cukup' are currently
+# flagged as ``function_word_candidates`` (high positional entropy +
+# concentrated at the action bucket). They are then EXCLUDED from the
+# action slot during (action, object) extraction — but they never get
+# a positive grammar identity of their own. They're noise from the
+# action-clustering perspective, but they ARE a coherent grammar class:
+# they routinely appear at the ACTION SLOT in 3-token "state + adj"
+# sentences ("es sangat dingin" → 'sangat' at index 1, the action
+# bucket). This is the positional signature of an adverb / intensifier
+# modifying the adjective/object-property.
+#
+# The discovery contract (zero-bias, no hardcoded adverb list):
+#
+#   1. Build two pre-object frequency tables during Pass 1, split by
+#      sentence length:
+#        - ``pre_object_3tok_freq[token]``: count of times the token
+#          sits at index n-2 (= index 1 = action bucket) in 3-token
+#          sentences. This is the "modifier of adjective" position
+#          ("es SANGAT dingin").
+#        - ``pre_object_long_freq[token]``: count of times the token
+#          sits at index n-2 in >3-token sentences. In >3-token
+#          sentences, n-2 is the between-first slot (between action
+#          and object) — this is where CONNECTORS sit
+#          ("X berbeda DARI Y").
+#      The split is the key signal: a MODIFIER's dominant position is
+#      the 3-token action slot; a CONNECTOR's dominant position is the
+#      >3-token between-first slot.
+#
+#   2. A token is a MODIFIER candidate when:
+#        - it is in ``function_word_candidates`` (already flagged as
+#          non-action by the anchor-word discovery — modifiers are
+#          grammatical, not content words); AND
+#        - its ``pre_object_3tok_freq`` count is >=
+#          ``_MODIFIER_MIN_PRE_OBJECT_COUNT`` (so one-off tokens don't
+#          qualify); AND
+#        - the ratio
+#          ``pre_object_3tok_freq[token] / (pre_object_3tok_freq[token]
+#          + pre_object_long_freq[token])`` is >=
+#          ``_MODIFIER_3TOK_RATE`` (the token's pre-object occurrences
+#          are DOMINATED by 3-token sentences, not >3-token sentences).
+#          This is what distinguishes 'sangat' (almost always in 3-token
+#          "state + adj" sentences) from 'dari' (almost always in
+#          >3-token "action + connector + object" sentences).
+#
+#   3. A token classified as MODIFIER is REMOVED from
+#      ``connector_tokens`` (if it was there). This is the priority
+#      rule: when a token's positional distribution clearly identifies
+#      it as a modifier, the modifier classification takes precedence
+#      over the connector classification. This corrects the over-broad
+#      connector detector, which flags any non-object token that sits
+#      between-first >= 3 times — including modifiers that sit at the
+#      action slot in 3-token sentences and happen to also appear
+#      between-first in a few >3-token sentences.
+#
+# Why split by sentence length?
+#   In 3-token sentences (X A Y), the action slot (index 1) IS the
+#   pre-object slot (n-2 = 1). A modifier like 'sangat' sits here in
+#   "es sangat dingin". A real action like 'makan' also sits here in
+#   "ayam makan pakan" — but 'makan' has verb morphology and is
+#   excluded from function_word_candidates, so it's never considered
+#   as a modifier candidate.
+#
+#   In >3-token sentences (X ... A ... Y), the between-first slot
+#   (index 2..n-2) is where CONNECTORS sit. A connector like 'dari'
+#   sits here in "tumbuhan tak bisa lepas dari karbon dioksida". A
+#   modifier like 'sangat' rarely sits here — when it does appear in
+#   >3-token sentences, it's usually at the action slot (index 1),
+#   not at n-2.
+#
+#   The 3tok-vs-long split cleanly separates these two positional
+#   patterns without consulting any meaning-based word list.
+
+# Minimum corpus-wide 3-token pre-object count for a token to be
+# considered a MODIFIER. Calibrated to exclude one-off tokens in
+# small test corpora while admitting real adverbs in the pretrain
+# corpus (where 'sangat' clears 19 3-token pre-object observations).
+_MODIFIER_MIN_PRE_OBJECT_COUNT = 3
+
+# Minimum fraction of a token's pre-object occurrences that must come
+# from 3-token sentences (vs >3-token) for it to be classified as a
+# MODIFIER. 0.5 = majority of pre-object observations are in 3-token
+# sentences.
+#
+# Calibration: 'sangat' has 3tok=19, long=13, rate=0.59 → MODIFIER ✓.
+# 'dari' has 3tok=0, long=51, rate=0.00 → CONNECTOR ✓.
+# 'dengan' has 3tok=0, long=81, rate=0.00 → CONNECTOR ✓.
+# 'begitu' has 3tok=13, long=5, rate=0.72 → MODIFIER ✓.
+# 'cukup' has 3tok=14, long=6, rate=0.70 → MODIFIER ✓.
+#
+# 0.5 cleanly separates modifiers (rate >= 0.59) from connectors
+# (rate = 0.00). We don't require a higher threshold because some
+# modifiers like 'sangat' appear in long sentences too (e.g.
+# "sinar matahari siang sangat terik" — 5 tokens, 'sangat' at n-2),
+# which is still a modifier position, just in a longer sentence.
+_MODIFIER_3TOK_RATE = 0.5
+
+
+# ----------------------------------------------------------------------
 # Learner
 # ----------------------------------------------------------------------
 
@@ -651,6 +752,34 @@ class PositionalClusterLearner:
     object_superclusters: Dict[int, Set[str]] = field(default_factory=dict)
 
     # ------------------------------------------------------------------
+    # MODIFIER (adverb / intensifier) discovery state.
+    #
+    # pre_object_3tok_freq: {token: count} — how often each token sits
+    #   at index n-2 in 3-token sentences (= index 1 = action bucket).
+    #   This is the "modifier of adjective" position. Built during
+    #   Pass 1 of train().
+    #
+    # pre_object_long_freq: {token: count} — how often each token sits
+    #   at index n-2 in >3-token sentences (= between-first slot).
+    #   This is where CONNECTORS sit. Built during Pass 1 of train().
+    #
+    # The split by sentence length is the key signal: a MODIFIER's
+    # dominant position is the 3-token action slot; a CONNECTOR's
+    # dominant position is the >3-token between-first slot. See the
+    # ``_MODIFIER_*`` constants above for the full contract.
+    #
+    # modifier_tokens: set of tokens statistically flagged as MODIFIERs
+    #   (function_word_candidates whose pre_object_3tok_freq clears the
+    #   count floor AND whose 3tok-rate clears the rate threshold).
+    #   Exposed via tag_sentence() as a positive grammar class. Tokens
+    #   classified as MODIFIER are REMOVED from connector_tokens
+    #   (modifier classification takes priority — see _MODIFIER_* docs).
+    # ------------------------------------------------------------------
+    pre_object_3tok_freq: Dict[str, int] = field(default_factory=dict)
+    pre_object_long_freq: Dict[str, int] = field(default_factory=dict)
+    modifier_tokens: Set[str] = field(default_factory=set)
+
+    # ------------------------------------------------------------------
     # Convenience views
     # ------------------------------------------------------------------
 
@@ -761,11 +890,42 @@ class PositionalClusterLearner:
                 fi = i if i != n - 1 else -1
                 fine_map = self.fine_positional_freq.setdefault(token, {})
                 fine_map[fi] = fine_map.get(fi, 0) + 1
+            # Pre-object slot count (for MODIFIER discovery — see
+            # _MODIFIER_* constants above). The token at index n-2 is
+            # the position immediately before the last-token object.
+            # We split by sentence length:
+            #   - 3-token sentences: index n-2 = index 1 = action
+            #     bucket. This is where MODIFIERs sit in "state + adj"
+            #     sentences ("es SANGAT dingin").
+            #   - >3-token sentences: index n-2 = between-first slot.
+            #     This is where CONNECTORS sit ("X berbeda DARI Y").
+            # The split is the key signal for distinguishing the two
+            # grammar classes — see _compute_modifiers().
+            if n >= 3:
+                pre_obj_tok = tokens[n - 2]
+                if n == 3:
+                    self.pre_object_3tok_freq[pre_obj_tok] = (
+                        self.pre_object_3tok_freq.get(pre_obj_tok, 0) + 1
+                    )
+                else:
+                    self.pre_object_long_freq[pre_obj_tok] = (
+                        self.pre_object_long_freq.get(pre_obj_tok, 0) + 1
+                    )
 
         # ----------------------------------------------------------------
         # Anchor-word discovery (between passes).
         # ----------------------------------------------------------------
         self._compute_anchor_words()
+
+        # ----------------------------------------------------------------
+        # Preliminary MODIFIER discovery (between passes, BEFORE Pass 2).
+        # ----------------------------------------------------------------
+        # Detect modifier tokens from pre_object_3tok_freq so they can
+        # be excluded from action extraction in Pass 2 (same as
+        # function_word_candidates). The connector priority rule
+        # (removing MODIFIERs from connector_tokens) is applied later,
+        # after _compute_connector_signature().
+        self._compute_modifiers()
 
         # ----------------------------------------------------------------
         # PASS 2 - (action, object) extraction using discovered sets.
@@ -799,6 +959,18 @@ class PositionalClusterLearner:
         # ----------------------------------------------------------------
         # Connector signature (existing).
         self._compute_connector_signature(action_between)
+
+        # MODIFIER connector-priority rule: now that connector_tokens
+        # is populated, remove any MODIFIERs from it. The preliminary
+        # MODIFIER detection ran before Pass 2 (to exclude modifiers
+        # from action extraction); here we just apply the priority
+        # rule. We do NOT re-run _compute_modifiers() because that
+        # would use the now-populated action_object_freq (which
+        # includes modifiers that slipped through Pass 2 before the
+        # preliminary detection — but the preliminary detection
+        # already caught them, so action_object_freq should not
+        # contain modifier tokens).
+        self.connector_tokens -= self.modifier_tokens
 
         # Brown-cluster the object vocabulary BEFORE action clustering,
         # so action clustering can use super-cluster distributions.
@@ -1348,6 +1520,83 @@ class PositionalClusterLearner:
             )
             self.action_connector_signature[action] = has_connector
 
+    # ------------------------------------------------------------------
+    # MODIFIER (adverb / intensifier) discovery
+    # ------------------------------------------------------------------
+
+    def _compute_modifiers(self) -> None:
+        """Populate ``modifier_tokens`` from positional evidence.
+
+        Called during train() after :meth:`_compute_anchor_words`
+        (which populates ``function_word_candidates``) but BEFORE
+        Pass 2 (action/object extraction). This ordering is critical:
+        modifier tokens must be identified before action extraction
+        so they can be excluded from the action slot (same as
+        ``function_word_candidates``). Without this, modifiers like
+        'sangat' would be extracted as actions in 3-token "state +
+        adj" sentences ("es sangat dingin" → action='sangat'), which
+        would pollute ``action_object_freq`` and ``cluster_id_of``.
+
+        See the ``_MODIFIER_*`` constants above for the full contract.
+
+        Reset contract: this method overwrites ``modifier_tokens`` from
+        scratch, so it is safe to call on every train() (no stale
+        entries from a previous corpus survive).
+
+        Connector priority rule: this method does NOT remove
+        MODIFIERs from ``connector_tokens`` because
+        ``connector_tokens`` is not yet populated at this point in
+        train(). The priority rule is applied separately after
+        :meth:`_compute_connector_signature` runs.
+
+        Zero-bias contract: no hardcoded adverb list. The detection
+        uses only positional + frequency statistics + verb-morphology
+        heuristic, same as the anchor-word discovery.
+        """
+        self.modifier_tokens = set()
+
+        # Pre-object freq tables were built during Pass 1 of train().
+        # If empty (e.g. tiny corpus with no >=3-token sentences), no
+        # modifiers can be discovered — leave the set empty.
+        if not self.pre_object_3tok_freq:
+            return
+
+        # Scan tokens in function_word_candidates (statistically
+        # flagged as non-action by the anchor-word discovery — high
+        # positional entropy + freq floor + no verb morphology).
+        # This is the zero-bias replacement for a hardcoded adverb
+        # list: function_word_candidates already excludes copulas
+        # like 'adalah' (low entropy — always at action slot) and
+        # real verbs (verb morphology check). Modifiers like 'sangat'
+        # (high entropy — appears at multiple positions) are IN
+        # function_word_candidates.
+        #
+        # We do NOT scan all tokens with pre_object_3tok_freq because
+        # that would include copulas ('adalah', 'merupakan') and
+        # perceptual predicates ('tampak', 'terasa') that sit at the
+        # action slot in 3-token sentences but are real actions, not
+        # modifiers. The function_word_candidates filter correctly
+        # excludes these (they have low positional entropy).
+        for token in self.function_word_candidates:
+            pre_3tok = self.pre_object_3tok_freq.get(token, 0)
+            # Count floor: need enough 3-token pre-object observations
+            # to be statistically confident this is a modifier pattern.
+            if pre_3tok < _MODIFIER_MIN_PRE_OBJECT_COUNT:
+                continue
+            pre_long = self.pre_object_long_freq.get(token, 0)
+            total_pre = pre_3tok + pre_long
+            if total_pre == 0:
+                continue
+            # 3tok rate: the fraction of pre-object observations that
+            # come from 3-token sentences. A MODIFIER's dominant
+            # position is the 3-token action slot; a CONNECTOR's
+            # dominant position is the >3-token between-first slot.
+            # This ratio cleanly separates the two.
+            rate_3tok = pre_3tok / total_pre
+            if rate_3tok < _MODIFIER_3TOK_RATE:
+                continue
+            self.modifier_tokens.add(token)
+
     @staticmethod
     def _extract_between_token(
         tokens: List[str],
@@ -1870,6 +2119,249 @@ class PositionalClusterLearner:
         # Look up the cluster's label (if labelled).
         return self.cluster_labels.get(cluster_id)
 
+    # ------------------------------------------------------------------
+    # Public API: object super-cluster inspection (POS-class discovery)
+    # ------------------------------------------------------------------
+
+    def get_object_supercluster(
+        self, token: str,
+    ) -> Optional[int]:
+        """Return the Brown super-cluster ID for an object token.
+
+        Resolves ``token`` → ``object_supercluster_id[token]``. The
+        super-cluster ID groups object tokens that share similar
+        action-context distributions (e.g. ``mamalia``, ``logam``,
+        ``reptil`` all belong to the same "taxonomy noun" super-cluster
+        because they co-occur with the same set of copulas).
+
+        Args:
+            token: The object token to look up. Will be normalized
+                via :meth:`_normalize_token` (lower-cased +
+                whitespace-collapsed).
+
+        Returns:
+            The super-cluster ID (a non-negative int), or ``None`` if:
+
+              - the learner is not trained, or
+              - the token is not in the object vocabulary (never
+                observed as an object of any action), or
+              - the token was observed but didn't merge into any
+                super-cluster (singleton — assigned its own ID, but
+                this is still a non-None return).
+
+            ``None`` always means "not in the object vocabulary".
+
+        Why this method exists
+        -----------------------
+        The Brown super-clustering of object vocabulary was previously
+        an internal helper for action clustering (see
+        :meth:`_cluster_object_vocabulary`). Exposing it as a public
+        API lets downstream code query "what kind of object is this?"
+        without reaching into the internal ``object_supercluster_id``
+        dict — same zero-bias principle as
+        :meth:`get_relation_type_for_action` (issue #93).
+        """
+        if not self.is_trained:
+            return None
+        if not isinstance(token, str):
+            return None
+        token = self._normalize_token(token)
+        if not token:
+            return None
+        sc_id = self.object_supercluster_id.get(token)
+        return sc_id  # None if not in vocabulary
+
+    def inspect_object_superclusters(self) -> Dict[int, List[str]]:
+        """Return all Brown super-clusters as ``{sc_id: [tokens]}``.
+
+        Convenience wrapper around the internal
+        ``object_superclusters`` dict that returns a plain
+        ``{int: List[str]}`` (sorted) instead of ``{int: Set[str]}``.
+        Useful for debugging, logging, and corpus inspection — e.g.
+        checking whether taxonomy nouns (``mamalia``, ``logam``) and
+        property adjectives (``dingin``, ``asam``) ended up in
+        different super-clusters.
+
+        Returns:
+            ``{supercluster_id: sorted_list_of_object_tokens}``. Empty
+            dict if the learner is untrained or no objects were
+            clustered.
+        """
+        return {
+            sc_id: sorted(objs)
+            for sc_id, objs in self.object_superclusters.items()
+        }
+
+    # ------------------------------------------------------------------
+    # Public API: unified POS tagging (POS-class discovery)
+    # ------------------------------------------------------------------
+
+    def tag_sentence(self, text: str) -> List[Tuple[str, str]]:
+        """Tag every token in ``text`` with a POS class.
+
+        Returns a list of ``(token, pos_class)`` pairs for every token
+        in the input sentence. ``pos_class`` is one of:
+
+            - ``"AGENT"``: the subject (position 0 in SVO).
+            - ``"ACTION"``: the predicate (position 1 in SVO, or the
+              action-bucket position in >3-token sentences). Only
+              assigned to tokens that are real actions (in
+              ``cluster_id_of`` or ``action_object_freq``, or with
+              verb morphology).
+            - ``"OBJECT"``: the object (last position in SVO).
+            - ``"MODIFIER"``: an adverb / intensifier (in
+              ``modifier_tokens`` — discovered via the pre-object
+              positional signal).
+            - ``"CONNECTOR"``: a preposition / complementizer (in
+              ``connector_tokens`` — discovered via the between-first
+              positional signal).
+            - ``"UNKNOWN"``: the token doesn't have enough data to be
+              classified into any of the above categories.
+
+        The tagging is **purely positional + statistical** — no
+        hardcoded word lists. Each token's POS class is determined by:
+
+          1. Parse SPO positionally via :meth:`spo` to identify the
+             AGENT (subject), ACTION (predicate), and OBJECT slots.
+          2. If the token at the ACTION slot is a real action (in
+             ``action_object_freq`` or ``cluster_id_of``, or has verb
+             morphology), tag it ``ACTION``. Otherwise it falls
+             through to step 3-5.
+          3. If the token is in ``modifier_tokens``, tag it
+             ``MODIFIER``.
+          4. If the token is in ``connector_tokens``, tag it
+             ``CONNECTOR``.
+          5. Otherwise tag it ``UNKNOWN``.
+
+        Tokens at the AGENT and OBJECT slots are always tagged
+        ``AGENT`` and ``OBJECT`` respectively, regardless of their
+        membership in modifier/connector sets (positional role beats
+        grammatical class — a noun is still a noun even if it happens
+        to be in the modifier set by corpus noise).
+
+        Args:
+            text: The sentence to tag. Tokenized via :meth:`_tokenize`
+                (lower-cased + punctuation stripped + whitespace
+                collapsed).
+
+        Returns:
+            List of ``(token, pos_class)`` pairs. Empty list for empty
+            / unparseable input. For sentences shorter than 3 tokens,
+            positional SVO parsing is ambiguous, so the method falls
+            back to per-token grammar-class lookup (MODIFIER /
+            CONNECTOR / UNKNOWN) without AGENT/ACTION/OBJECT
+            assignment.
+
+        Example
+        -------
+        >>> learner = PositionalClusterLearner.load("cluster_learner_state.json")
+        >>> learner.tag_sentence("es sangat dingin")
+        [("es", "AGENT"), ("sangat", "MODIFIER"), ("dingin", "OBJECT")]
+        >>> learner.tag_sentence("kucing berbeda dari reptil")
+        [("kucing", "AGENT"), ("berbeda", "ACTION"), ("dari", "CONNECTOR"), ("reptil", "OBJECT")]
+        """
+        if not self.is_trained:
+            # Untrained — can't do positional SVO parsing. Fall back
+            # to per-token grammar-class lookup (all UNKNOWN if no
+            # modifier/connector sets are populated).
+            tokens = self._tokenize(text)
+            return [(t, self._lookup_grammar_class(t)) for t in tokens]
+
+        tokens = self._tokenize(text)
+        if not tokens:
+            return []
+
+        n = len(tokens)
+
+        # For sentences with < 3 tokens, positional SVO is ambiguous.
+        # Fall back to per-token grammar-class lookup.
+        if n < 3:
+            return [(t, self._lookup_grammar_class(t)) for t in tokens]
+
+        # Parse SVO positionally.
+        try:
+            spo = self.spo(text)
+        except Exception:
+            # spo() failed — fall back to per-token lookup.
+            return [(t, self._lookup_grammar_class(t)) for t in tokens]
+
+        subject = self._normalize_token(spo.subject) if spo.subject else ""
+        # spo() returns predicate as a phrase for >3-token sentences.
+        # The head verb is the first token of the predicate phrase.
+        predicate_head = ""
+        if spo.predicate:
+            predicate_head = self._normalize_token(spo.predicate.split()[0])
+        obj = self._normalize_token(spo.object) if spo.object else ""
+
+        # Build the tag list. Start with UNKNOWN for everything, then
+        # fill in AGENT/ACTION/OBJECT/MODIFIER/CONNECTOR.
+        tags: List[str] = ["UNKNOWN"] * n
+
+        # Identify AGENT (position 0) and OBJECT (last position) by
+        # matching the SPO parse against the token list.
+        if subject and tokens[0] == subject:
+            tags[0] = "AGENT"
+        if obj and tokens[n - 1] == obj:
+            tags[n - 1] = "OBJECT"
+
+        # Identify ACTION (position 1, or the action-bucket position).
+        # The predicate head verb should be at index 1 in 3-token
+        # sentences, or at index 1 in >3-token sentences (per
+        # _compute_buckets: [0] + [1]*(n-2) + [-1]).
+        if predicate_head and n >= 2 and tokens[1] == predicate_head:
+            # Check if this token is a real action. It's a real action
+            # if it's in action_object_freq / cluster_id_of, or if it
+            # has verb morphology. Otherwise it might be a modifier
+            # sitting at the action slot (e.g. 'sangat' in
+            # "es sangat dingin").
+            #
+            # Note: we do NOT check action_bucket_anchors here. A
+            # token can be an action_bucket_anchor (sits at the action
+            # bucket frequently) AND a modifier — 'sangat' is both.
+            # The modifier classification takes priority for tokens
+            # that are NOT in action_object_freq (i.e. were excluded
+            # from action extraction because they're function words).
+            is_real_action = (
+                predicate_head in self.action_object_freq
+                or predicate_head in self.cluster_id_of
+                or self._looks_like_verb(predicate_head)
+            )
+            if is_real_action:
+                tags[1] = "ACTION"
+            # If not a real action, leave it as UNKNOWN for now —
+            # the grammar-class lookup below will classify it as
+            # MODIFIER if applicable.
+
+        # Fill in MODIFIER and CONNECTOR for tokens that aren't
+        # already tagged AGENT/ACTION/OBJECT.
+        for i, tok in enumerate(tokens):
+            if tags[i] != "UNKNOWN":
+                continue
+            gc = self._lookup_grammar_class(tok)
+            tags[i] = gc
+
+        return list(zip(tokens, tags))
+
+    def _lookup_grammar_class(self, token: str) -> str:
+        """Return the grammar class for a token (MODIFIER/CONNECTOR/UNKNOWN).
+
+        Helper for :meth:`tag_sentence`. Returns the grammar class
+        based on the token's membership in ``modifier_tokens`` and
+        ``connector_tokens``. Returns ``"UNKNOWN"`` if the token is
+        not in either set.
+
+        Note: this method does NOT identify AGENT/ACTION/OBJECT —
+        those are positional roles determined by :meth:`spo`, not by
+        set membership. This method only identifies the grammar-class
+        overlay for tokens whose positional role is ambiguous or
+        non-structural.
+        """
+        if token in self.modifier_tokens:
+            return "MODIFIER"
+        if token in self.connector_tokens:
+            return "CONNECTOR"
+        return "UNKNOWN"
+
     def classify(self, text: str) -> RelationType:
         """Classify ``text`` using labelled clusters, else fallback.
 
@@ -2008,17 +2500,21 @@ class PositionalClusterLearner:
               "function_word_candidates":   ["sangat", "itu", "bukan", ...],
               "action_bucket_anchors":      ["adalah", "merupakan", ...],
               "object_supercluster_id":     {"mamalia": 0, "logam": 0, ...},
-              "object_superclusters":       {"0": ["mamalia", "logam", ...], ...}
+              "object_superclusters":       {"0": ["mamalia", "logam", ...], ...},
+              "pre_object_3tok_freq":       {"sangat": 30, "begitu": 12, ...},
+              "pre_object_long_freq":       {"dari": 51, "dengan": 81, ...},
+              "modifier_tokens":            ["sangat", "begitu", ...]
             }
 
         The ``fine_positional_freq``, ``function_word_candidates``,
-        ``action_bucket_anchors``, ``object_supercluster_id``, and
-        ``object_superclusters`` fields are persisted so a loaded
-        learner reproduces the same zero-bias anchor-word discovery
-        and Brown-clustering contract. Older save files (pre-anchor /
-        pre-Brown fix) lack these fields and load() backfills them
-        as empty / re-derives them from positional_freq — backward
-        compatible.
+        ``action_bucket_anchors``, ``object_supercluster_id``,
+        ``object_superclusters``, ``pre_object_3tok_freq``,
+        ``pre_object_long_freq``, and ``modifier_tokens`` fields are persisted so a loaded
+        learner reproduces the same zero-bias anchor-word discovery,
+        Brown-clustering contract, and MODIFIER discovery. Older save
+        files (pre-anchor / pre-Brown / pre-MODIFIER fix) lack these
+        fields and load() backfills them as empty / re-derives them
+        from positional_freq — backward compatible.
 
         Atomic write: temp file + os.replace. Parent dirs created on
         demand. Same pattern as SemanticRoleClassifier.save.
@@ -2060,6 +2556,9 @@ class PositionalClusterLearner:
                 str(sc_id): sorted(objs)
                 for sc_id, objs in self.object_superclusters.items()
             },
+            "pre_object_3tok_freq": dict(self.pre_object_3tok_freq),
+            "pre_object_long_freq": dict(self.pre_object_long_freq),
+            "modifier_tokens": sorted(self.modifier_tokens),
         }
 
         parent = os.path.dirname(os.path.abspath(path))
@@ -2293,6 +2792,30 @@ class PositionalClusterLearner:
                 o for o in objs if isinstance(o, str)
             }
 
+        # pre_object_3tok_freq: {token: count} -> {str: int}
+        # Backward-compat: older save files (pre-MODIFIER-discovery)
+        # lack this field. Empty dict is the correct backfill —
+        # modifier_tokens will also be empty, so tag_sentence() will
+        # classify any unknown mid-sentence token as UNKNOWN (which is
+        # the safe default for a learner loaded from a stale state
+        # file). Re-running train() on the canonical corpus rebuilds
+        # all three fields.
+        for tok, count in raw.get("pre_object_3tok_freq", {}).items():
+            if isinstance(tok, str) and isinstance(count, (int, float)):
+                learner.pre_object_3tok_freq[tok] = int(count)
+
+        # pre_object_long_freq: {token: count} -> {str: int}
+        # Same backward-compat note as above.
+        for tok, count in raw.get("pre_object_long_freq", {}).items():
+            if isinstance(tok, str) and isinstance(count, (int, float)):
+                learner.pre_object_long_freq[tok] = int(count)
+
+        # modifier_tokens: list[str] -> set[str]
+        # Same backward-compat note as above.
+        for tok in raw.get("modifier_tokens", []):
+            if isinstance(tok, str):
+                learner.modifier_tokens.add(tok)
+
         return learner
 
     # ------------------------------------------------------------------
@@ -2426,6 +2949,18 @@ class PositionalClusterLearner:
         discovered purely from positional statistics - no hardcoded
         word list.
 
+        MODIFIER exclusion (POS-class discovery):
+        Tokens in ``self.modifier_tokens`` (statistically discovered
+        from pre-object positional signal - see
+        ``_compute_modifiers``) are also skipped from the action
+        slot. This is the same exclusion as function_word_candidates
+        but for a different grammar class: modifiers like 'sangat'
+        that sit at the action slot in 3-token "state + adj"
+        sentences but are NOT real actions. Without this exclusion,
+        'sangat' would be extracted as the action in "es sangat
+        dingin", polluting action_object_freq and preventing it from
+        being classified as a MODIFIER.
+
         Zero-bias copula recognition (replaces ``_COPULAS`` whitelist):
         Copulas like ``adalah`` and ``merupakan`` lack the me-/ber-/
         diper-/ter- prefixes that ``_looks_like_verb`` detects, so
@@ -2488,6 +3023,12 @@ class PositionalClusterLearner:
             candidate = tokens[1]
             if candidate in self.function_word_candidates:
                 return None, None
+            # MODIFIER exclusion: modifiers like 'sangat' sit at the
+            # action slot in 3-token "state + adj" sentences but are
+            # NOT real actions. Excluding them here prevents pollution
+            # of action_object_freq.
+            if candidate in self.modifier_tokens:
+                return None, None
             action_bucket_count = self.positional_freq.get(
                 candidate, {}
             ).get(_ACTION_BUCKET, 0)
@@ -2505,6 +3046,9 @@ class PositionalClusterLearner:
             candidate = tokens[i]
             # Function words are always excluded.
             if candidate in self.function_word_candidates:
+                continue
+            # MODIFIERs are also excluded (same rationale as 3-token).
+            if candidate in self.modifier_tokens:
                 continue
             # Verb morphology OR action bucket anchor.
             if self._looks_like_verb(candidate):
