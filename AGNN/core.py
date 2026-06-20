@@ -1772,13 +1772,56 @@ class AGNNCore:
         subject_token = self._normalize_spo_token(spo.subject)
 
         # Find candidate source nodes by label.
+        #
+        # Two label conventions are supported:
+        #
+        #   (a) Single-token labels — e.g. ``"manusia"``. Used by the
+        #       unit-test helper ``_make_core_with_action_object_edge``
+        #       and by any caller that constructs AGNNNode directly
+        #       with a token label. The exact-match path below
+        #       handles this case.
+        #
+        #   (b) Full-sentence labels — e.g. ``"manusia berbeda ikan"``.
+        #       This is the convention ``AGNNCore.learn()`` produces:
+        #       ``TrisynapticCircuit.encode()`` calls
+        #       ``AGNNNode(label=episome.text, ...)`` where
+        #       ``episome.text`` is the *entire correction sentence*``.
+        #       Without this fallback, ``apply_feedback`` could never
+        #       find an edge for any sentence produced by the CLI's
+        #       ``sample_sentence()`` + ``core.learn()`` workflow
+        #       (issue #95) — the lookup would search for a node
+        #       labelled ``"manusia"`` but only find one labelled
+        #       ``"manusia berbeda ikan"``.
+        #
+        # The fallback matches a node iff:
+        #   - ``node.label`` is a multi-token string, AND
+        #   - its first whitespace-separated token (lower-cased) equals
+        #     the subject token.
+        #
+        # This is the minimum-viable reconciliation: the subject of a
+        # positional SVO sentence is always the first token, so the
+        # first-token check is sound for any sentence produced by
+        # ``PositionalClusterLearner.spo()``. We do NOT also match on
+        # the object token here — that filter still happens in the
+        # edge-walk loop below, where the target node's label is
+        # checked the same way (single-token OR first-token-of-sentence).
         source_node_ids: List[str] = []
         try:
             for nid in self._iter_node_ids(inner):
                 node = inner.get_node(nid)
                 if node is None:
                     continue
-                if self._normalize_spo_token(getattr(node, "label", "")) == subject_token:
+                node_label = self._normalize_spo_token(
+                    getattr(node, "label", "")
+                )
+                if node_label == subject_token:
+                    # Convention (a): single-token exact match.
+                    source_node_ids.append(nid)
+                    continue
+                # Convention (b): full-sentence label whose first
+                # token matches the subject.
+                label_tokens = node_label.split()
+                if len(label_tokens) > 1 and label_tokens[0] == subject_token:
                     source_node_ids.append(nid)
         except Exception:
             pass
@@ -1791,8 +1834,25 @@ class AGNNCore:
                     tgt_node = inner.get_node(edge.target_id)
                     if tgt_node is None:
                         continue
-                    if self._normalize_spo_token(getattr(tgt_node, "label", "")) != object_token:
-                        continue
+                    tgt_label = self._normalize_spo_token(
+                        getattr(tgt_node, "label", "")
+                    )
+                    if tgt_label != object_token:
+                        # Apply the same convention-(a)/(b) fallback
+                        # used for the source-node lookup: a target
+                        # node whose label is a full sentence is a
+                        # match iff its LAST whitespace-separated
+                        # token equals the object token. Positional
+                        # SVO puts the object at the end (index 2 for
+                        # 3-token sentences, index -1 for longer
+                        # ones), so the last-token check is sound
+                        # for any sentence produced by PCL.spo().
+                        tgt_tokens = tgt_label.split()
+                        if (
+                            len(tgt_tokens) <= 1
+                            or tgt_tokens[-1] != object_token
+                        ):
+                            continue
                     # Match relation type if we have one. When the
                     # cluster is unlabelled (relation_type is None),
                     # stamp ANY edge between subject and object —
