@@ -1674,7 +1674,11 @@ class PositionalClusterLearner:
 
         return f"{subject} {action} {obj}"
 
-    def label_clusters(self, mapping: Dict[int, RelationType]) -> None:
+    def label_clusters(
+        self,
+        mapping: Dict[int, RelationType],
+        graph_has_existing_edges: bool = False,
+    ) -> None:
         """Assign RelationType names to clusters (post-hoc, once).
 
         Idempotent: calling label_clusters() again with a different
@@ -1687,7 +1691,64 @@ class PositionalClusterLearner:
                 silently skipped (forward-compatibility: a saved
                 mapping from a previous run that had more clusters
                 should not crash on load).
+            graph_has_existing_edges: Set to True when this PCL
+                instance is already wired into a
+                :class:`TrisynapticCircuit` (or any other component)
+                that has **already encoded at least one Episome**
+                into an :class:`EngramComplex` graph using this
+                learner's current cluster labels. When True, this
+                method emits a ``RuntimeWarning`` describing the
+                mixed-type-edge risk (see below). When False (the
+                default), the call is silent — this is the safe case
+                where labelling happens before any edges are encoded.
+
+                **Why this flag exists.** ``TrisynapticCircuit.encode()``
+                snapshots ``edge_type`` onto each :class:`Episome`
+                and :class:`TypedEdge` at encode time, using the
+                PCL's labels *at that moment*. Re-labelling a PCL
+                after edges already exist leaves the graph with
+                edges whose ``relation_type`` reflects the **old**
+                labelling, while new edges (encoded after the
+                re-labelling) reflect the **new** labelling. If a
+                predicate's cluster label changed between the two
+                encodings, the same predicate will have edges with
+                **different** ``relation_type`` in the same graph.
+                This breaks BA 44's transitivity rules
+                (``CAUSAL_CHAIN``, ``CATEGORICAL_TRANSITIVITY``,
+                ``FUNCTIONAL_COMPOSITION``), which require
+                homogeneous-type chains to fire. See issue #91 for
+                the full red-team analysis.
+
+                **The warning is non-blocking** (``RuntimeWarning``,
+                not an exception) because there are legitimate
+                use cases for re-labelling mid-session (e.g. an
+                A/B experiment that flips labels to observe the
+                downstream effect on new edges). Researchers who
+                know what they're doing can suppress the warning
+                with ``warnings.simplefilter('ignore', RuntimeWarning)``
+                scoped to the call.
+
+                **The safe path** is to call ``label_clusters()``
+                before constructing any component that encodes
+                edges (i.e. before ``AGNNCore.__init__`` or before
+                the first ``TrisynapticCircuit.encode()`` call).
+                In that order, the flag can stay False.
         """
+        if graph_has_existing_edges:
+            import warnings
+            warnings.warn(
+                "PositionalClusterLearner.label_clusters() called with "
+                "graph_has_existing_edges=True. Existing edges in the "
+                "graph retain their original relation_type (snapshotted "
+                "at encode time); only new edges will reflect the new "
+                "labels. If any predicate's cluster label changed, the "
+                "graph will contain mixed-type edges for the same "
+                "predicate, which mutes BA 44 transitivity rules on "
+                "chains that include those edges. The safe path is to "
+                "label clusters BEFORE encoding any edges. See issue #91.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
         for cluster_id, relation_type in mapping.items():
             if cluster_id in self.action_clusters:
                 self.cluster_labels[cluster_id] = relation_type
@@ -1956,6 +2017,35 @@ class PositionalClusterLearner:
             every field. They fire only on out-of-band inputs. See
             ``AGNN/docs/dead-code-audit.md`` §3.6 for the original
             "keep as cheap insurance" decision.
+
+        .. warning::
+            **Post-encode mutation risk (issue #91).** Loading a
+            state file whose ``cluster_labels`` differ from the
+            labels used at encode time is functionally equivalent
+            to calling :meth:`label_clusters` on a PCL that's
+            already wired into a graph with existing edges. Existing
+            :class:`TypedEdge` instances retain the ``relation_type``
+            that was snapshotted at encode time (using the *old*
+            labels); only edges encoded after the load will reflect
+            the *new* labels. If a predicate's cluster label
+            changed between the two states, the graph will contain
+            mixed-type edges for the same predicate, which mutes
+            BA 44 transitivity rules on chains that include those
+            edges.
+
+            **Production scenario:** deploy v1 with state file v1 →
+            user learns N facts → deploy v2 with retrained state
+            file v2 (different ``cluster_labels``) → user learns M
+            more facts. The graph now has mixed ``relation_type``
+            for any predicate whose label shifted between v1 and v2.
+
+            **Mitigation:** version-stamp your state files and
+            refuse to load a state file whose version differs from
+            the one used to encode the existing graph. Or: rebuild
+            the graph from scratch after every PCL state change.
+            See :meth:`label_clusters` for the in-session equivalent
+            of this warning (with the ``graph_has_existing_edges``
+            flag).
         """
         with open(path, "r", encoding="utf-8") as f:
             raw = json.load(f)

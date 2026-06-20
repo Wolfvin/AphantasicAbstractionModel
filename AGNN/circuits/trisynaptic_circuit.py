@@ -202,6 +202,41 @@ class TrisynapticCircuit:
 
         Returns:
             The freshly encoded Episome (confidence = 0.6).
+
+        .. warning::
+            **``edge_type`` is snapshotted at encode time (issue #91).**
+            The ``edge_type`` written onto the returned :class:`Episome`
+            and onto each :class:`TypedEdge` in the graph is computed
+            from :attr:`self.role_classifier` **at the moment of this
+            ``encode()`` call**. If ``role_classifier`` is a
+            :class:`PositionalClusterLearner` and its
+            :meth:`~PositionalClusterLearner.label_clusters` is later
+            called (or its state file is reloaded with different
+            ``cluster_labels``), the **already-encoded edges retain
+            their original ``relation_type``**. Only edges encoded
+            *after* the re-labelling will reflect the new labels.
+
+            If a predicate's cluster label changed between two
+            ``encode()`` calls, the same predicate will have edges
+            with **different** ``relation_type`` in the same graph.
+            This mutes BA 44's transitivity rules
+            (``CAUSAL_CHAIN``, ``CATEGORICAL_TRANSITIVITY``,
+            ``FUNCTIONAL_COMPOSITION``) on chains that include those
+            edges, because the rules require homogeneous-type chains
+            to fire.
+
+            **Safe ordering:** label clusters (or load the final
+            state file) BEFORE the first ``encode()`` call. Once any
+            edge exists in the graph, re-labelling requires either
+            (a) accepting the mixed-type risk, (b) rebuilding the
+            graph from scratch, or (c) implementing Option 2 from
+            issue #91 (re-classify existing edges on PCL mutation —
+            not yet implemented).
+
+            See :meth:`PositionalClusterLearner.label_clusters` for
+            the ``graph_has_existing_edges`` flag that surfaces this
+            risk as a ``RuntimeWarning`` when re-labelling is
+            attempted mid-session.
         """
         # 1. EC: normalize input.
         norm = self.ec.normalize_input(stimulus)
