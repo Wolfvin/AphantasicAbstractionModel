@@ -2030,6 +2030,43 @@ class PositionalClusterLearner:
         # correct backfill — _cluster_actions treats absent entries as
         # has_connector=False, matching the pre-fix clustering
         # behaviour for legacy saves.
+        #
+        # ------------------------------------------------------------------
+        # INSURANCE NOTE — DO NOT DELETE IN A DEAD-CODE AUDIT
+        # ------------------------------------------------------------------
+        # Every `raw.get(..., default)` branch from this point through
+        # `object_superclusters` below is a *defensive backfill* kept
+        # on purpose, even though the only save file shipped with the
+        # repo (`AGNN/data/cluster_learner_state.json`) is regenerated
+        # by `neocortex.bootstrap_classifier.save_default_state` and
+        # therefore contains every field these branches backfill.
+        #
+        # They are NOT dead code. They are cheap insurance against
+        # three real-world schema-drift scenarios documented in
+        # `AGNN/docs/dead-code-audit.md` §3.6:
+        #
+        #   1. A user hand-edits the JSON and drops a field.
+        #   2. A user loads a state file produced by an older release
+        #      (pre-anchor-word, pre-cluster-62, pre-Brown-fix).
+        #   3. A future schema migration forgets to write a field that
+        #      a downstream consumer still expects.
+        #
+        # In every case the backfill returns the dataclass default
+        # (empty set / empty dict / re-derived from positional_freq),
+        # which preserves the *pre-fix* runtime behaviour for that
+        # field — graceful degradation rather than a KeyError crash.
+        #
+        # Each branch carries a per-field "Same backward-compat note as
+        # above." or its own inline note explaining what the empty
+        # default means semantically. If you are doing a future audit
+        # and these branches still never fire on the shipped state
+        # file, KEEP THEM. They cost nothing at runtime (one
+        # `dict.get` per field, only at load time) and they are the
+        # only thing standing between a stale save file and a
+        # traceback. Revisit only after a deliberate, breaking change
+        # to the state-file schema has shipped AND a release-note
+        # cycle has elapsed.
+        # ------------------------------------------------------------------
         for act, flag in raw.get("action_connector_signature", {}).items():
             if isinstance(act, str) and isinstance(flag, bool):
                 learner.action_connector_signature[act] = flag

@@ -169,6 +169,7 @@ class AGNNCore:
         classifier_persist_path: Optional[str] = None,
         use_cluster_learner: bool = True,
         cluster_learner_state_path: Optional[str] = None,
+        t_norm: str = "product",
     ):
         """
         Initialize brain-inspired memory system.
@@ -213,6 +214,26 @@ class AGNNCore:
                 file committed to the repo by
                 ``neocortex.bootstrap_classifier.save_default_state``).
                 Only consulted when ``use_cluster_learner=True``.
+            t_norm: Fuzzy-logic t-norm used by the deductive component
+                (:class:`InferiorFrontalGyrus`) when composing the
+                weights of two premise edges during a rule firing.
+                Accepted values: ``"product"`` (default —
+                ``T(a, b) = a * b``, legacy behaviour, bit-for-bit
+                identical to pre-PR-#79 arithmetic), ``"lukasiewicz"``
+                (``T(a, b) = max(0, a + b - 1)``), or ``"godel"``
+                (``T(a, b) = min(a, b)``). The default preserves the
+                historical weight composition so all existing tests
+                pass unchanged. The two non-default options are
+                *research surfaces* kept deliberately configurable per
+                ``AGNN/docs/dead-code-audit.md`` §3.5 and
+                ``AGNN/docs/research-neuro-symbolic-reasoning.md`` §4:
+                they let a researcher A/B-test different fuzzy-semantics
+                regimes without reaching into the internal
+                :class:`InferiorFrontalGyrus` object. Any other value
+                raises ``ValueError`` at IFG construction time (which
+                ``_safe_init`` swallows into ``self.deductive = None``
+                — the same graceful-degradation contract applied to
+                every other sub-component).
         """
         # Component wiring. Each component is wrapped in try/except so
         # AGNNCore can still be constructed even if a sibling component
@@ -268,8 +289,18 @@ class AGNNCore:
             kwargs=trisynaptic_kwargs,
         )
         self.papez = self._safe_init("circuits.papez_circuit", "PapezCircuit")
+        # The deductive component (InferiorFrontalGyrus) accepts a
+        # `t_norm` kwarg (PR #79). We plumb the user-facing `t_norm`
+        # constructor arg down here so researchers can A/B-test fuzzy
+        # t-norms from the AGNNCore entry point without reaching into
+        # internals. The default "product" reproduces the legacy
+        # arithmetic bit-for-bit, so existing tests are unchanged.
+        # See `AGNN/docs/dead-code-audit.md` §3.5 for the rationale
+        # and `AGNN/docs/research-neuro-symbolic-reasoning.md` §4 for
+        # the fuzzy-logic background.
         self.deductive = self._safe_init(
             "neocortex.inferior_frontal_gyrus", "InferiorFrontalGyrus",
+            kwargs={"t_norm": t_norm},
         )
         self.consolidation = self._safe_init(
             "plasticity.systems_consolidation", "SystemsConsolidation",
