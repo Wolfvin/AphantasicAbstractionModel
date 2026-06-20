@@ -48,6 +48,39 @@ Public API
     save_default_state(corpus_paths, state_path) -> PositionalClusterLearner
         Convenience: build + save in one call. Used by the one-shot
         generator script and by tests that need a fresh state file.
+
+State-file regeneration contract
+---------------------------------
+``AGNN/data/cluster_learner_state.json`` is a **build artifact**, not
+source code. It MUST be regenerated whenever the
+``PositionalClusterLearner`` clustering algorithm changes — including
+(but not limited to):
+
+  * any change to ``_cluster_actions``, ``_weighted_jaccard``, the
+    connector-signal partition, or the anchor-word discovery logic;
+  * any change to the Brown-clustering configuration for objects;
+  * any change to ``DEFAULT_CORPUS_PATHS`` or the contents of the
+    canonical corpus files;
+  * any change to ``EXPECTED_VERB_GROUPS`` (which the labelling step
+    matches against).
+
+Regeneration procedure::
+
+    cd AGNN/
+    python -m neocortex.bootstrap_classifier
+
+This rebuilds the learner from the canonical corpus and overwrites
+``DEFAULT_STATE_PATH`` in place. Commit the regenerated file alongside
+the algorithm change that necessitated it.
+
+The regression test
+``test_committed_state_file_matches_fresh_build`` (in
+``AGNN/tests/test_bootstrap_classifier.py``) enforces this contract:
+it compares the committed state file against a fresh build and fails
+on any token-set drift. PR #81 (anchor-word discovery + Brown
+clustering for objects) was the original case where this contract was
+violated — the state file went stale and silently shipped different
+cluster IDs in production vs test (see issue #92).
 """
 
 from __future__ import annotations
@@ -85,11 +118,12 @@ from neocortex.semantic_role_classifier import RelationType  # noqa: E402
 # These verb sets came from manual inspection of
 # inspect_cluster_details() output on the combined corpus
 # (pretrain_corpus.txt + pretrain_corpus_depth.txt, 3290 sentences).
-# Cluster IDs in the canonical run were 42 (CAUSAL), 57 (FUNCTIONAL),
-# 60 (CATEGORICAL), 98 (TEMPORAL), 124 (DIFFERENTIAL) - but we DO NOT
-# hardcode those IDs. We look up the cluster_id fresh on every call
-# by matching the action set, because cluster IDs shift if the corpus
-# or clustering algorithm changes.
+# Cluster IDs in the canonical run post-PR #81 are 42 (CAUSAL),
+# 56 (FUNCTIONAL), 61 (CATEGORICAL), 110 (TEMPORAL),
+# 111 (DIFFERENTIAL) - but we DO NOT hardcode those IDs. We look up
+# the cluster_id fresh on every call by matching the action set,
+# because cluster IDs shift if the corpus or clustering algorithm
+# changes. (Pre-PR #81 the IDs were 42/57/60/98/124 - issue #92.)
 EXPECTED_VERB_GROUPS: Dict[RelationType, Set[str]] = {
     RelationType.CAUSAL: {
         "berakibat", "membuat", "memicu", "mengakibatkan",
