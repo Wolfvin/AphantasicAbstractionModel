@@ -468,3 +468,137 @@ def test_end_to_end_learn_reinforce_process(brain: AGNNCore):
     assert "answer" in result
     assert "chain" in result
     assert isinstance(result["answer"], str)
+
+
+# ======================================================================
+# Regression: import-path bootstrap order (issue #94)
+# ======================================================================
+#
+# AGNN/core.py used to import ``neocortex.bootstrap_classifier`` at
+# module-load time BEFORE inserting AGNN/ onto sys.path. When core.py
+# was loaded as ``AGNN.core`` (repo root on sys.path, NOT AGNN/),
+# the import failed with ``ModuleNotFoundError``, was silently
+# swallowed by a bare ``except``, and the cluster learner was
+# disabled with zero warning. AGNNCore then ran on the legacy
+# SemanticRoleClassifier only — a silent feature-disable on a
+# documented-supported import path.
+#
+# The fix moved the sys.path bootstrap ABOVE the sibling-package
+# imports. The tests below pin the contract for BOTH supported
+# import paths so this regression cannot return silently.
+
+
+def test_agnncore_loads_cluster_learner_via_namespace_package_path():
+    """Import via ``from AGNN.core import AGNNCore`` must load the cluster learner.
+
+    Regression test for issue #94. Reproduces the exact scenario from
+    the issue: a fresh Python process started with the repo root on
+    sys.path (NOT AGNN/), importing AGNNCore via the namespace
+    package path. Pre-fix, this silently disabled the cluster
+    learner. Post-fix, the sys.path bootstrap inside core.py runs
+    before the ``neocortex.bootstrap_classifier`` import, so the
+    cluster learner loads normally.
+
+    We run this in a subprocess so the importing process truly
+    starts with a clean sys.path (no AGNN/ leakage from this test's
+    own sys.path manipulations).
+    """
+    import subprocess
+
+    repo_root = str(_AGNP_ROOT.parent)
+    self_ai_src = str(_SELF_AI_SRC)
+
+    # The subprocess starts with cwd = repo_root, simulating a user
+    # who runs `python my_script.py` from the repo root. We do NOT
+    # inject AGNN/ onto sys.path ourselves — core.py must do that.
+    code = (
+        "import sys;\n"
+        # Defensive: scrub any AGNN/ or self-ai/src entries that may
+        # have leaked from the parent pytest process's sys.path via
+        # PYTHONPATH or sitecustomize. The bug only manifests when
+        # AGNN/ is NOT on sys.path at core.py load time.
+        "sys.path = [p for p in sys.path "
+        f"if p not in ({repo_root!r}, {self_ai_src!r}, "
+        f"{(repo_root + '/AGNN')!r}, {(repo_root + '/self-ai/src')!r})];\n"
+        "import warnings; warnings.simplefilter('error', RuntimeWarning);\n"
+        "from AGNN.core import AGNNCore;\n"
+        "import AGNN.core as m;\n"
+        "assert m._CLUSTER_LEARNER_AVAILABLE, (\n"
+        "    'cluster learner bootstrap failed silently via "
+        "from AGNN.core import - issue #94 regression'\n"
+        ");\n"
+        "assert m._PHASE1_AVAILABLE, (\n"
+        "    'Phase 1 helpers bootstrap failed silently via "
+        "from AGNN.core import - issue #94 regression'\n"
+        ");\n"
+        "brain = AGNNCore(model_path=None);\n"
+        "assert brain._cluster_learner is not None, (\n"
+        "    'brain._cluster_learner is None after AGNNCore() via "
+        "from AGNN.core import - issue #94 regression'\n"
+        ");\n"
+        "print('OK: cluster learner loaded via namespace-package path');\n"
+    )
+
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert result.returncode == 0, (
+        f"Subprocess failed (issue #94 regression). "
+        f"returncode={result.returncode}\n"
+        f"stdout:\n{result.stdout}\n"
+        f"stderr:\n{result.stderr}"
+    )
+    assert "OK: cluster learner loaded via namespace-package path" in result.stdout, (
+        f"Subprocess did not print the success marker.\n"
+        f"stdout:\n{result.stdout}\n"
+        f"stderr:\n{result.stderr}"
+    )
+
+
+def test_agnncore_loads_cluster_learner_via_direct_module_path():
+    """Import via ``from core import AGNNCore`` (AGNN/ on sys.path) still works.
+
+    This is the test-suite path (and the path used by every other
+    AGNN/ module). The fix in this PR must not break it: when AGNN/
+    IS on sys.path at module-load time, the sys.path bootstrap
+    inside core.py is a no-op (the path is already present), and
+    the sibling-package imports must still succeed.
+
+    The whole test_core_wired.py module already exercises this path
+    implicitly (it imports AGNNCore via importlib.util from
+    AGNN/core.py with AGNN/ on sys.path). This test makes the
+    invariant explicit so a future regression on either import
+    path is caught independently.
+    """
+    # ``agnn_core_module`` was loaded at the top of this file via
+    # importlib.util.spec_from_file_location("agnn_core_module",
+    # AGNN/core.py) with AGNN/ on sys.path. The cluster-learner
+    # bootstrap inside core.py must have succeeded under that load.
+    assert agnn_core_module._CLUSTER_LEARNER_AVAILABLE, (
+        "AGNN.core failed to load the cluster learner even when AGNN/ "
+        "was on sys.path. This is a regression on the "
+        "test-suite import path — the fix for issue #94 must not "
+        "break this path."
+    )
+    assert agnn_core_module._PHASE1_AVAILABLE, (
+        "AGNN.core failed to load the Phase 1 helpers even when AGNN/ "
+        "was on sys.path. This is a regression on the "
+        "test-suite import path — the fix for issue #94 must not "
+        "break this path."
+    )
+
+    # And a freshly-constructed AGNNCore must actually carry the
+    # cluster learner instance.
+    brain = AGNNCore(model_path=None)
+    if brain.graph is None:
+        pytest.skip("EngramComplex (self-ai/src/agnn) not available")
+    assert brain._cluster_learner is not None, (
+        "brain._cluster_learner is None after AGNNCore(model_path=None) "
+        "constructed via the test-suite path. The cluster-learner "
+        "bootstrap inside core.py failed silently."
+    )
+

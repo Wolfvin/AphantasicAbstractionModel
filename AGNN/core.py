@@ -16,7 +16,32 @@ from __future__ import annotations
 
 import os
 import sys
+import warnings
 from typing import Any, Dict, List, Optional
+
+
+# ----------------------------------------------------------------------
+# Bootstrap sys.path BEFORE any sibling-package import.
+# ----------------------------------------------------------------------
+#
+# ``core.py`` may be loaded as either ``core`` (when AGNN/ is on
+# sys.path, the convention used by every other module in AGNN/) or
+# ``AGNN.core`` (when the repo root is on sys.path, the convention a
+# user follows when they write ``from AGNN.core import AGNNCore``).
+# Either way, sibling-package imports like ``from neocortex... import
+# ...`` must work — and they only work if AGNN/ itself is on sys.path
+# at module-load time.
+#
+# This bootstrap MUST run BEFORE the try/except blocks below that
+# import ``neocortex.bootstrap_classifier`` and
+# ``neocortex.aphantasic_chain_formatter``. Pre-fix, those imports
+# ran first and silently swallowed ``ModuleNotFoundError`` when AGNN/
+# was not yet on sys.path — the cluster learner then quietly
+# disabled itself and AGNNCore fell back to the legacy
+# SemanticRoleClassifier with zero warning (issue #94).
+_AGNP_ROOT = os.path.dirname(os.path.abspath(__file__))
+if _AGNP_ROOT not in sys.path:
+    sys.path.insert(0, _AGNP_ROOT)
 
 
 # Phase 1 (Aphantasic Node Representation): import the two new helper
@@ -31,7 +56,19 @@ try:
     from neocortex.aphantasic_chain_formatter import AphantasicChainFormatter
     from neocortex.definition_extractor import DefinitionExtractor
     _PHASE1_AVAILABLE = True
-except Exception:  # noqa: BLE001
+except Exception as exc:  # noqa: BLE001
+    # The sys.path bootstrap above should make this import succeed in
+    # any supported load path. If it still fails, warn loudly so the
+    # user sees the silent-degradation cause instead of debugging a
+    # half-functional AGNNCore (issue #94).
+    warnings.warn(
+        f"AGNNCore Phase 1 helpers unavailable "
+        f"({type(exc).__name__}: {exc}). Falling back to the "
+        f"pre-Phase-1 surface-form-only chain. This may indicate a "
+        f"broken install.",
+        RuntimeWarning,
+        stacklevel=2,
+    )
     AphantasicChainFormatter = None  # type: ignore[assignment,misc]
     DefinitionExtractor = None  # type: ignore[assignment,misc]
     _PHASE1_AVAILABLE = False
@@ -55,20 +92,22 @@ try:
         load_default_state as _load_cluster_learner_state,
     )
     _CLUSTER_LEARNER_AVAILABLE = True
-except Exception:  # noqa: BLE001
+except Exception as exc:  # noqa: BLE001
+    # Same rationale as the Phase 1 warn above: the sys.path bootstrap
+    # should make this import succeed in any supported load path. If
+    # it doesn't, warn so the user knows why their AGNNCore isn't
+    # using the labelled PositionalClusterLearner (issue #94).
+    warnings.warn(
+        f"AGNNCore cluster learner unavailable "
+        f"({type(exc).__name__}: {exc}). Falling back to the legacy "
+        f"SemanticRoleClassifier. This may indicate a broken install "
+        f"or a missing/corrupt cluster_learner_state.json.",
+        RuntimeWarning,
+        stacklevel=2,
+    )
     _CLUSTER_LEARNER_AVAILABLE = False
     _CLUSTER_LEARNER_STATE_PATH = None  # type: ignore[assignment]
     _load_cluster_learner_state = None  # type: ignore[assignment]
-
-
-# ----------------------------------------------------------------------
-# Make sibling AGNN subpackages importable when ``core`` is loaded as
-# ``AGNN.core`` (repo root on sys.path) or as ``core`` (AGNN/ on
-# sys.path, the convention used by every other module in AGNN/).
-# ----------------------------------------------------------------------
-_AGNP_ROOT = os.path.dirname(os.path.abspath(__file__))
-if _AGNP_ROOT not in sys.path:
-    sys.path.insert(0, _AGNP_ROOT)
 
 
 class AGNNCore:
