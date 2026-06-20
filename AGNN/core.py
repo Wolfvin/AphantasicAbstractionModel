@@ -169,6 +169,7 @@ class AGNNCore:
         classifier_persist_path: Optional[str] = None,
         use_cluster_learner: bool = True,
         cluster_learner_state_path: Optional[str] = None,
+        t_norm: str = "product",
     ):
         """
         Initialize brain-inspired memory system.
@@ -213,6 +214,42 @@ class AGNNCore:
                 file committed to the repo by
                 ``neocortex.bootstrap_classifier.save_default_state``).
                 Only consulted when ``use_cluster_learner=True``.
+            t_norm: Which fuzzy-logic t-norm to use when
+                :class:`InferiorFrontalGyrus` (BA 44) composes two
+                premise weights into one inferred weight during
+                deductive reasoning. One of:
+
+                    - ``"product"``      (default)  ->  T(a, b) = a * b
+                    - ``"lukasiewicz"``             ->  T(a, b) = max(0, a + b - 1)
+                    - ``"godel"``                   ->  T(a, b) = min(a, b)
+
+                The default ``"product"`` reproduces the pre-refactor
+                BA 44 arithmetic exactly (e.g. ``0.7 * 0.7 = 0.49``,
+                ``0.6 * 0.6 = 0.36``, ``1.0 * 1.0 = 1.0``) and is the
+                only value that keeps every existing test's
+                weight-related assertion unchanged. The other two
+                options make BA 44 a *conscious* fuzzy-logic engine
+                whose conjunction operator is configurable, as
+                recommended in
+                ``AGNN/docs/research-neuro-symbolic-reasoning.md`` §4 / §B1.
+
+                **Research surface.** This parameter is intentionally
+                exposed at the AGNNCore level (rather than requiring
+                callers to reach into ``core.deductive.t_norm``
+                directly) so that A/B t-norm experiments can be run
+                from any AGNNCore entry point (the
+                ``__main__.py`` CLI, ``e2e_test.py``, ad-hoc scripts).
+                The parameter is plumbed straight into
+                :class:`InferiorFrontalGyrus`'s constructor; if BA 44
+                is unavailable (``_safe_init`` returns ``None``), the
+                parameter is recorded on ``self._t_norm_requested``
+                but has no effect.
+
+                Note: the ``CAUSAL_DIFFERENTIAL_CONFLICT`` rule
+                resolves its two premises via arithmetic mean, which
+                is *not* a t-norm and is therefore unaffected by this
+                parameter. Likewise, ``DIFFERENTIAL_INVERSION`` is a
+                unary inversion and does not combine weights.
         """
         # Component wiring. Each component is wrapped in try/except so
         # AGNNCore can still be constructed even if a sibling component
@@ -268,8 +305,30 @@ class AGNNCore:
             kwargs=trisynaptic_kwargs,
         )
         self.papez = self._safe_init("circuits.papez_circuit", "PapezCircuit")
+        # BA 44 (InferiorFrontalGyrus) takes a `t_norm` kwarg selecting
+        # which fuzzy-logic conjunction to use when composing premise
+        # weights. We plumb the AGNNCore-level `t_norm` parameter
+        # straight through. The default "product" reproduces the
+        # pre-refactor arithmetic bit-for-bit, so existing tests are
+        # unaffected; the other two options ("lukasiewicz", "godel")
+        # are research surfaces for A/B t-norm experiments (see
+        # AGNN/docs/research-neuro-symbolic-reasoning.md §4 / §B1).
+        #
+        # Validate up-front: `_safe_init` swallows construction errors
+        # (returns None), so an invalid `t_norm` value would otherwise
+        # leave `self.deductive` silently None with no diagnostic. We
+        # raise explicitly here so a typo surfaces at construction
+        # time, not at the first `process()` call.
+        _VALID_T_NORMS = ("product", "lukasiewicz", "godel")
+        if t_norm not in _VALID_T_NORMS:
+            raise ValueError(
+                f"Unknown t_norm {t_norm!r}. "
+                f"Expected one of: {list(_VALID_T_NORMS)}"
+            )
+        deductive_kwargs: Dict[str, Any] = {"t_norm": t_norm}
         self.deductive = self._safe_init(
             "neocortex.inferior_frontal_gyrus", "InferiorFrontalGyrus",
+            kwargs=deductive_kwargs,
         )
         self.consolidation = self._safe_init(
             "plasticity.systems_consolidation", "SystemsConsolidation",
@@ -308,6 +367,16 @@ class AGNNCore:
         # ``use_cluster_learner=False`` falls back identically.
         self._cluster_learner = cluster_learner
         self._use_cluster_learner_requested = use_cluster_learner
+
+        # Record the caller's requested t_norm (post-validation, so
+        # always one of "product"/"lukasiewicz"/"godel"). Useful for
+        # test introspection — when `self.deductive` is None (BA 44
+        # module unavailable), this attribute still surfaces what the
+        # caller asked for. The actual t-norm function lives on
+        # `self.deductive.t_norm` (a string, matching this attribute)
+        # and `self.deductive._tnorm_fn` (the resolved callable) when
+        # BA 44 is available.
+        self._t_norm_requested = t_norm
 
         # Phase 0: per-instance override of the articulate system
         # message. ``None`` (the default) means "use the class-level
