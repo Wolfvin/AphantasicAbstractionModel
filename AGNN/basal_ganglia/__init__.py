@@ -1,6 +1,8 @@
-"""Basal ganglia package - action selection + reinforcement."""
+"""Basal ganglia package - action selection + reinforcement.
 
-from .striatum import Striatum
-from .globus_pallidus import GlobusPallidus
+The striatum.py and globus_pallidus.py stubs were removed (see
+AGNN/docs/dead-code-audit.md §2.1). The package is currently empty
+of live implementations.
+"""
 
-__all__ = ["Striatum", "GlobusPallidus"]
+__all__: list[str] = []

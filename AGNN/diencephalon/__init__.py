@@ -1,6 +1,8 @@
-"""Diencephalon package - relay + plasticity optimization."""
+"""Diencephalon package - relay + plasticity optimization.
 
-from .thalamus import AnteriorThalamus
-from .mamillary_body import MamillaryBody
+The thalamus.py and mamillary_body.py stubs were removed (see
+AGNN/docs/dead-code-audit.md §2.1). The package is currently empty
+of live implementations.
+"""
 
-__all__ = ["AnteriorThalamus", "MamillaryBody"]
+__all__: list[str] = []

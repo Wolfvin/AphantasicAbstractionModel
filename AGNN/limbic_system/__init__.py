@@ -1,10 +1,9 @@
 """Limbic system package - emotional modulation + confidence.
 
-Exports amygdala, cingulate gyrus, parahippocampal gyrus.
+Exports cingulate gyrus. The amygdala and parahippocampal gyrus stubs
+were removed (see AGNN/docs/dead-code-audit.md §2.1).
 """
 
-from .amygdala import BasolateralAmygdala
 from .cingulate_gyrus import CingulateGyrus
-from .parahippocampal_gyrus import ParahippocampalGyrus
 
-__all__ = ["BasolateralAmygdala", "CingulateGyrus", "ParahippocampalGyrus"]
+__all__ = ["CingulateGyrus"]
