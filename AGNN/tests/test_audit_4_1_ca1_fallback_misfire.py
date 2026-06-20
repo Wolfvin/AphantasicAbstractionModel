@@ -18,7 +18,8 @@ encodes the *current buggy behaviour* and would need to be flipped to
 Misfire scenario under audit:
   1. PCL (PositionalClusterLearner) correctly classifies an Indonesian
      CATEGORICAL correction ("X merupakan Y") as RelationType.CATEGORICAL
-     via labelled cluster 60 (tokens: adalah, merupakan, termasuk).
+     via the labelled CATEGORICAL cluster (tokens: adalah, merupakan,
+     termasuk, plus post-PR #81 additions like tergolong, klasifikasi).
   2. The fallback block at line 255-263 fires because
      ``relation == RelationType.CATEGORICAL and correction.strip()``.
   3. CA1.integrate_context(stimulus, correction) is called with the
@@ -118,35 +119,68 @@ def _make_circuit_with_pcl() -> TrisynapticCircuit:
 
 
 def test_audit_4_1_pcl_correctly_classifies_pure_indonesian_categorical():
-    """Sanity check: PCL's labelled cluster 60 fires for ID categorical.
+    """Sanity check: PCL's labelled CATEGORICAL cluster fires for ID categorical.
 
-    Tokens "adalah", "merupakan", "termasuk" are in cluster 60
-    (CATEGORICAL). classify() must return CATEGORICAL for any
-    Indonesian "X adalah Y" / "X merupakan Y" / "X termasuk Y"
-    sentence — this is the *correct* classification.
+    Tokens "adalah", "merupakan", "termasuk" must all sit in the
+    cluster the committed state file labels as CATEGORICAL. classify()
+    must return CATEGORICAL for any Indonesian "X adalah Y" / "X
+    merupakan Y" / "X termasuk Y" sentence — this is the *correct*
+    classification.
 
     If this test fails, the cluster state file has drifted and the
     misfire investigation cannot be reproduced from this baseline.
+
+    NB: The audit (dead-code-audit.md §4.1) originally hardcoded
+    cluster id 60 (the pre-PR #81 CATEGORICAL cluster id). PR #81 +
+    issue #92's state-file regeneration shifted CATEGORICAL to
+    cluster id 61. We now look the id up dynamically from
+    ``cluster_labels`` instead of hardcoding it — the cluster *id* is
+    an implementation detail of the clustering algorithm; the
+    *label* + *verb set* are the contract.
     """
     learner = _load_committed_pcl()
 
-    # Confirm the cluster mapping the audit refers to.
-    tokens_in_cluster_60 = sorted(
-        t for t, c in learner.cluster_id_of.items() if c == 60
+    # Look up the cluster id that is labelled CATEGORICAL in the
+    # committed state file. There must be exactly one.
+    categorical_cids = [
+        cid for cid, rt in learner.cluster_labels.items()
+        if rt == RelationType.CATEGORICAL
+    ]
+    assert len(categorical_cids) == 1, (
+        f"Expected exactly one CATEGORICAL-labelled cluster in the "
+        f"committed state file; got {categorical_cids}. "
+        f"cluster_labels = {learner.cluster_labels}"
     )
-    assert tokens_in_cluster_60 == ["adalah", "merupakan", "termasuk"], (
-        f"Cluster 60 (CATEGORICAL) tokens drifted from the audit baseline "
-        f"{{adalah, merupakan, termasuk}}; got {tokens_in_cluster_60}. "
-        f"The misfire-investigation assertions below assume the audit "
-        f"baseline — re-evaluate if this changes."
+    categorical_cid = categorical_cids[0]
+
+    # Confirm the verb set the audit refers to.
+    tokens_in_categorical_cluster = sorted(
+        t for t, c in learner.cluster_id_of.items() if c == categorical_cid
+    )
+    # The audit baseline was {adalah, merupakan, termasuk}. After
+    # PR #81 + issue #92's regenerate, the CATEGORICAL cluster grew
+    # to include additional verbs discovered by anchor-word +
+    # Brown-clustering (e.g. 'tergolong', 'klasifikasi', 'bukanlah').
+    # The minimum contract is that the audit's three verbs are still
+    # present in the CATEGORICAL cluster — the audit's misfire
+    # scenario fires on 'merupakan', which must still be here.
+    audit_baseline = {"adalah", "merupakan", "termasuk"}
+    actual_set = set(tokens_in_categorical_cluster)
+    assert audit_baseline <= actual_set, (
+        f"CATEGORICAL cluster (id={categorical_cid}) lost audit-baseline "
+        f"verbs. Expected at least {sorted(audit_baseline)}; got "
+        f"{tokens_in_categorical_cluster}. The misfire-investigation "
+        f"assertions below assume 'merupakan' is in the CATEGORICAL "
+        f"cluster — re-evaluate if this changes."
     )
 
     # The correction sentence used throughout the misfire tests.
     correction = "hamilton merupakan kota di selandia baru"
     relation = learner.classify(correction)
     assert relation == RelationType.CATEGORICAL, (
-        f"PCL must classify {correction!r} as CATEGORICAL via cluster 60; "
-        f"got {relation}. Misfire-investigation tests assume this baseline."
+        f"PCL must classify {correction!r} as CATEGORICAL via cluster "
+        f"{categorical_cid}; got {relation}. Misfire-investigation "
+        f"tests assume this baseline."
     )
 
 

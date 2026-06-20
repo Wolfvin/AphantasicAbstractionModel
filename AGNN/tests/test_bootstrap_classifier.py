@@ -615,3 +615,117 @@ def test_expected_verb_groups_do_not_overlap():
             f"this would cause the bootstrap's leakage check to always fail."
         )
         seen.add(v)
+
+
+# ======================================================================
+# Regression: committed state file vs fresh build (issue #92)
+# ======================================================================
+
+
+def test_committed_state_file_matches_fresh_build():
+    """The committed ``cluster_learner_state.json`` must match a fresh build.
+
+    Regression test for issue #92: the committed state file drifted
+    from the output of :func:`build_labelled_cluster_learner` because
+    it was last regenerated before PR #81 (anchor-word discovery +
+    Brown clustering for objects) landed. The fresh build produced
+    different cluster IDs and a different token set, but every
+    individual test passed because:
+
+      * ``test_bootstrap_classifier_finds_all_5_clusters`` only checks
+        the *fresh* build, and
+      * ``test_bootstrap_classifier_state_file_is_loadable`` only
+        checks the *committed* file's loadability + the easy
+        ``classify("api menyebabkan kebakaran") == CAUSAL`` assertion.
+
+    No test compared the two until now.
+
+    Contract pinned by this test:
+
+      * The set of action tokens tracked by the committed state file
+        must equal the set tracked by a fresh build on the canonical
+        corpus. Any drift means the state file is stale — run
+        ``python -m neocortex.bootstrap_classifier`` (from the
+        ``AGNN/`` directory) to regenerate.
+      * Each expected verb group (``EXPECTED_VERB_GROUPS``) must map
+        to exactly one cluster in BOTH the fresh build and the
+        committed state file. Cluster IDs are allowed to differ
+        between the two (they are an implementation detail of the
+        clustering algorithm); what matters is that every expected
+        verb is clustered in both, and that all verbs for a given
+        relation type land in the SAME cluster within each.
+    """
+    _require_corpus_files()
+
+    if not os.path.exists(DEFAULT_STATE_PATH):
+        pytest.skip(
+            f"State file not found: {DEFAULT_STATE_PATH} - run "
+            f"`python -m neocortex.bootstrap_classifier` (from AGNN/) "
+            f"to generate."
+        )
+
+    fresh = build_labelled_cluster_learner()
+    committed = load_default_state(DEFAULT_STATE_PATH)
+    assert committed is not None, (
+        "load_default_state() returned None - committed state file is "
+        "missing or corrupt. Run "
+        "`python -m neocortex.bootstrap_classifier` (from AGNN/) to "
+        "regenerate."
+    )
+
+    # 1. Token-set equality. This is the strongest invariant: any
+    #    change to the clustering algorithm that adds or removes
+    #    tracked action tokens will be caught here. The drift in
+    #    issue #92 was 236 tokens (119 only-in-committed, 117
+    #    only-in-fresh); this assertion makes that kind of drift a
+    #    hard test failure.
+    fresh_tokens = set(fresh.cluster_id_of.keys())
+    committed_tokens = set(committed.cluster_id_of.keys())
+    only_in_committed = sorted(committed_tokens - fresh_tokens)
+    only_in_fresh = sorted(fresh_tokens - committed_tokens)
+    assert fresh_tokens == committed_tokens, (
+        f"Committed cluster_learner_state.json is stale (issue #92). "
+        f"Token set drifted from a fresh build.\n"
+        f"  fresh tokens:     {len(fresh_tokens)}\n"
+        f"  committed tokens: {len(committed_tokens)}\n"
+        f"  in committed but not fresh ({len(only_in_committed)}): "
+        f"{only_in_committed[:15]} (showing 15)\n"
+        f"  in fresh but not committed ({len(only_in_fresh)}): "
+        f"{only_in_fresh[:15]} (showing 15)\n"
+        f"Run `python -m neocortex.bootstrap_classifier` (from AGNN/) "
+        f"to regenerate the state file."
+    )
+
+    # 2. Each expected verb group maps to exactly one cluster in BOTH
+    #    fresh and committed. Cluster IDs themselves are allowed to
+    #    differ (the algorithm's exact ID assignment is not part of
+    #    the contract — only the grouping is).
+    for relation_type, expected_verbs in EXPECTED_VERB_GROUPS.items():
+        # Fresh: every expected verb must be clustered (not -1 / absent)
+        # and they must all share one cluster ID.
+        fresh_cids = {fresh.cluster_id_of[v] for v in expected_verbs}
+        assert len(fresh_cids) == 1, (
+            f"Fresh build: {relation_type.name} verbs {sorted(expected_verbs)} "
+            f"did not land in a single cluster (got {sorted(fresh_cids)}). "
+            f"This is a bootstrap_classifier regression - "
+            f"test_bootstrap_classifier_finds_all_5_clusters should have caught it."
+        )
+        # Committed: same invariant.
+        committed_cids = {
+            committed.cluster_id_of[v] for v in expected_verbs
+        }
+        assert len(committed_cids) == 1, (
+            f"Committed state file: {relation_type.name} verbs "
+            f"{sorted(expected_verbs)} did not land in a single cluster "
+            f"(got {sorted(committed_cids)}). The committed state file is "
+            f"internally inconsistent - regenerate it."
+        )
+        # And the committed cluster must carry the right label.
+        committed_cid = next(iter(committed_cids))
+        assert committed.cluster_labels.get(committed_cid) == relation_type, (
+            f"Committed state file: cluster {committed_cid} (which contains "
+            f"the {relation_type.name} verbs) is labelled "
+            f"{committed.cluster_labels.get(committed_cid)} - expected "
+            f"{relation_type.name}. Regenerate the state file."
+        )
+
