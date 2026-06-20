@@ -19,6 +19,37 @@ AGNN/ARCHITECTURE.md section 5 ("Deductive Reasoning Engine - Rule Types"):
     | CAUSAL_DIFFERENTIAL_CONFLICT      | A->B (CAUSAL) + A->B (DIFF) => conflict  | (0.7 + -0.8)/2 = -0.05|
     | FUNCTIONAL_COMPOSITION            | A->B (FUNC), B->C (FUNC) => A->C         | 0.6 * 0.6 = 0.36      |
 
+t-norms and fuzzy logic
+-----------------------
+The composition rules (CATEGORICAL_TRANSITIVITY, CAUSAL_CHAIN,
+FUNCTIONAL_COMPOSITION) compute their inferred weight by *combining* the
+two premise weights. The historical implementation hard-coded this
+combination as a plain multiplication (`a * b`) — which is exactly the
+**product t-norm** of fuzzy logic (one of the three canonical
+conjunction operators, alongside Łukasiewicz `max(0, a+b-1)` and Gödel
+`min(a, b)`).
+
+This was called out in `AGNN/docs/research-neuro-symbolic-reasoning.md`
+section 4 ("AGNN is *already* an (unconscious) product-t-norm fuzzy
+logic"). This module makes the choice *explicit* and *configurable* via
+the `t_norm` parameter of `InferiorFrontalGyrus`:
+
+    t_norm = "product"      (default)  →  T(a, b) = a * b           (legacy)
+    t_norm = "lukasiewicz"             →  T(a, b) = max(0, a + b - 1)
+    t_norm = "godel"                   →  T(a, b) = min(a, b)
+
+The default `"product"` reproduces the original BA44 arithmetic bit-for-
+bit, so all existing tests pass unchanged. The other two t-norms are
+useful for A/B testing different fuzzy-semantics regimes (see van
+Krieken et al., AIJ 2022, on how the choice of t-norm affects gradient
+steepness and rule-learning quality).
+
+Note on the conflict rule: `CAUSAL_DIFFERENTIAL_CONFLICT` resolves the
+two conflicting weights via arithmetic mean, which is *not* a t-norm
+(it is a recognised fuzzy aggregation operator). It is therefore *not*
+affected by the `t_norm` parameter — it deliberately keeps its
+arithmetic-mean semantics regardless of the chosen conjunction t-norm.
+
 Usage
 -----
 Two equivalent entry points:
@@ -50,7 +81,7 @@ Design
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import List, Optional, Sequence
+from typing import Callable, List, Literal, Optional, Sequence
 
 # Re-use the existing engram dataclasses - they ARE our edge/node types.
 from engrams.episodic_engram import Episome
@@ -67,6 +98,65 @@ DIFFERENTIAL = "DIFFERENTIAL"
 FUNCTIONAL = "FUNCTIONAL"
 
 _EDGE_TYPES = (CATEGORICAL, CAUSAL, DIFFERENTIAL, FUNCTIONAL)
+
+
+# ─────────────────────────────────────────────────────────────────────
+# t-norms (fuzzy-logic conjunctions)
+# ─────────────────────────────────────────────────────────────────────
+
+# The three canonical t-norms for fuzzy conjunction. Each takes two
+# truth values in [0, 1] (or, in AGNN's looser convention, a weight in
+# [-1, 1]) and returns their combined truth/weight. The "product"
+# variant reproduces the legacy `a * b` arithmetic bit-for-bit.
+TNormKind = Literal["product", "lukasiewicz", "godel"]
+
+
+def product_tnorm(a: float, b: float) -> float:
+    """Product t-norm: T(a, b) = a * b.
+
+    This is the *legacy* BA44 behaviour: every composition rule
+    previously hard-coded this multiplication. Selecting this t-norm
+    reproduces the pre-refactor semantics exactly.
+    """
+    return a * b
+
+
+def lukasiewicz_tnorm(a: float, b: float) -> float:
+    """Łukasiewicz t-norm: T(a, b) = max(0, a + b - 1).
+
+    Has steeper "either premise must be quite true" semantics: the
+    combined truth collapses to 0 unless both premises individually
+    exceed 0.5. Recommended for rule-learning regimes where we want
+    weak premises to produce weak (rather than merely reduced) evidence.
+    """
+    return max(0.0, a + b - 1.0)
+
+
+def godel_tnorm(a: float, b: float) -> float:
+    """Gödel (minimum) t-norm: T(a, b) = min(a, b).
+
+    The combined truth is bounded by the weaker premise. Conservative
+    conjunction: a chain is only as strong as its weakest link.
+    """
+    return min(a, b)
+
+
+_TNORMS: dict = {
+    "product": product_tnorm,
+    "lukasiewicz": lukasiewicz_tnorm,
+    "godel": godel_tnorm,
+}
+
+
+def _resolve_tnorm(t_norm: TNormKind) -> Callable[[float, float], float]:
+    """Map a t-norm name to its implementation, with a friendly error."""
+    try:
+        return _TNORMS[t_norm]
+    except KeyError:
+        raise ValueError(
+            f"Unknown t_norm {t_norm!r}. "
+            f"Expected one of: {sorted(_TNORMS)}"
+        ) from None
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -136,9 +226,19 @@ class _Rule:
     Subclasses override `matches(edges)` (returns a list of premise-tuples
     that should fire the rule) and `apply(premises)` (returns an
     `Inference` for each premise-tuple).
+
+    Each rule receives the resolved t-norm callable at construction so
+    that composition-style rules can combine premise weights through the
+    configured t-norm rather than a hard-coded multiplication.
     """
 
     name: str = "BASE_RULE"
+
+    def __init__(self, t_norm: Callable[[float, float], float] = product_tnorm):
+        # Default to the legacy product t-norm so subclasses that don't
+        # actually compose weights (e.g. DIFFERENTIAL_INVERSION) can
+        # still accept the parameter without changing their behaviour.
+        self._tnorm = t_norm
 
     def matches(self, edges: Sequence[Semesome]) -> List[tuple]:
         """Return a list of premise-tuples that should fire this rule."""
@@ -150,7 +250,11 @@ class _Rule:
 
 
 class CategoricalTransitivity(_Rule):
-    """A->B (CAT), B->C (CAT) => A->C (CAT, weight = 1.0 * 1.0 = 1.0)."""
+    """A->B (CAT), B->C (CAT) => A->C (CAT, weight = t_norm(1.0, 1.0)).
+
+    Under the default `"product"` t-norm this is `1.0 * 1.0 = 1.0`,
+    matching the legacy semantics bit-for-bit.
+    """
 
     name = "CATEGORICAL_TRANSITIVITY"
 
@@ -165,7 +269,7 @@ class CategoricalTransitivity(_Rule):
 
     def apply(self, premises: tuple) -> Inference:
         e1, e2 = premises
-        weight = e1.weight * e2.weight  # 1.0 * 1.0
+        weight = self._tnorm(e1.weight, e2.weight)
         conclusion = Semesome(
             type=CATEGORICAL,
             weight=weight,
@@ -184,7 +288,11 @@ class CategoricalTransitivity(_Rule):
 
 
 class CausalChain(_Rule):
-    """A->B (CAUSAL), B->C (CAUSAL) => A->C (CAUSAL, weight = 0.7 * 0.7 = 0.49)."""
+    """A->B (CAUSAL), B->C (CAUSAL) => A->C (CAUSAL, weight = t_norm(0.7, 0.7)).
+
+    Under the default `"product"` t-norm this is `0.7 * 0.7 = 0.49`,
+    matching the legacy semantics bit-for-bit.
+    """
 
     name = "CAUSAL_CHAIN"
 
@@ -199,7 +307,7 @@ class CausalChain(_Rule):
 
     def apply(self, premises: tuple) -> Inference:
         e1, e2 = premises
-        weight = e1.weight * e2.weight  # 0.7 * 0.7 = 0.49
+        weight = self._tnorm(e1.weight, e2.weight)
         conclusion = Semesome(
             type=CAUSAL,
             weight=weight,
@@ -218,7 +326,12 @@ class CausalChain(_Rule):
 
 
 class DifferentialInversion(_Rule):
-    """A->B (DIFF=-0.8) => B->A (DIFF=-0.8). Symmetric: weight preserved."""
+    """A->B (DIFF=-0.8) => B->A (DIFF=-0.8). Symmetric: weight preserved.
+
+    This rule does NOT combine two premises — it is a unary inversion
+    that preserves the original weight — so the t-norm parameter has no
+    effect here. It is still accepted (and stored) for API uniformity.
+    """
 
     name = "DIFFERENTIAL_INVERSION"
 
@@ -254,6 +367,11 @@ class CausalDifferentialConflict(_Rule):
 
     Resolution: arithmetic mean of the two weights.
     Example: (0.7 + -0.8) / 2 = -0.05 (near zero = uncertain).
+
+    Note: the arithmetic mean is *not* a t-norm (it is a recognised
+    fuzzy aggregation operator but lacks the boundary / associativity
+    properties of a t-norm). This rule therefore deliberately keeps its
+    arithmetic-mean semantics regardless of the configured t-norm.
     """
 
     name = "CAUSAL_DIFFERENTIAL_CONFLICT"
@@ -302,7 +420,11 @@ class CausalDifferentialConflict(_Rule):
 
 
 class FunctionalComposition(_Rule):
-    """A->B (FUNC), B->C (FUNC) => A->C (FUNC, weight = 0.6 * 0.6 = 0.36)."""
+    """A->B (FUNC), B->C (FUNC) => A->C (FUNC, weight = t_norm(0.6, 0.6)).
+
+    Under the default `"product"` t-norm this is `0.6 * 0.6 = 0.36`,
+    matching the legacy semantics bit-for-bit.
+    """
 
     name = "FUNCTIONAL_COMPOSITION"
 
@@ -317,7 +439,7 @@ class FunctionalComposition(_Rule):
 
     def apply(self, premises: tuple) -> Inference:
         e1, e2 = premises
-        weight = e1.weight * e2.weight  # 0.6 * 0.6 = 0.36
+        weight = self._tnorm(e1.weight, e2.weight)
         conclusion = Semesome(
             type=FUNCTIONAL,
             weight=weight,
@@ -346,16 +468,40 @@ class InferiorFrontalGyrus:
     `Semesome` edges. The rules are stateless, so a single
     `InferiorFrontalGyrus` instance can be reused across many `deduce()`
     calls.
+
+    Args:
+        t_norm: Which fuzzy-logic t-norm to use when a rule composes two
+            premise weights into one inferred weight. One of:
+
+                - "product"      (default)  →  T(a, b) = a * b
+                - "lukasiewicz"             →  T(a, b) = max(0, a + b - 1)
+                - "godel"                   →  T(a, b) = min(a, b)
+
+            The default `"product"` reproduces the pre-refactor BA44
+            arithmetic exactly (`0.7 * 0.7 = 0.49`, `0.6 * 0.6 = 0.36`,
+            `1.0 * 1.0 = 1.0`). The other two options make BA44 a
+            *conscious* fuzzy-logic engine whose conjunction operator is
+            configurable, as recommended in
+            `AGNN/docs/research-neuro-symbolic-reasoning.md` §4 / §B1.
+
+            Note: the `CAUSAL_DIFFERENTIAL_CONFLICT` rule resolves its
+            two premises via arithmetic mean, which is *not* a t-norm
+            and is therefore unaffected by this parameter. Likewise,
+            `DIFFERENTIAL_INVERSION` is a unary inversion and does not
+            combine weights.
     """
 
-    def __init__(self):
-        """Register the five deductive rules."""
+    def __init__(self, t_norm: TNormKind = "product"):
+        """Register the five deductive rules with the chosen t-norm."""
+        tnorm_fn = _resolve_tnorm(t_norm)
+        self.t_norm: TNormKind = t_norm
+        self._tnorm_fn: Callable[[float, float], float] = tnorm_fn
         self.rules: List[_Rule] = [
-            CategoricalTransitivity(),
-            CausalChain(),
-            DifferentialInversion(),
-            CausalDifferentialConflict(),
-            FunctionalComposition(),
+            CategoricalTransitivity(tnorm_fn),
+            CausalChain(tnorm_fn),
+            DifferentialInversion(tnorm_fn),
+            CausalDifferentialConflict(tnorm_fn),
+            FunctionalComposition(tnorm_fn),
         ]
         # Lifetime counter of rule firings (for introspect / audit).
         self.rule_count: int = 0
