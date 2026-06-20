@@ -543,9 +543,28 @@ class InferiorFrontalGyrus:
                 seen.add(inf.rule)
                 applied_rules.append(inf.rule)
 
-        # Aggregate confidence: product of inferred weights clamped to [0, 1].
+        # Aggregate confidence: t-norm fold of inferred weights, clamped to [0, 1].
         # Negative weights (e.g. -0.8 from DIFFERENTIAL) drop confidence to 0.
         # Zero inferences => confidence 0.0.
+        #
+        # The fold uses ``self._tnorm_fn`` (the same t-norm selected via the
+        # ``t_norm`` constructor parameter and plumbed through from AGNNCore).
+        # This makes the t-norm choice affect BOTH per-edge inference weights
+        # (via each rule's ``apply()``) AND the aggregate ``deduction.confidence``
+        # that surfaces as ``chain_confidence`` in ``AGNNCore.process()``.
+        #
+        # Identity element: 1.0 is the identity for all three canonical t-norms
+        # (product: 1*w=w; lukasiewicz: max(0, 1+w-1)=w for w>=0; godel:
+        # min(1, w)=w), so seeding with 1.0 is correct for all choices.
+        #
+        # Backward compat: with ``t_norm="product"`` (the default), the fold
+        # is ``1.0 * w1 * w2 * ... * wn`` — bit-for-bit identical to the
+        # pre-fix ``confidence *= w`` arithmetic. Existing tests pass
+        # unchanged.
+        #
+        # Ref: issue #90 (red-team audit found the aggregate used plain
+        # multiplication regardless of t_norm, silently making t_norm a
+        # no-op for multi-inference chains).
         confidence = 1.0
         if not all_inferences:
             confidence = 0.0
@@ -555,7 +574,7 @@ class InferiorFrontalGyrus:
                 if w <= 0:
                     confidence = 0.0
                     break
-                confidence *= w
+                confidence = self._tnorm_fn(confidence, w)
                 if confidence <= 0:
                     break
             confidence = max(0.0, min(1.0, confidence))
