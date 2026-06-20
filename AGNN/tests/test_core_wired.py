@@ -519,7 +519,7 @@ def test_agnncore_loads_cluster_learner_via_namespace_package_path():
         # AGNN/ is NOT on sys.path at core.py load time.
         "sys.path = [p for p in sys.path "
         f"if p not in ({repo_root!r}, {self_ai_src!r}, "
-        f"'{repo_root}/AGNN', '{repo_root}/self-ai/src')];\n"
+        f"{(repo_root + '/AGNN')!r}, {(repo_root + '/self-ai/src')!r})];\n"
         "import warnings; warnings.simplefilter('error', RuntimeWarning);\n"
         "from AGNN.core import AGNNCore;\n"
         "import AGNN.core as m;\n"
