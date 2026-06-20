@@ -285,10 +285,43 @@ class TrisynapticCircuit:
         #    This dual path preserves every existing test's expectation
         #    while still letting the classifier drive the new CAUSAL /
         #    DIFFERENTIAL / TEMPORAL / DISCURSIVE cases.
+        #
+        #    CA1 fallback override gate (issue #88):
+        #    Pre-fix, the override fired whenever classify() returned
+        #    CATEGORICAL on a non-empty correction. This was correct
+        #    in the SRC-as-primary era (SRC returning CATEGORICAL
+        #    meant "I gave up, here's the default"), but post-PCL-
+        #    migration it misfires: PCL correctly classifies
+        #    "X merupakan Y" as CATEGORICAL (via labelled cluster OR
+        #    via SRC seed match on the head verb), and CA1 then
+        #    wrongly overrides to CAUSAL/FUNCTIONAL/etc. based on
+        #    English cue-words in the *stimulus* (the user's
+        #    question), not the correction.
+        #
+        #    The gate: suppress the CA1 override when the
+        #    role_classifier is a PositionalClusterLearner AND the
+        #    correction's predicate head verb has a non-None PCL
+        #    label (i.e. PCL knows this action and has labelled its
+        #    cluster). In that case, PCL's CATEGORICAL classification
+        #    is authoritative — CA1's stimulus-text scan must not
+        #    override it.
+        #
+        #    The CA1 override still fires (preserving the original
+        #    "PCL+SRC both failed" design intent) when:
+        #      - role_classifier is a plain SemanticRoleClassifier
+        #        (no PCL loaded; legacy path), OR
+        #      - role_classifier is a PCL but the correction's
+        #        predicate head verb is untracked / unlabelled (PCL
+        #        genuinely fell back to SRC default, not seed match).
+        #
+        #    See issue #88 for the red-team analysis and
+        #    AGNN/tests/test_audit_4_1_ca1_fallback_misfire.py for
+        #    the regression tests.
         relation = self.role_classifier.classify(correction or stimulus)
         edge_type = relation.name
         if (relation == RelationType.CATEGORICAL
-                and correction.strip()):
+                and correction.strip()
+                and not self._pcl_labelled_correction(correction)):
             # Classifier fell back to default. Give CA1 one more shot
             # at the combined stimulus + correction text - its cue
             # list includes tokens ("causes", "requires") that may
@@ -419,3 +452,85 @@ class TrisynapticCircuit:
                 confidence=episome.confidence,
             )
             graph.add_edge(edge)
+
+    # ------------------------------------------------------------------
+    # Issue #88 helpers — CA1 fallback override gate
+    # ------------------------------------------------------------------
+
+    def _pcl_labelled_correction(self, correction: str) -> bool:
+        """Return True iff PCL has a labelled cluster for the correction's verb.
+
+        Used by :meth:`encode` to gate the CA1 fallback override (issue #88):
+        when PCL ``classify()`` returns CATEGORICAL but PCL actually knows the
+        correction's predicate verb (the head verb of the SPO predicate has a
+        non-None label via :meth:`PositionalClusterLearner.get_relation_type_for_action`),
+        then PCL's CATEGORICAL is authoritative and CA1 must not override it.
+
+        Returns False (allowing CA1 override) when any of these hold:
+
+          - ``role_classifier`` is not a PositionalClusterLearner (no
+            ``get_relation_type_for_action`` method — e.g. a plain
+            SemanticRoleClassifier). The legacy CA1 override path is
+            preserved for this case.
+          - ``role_classifier`` is a PCL but ``spo(correction)`` raises
+            or returns an empty predicate (defensive: never block CA1
+            on a parse failure).
+          - ``role_classifier`` is a PCL, ``spo(correction)`` succeeds,
+            but the head verb is untracked / unlabelled (PCL genuinely
+            fell back to SRC default, not seed match — CA1 override
+            is appropriate per the original design intent).
+
+        Returns True (suppressing CA1 override) only when ``role_classifier``
+        is a PCL AND the head verb of ``spo(correction).predicate`` has a
+        non-None PCL label.
+
+        Why head verb, not the full predicate phrase?
+        ----------------------------------------------
+        PCL's ``spo()`` returns a multi-token predicate for sentences with
+        >3 tokens (e.g. ``"hamilton merupakan kota di selandia baru"`` →
+        predicate = ``"merupakan kota di selandia"``). But PCL's
+        ``cluster_id_of`` is keyed on **single verb tokens** (``"merupakan"``),
+        not on multi-token phrases. So ``get_relation_type_for_action(predicate)``
+        with the full phrase would return None even though PCL knows the
+        head verb.
+
+        The head verb (first token of the predicate phrase) IS in
+        ``cluster_id_of`` for canonical verbs like ``merupakan``. Checking
+        the head verb gives us the right answer: "does PCL know this
+        action's verb stem and has it labelled the cluster?"
+
+        This matches the behaviour of ``PositionalClusterLearner.classify()``
+        on a 3-token version of the same sentence — for which PCL would
+        resolve ``merupakan`` directly via the labelled CATEGORICAL cluster.
+        """
+        classifier = self.role_classifier
+        # Defensive: only PCL exposes get_relation_type_for_action.
+        # Plain SemanticRoleClassifier (legacy path, no PCL loaded) does
+        # not — return False so the CA1 override fires as before.
+        if not hasattr(classifier, "get_relation_type_for_action"):
+            return False
+        # Defensive: spo() may raise on weird input. Never block CA1
+        # on a parse failure.
+        try:
+            spo = classifier.spo(correction)
+        except Exception:
+            return False
+        predicate = getattr(spo, "predicate", "") or ""
+        predicate = predicate.strip()
+        if not predicate:
+            return False
+        # Extract the head verb (first token of the predicate phrase).
+        # PCL's cluster_id_of is keyed on single tokens, so the head is
+        # the right lookup key.
+        head_verb = predicate.split()[0]
+        if not head_verb:
+            return False
+        # Use the stable content-addressed API (issue #93). Returns
+        # None if the head verb is untracked / unclustered / in an
+        # unlabelled cluster — all cases where CA1 override is
+        # appropriate (PCL genuinely fell back to SRC default).
+        try:
+            rt = classifier.get_relation_type_for_action(head_verb)
+        except Exception:
+            return False
+        return rt is not None
