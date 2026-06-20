@@ -185,25 +185,25 @@ def test_audit_4_1_pcl_correctly_classifies_pure_indonesian_categorical():
 
 
 def test_audit_4_1_misfire_on_stimulus_with_english_causal_cue():
-    """PROOF of misfire: stimulus contains "causes" → CA1 overrides
-    PCL's correct CATEGORICAL to CAUSAL.
+    """REGRESSION GUARD (post-issue-#88 fix): stimulus contains "causes"
+    but the override is correctly SUPPRESSED.
 
     The correction "hamilton merupakan kota di selandia baru" is a
     textbook CATEGORICAL statement — PCL correctly returns
-    RelationType.CATEGORICAL. But the stimulus (the user's question)
+    RelationType.CATEGORICAL (via SRC seed match on the head verb
+    "merupakan", which IS in a labelled PCL cluster). The stimulus
     "What causes Hamilton to be a city?" contains the English cue-word
-    "causes", which sits in CA1's CAUSAL cue table.
+    "causes", which would sit in CA1's CAUSAL cue table.
 
-    CA1's bag-of-words scan over (stimulus + correction) finds 1
-    CAUSAL cue ("causes") and 0 of any other type, so it returns
-    "CAUSAL". The override block at trisynaptic_circuit.py:262-263
-    then sets edge_type = "CAUSAL", which is WRONG for a sentence
-    that says "X merupakan Y".
+    Pre-fix (issue #88): CA1's bag-of-words scan over (stimulus +
+    correction) found 1 CAUSAL cue ("causes") and the override block
+    at trisynaptic_circuit.py:255-263 set edge_type = "CAUSAL" —
+    WRONG for a sentence that says "X merupakan Y".
 
-    This test ASSERTS the misfire (i.e. edge_type == "CAUSAL"). If
-    the audit's suggested fix is implemented (gate the override on a
-    PCL-side "was-fallback" flag), this assertion will fail and the
-    test should be updated to assert edge_type == "CATEGORICAL".
+    Post-fix: the override is gated by ``_pcl_labelled_correction()``.
+    PCL's head-verb lookup via ``get_relation_type_for_action("merupakan")``
+    returns CATEGORICAL (non-None), so the gate suppresses the CA1
+    override and the correct CATEGORICAL classification stands.
     """
     circuit = _make_circuit_with_pcl()
 
@@ -215,33 +215,36 @@ def test_audit_4_1_misfire_on_stimulus_with_english_causal_cue():
     pcl_only = circuit.role_classifier.classify(correction)
     assert pcl_only == RelationType.CATEGORICAL
 
-    # Sanity: CA1 alone returns CAUSAL (English cue "causes" fires).
+    # Sanity: CA1 alone STILL returns CAUSAL (English cue "causes" fires).
+    # The fix does NOT change CA1's behavior — it gates WHEN CA1 is
+    # consulted, not HOW CA1 classifies.
     ca1_only = CA1().integrate_context(stimulus, correction)
     assert ca1_only == "CAUSAL", (
-        f"CA1 should fire CAUSAL on stimulus containing 'causes'; "
-        f"got {ca1_only}. If this changes, the misfire scenario may no "
-        f"longer reproduce."
+        f"CA1 should still fire CAUSAL on stimulus containing 'causes'; "
+        f"got {ca1_only}. The fix gates CA1 invocation, not CA1 itself — "
+        f"if CA1's cue table changed, the regression scope needs review."
     )
 
-    # The misfire: the encode() pipeline lets CA1 override PCL's
-    # correct CATEGORICAL with the wrong CAUSAL.
-    assert episome.edge_type == "CAUSAL", (
-        f"§4.1 misfire did NOT fire for this stimulus/correction pair. "
-        f"Either (a) the override block at trisynaptic_circuit.py:255-263 "
-        f"has been gated/removed, or (b) CA1's cue table changed so "
-        f"'causes' no longer fires CAUSAL. Either way, the audit's "
-        f"misfire claim no longer holds for this case — update the "
-        f"investigation doc accordingly."
+    # The fix: the encode() pipeline now SUPPRESSES the CA1 override
+    # because PCL has a labelled cluster for the correction's head verb
+    # "merupakan". The correct CATEGORICAL classification stands.
+    assert episome.edge_type == "CATEGORICAL", (
+        f"§4.1 misfire regression: edge_type should be 'CATEGORICAL' "
+        f"(PCL's correct classification, with CA1 override suppressed "
+        f"by the issue #88 gate); got {episome.edge_type!r}. The gate "
+        f"in TrisynapticCircuit._pcl_labelled_correction() may have "
+        f"regressed — verify that get_relation_type_for_action('merupakan') "
+        f"returns a non-None value on the committed PCL state."
     )
 
 
 def test_audit_4_1_misfire_on_stimulus_with_english_functional_cue():
-    """PROOF of misfire (second variant): stimulus contains "requires"
-    → CA1 overrides PCL's CATEGORICAL to FUNCTIONAL.
+    """REGRESSION GUARD (post-issue-#88 fix, second variant): stimulus
+    contains "requires" but the override is correctly SUPPRESSED.
 
     Same scenario as the previous test but with a different English
     cue-word ("requires" sits in CA1's FUNCTIONAL cue table). Proves
-    the misfire is not specific to the "causes" cue.
+    the gate is not specific to the "causes" cue.
     """
     circuit = _make_circuit_with_pcl()
 
@@ -254,19 +257,20 @@ def test_audit_4_1_misfire_on_stimulus_with_english_functional_cue():
     ca1_only = CA1().integrate_context(stimulus, correction)
     assert ca1_only == "FUNCTIONAL"
 
-    assert episome.edge_type == "FUNCTIONAL", (
-        f"§4.1 misfire did NOT fire for the 'requires' variant. "
-        f"See test_audit_4_1_misfire_on_stimulus_with_english_causal_cue "
+    assert episome.edge_type == "CATEGORICAL", (
+        f"§4.1 misfire regression ('requires' variant): edge_type should "
+        f"be 'CATEGORICAL'; got {episome.edge_type!r}. See "
+        f"test_audit_4_1_misfire_on_stimulus_with_english_causal_cue "
         f"for the canonical case."
     )
 
 
 def test_audit_4_1_misfire_on_stimulus_with_english_affects_cue():
-    """PROOF of misfire (third variant): stimulus contains "affects"
-    → CA1 overrides PCL's CATEGORICAL to CAUSAL.
+    """REGRESSION GUARD (post-issue-#88 fix, third variant): stimulus
+    contains "affects" but the override is correctly SUPPRESSED.
 
     "affects" is in CA1's CAUSAL cue table. This third variant
-    demonstrates the misfire fires for any English cue that maps to a
+    demonstrates the gate fires for any English cue that maps to a
     non-CATEGORICAL relation type, not just the canonical "causes".
     """
     circuit = _make_circuit_with_pcl()
@@ -280,8 +284,9 @@ def test_audit_4_1_misfire_on_stimulus_with_english_affects_cue():
     ca1_only = CA1().integrate_context(stimulus, correction)
     assert ca1_only == "CAUSAL"
 
-    assert episome.edge_type == "CAUSAL", (
-        f"§4.1 misfire did NOT fire for the 'affects' variant."
+    assert episome.edge_type == "CATEGORICAL", (
+        f"§4.1 misfire regression ('affects' variant): edge_type should "
+        f"be 'CATEGORICAL'; got {episome.edge_type!r}."
     )
 
 
@@ -348,6 +353,132 @@ def test_audit_4_1_no_misfire_when_cue_ties_with_categorical():
     )
 
     assert episome.edge_type == "CATEGORICAL"
+
+
+# ======================================================================
+# §4.1 — post-fix regression: CA1 override still fires when PCL genuinely
+# falls back to SRC default (preserves the original "PCL+SRC both failed"
+# design intent per issue #88 task brief).
+# ======================================================================
+
+
+def test_audit_4_1_ca1_override_still_fires_when_pcl_genuinely_fell_back():
+    """Post-fix regression guard: CA1 override still fires when PCL has no
+    labelled cluster for the correction's head verb.
+
+    The issue #88 fix gates the CA1 override on
+    ``_pcl_labelled_correction(correction)``: suppress the override when
+    PCL knows the correction's head verb. This test verifies the gate
+    does NOT over-suppress — when the correction uses a verb PCL has
+    never seen (or seen but not labelled), the CA1 override must still
+    fire, preserving the original "PCL+SRC both failed" design intent.
+
+    Setup: correction "xyz random words here" — head verb "words" is
+    not in any PCL cluster. classify() returns CATEGORICAL as the SRC
+    default (no seed match). CA1 sees "causes" in the stimulus and
+    returns CAUSAL. The override MUST fire — edge_type should be CAUSAL.
+    """
+    circuit = _make_circuit_with_pcl()
+
+    stimulus = "What causes this?"
+    # "words" is not a verb PCL knows — get_relation_type_for_action
+    # returns None for it, so the gate allows CA1 override.
+    correction = "xyz random words here"
+    episome = circuit.encode(stimulus=stimulus, correction=correction)
+
+    # Sanity: PCL falls back to SRC default CATEGORICAL (no seed match
+    # for "words" — it's not in any SRC seed table).
+    pcl_only = circuit.role_classifier.classify(correction)
+    assert pcl_only == RelationType.CATEGORICAL, (
+        f"PCL should return CATEGORICAL (SRC default) for unknown verb; "
+        f"got {pcl_only}."
+    )
+
+    # Sanity: the gate's check confirms PCL has no label for "words".
+    # We can verify this directly via the new API from PR #101.
+    pcl_label = circuit.role_classifier.get_relation_type_for_action("words")
+    assert pcl_label is None, (
+        f"PCL should have no label for 'words' (untracked verb); "
+        f"got {pcl_label}. The gate relies on None here to allow "
+        f"the CA1 override."
+    )
+
+    # Sanity: CA1 alone returns CAUSAL (English cue "causes" fires).
+    ca1_only = CA1().integrate_context(stimulus, correction)
+    assert ca1_only == "CAUSAL"
+
+    # The override MUST fire — the gate does not suppress it because
+    # PCL genuinely fell back (no labelled cluster for "words").
+    assert episome.edge_type == "CAUSAL", (
+        f"CA1 override should fire when PCL has no labelled cluster for "
+        f"the correction's verb (preserves the original 'PCL+SRC both "
+        f"failed' design intent per issue #88). Got {episome.edge_type!r} "
+        f"instead of 'CAUSAL'. The gate in _pcl_labelled_correction() "
+        f"may be over-suppressing — verify it returns False when "
+        f"get_relation_type_for_action returns None."
+    )
+
+
+def test_audit_4_1_ca1_override_preserved_for_plain_semantic_role_classifier():
+    """Post-fix regression guard: CA1 override fires as before when
+    role_classifier is a plain SemanticRoleClassifier (no PCL loaded).
+
+    The issue #88 fix's gate only applies when role_classifier is a
+    PositionalClusterLearner (it checks for the
+    ``get_relation_type_for_action`` method). For a plain SRC
+    (``use_cluster_learner=False`` AGNNCore path, or a standalone
+    TrisynapticCircuit with no PCL injected), the gate returns False
+    and the legacy CA1 override behavior is preserved bit-for-bit.
+
+    This guards against accidentally widening the gate to suppress
+    CA1 for non-PCL classifiers, which would break the original
+    "SRC gave up" design intent.
+    """
+    # Build a circuit with a plain SemanticRoleClassifier (no PCL).
+    from neocortex.semantic_role_classifier import SemanticRoleClassifier
+    try:
+        ec = EngramComplex()
+    except ImportError:
+        pytest.skip("AGNNGraph (self-ai/src/agnn) not available")
+    circuit = TrisynapticCircuit(
+        engram_complex=ec, role_classifier=SemanticRoleClassifier(),
+    )
+
+    # Confirm the classifier is NOT a PCL (no get_relation_type_for_action).
+    assert not hasattr(circuit.role_classifier, "get_relation_type_for_action"), (
+        "Plain SemanticRoleClassifier should not expose "
+        "get_relation_type_for_action (that's PCL-only)."
+    )
+
+    # The gate must return False for non-PCL classifiers, allowing
+    # the CA1 override to fire.
+    assert circuit._pcl_labelled_correction("any correction") is False, (
+        "Gate should return False (allow CA1 override) when "
+        "role_classifier is not a PCL."
+    )
+
+    # End-to-end: with a plain SRC, the CA1 override fires on a
+    # CATEGORICAL classification when the stimulus contains "causes".
+    # This is the legacy pre-PCL behavior, preserved by the fix.
+    stimulus = "What causes this?"
+    # Use a correction whose head verb is not in SRC's seed table,
+    # so SRC returns CATEGORICAL as default (the original "gave up"
+    # case the CA1 override was designed for).
+    correction = "xyz random words here"
+    episome = circuit.encode(stimulus=stimulus, correction=correction)
+
+    src_only = circuit.role_classifier.classify(correction)
+    assert src_only == RelationType.CATEGORICAL, (
+        f"SRC should return CATEGORICAL (default) for unknown verb; "
+        f"got {src_only}."
+    )
+    ca1_only = CA1().integrate_context(stimulus, correction)
+    assert ca1_only == "CAUSAL"
+
+    assert episome.edge_type == "CAUSAL", (
+        f"CA1 override should fire for plain SRC (legacy path preserved); "
+        f"got {episome.edge_type!r}."
+    )
 
 
 # ======================================================================
