@@ -488,3 +488,193 @@ def test_agnncore_has_required_methods():
         assert callable(getattr(AGNNCore, method_name)), (
             f"AGNNCore.{method_name} must be callable"
         )
+
+
+# ======================================================================
+# Configurable t-norm: behaviour of non-default t-norms must differ
+# from the legacy "product" t-norm.
+#
+# Background: see AGNN/docs/research-neuro-symbolic-reasoning.md §4 and
+# §B1. BA44's hardcoded `a * b` IS the product t-norm; making it
+# explicit & swappable is a pure structural refactor that must NOT
+# change the default behaviour (every test above still passes), but
+# MUST let callers opt into "lukasiewicz" or "godel" and observe
+# different weights.
+# ======================================================================
+
+def test_default_t_norm_is_product(ba44: InferiorFrontalGyrus):
+    """InferiorFrontalGyrus() with no args defaults to the product t-norm.
+
+    This is what guarantees the refactor is behaviour-preserving: every
+    pre-existing call site that does `InferiorFrontalGyrus()` keeps
+    getting `a * b` composition.
+    """
+    assert ba44.t_norm == "product"
+
+    # Sanity: 0.7 * 0.7 = 0.49 under the default.
+    edges = [
+        _edge(CAUSAL, 0.7, "smoking", "lung_damage"),
+        _edge(CAUSAL, 0.7, "lung_damage", "cancer"),
+    ]
+    result = ba44.deduce(edges)
+    assert result.inferred_edges[0].weight == pytest.approx(0.49, rel=1e-9)
+
+
+def test_unknown_t_norm_raises():
+    """An invalid t_norm name must raise ValueError, not silently fall back."""
+    with pytest.raises(ValueError):
+        InferiorFrontalGyrus(t_norm="not-a-t-norm")
+
+
+def test_lukasiewicz_tnorm_differs_from_product():
+    """Łukasiewicz t-norm: T(a, b) = max(0, a + b - 1).
+
+    For a CAUSAL_CHAIN over (0.7, 0.7):
+        product      →  0.7 * 0.7        = 0.49  (legacy)
+        lukasiewicz  →  max(0, 0.7+0.7-1) = 0.40
+
+    The two must differ; otherwise the refactor is a no-op and the
+    configurability promise is hollow.
+    """
+    edges = [
+        _edge(CAUSAL, 0.7, "smoking", "lung_damage"),
+        _edge(CAUSAL, 0.7, "lung_damage", "cancer"),
+    ]
+
+    product_result = InferiorFrontalGyrus(t_norm="product").deduce(edges)
+    lukasiewicz_result = InferiorFrontalGyrus(t_norm="lukasiewicz").deduce(edges)
+
+    # Sanity: same rule fired in both regimes.
+    assert "CAUSAL_CHAIN" in product_result.applied_rules
+    assert "CAUSAL_CHAIN" in lukasiewicz_result.applied_rules
+
+    product_w = product_result.inferred_edges[0].weight
+    lukasiewicz_w = lukasiewicz_result.inferred_edges[0].weight
+
+    # Sanity: product reproduces the legacy value exactly.
+    assert product_w == pytest.approx(0.49, rel=1e-9)
+    # Sanity: lukasiewicz matches its closed-form value.
+    assert lukasiewicz_w == pytest.approx(0.40, rel=1e-9)
+    # The whole point of the refactor: they must differ.
+    assert product_w != pytest.approx(lukasiewicz_w, rel=1e-9)
+
+
+def test_lukasiewicz_tnorm_collapses_low_premises_to_zero():
+    """Łukasiewicz t-norm gives 0 when both premises are <= 0.5.
+
+    This is the characteristic Łukasiewicz "either premise must be
+    quite true" semantics that distinguishes it from the product t-norm
+    (which only scales down). For (0.4, 0.5):
+        product      →  0.4 * 0.5             = 0.20
+        lukasiewicz  →  max(0, 0.4+0.5-1)     = 0.00  (boundary clamp)
+    """
+    edges = [
+        _edge(FUNCTIONAL, 0.4, "X", "Y"),
+        _edge(FUNCTIONAL, 0.5, "Y", "Z"),
+    ]
+
+    product_w = InferiorFrontalGyrus(t_norm="product").deduce(edges).inferred_edges[0].weight
+    lukasiewicz_w = InferiorFrontalGyrus(t_norm="lukasiewicz").deduce(edges).inferred_edges[0].weight
+
+    assert product_w == pytest.approx(0.20, rel=1e-9)
+    assert lukasiewicz_w == pytest.approx(0.0, rel=1e-9)
+
+
+def test_godel_tnorm_differs_from_product():
+    """Gödel (minimum) t-norm: T(a, b) = min(a, b).
+
+    For a FUNCTIONAL_COMPOSITION over (0.6, 0.6):
+        product  →  0.6 * 0.6  = 0.36  (legacy)
+        godel    →  min(0.6, 0.6) = 0.60
+
+    They clearly differ. (For equal-weight premises godel returns the
+    common value, product scales it down.)
+    """
+    edges = [
+        _edge(FUNCTIONAL, 0.6, "heart", "blood"),
+        _edge(FUNCTIONAL, 0.6, "blood", "oxygen_transport"),
+    ]
+
+    product_result = InferiorFrontalGyrus(t_norm="product").deduce(edges)
+    godel_result = InferiorFrontalGyrus(t_norm="godel").deduce(edges)
+
+    assert "FUNCTIONAL_COMPOSITION" in product_result.applied_rules
+    assert "FUNCTIONAL_COMPOSITION" in godel_result.applied_rules
+
+    product_w = product_result.inferred_edges[0].weight
+    godel_w = godel_result.inferred_edges[0].weight
+
+    assert product_w == pytest.approx(0.36, rel=1e-9)
+    assert godel_w == pytest.approx(0.60, rel=1e-9)
+    assert product_w != pytest.approx(godel_w, rel=1e-9)
+
+
+def test_godel_tnorm_is_min_for_mismatched_premises():
+    """Gödel t-norm returns the weaker premise. For (0.5, 0.8):
+        product  →  0.5 * 0.8  = 0.40
+        godel    →  min(0.5, 0.8) = 0.50
+    """
+    edges = [
+        _edge(FUNCTIONAL, 0.5, "X", "Y"),
+        _edge(FUNCTIONAL, 0.8, "Y", "Z"),
+    ]
+
+    product_w = InferiorFrontalGyrus(t_norm="product").deduce(edges).inferred_edges[0].weight
+    godel_w = InferiorFrontalGyrus(t_norm="godel").deduce(edges).inferred_edges[0].weight
+
+    assert product_w == pytest.approx(0.40, rel=1e-9)
+    assert godel_w == pytest.approx(0.50, rel=1e-9)
+
+
+def test_t_norm_does_not_affect_conflict_rule():
+    """CAUSAL_DIFFERENTIAL_CONFLICT uses arithmetic mean, NOT a t-norm.
+
+    So changing the t-norm must NOT change the conflict-resolved
+    weight. This guards the design contract documented in
+    inferior_frontal_gyrus.py: the arithmetic mean is a fuzzy
+    aggregation operator but not a t-norm, and is intentionally
+    excluded from t-norm configurability.
+    """
+    edges = [
+        _edge(CAUSAL, 0.7, "stress", "ulcer"),
+        _edge(DIFFERENTIAL, -0.8, "stress", "ulcer"),
+    ]
+
+    weights = {}
+    for tn in ("product", "lukasiewicz", "godel"):
+        result = InferiorFrontalGyrus(t_norm=tn).deduce(edges)
+        conflict = [
+            i for i in result.inferences
+            if i.rule == "CAUSAL_DIFFERENTIAL_CONFLICT"
+        ]
+        assert len(conflict) == 1
+        weights[tn] = conflict[0].weight
+
+    # All three regimes must give the same arithmetic-mean weight (-0.05).
+    for tn, w in weights.items():
+        assert w == pytest.approx(-0.05, rel=1e-9), (
+            f"conflict weight drifted under t_norm={tn!r}: got {w}"
+        )
+
+
+def test_t_norm_does_not_affect_differential_inversion():
+    """DIFFERENTIAL_INVERSION is a unary, weight-preserving rule.
+
+    The t-norm parameter must therefore have no effect on its output.
+    """
+    edges = [_edge(DIFFERENTIAL, -0.8, "exercise", "body_fat")]
+
+    weights = {}
+    for tn in ("product", "lukasiewicz", "godel"):
+        result = InferiorFrontalGyrus(t_norm=tn).deduce(edges)
+        inv = [
+            i for i in result.inferences
+            if i.rule == "DIFFERENTIAL_INVERSION"
+        ]
+        assert len(inv) == 1
+        weights[tn] = inv[0].weight
+
+    for tn, w in weights.items():
+        assert w == pytest.approx(-0.8, rel=1e-9), (
+            f"inversion weight drifted under t_norm={tn!r}: got {w}"
+        )
