@@ -63,11 +63,12 @@ get calibrated:
         classify() can use the labels; before it, classify() must
         fall back to SemanticRoleClassifier.
 
-    inspect_clusters() -> Dict[int, List[str]]
+    inspect_cluster_details() -> Dict[int, Dict[str, object]]
         Returns a human-readable view of each cluster: its action
-        tokens and its top object tokens (sorted by co-occurrence
-        count). This is what a human reviews before deciding the
-        cluster -> RelationType mapping.
+        tokens, its top object tokens (sorted by co-occurrence
+        count), its label (if assigned), and its connector
+        signature. This is what a human reviews before deciding
+        the cluster -> RelationType mapping.
 
 CLASSIFICATION
 --------------
@@ -463,9 +464,9 @@ _DEFAULT_SIMILARITY_THRESHOLD = 0.13
 # fall back to SemanticRoleClassifier for it.
 _DEFAULT_MIN_ACTION_OBSERVATIONS = 2
 
-# How many top objects (by count) to surface in inspect_clusters().
-# Keeps the human-readable view manageable when a cluster has dozens
-# of objects.
+# How many top objects (by count) to surface in
+# inspect_cluster_details(). Keeps the human-readable view manageable
+# when a cluster has dozens of objects.
 _INSPECT_TOP_OBJECTS = 15
 
 
@@ -547,7 +548,7 @@ class PositionalClusterLearner:
 
     Public API:
         train(corpus_lines)                  -> None
-        inspect_clusters()                   -> Dict[int, List[str]]
+        inspect_cluster_details()            -> Dict[int, Dict[str, object]]
         label_clusters(mapping)              -> None
         classify(text)                       -> RelationType
         spo(text)                            -> SPO
@@ -1408,25 +1409,6 @@ class PositionalClusterLearner:
         return between[0]
 
     @staticmethod
-    def _jaccard(a: Set[str], b: Set[str]) -> float:
-        """Plain Jaccard similarity of two sets: |A ∩ B| / |A ∪ B|.
-
-        Returns 0.0 for two empty sets (convention; avoids div-by-zero).
-
-        Kept for backward compatibility and as a public diagnostic
-        helper. The clustering algorithm itself uses
-        :meth:`_weighted_jaccard` (which considers co-occurrence
-        counts, not just set membership) - see ``_cluster_actions``
-        for the rationale.
-        """
-        if not a and not b:
-            return 0.0
-        union = a | b
-        if not union:
-            return 0.0
-        return len(a & b) / len(union)
-
-    @staticmethod
     def _weighted_jaccard(
         a: Dict[str, int], b: Dict[str, int]
     ) -> float:
@@ -1463,22 +1445,6 @@ class PositionalClusterLearner:
     # ------------------------------------------------------------------
     # STAGE 2: post-hoc naming + inspection
     # ------------------------------------------------------------------
-
-    def inspect_clusters(self) -> Dict[int, List[str]]:
-        """Return a human-readable view of every cluster for review.
-
-        Returns ``{cluster_id: [action_token, action_token, ...]}``
-        sorted by cluster_id. Use :meth:`inspect_cluster_details` for
-        a richer view that also includes the top objects per cluster.
-
-        Unclustered actions (cluster_id = -1) are NOT included - they
-        have no cluster to inspect.
-        """
-        out: Dict[int, List[str]] = {}
-        for cluster_id in sorted(self.action_clusters.keys()):
-            actions = sorted(self.action_clusters[cluster_id])
-            out[cluster_id] = actions
-        return out
 
     def inspect_cluster_details(
         self, top_objects: int = _INSPECT_TOP_OBJECTS

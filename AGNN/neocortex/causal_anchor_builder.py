@@ -100,7 +100,7 @@ class CausalAnchorBuilder:
     def build(
         self,
         correction: str,
-        relation: "RelationType | None" = None,
+        relation: "RelationType",
     ) -> Tuple[Tuple[str, str], ...]:
         """Extract causal anchors from ``correction``.
 
@@ -108,17 +108,12 @@ class CausalAnchorBuilder:
             correction: The correction text (e.g. "api menyebabkan panas"
                 or "X tidak menyebabkan Y"). Empty/whitespace returns
                 an empty tuple.
-            relation: Optional pre-computed RelationType for the
-                correction. When supplied, the builder skips its own
-                ``classify()`` call and uses this value directly —
-                this avoids double-bumping the classifier's frequency
-                table (the caller has already called ``classify()``
-                once to determine the edge type). When ``None`` (the
-                default), the builder calls ``classify()`` itself;
-                this is kept for backward compatibility with callers
-                that don't have a pre-computed relation, but is NOT
-                used by ``TrisynapticCircuit.encode()`` (which always
-                passes the pre-computed relation).
+            relation: Pre-computed RelationType for the correction. The
+                builder uses this value directly — it never calls
+                ``classify()`` itself. This avoids double-bumping the
+                classifier's frequency table: the caller has already
+                called ``classify()`` once to determine the edge type
+                (see :meth:`TrisynapticCircuit.encode`). Required.
 
         Returns:
             Tuple of ``(relation_type_name, target)`` pairs. Empty
@@ -126,7 +121,7 @@ class CausalAnchorBuilder:
               - ``correction`` is empty
               - the SPO parse finds no object (e.g. single-token
                 correction like "api")
-              - the classified relation type is not in
+              - the supplied relation type is not in
                 ``causal_types`` (e.g. a pure CATEGORICAL "X adalah Y"
                 yields no anchors — that's identity, not cause-effect)
 
@@ -163,20 +158,6 @@ class CausalAnchorBuilder:
         # No object → no anchor (single-token or parse failure).
         if not spo.object:
             return ()
-
-        # Resolve the relation type. Prefer the caller-supplied
-        # ``relation`` (avoids double-bumping the frequency table).
-        # Fall back to ``classify()`` only when the caller didn't
-        # supply one (backward-compat for direct builder use).
-        if relation is None:
-            try:
-                relation = self._classifier.classify(correction)
-            except Exception as exc:  # noqa: BLE001
-                logger.debug(
-                    "CausalAnchorBuilder: classify failed for %r: %s",
-                    correction[:60], exc,
-                )
-                return ()
 
         # Only emit anchors for causal relation types. CATEGORICAL /
         # DISCURSIVE / TEMPORAL / SPATIAL are skipped — they don't

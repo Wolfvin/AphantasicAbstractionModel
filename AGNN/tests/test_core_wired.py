@@ -14,8 +14,9 @@ Covers the Definition-of-Done from the task brief:
     8. ``penalize()`` decreases confidence.
 
 Plus targeted edge-case tests (model_path=None fallback, lazy model
-loading, graceful degradation when a sub-component raises, the
-module-level singleton shortcuts). Total: 16 tests (> 8 required).
+loading, graceful degradation when a sub-component raises, and the
+removed module-level singleton facade — see
+``test_module_level_shortcuts_removed``). Total: 16 tests (> 8 required).
 
 Run:
     cd <repo-root>
@@ -391,28 +392,51 @@ def test_aggregate_reinforce_then_penalize_round_trip(brain: AGNNCore):
     assert end == pytest.approx(start)
 
 
-def test_module_level_shortcuts_require_init_brain():
-    """Module-level ``learn()`` without ``init_brain()`` raises RuntimeError."""
-    # Reset the singleton so previous tests don't leak.
-    agnn_core_module._core = None
-    with pytest.raises(RuntimeError):
-        agnn_core_module.learn("q", "w", "c")
-    with pytest.raises(RuntimeError):
-        agnn_core_module.process("q")
-    with pytest.raises(RuntimeError):
-        agnn_core_module.inspect_engrams()
-    with pytest.raises(RuntimeError):
-        agnn_core_module.reinforce(1)
-    with pytest.raises(RuntimeError):
-        agnn_core_module.penalize(1)
+def test_module_level_shortcuts_removed():
+    """Module-level singleton shortcuts (init_brain/learn/process/...) removed.
+
+    Regression guard for the dead-code-audit §3.3 shrink: the
+    ``_core`` module-global + ``init_brain()``, ``learn()``,
+    ``process()``, ``inspect_engrams()``, ``reinforce()``, and
+    ``penalize()`` shortcut functions used to live in
+    ``AGNN/core.py`` as a thin facade over a module-level singleton.
+    The audit found zero production callers (the canonical entry
+    point is ``AGNNCore(...)`` directly), so the facade was removed.
+
+    This test pins the contract: callers must construct
+    ``AGNNCore`` themselves and call methods on the instance. The
+    shortcuts no longer exist as module-level attributes.
+    """
+    removed = (
+        "init_brain",
+        "learn",
+        "process",
+        "inspect_engrams",
+        "reinforce",
+        "penalize",
+        "_core",
+    )
+    for name in removed:
+        assert not hasattr(agnn_core_module, name), (
+            f"AGNN.core.{name} should be removed (dead-code-audit §3.3). "
+            f"Callers must use AGNNCore(...) directly."
+        )
 
 
-def test_module_level_init_brain_returns_singleton():
-    """``init_brain()`` returns an AGNNCore and stores it as the singleton."""
-    agnn_core_module._core = None  # reset
-    instance = agnn_core_module.init_brain(model_path=None)
-    assert isinstance(instance, AGNNCore)
-    assert agnn_core_module._core is instance
+def test_agnn_core_public_api_surface():
+    """AGNNCore exposes the instance methods the removed shortcuts delegated to.
+
+    The removed module-level shortcuts delegated to AGNNCore's
+    instance methods. After removing the shortcuts, those instance
+    methods must still exist on the class itself (otherwise callers
+    that already used AGNNCore directly would break).
+    """
+    required = ("learn", "process", "introspect", "reinforce", "penalize")
+    for name in required:
+        assert hasattr(AGNNCore, name), (
+            f"AGNNCore.{name} must still exist as an instance method "
+            f"after removing the module-level shortcut facade."
+        )
 
 
 # ======================================================================
