@@ -137,7 +137,7 @@ import re
 import tempfile
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from neocortex.semantic_role_classifier import (
     RelationType,
@@ -300,6 +300,17 @@ _ACTION_ANCHOR_MAX_BUCKET_ENTROPY = 0.5
 # test corpora (e.g., 'memang' at freq 1) while admitting recurring
 # irregular verbs (e.g., 'makan' at freq 2).
 _3_TOKEN_MIN_ACTION_FREQ = 2
+
+# Subject candidate — minimum frequency for a token that ONLY appears
+# at the agent bucket (bucket 0) to be considered a discourse marker
+# rather than a real subject. Real subject nouns in small corpora
+# might only appear at bucket 0 by chance (e.g., 'manusia' in a
+# 20-sentence test corpus); discourse markers like 'secara',
+# 'menurut', 'karena' appear at bucket 0 many times because they're
+# grammatical. The threshold 10 cleanly separates them: real subjects
+# in small corpora stay below 10, discourse markers in the pretrain
+# corpus (51 'secara', 45 'menurut', 34 'karena') all clear it.
+_SUBJECT_DISCOURSE_MARKER_MIN_FREQ = 10
 
 
 # ----------------------------------------------------------------------
@@ -1524,6 +1535,178 @@ class PositionalClusterLearner:
                 "has_connector": has_connector,
             }
         return out
+
+    # ------------------------------------------------------------------
+    # Public API: synthetic sentence generation (for RLHF-style feedback loop)
+    # ------------------------------------------------------------------
+
+    def sample_sentence(
+        self,
+        cluster_id: int,
+        *,
+        rng: Optional[Any] = None,
+    ) -> Optional[str]:
+        """Generate one synthetic SVO sentence from a learned cluster.
+
+        Picks an action from the cluster, picks the object most
+        statistically associated with that action (from
+        ``action_object_freq``), and picks a subject from tokens that
+        frequently appear at the agent position (bucket 0) anywhere
+        in the corpus. Returns the sentence as ``"Subject Action
+        Object"`` (lower-cased, single-space separated).
+
+        Why this is the synthetic-generation contract:
+
+          * **Action** — sampled uniformly from the cluster's action
+            set so every cluster member gets airtime. The action
+            token is what ``classify()`` will look up to label the
+            sentence, so it MUST be a real cluster member.
+
+          * **Object** — picked as the HIGHEST-count object in
+            ``action_object_freq[action]``. Statistical association:
+            the object the corpus most frequently paired with this
+            action. We don't sample-weight because we want the
+            generated sentence to be maximally representative of the
+            action's observed distribution — the user's verdict
+            ("makes sense" / "doesn't make sense") should reflect the
+            cluster's CENTRAL tendency, not a tail co-occurrence.
+
+          * **Subject** — picked from tokens whose
+            ``positional_freq[token][0]`` (agent bucket) count is
+            highest. This is corpus-wide, not action-specific — we
+            don't track which subjects co-occurred with which actions
+            (the cluster learner only stores action↔object
+            co-occurrence). The subject is a "carrier" token that
+            makes the sentence grammatical; the SEMANTIC content the
+            user evaluates is the action↔object pair. Subject
+            selection from the agent-bucket distribution keeps the
+            generated sentence corpus-grounded (real subject tokens
+            the learner has seen) without biasing the verdict toward
+            any particular subject.
+
+        Zero-bias contract: this method does NOT consult any human
+        word list. Action, object, and subject are all picked from
+        learned statistical distributions. The generated sentence is
+        a faithful projection of what the cluster's central tendency
+        looks like in surface form — if the user's verdict is "bad",
+        the cluster's central tendency is misaligned with the user's
+        semantic expectation, and ``AGNNCore.apply_feedback`` will
+        adjust the action↔object edge weight accordingly (NOT relabel
+        the cluster).
+
+        Args:
+            cluster_id: The cluster to sample from. Must be a real
+                cluster id in ``self.action_clusters`` (i.e. >= 0 and
+                present as a key). -1 (unclustered) is rejected.
+            rng: Optional random.Random instance for reproducible
+                sampling. When ``None`` (the default), a fresh
+                ``random.Random()`` is constructed per call — callers
+                who need reproducibility should pass a seeded rng.
+                Action selection is ``rng.choice(list(actions))``;
+                object selection is deterministic (top-1 by count);
+                subject selection is ``rng.choice(top_n_subjects)``.
+
+        Returns:
+            The generated sentence as ``"subject action object"``, or
+            ``None`` when:
+
+              * the learner is not trained,
+              * ``cluster_id`` is not a real cluster (e.g. -1, or an
+                id not in ``self.action_clusters``),
+              * the cluster has no actions,
+              * the chosen action has no objects in
+                ``action_object_freq`` (rare — actions with zero
+                observations never get clustered),
+              * no subject candidate is available (extremely rare —
+                only when ``positional_freq`` is empty, which means
+                ``is_trained`` is also False).
+
+            Returning ``None`` (rather than raising) lets the CLI
+            loop skip degenerate clusters silently.
+        """
+        if not self.is_trained:
+            return None
+        if cluster_id not in self.action_clusters:
+            return None
+        actions = self.action_clusters[cluster_id]
+        if not actions:
+            return None
+
+        if rng is None:
+            import random
+            rng = random.Random()
+
+        # 1. Pick an action — uniform over cluster members so every
+        #    action gets a chance to surface in the feedback loop.
+        action = rng.choice(sorted(actions))
+
+        # 2. Pick the object — highest-count object in
+        #    action_object_freq[action]. Ties broken alphabetically
+        #    for determinism. The object is the SEMANTIC content the
+        #    user evaluates.
+        objs = self.action_object_freq.get(action, {})
+        if not objs:
+            return None
+        # max() with a (count, -token) key gives highest count,
+        # alphabetically smallest token on ties.
+        obj = max(objs.items(), key=lambda kv: (kv[1], -ord(kv[0][0]) if kv[0] else 0))[0]
+
+        # 3. Pick a subject — from tokens with the highest agent-bucket
+        #    (bucket 0) counts. We don't track action↔subject
+        #    co-occurrence (only action↔object), so this is
+        #    corpus-wide. The subject is a grammatical carrier; the
+        #    semantic content the user evaluates is the action↔object
+        #    pair. Excluding the chosen action and object tokens from
+        #    the subject candidate set prevents degenerate sentences
+        #    like "makan makan makan" when the same token appears in
+        #    multiple buckets.
+        #
+        #    We also exclude two classes of tokens that are NOT real
+        #    subjects but happen to sit at position 0:
+        #      (a) ``function_word_candidates`` — statistically
+        #          discovered function words (sangat, itu, bukan, ...).
+        #      (b) Tokens whose bucket distribution is DOMINATED by
+        #          bucket 0 with zero presence at the object bucket
+        #          (2 or -1) AND high frequency (>=
+        #          ``_SUBJECT_DISCOURSE_MARKER_MIN_FREQ``). These are
+        #          discourse markers like "secara", "menurut",
+        #          "karena", "begitu" that introduce clauses and never
+        #          appear as objects. Real subject nouns (api, manusia,
+        #          kucing, ...) also appear as objects somewhere in a
+        #          large corpus, so their bucket distribution spans 0
+        #          AND 2/-1. Discourse markers don't — and they appear
+        #          often (they're grammatical). The frequency floor
+        #          excludes rare subject nouns in small corpora (where
+        #          a noun might only appear at bucket 0 by chance).
+        subject_candidates: List[Tuple[str, int]] = []
+        for token, pos_map in self.positional_freq.items():
+            if token == action or token == obj:
+                continue
+            if token in self.function_word_candidates:
+                continue
+            agent_count = pos_map.get(_AGENT_BUCKET, 0)
+            if agent_count <= 0:
+                continue
+            object_count = (
+                pos_map.get(_OBJECT_BUCKET_3, 0)
+                + pos_map.get(_OBJECT_BUCKET_N, 0)
+            )
+            if object_count == 0 and agent_count >= _SUBJECT_DISCOURSE_MARKER_MIN_FREQ:
+                # High-frequency token that ONLY appears at bucket 0 —
+                # a discourse marker, not a real subject. Skip.
+                continue
+            subject_candidates.append((token, agent_count))
+        if not subject_candidates:
+            return None
+        # Sort by (-count, token) so the highest-count subject comes
+        # first. We pick from the top 5 to add a little variety when
+        # the rng is seeded — pure top-1 would make every call
+        # produce the same sentence (boring for the user).
+        subject_candidates.sort(key=lambda kv: (-kv[1], kv[0]))
+        top_n = subject_candidates[:5]
+        subject = rng.choice([t for t, _ in top_n])
+
+        return f"{subject} {action} {obj}"
 
     def label_clusters(self, mapping: Dict[int, RelationType]) -> None:
         """Assign RelationType names to clusters (post-hoc, once).

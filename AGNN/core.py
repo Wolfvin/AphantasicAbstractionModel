@@ -1460,6 +1460,327 @@ class AGNNCore:
         except Exception:
             pass
 
+    # ------------------------------------------------------------------
+    # Output-level feedback loop (RLHF-style, statistical substrate)
+    # ------------------------------------------------------------------
+
+    def apply_feedback(
+        self,
+        sentence: str,
+        verdict: str,
+    ) -> Dict[str, Any]:
+        """Apply output-level feedback to the action↔object edge.
+
+        Parses the sentence using the cluster learner's ``spo()``
+        method, looks up the action↔object edge in the graph (if it
+        exists), stamps an eligibility trace on that edge, and calls
+        ``reinforce()`` or ``penalize()`` — which distributes the
+        ±0.1 modulatory signal across the stamped edge via the
+        existing three-factor learning path.
+
+        This is the RLHF-style feedback loop, but the substrate is
+        statistical (action_object_freq + TypedEdge.confidence),
+        not neural weights. The user judges the GENERATED SENTENCE
+        ("makes sense" / "doesn't make sense"); the credit-assignment
+        flows to the action↔object edge that produced it.
+
+        Zero-bias contract — what this method does NOT do:
+
+          * It does NOT relabel the cluster. The RelationType
+            assigned by ``label_clusters()`` is unchanged. The
+            feedback only adjusts the edge confidence (a continuous
+            weight), never the cluster membership or the label.
+            This is the guard against the feedback loop silently
+            injecting semantic bias into the cluster structure —
+            the principle AGNN holds throughout the project.
+          * It does NOT add or remove cluster members. The set
+            ``action_clusters[cluster_id]`` is unchanged.
+          * It does NOT touch the cluster learner's
+            ``action_object_freq``. That table is the corpus
+            statistics; feedback adjusts the graph edge weights,
+            which are a separate, post-hoc signal.
+
+        What it DOES do (the entire effect):
+
+          * Finds the TypedEdge whose source.label == subject and
+            target.label == object and relation_type == the action's
+            cluster label (if the cluster is labelled). If multiple
+            edges match, all get stamped.
+          * Stamps each matching edge with an eligibility trace
+            increment (``_ELIGIBILITY_INCREMENT = 1.0``).
+          * Calls ``reinforce(source_episome_id)`` or
+            ``penalize(source_episome_id)``. The existing
+            ``_apply_eligibility_weighted`` distributes the ±0.1
+            modulatory signal across the stamped edges
+            proportionally to their trace (which is uniform here —
+            one edge, one share = full ±0.1).
+
+        Args:
+            sentence: The generated sentence to give feedback on.
+                Typically the output of
+                ``PositionalClusterLearner.sample_sentence()``, but
+                any 3+ token SVO sentence works. Parsed via
+                ``self._cluster_learner.spo()`` (or the fallback
+                SemanticRoleClassifier's spo() if no cluster learner
+                is loaded).
+            verdict: ``"good"`` to reinforce, ``"bad"`` to penalize.
+                Any other value is silently ignored (returns
+                ``{"applied": False, "reason": "invalid_verdict"}``).
+
+        Returns:
+            Dict with diagnostic fields:
+              * ``applied`` (bool): True if feedback was applied
+                (edge found + stamped + reinforce/penalize called).
+              * ``reason`` (str): Why feedback was/wasn't applied.
+                One of ``"ok"``, ``"no_cluster_learner"``,
+                ``"parse_failed"``, ``"no_action_token"``,
+                ``"no_object_token"``, ``"action_unclustered"``,
+                ``"no_graph"``, ``"no_matching_edge"``,
+                ``"invalid_verdict"``.
+              * ``action`` (str|None): The action token parsed from
+                the sentence.
+              * ``object`` (str|None): The object token parsed from
+                the sentence.
+              * ``cluster_id`` (int|None): The cluster id of the
+                action, or None if unclustered.
+              * ``relation_type`` (str|None): The RelationType name
+                of the edge that was stamped, or None.
+              * ``edges_stamped`` (int): How many edges received an
+                eligibility trace increment (typically 1).
+        """
+        result: Dict[str, Any] = {
+            "applied": False,
+            "reason": "unknown",
+            "action": None,
+            "object": None,
+            "cluster_id": None,
+            "relation_type": None,
+            "edges_stamped": 0,
+        }
+
+        # Validate verdict early.
+        if verdict not in ("good", "bad"):
+            result["reason"] = "invalid_verdict"
+            return result
+
+        # Need a classifier with spo() — the cluster learner if loaded,
+        # else the trisynaptic circuit's role_classifier, else bail.
+        classifier = self._cluster_learner
+        if classifier is None:
+            # Try the trisynaptic circuit's role_classifier.
+            ts = getattr(self, "trisynaptic", None)
+            classifier = getattr(ts, "role_classifier", None) if ts else None
+        if classifier is None:
+            result["reason"] = "no_cluster_learner"
+            return result
+
+        # Parse the sentence.
+        try:
+            spo = classifier.spo(sentence)
+        except Exception:
+            result["reason"] = "parse_failed"
+            return result
+
+        action_token = self._normalize_spo_token(spo.predicate)
+        object_token = self._normalize_spo_token(spo.object)
+        if not action_token:
+            result["reason"] = "no_action_token"
+            return result
+        if not object_token:
+            result["reason"] = "no_object_token"
+            return result
+        result["action"] = action_token
+        result["object"] = object_token
+
+        # Look up the action's cluster + label (if the cluster learner
+        # has labelled clusters). This tells us which RelationType to
+        # match against when finding edges in the graph.
+        cluster_id = None
+        relation_type = None
+        if hasattr(classifier, "cluster_id_of"):
+            cluster_id = classifier.cluster_id_of.get(action_token)
+            if cluster_id is not None and cluster_id >= 0:
+                result["cluster_id"] = cluster_id
+                if hasattr(classifier, "cluster_labels") and cluster_id in classifier.cluster_labels:
+                    relation_type = classifier.cluster_labels[cluster_id]
+                    result["relation_type"] = (
+                        relation_type.name if relation_type else None
+                    )
+        if cluster_id is None or cluster_id < 0:
+            # Action not in any cluster — nothing to credit. This is
+            # the guard against feedback on un-clustered actions
+            # polluting the graph: we only adjust edges whose
+            # relation_type the cluster learner has assigned.
+            result["reason"] = "action_unclustered"
+            return result
+
+        # Need a graph to find edges in.
+        if self.graph is None:
+            result["reason"] = "no_graph"
+            return result
+        inner = getattr(self.graph, "_graph", None)
+        if inner is None:
+            result["reason"] = "no_graph"
+            return result
+
+        # Find edges whose source.label == subject and target.label ==
+        # object and relation_type == the cluster's label. We iterate
+        # over all nodes, find those whose label matches the subject,
+        # then walk their outgoing edges looking for matching target
+        # label + relation type.
+        subject_token = self._normalize_spo_token(spo.subject)
+
+        # Find candidate source nodes by label.
+        source_node_ids: List[str] = []
+        try:
+            for nid in self._iter_node_ids(inner):
+                node = inner.get_node(nid)
+                if node is None:
+                    continue
+                if self._normalize_spo_token(getattr(node, "label", "")) == subject_token:
+                    source_node_ids.append(nid)
+        except Exception:
+            pass
+
+        # Walk outgoing edges from each source node, find matches.
+        edges_stamped = 0
+        for src_id in source_node_ids:
+            try:
+                for edge in inner.get_edges_from(src_id):
+                    tgt_node = inner.get_node(edge.target_id)
+                    if tgt_node is None:
+                        continue
+                    if self._normalize_spo_token(getattr(tgt_node, "label", "")) != object_token:
+                        continue
+                    # Match relation type if we have one. When the
+                    # cluster is unlabelled (relation_type is None),
+                    # stamp ANY edge between subject and object —
+                    # this is rare (label_clusters is usually called
+                    # before apply_feedback) but the contract is to
+                    # credit the edge regardless of label when the
+                    # cluster hasn't been named yet.
+                    if relation_type is not None:
+                        edge_rel = edge.relation_type
+                        edge_rel_name = (
+                            edge_rel.name if hasattr(edge_rel, "name")
+                            else str(edge_rel)
+                        )
+                        if edge_rel_name != relation_type.name:
+                            continue
+                    # Stamp this edge with an eligibility trace
+                    # increment so the upcoming reinforce/penalize
+                    # credits it via _apply_eligibility_weighted.
+                    pair = (
+                        edge.source_id,
+                        edge.target_id,
+                        str(edge.relation_type),
+                    )
+                    self._eligibility[pair] = (
+                        self._eligibility.get(pair, 0.0)
+                        + self._ELIGIBILITY_INCREMENT
+                    )
+                    edges_stamped += 1
+            except Exception:  # noqa: BLE001
+                # Best-effort: a single edge-walk failure must not
+                # abort the rest of the feedback loop.
+                continue
+
+        result["edges_stamped"] = edges_stamped
+        if edges_stamped == 0:
+            result["reason"] = "no_matching_edge"
+            return result
+
+        # Find a valid episome to pass to reinforce/penalize. The
+        # reinforce/penalize code path needs a non-None episome to
+        # proceed past the early-return guard. We use the first
+        # source node's episome if it exists; otherwise we bail
+        # because reinforce/penalize would silently no-op.
+        target_episome_id: Optional[Any] = None
+        for src_id in source_node_ids:
+            epi = self._find_episome(src_id)
+            if epi is not None:
+                target_episome_id = src_id
+                break
+        if target_episome_id is None:
+            # No registered episome for any source node. The trace
+            # was stamped but reinforce/penalize would no-op. Clear
+            # the stamp so we don't leak trace state.
+            for src_id in source_node_ids:
+                pair_keys_to_clear = [
+                    k for k in self._eligibility
+                    if k[0] == src_id
+                ]
+                for k in pair_keys_to_clear:
+                    self._eligibility[k] -= self._ELIGIBILITY_INCREMENT
+                    if self._eligibility[k] <= self._ELIGIBILITY_EPSILON:
+                        del self._eligibility[k]
+            result["reason"] = "no_matching_edge"
+            result["edges_stamped"] = 0
+            return result
+
+        # Apply the verdict via the existing three-factor path.
+        # The eligibility trace we just stamped will route the ±0.1
+        # modulatory signal to the matching edge(s).
+        if verdict == "good":
+            self.reinforce(target_episome_id)
+        else:
+            self.penalize(target_episome_id)
+
+        result["applied"] = True
+        result["reason"] = "ok"
+        return result
+
+    @staticmethod
+    def _normalize_spo_token(token: Any) -> str:
+        """Lower-case + strip a token (or multi-token predicate phrase).
+
+        ``spo().predicate`` for >3-token sentences is a space-joined
+        phrase like ``"sedang makan nasi"``; we take the FIRST token
+        (the actual action) for cluster lookup. For single-token
+        predicates / subjects / objects this is a no-op lower-case.
+        """
+        if not token:
+            return ""
+        s = str(token).lower().strip()
+        if not s:
+            return ""
+        # For multi-token predicate phrases, take the first token —
+        # that's the action the cluster learner indexed.
+        return s.split()[0]
+
+    @staticmethod
+    def _iter_node_ids(inner: Any) -> List[str]:
+        """Best-effort iteration over all node ids in the wrapped graph.
+
+        Tries common AGNNGraph APIs in order: ``get_all_node_ids()``,
+        ``nodes`` attribute (dict-like), then ``_nodes`` private
+        attribute. Returns an empty list if none work — the caller
+        (apply_feedback) will then find no matching edges and report
+        ``no_matching_edge``.
+        """
+        # Common API: explicit getter.
+        for method_name in ("get_all_node_ids", "all_node_ids"):
+            method = getattr(inner, method_name, None)
+            if callable(method):
+                try:
+                    ids = method()
+                    if ids is not None:
+                        return list(ids)
+                except Exception:
+                    pass
+        # Dict-like attribute.
+        for attr in ("nodes", "_nodes", "node_map"):
+            coll = getattr(inner, attr, None)
+            if isinstance(coll, dict):
+                return list(coll.keys())
+            try:
+                # Maybe it's iterable of nodes.
+                if coll is not None:
+                    return [getattr(n, "id", str(n)) for n in coll]
+            except Exception:
+                pass
+        return []
+
     def _mirror_confidence_to_graph(self, episome: Any) -> None:
         """Best-effort: copy episome.confidence onto the graph node.
 
