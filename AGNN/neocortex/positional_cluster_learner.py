@@ -1757,6 +1757,119 @@ class PositionalClusterLearner:
     # Public API: classification
     # ------------------------------------------------------------------
 
+    def get_relation_type_for_action(
+        self, action: str,
+    ) -> Optional[RelationType]:
+        """Resolve the ``RelationType`` for an action token by content.
+
+        Resolves ``action`` → ``cluster_id`` → ``cluster_labels[cluster_id]``,
+        returning the label without exposing the unstable cluster_id to
+        the caller (see issue #93: cluster IDs are not stable across
+        PCL versions; code that introspects by cluster_id directly
+        breaks silently on PCL upgrades).
+
+        Args:
+            action: The action token to look up. Will be normalized
+                via :meth:`_normalize_token` (lower-cased + whitespace-
+                collapsed). Multi-word predicates should pass the
+                normalized form (e.g. ``"bergantung pada"`` for the
+                FUNCTIONAL predicate; the head word ``"bergantung"``
+                is also accepted and will be looked up directly).
+
+        Returns:
+            The :class:`RelationType` of the labelled cluster that
+            contains ``action``, or ``None`` if:
+
+              - the learner is not trained (no clusters discovered), or
+              - the action is not tracked by the learner (never
+                observed in the training corpus), or
+              - the action's cluster_id is ``-1`` (unclustered, below
+                ``min_action_observations``), or
+              - the action's cluster exists but is not labelled
+                (``cluster_labels`` has no entry for it).
+
+            ``None`` always means "fall back to the wrapped
+            :class:`SemanticRoleClassifier`" — callers should treat
+            ``None`` as "no PCL-primary classification available".
+
+        Why this method exists
+        -----------------------
+        Pre-this-method, downstream code (e.g.
+        :meth:`AGNNCore.apply_feedback`) reached into
+        ``classifier.cluster_id_of[action]`` and then
+        ``classifier.cluster_labels[cluster_id]`` directly. This is
+        fragile because cluster IDs are an **implementation detail**
+        of the greedy agglomerative merge in :meth:`_cluster_actions`:
+
+          - They depend on corpus token order.
+          - They depend on ``similarity_threshold``.
+          - They depend on the presence/absence of anchor-word
+            discovery (PR #81 changed this).
+          - They depend on the presence/absence of Brown clustering
+            for objects (PR #81 changed this).
+
+        Any change to the clustering algorithm shifts cluster IDs.
+        Code that hardcodes ``cluster_labels[42]`` to fetch CAUSAL
+        will silently inspect the wrong cluster after a PCL upgrade.
+
+        This method hides the cluster_id behind a content-addressed
+        lookup: ``action`` → ``cluster_id_of[action]`` →
+        ``cluster_labels[cluster_id]``. The caller never sees the ID.
+
+        Backward compatibility
+        ----------------------
+        The internal fields ``cluster_id_of`` and ``cluster_labels``
+        are NOT deprecated — they remain the implementation backing
+        this method, and tests that exercise the implementation
+        directly (e.g. ``test_positional_cluster_learner.py``'s
+        cluster-identity assertions) still need them. The new API is
+        the **preferred** way for production code (anything outside
+        PCL's own test suite) to look up an action's label.
+
+        Relation to :meth:`classify`
+        ----------------------------
+        :meth:`classify` takes a full ``text`` sentence, parses SPO,
+        checks negation, then looks up the action's cluster label —
+        falling back to :class:`SemanticRoleClassifier` on any miss.
+        This method takes just an action token and returns only the
+        PCL-primary label (or ``None``); it does NOT fall back to
+        SRC. Use this method when you want to know "did PCL label
+        this action?" without invoking the full fallback chain.
+
+        Example
+        -------
+        >>> learner = PositionalClusterLearner.load("cluster_learner_state.json")
+        >>> learner.get_relation_type_for_action("menyebabkan")
+        <RelationType.CAUSAL: 'causal'>
+        >>> learner.get_relation_type_for_action("memicu")
+        <RelationType.CAUSAL: 'causal'>
+        >>> learner.get_relation_type_for_action("upload")  # unclustered loan-word
+        None
+        >>> learner.get_relation_type_for_action("merawat")  # clustered but unlabelled
+        None
+        """
+        # Defensive: if not trained, there's nothing to look up.
+        if not self.is_trained:
+            return None
+        # Defensive: non-string input (None, int, etc.) returns None
+        # rather than raising AttributeError on .lower(). This makes
+        # the API robust to callers that pass untyped user input.
+        if not isinstance(action, str):
+            return None
+        # Normalize the input the same way classify() does.
+        action_token = self._normalize_token(action)
+        if not action_token:
+            return None
+        # Look up the cluster_id for this action (if tracked at all).
+        cluster_id = self.cluster_id_of.get(action_token)
+        if cluster_id is None or cluster_id < 0:
+            # None = untracked (never observed); -1 = tracked but
+            # unclustered (below min_action_observations). Either way,
+            # no PCL-primary classification.
+            return None
+        # Look up the cluster's label (if labelled).
+        return self.cluster_labels.get(cluster_id)
+
     def classify(self, text: str) -> RelationType:
         """Classify ``text`` using labelled clusters, else fallback.
 

@@ -1700,12 +1700,40 @@ class AGNNCore:
         result["action"] = action_token
         result["object"] = object_token
 
-        # Look up the action's cluster + label (if the cluster learner
-        # has labelled clusters). This tells us which RelationType to
-        # match against when finding edges in the graph.
-        cluster_id = None
+        # Look up the action's relation type via the stable content-
+        # addressed API (issue #93: cluster IDs are not stable across
+        # PCL versions, so we never expose them to callers). The new
+        # ``get_relation_type_for_action`` method returns the
+        # RelationType directly (or None if the action is unclustered
+        # or in an unlabelled cluster), without revealing the
+        # underlying cluster_id.
+        #
+        # We still need the cluster_id for the result dict
+        # (``result["cluster_id"]`` is a documented public field of
+        # ``apply_feedback``'s return value, used by
+        # ``sample_feedback_loop.py`` for debug logging). Reach into
+        # the internal ``cluster_id_of`` only for that one debug
+        # output — never for label resolution.
         relation_type = None
-        if hasattr(classifier, "cluster_id_of"):
+        cluster_id = None
+        if hasattr(classifier, "get_relation_type_for_action"):
+            # Preferred path: stable, content-addressed API.
+            relation_type = classifier.get_relation_type_for_action(action_token)
+            # The cluster_id is still useful for debug logging, so
+            # fetch it from the internal field. This is safe because
+            # we don't use it for any semantic decision — only for
+            # the ``result["cluster_id"]`` debug field.
+            if relation_type is not None and hasattr(classifier, "cluster_id_of"):
+                cluster_id = classifier.cluster_id_of.get(action_token)
+                if cluster_id is not None and cluster_id >= 0:
+                    result["cluster_id"] = cluster_id
+                    result["relation_type"] = relation_type.name
+        elif hasattr(classifier, "cluster_id_of"):
+            # Fallback for older classifiers that don't yet have the
+            # new method (e.g. a plain SemanticRoleClassifier without
+            # PCL wrapping). Use the legacy direct-access path. This
+            # branch can be removed once all classifier implementations
+            # in the repo expose ``get_relation_type_for_action``.
             cluster_id = classifier.cluster_id_of.get(action_token)
             if cluster_id is not None and cluster_id >= 0:
                 result["cluster_id"] = cluster_id
@@ -1714,12 +1742,17 @@ class AGNNCore:
                     result["relation_type"] = (
                         relation_type.name if relation_type else None
                     )
-        if cluster_id is None or cluster_id < 0:
-            # Action not in any cluster — nothing to credit. This is
-            # the guard against feedback on un-clustered actions
-            # polluting the graph: we only adjust edges whose
+        if relation_type is None:
+            # Action not in any labelled cluster — nothing to credit.
+            # This is the guard against feedback on un-clustered
+            # actions polluting the graph: we only adjust edges whose
             # relation_type the cluster learner has assigned.
-            result["reason"] = "action_unclustered"
+            if cluster_id is None or cluster_id < 0:
+                result["reason"] = "action_unclustered"
+            else:
+                # Clustered but unlabelled — distinct reason so debug
+                # output can tell the two cases apart.
+                result["reason"] = "action_in_unlabelled_cluster"
             return result
 
         # Need a graph to find edges in.
