@@ -91,18 +91,3 @@ class CA1:
             # is the safest bet for freshly encoded facts).
             best = "CATEGORICAL"
         return best
-
-    # ------------------------------------------------------------------
-    # Overload accepting an episome_id (skeleton-era signature)
-    # ------------------------------------------------------------------
-
-    def integrate_context_for(self, episome_id: int, stimulus: str, correction: str = "") -> str:
-        """Same as :meth:`integrate_context`, but also cache the result
-        keyed by ``episome_id`` so other components can look it up later.
-
-        This bridges the skeleton API (which took only ``episome_id``)
-        with the real input CA1 needs (the text).
-        """
-        edge_type = self.integrate_context(stimulus, correction)
-        self.inferred_types[episome_id] = edge_type
-        return edge_type

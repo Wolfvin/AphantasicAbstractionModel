@@ -74,15 +74,3 @@ class EntorhinalCortex:
         record: Dict[str, object] = {"text": text, "tokens": tokens, "keywords": keywords}
         self.input_buffer.append(record)
         return record
-
-    # ------------------------------------------------------------------
-    # Backwards-compatible alias
-    # ------------------------------------------------------------------
-
-    def gateway_input(self, stimulus: str) -> str:
-        """Legacy entry point - returns the normalized text only.
-
-        Kept so any caller that still hits the skeleton-era API keeps
-        working. New code should call :meth:`normalize_input` directly.
-        """
-        return str(self.normalize_input(stimulus)["text"])

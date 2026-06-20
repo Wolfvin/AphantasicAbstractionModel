@@ -1,6 +1,8 @@
-"""Commissures package - bidirectional pathways."""
+"""Commissures package - bidirectional pathways.
 
-from .fornix import Fornix
-from .corpus_callosum import CorpusCallosum
+The corpus_callosum.py and fornix.py stubs were removed (see
+AGNN/docs/dead-code-audit.md §2.1). The package is currently empty
+of live implementations.
+"""
 
-__all__ = ["Fornix", "CorpusCallosum"]
+__all__: list[str] = []

@@ -1,6 +1,8 @@
-"""Brainstem package - global activation (serotonin, dopamine)."""
+"""Brainstem package - global activation (serotonin, dopamine).
 
-from .raphe_nucleus import RapheNucleus
-from .tegmentum import Tegmentum
+The raphe_nucleus.py and tegmentum.py stubs were removed (see
+AGNN/docs/dead-code-audit.md §2.1). The package is currently empty
+of live implementations.
+"""
 
-__all__ = ["RapheNucleus", "Tegmentum"]
+__all__: list[str] = []

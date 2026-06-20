@@ -87,19 +87,3 @@ class CA3:
         neighbor_ids = [oid for oid, _ in scored[:top_k]]
         self.bindings.append((episome_id, list(neighbor_ids)))
         return neighbor_ids
-
-    # ------------------------------------------------------------------
-    # Backwards-compatible alias
-    # ------------------------------------------------------------------
-
-    def bind(self, episome_id: int, neighbor_ids: List[int]) -> None:
-        """Legacy entry point - persist a (episome_id, neighbor_ids) binding.
-
-        New code should call :meth:`register` followed by
-        :meth:`autoassociate`, which both compute and persist the binding.
-        This method is kept so callers using the skeleton-era API continue
-        to work.
-        """
-        if not isinstance(episome_id, int):
-            raise TypeError("episome_id must be int")
-        self.bindings.append((episome_id, list(neighbor_ids)))
