@@ -87,6 +87,23 @@ class AGNNCore:
     # How much a single reinforce()/penalize() call nudges confidence.
     _REINFORCE_DELTA = 0.1
 
+    # Three-factor learning (R-STDP / neoHebbian) — see
+    # AGNN/docs/research-spiking-neural-networks.md §1.1-1.3 + §4 + B1.
+    # Per-edge eligibility trace `e_ij` is incremented each time an edge
+    # is read during _build_semesomes_from_graph() (the canonical
+    # edge-traversal site invoked from process()), and decays
+    # exponentially per call so older traversals fade. When
+    # reinforce()/penalize() fires, the global modulatory signal `M`
+    # (= ±_REINFORCE_DELTA) is distributed across edges proportionally
+    # to their trace — `Δw_ij = M · e_ij / Σe` — implementing the
+    # textbook three-factor rule `Δw = M · e`. When the trace dict is
+    # empty (cold start, no recent traversal), reinforce/penalize falls
+    # back to the legacy uniform node-confidence bump so behavior is
+    # bit-identical for callers that never traverse.
+    _ELIGIBILITY_DECAY: float = 0.9
+    _ELIGIBILITY_INCREMENT: float = 1.0
+    _ELIGIBILITY_EPSILON: float = 1e-6
+
     # Phase 0 (Aphantasic Articulation Anchor): default system message
     # sent to Qwen3 alongside the user prompt in ``_articulate()``.
     #
@@ -344,6 +361,14 @@ class AGNNCore:
         # delta to 0, and sets ``episome.definition_dirty = True`` so
         # the next ``_articulate`` re-generates the definition.
         self._reinforce_deltas: Dict[Any, float] = {}
+
+        # Three-factor learning: per-edge eligibility trace. Keyed by
+        # ``(source_id, target_id, str(relation_type))`` — the same
+        # triple _build_semesomes_from_graph uses for dedup. Value is
+        # a non-negative float; decays exponentially per process() call
+        # and is consumed (renormalised to ±_REINFORCE_DELTA) when
+        # reinforce()/penalize() fires.
+        self._eligibility: Dict[Any, float] = {}
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -809,6 +834,14 @@ class AGNNCore:
                 if pair in seen_pairs:
                     continue
                 seen_pairs.add(pair)
+                # Three-factor learning: stamp this edge with an
+                # eligibility trace increment so the next
+                # reinforce()/penalize() call can credit it. This is
+                # the local-factor side of Δw = M · e (R-STDP).
+                self._eligibility[pair] = (
+                    self._eligibility.get(pair, 0.0)
+                    + self._ELIGIBILITY_INCREMENT
+                )
                 raw_edges.append(Semesome(
                     type=str(edge.relation_type.value).upper(),
                     weight=float(edge.confidence),
@@ -816,6 +849,85 @@ class AGNNCore:
                     target=id_to_text.get(edge.target_id, edge.target_id),
                 ))
         return self._order_chain(raw_edges)
+
+    def _decay_eligibility(self) -> None:
+        """Exponentially decay all eligibility traces, drop ~zero ones.
+
+        Called at the start of ``process()`` so the most-recent
+        traversal's edges dominate the trace — older traversals fade
+        by ``_ELIGIBILITY_DECAY`` per call. This is the time-decay
+        half of Izhikevich's distal-reward solution.
+        """
+        if not self._eligibility:
+            return
+        decayed = {
+            k: v * self._ELIGIBILITY_DECAY
+            for k, v in self._eligibility.items()
+        }
+        self._eligibility = {
+            k: v for k, v in decayed.items()
+            if v > self._ELIGIBILITY_EPSILON
+        }
+
+    def _apply_eligibility_weighted(self, modulatory_signal: float) -> bool:
+        """Distribute ``modulatory_signal`` across edges by eligibility.
+
+        Implements the three-factor rule ``Δw_ij = M · e_ij / Σe``:
+        each edge whose trace > 0 receives a confidence delta
+        proportional to its share of the total trace, signed by
+        ``modulatory_signal`` (+_REINFORCE_DELTA for reinforce,
+        -_REINFORCE_DELTA for penalize). Each edge is clipped to
+        [0.0, 1.0] per TypedEdge's invariant.
+
+        Returns True if any edge was updated (i.e. the trace was
+        non-empty and the apply actually ran), False otherwise —
+        callers use the return value to decide whether to also apply
+        the legacy uniform node bump (False) or skip it (True), so
+        the total modulatory budget is conserved.
+        """
+        if not self._eligibility:
+            return False
+        if self.graph is None:
+            return False
+        inner = getattr(self.graph, "_graph", None)
+        if inner is None:
+            return False
+        total = sum(self._eligibility.values())
+        if total <= self._ELIGIBILITY_EPSILON:
+            return False
+        # Walk a snapshot — we don't mutate the trace dict here.
+        for (src, tgt, rel), trace in list(self._eligibility.items()):
+            if trace <= self._ELIGIBILITY_EPSILON:
+                continue
+            share = trace / total
+            delta = modulatory_signal * share
+            # Find the actual TypedEdge by matching (src, tgt, rel) —
+            # get_edges_from returns live references into _edges, so
+            # in-place mutation of .confidence propagates to the graph.
+            try:
+                for edge in inner.get_edges_from(src):
+                    if (
+                        edge.target_id == tgt
+                        and str(edge.relation_type) == rel
+                    ):
+                        edge.confidence = float(
+                            max(0.0, min(1.0, edge.confidence + delta))
+                        )
+                        break
+            except Exception:  # noqa: BLE001
+                # Best-effort: a single edge-mutation failure must
+                # not abort the rest of the credit assignment.
+                continue
+        # Consume the trace — the modulatory signal has been applied.
+        # A residual decay (rather than hard reset) keeps traces
+        # available for back-to-back reinforces, matching the
+        # biological "lingering eligibility" model (Gerstner 2018).
+        self._eligibility = {
+            k: v * self._ELIGIBILITY_DECAY
+            for k, v in self._eligibility.items()
+            if v * self._ELIGIBILITY_DECAY > self._ELIGIBILITY_EPSILON
+        }
+        return True
 
     @staticmethod
     def _order_chain(edges: List[Any]) -> List[Any]:
@@ -1030,6 +1142,12 @@ class AGNNCore:
             "chain_confidence": 0.0,
         }
 
+        # Three-factor learning: decay existing eligibility traces so
+        # the edges about to be traversed (step 2 below) dominate the
+        # next reinforce()/penalize() credit assignment. Older
+        # traversals fade by _ELIGIBILITY_DECAY per process() call.
+        self._decay_eligibility()
+
         # 1. Retrieve candidate episomes via the Papez circuit.
         episomes: List[Any] = []
         if self.papez is not None and self.graph is not None:
@@ -1235,6 +1353,17 @@ class AGNNCore:
         Biologis: Dopamine (mesolimbic) -> strengthen synapses.
         AI: ``confidence += 0.1`` (capped at 1.0).
 
+        Three-factor learning (R-STDP / neoHebbian): if a non-empty
+        eligibility trace exists from a recent ``process()`` /
+        ``traverse()`` traversal, the +0.1 modulatory signal is
+        distributed across the traversed edges proportionally to
+        their trace — ``Δw_ij = M · e_ij / Σe`` — implementing
+        per-edge credit assignment. Edges never traversed receive
+        zero delta. When the trace is empty (cold start, no recent
+        traversal), the legacy uniform +0.1 node-confidence bump
+        runs instead, preserving pre-three-factor behavior. The
+        public signature is unchanged.
+
         Phase 1 (Aphantasic Node Representation): also tracks the
         cumulative positive delta per node. When the delta crosses
         ``_DEFINITION_INVALIDATE_THRESHOLD`` (default 0.3, i.e. three
@@ -1255,11 +1384,20 @@ class AGNNCore:
         if epi is None:
             return
         try:
-            epi.confidence = min(
-                1.0, float(epi.confidence) + self._REINFORCE_DELTA,
+            # Three-factor learning: if there is a lingering
+            # eligibility trace from a recent traversal, distribute
+            # the +_REINFORCE_DELTA modulatory signal across the
+            # traversed edges (per-edge credit assignment). Otherwise
+            # fall through to the legacy uniform node bump.
+            applied_edge = self._apply_eligibility_weighted(
+                self._REINFORCE_DELTA
             )
-            # Mirror onto the graph node so retrieval sees the new value.
-            self._mirror_confidence_to_graph(epi)
+            if not applied_edge:
+                epi.confidence = min(
+                    1.0, float(epi.confidence) + self._REINFORCE_DELTA,
+                )
+                # Mirror onto the graph node so retrieval sees the new value.
+                self._mirror_confidence_to_graph(epi)
 
             # Phase 1: track cumulative positive delta + invalidate
             # the cached definition when the threshold is crossed.
@@ -1298,6 +1436,12 @@ class AGNNCore:
         Biologis: Serotonin (raphe nucleus) -> weaken synapses.
         AI: ``confidence -= 0.1`` (floored at 0.0).
 
+        Three-factor learning: mirrors ``reinforce()`` — when a
+        non-empty eligibility trace exists, the -0.1 modulatory
+        signal is distributed across traversed edges proportionally
+        to their trace; otherwise the legacy uniform -0.1
+        node-confidence bump runs. Public signature unchanged.
+
         Args:
             episome_id: Node to penalize.
         """
@@ -1305,10 +1449,14 @@ class AGNNCore:
         if epi is None:
             return
         try:
-            epi.confidence = max(
-                0.0, float(epi.confidence) - self._REINFORCE_DELTA,
+            applied_edge = self._apply_eligibility_weighted(
+                -self._REINFORCE_DELTA
             )
-            self._mirror_confidence_to_graph(epi)
+            if not applied_edge:
+                epi.confidence = max(
+                    0.0, float(epi.confidence) - self._REINFORCE_DELTA,
+                )
+                self._mirror_confidence_to_graph(epi)
         except Exception:
             pass
 
