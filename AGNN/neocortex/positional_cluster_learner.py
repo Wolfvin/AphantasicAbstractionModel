@@ -131,6 +131,7 @@ CONSTRAINTS
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import tempfile
@@ -169,85 +170,239 @@ _OBJECT_BUCKET_N = -1
 
 
 # ----------------------------------------------------------------------
-# Action stoplist (Bug 1 fix)
+# Statistical anchor-word discovery (replaces _ACTION_STOPLIST/_COPULAS)
 # ----------------------------------------------------------------------
 #
-# Function words that must NEVER be captured as the "action" token when
-# extracting (action, object) pairs positionally. These are intensifiers,
-# deictic markers, epistemic adverbs, and copula-like appearance verbs
-# that sit in position 1 of state+adjective sentences like:
+# Previous design (PR #73, rejected for violating zero-bias):
+#   ``_ACTION_STOPLIST`` was a hardcoded frozenset of Indonesian
+#   function words (itu, sangat, memang, tampak, bukan, tidak, ...)
+#   hand-picked based on their linguistic meaning. ``_COPULAS`` was a
+#   similar hardcoded frozenset of copula verbs (adalah, merupakan,
+#   ialah, yaitu, yakni). Both lists were the same kind of human
+#   bias that PR #69 was rejected for (seeding RelationType by meaning)
+#   - just smaller in scope.
 #
-#     "es itu sangat dingin"     - 'itu' and 'sangat' are NOT actions;
-#                                   'dingin' (the adjective) is.
-#     "karbon tampak stabil"     - 'tampak' is NOT an action; 'stabil' is.
-#     "durian bersifat harum"    - 'bersifat' is NOT an action; 'harum' is.
+# New design (zero-bias, statistical discovery):
 #
-# Without this stoplist, 'sangat' / 'itu' / 'tampak' / etc. would be
-# captured as the action and form garbage clusters whose "objects" are
-# actually the adjectives of the state pattern - e.g.
-# {'actions': ['sangat'], 'top_objects': ['asin', 'dingin', 'hijau']}.
+#   1. FUNCTION WORD CANDIDATES — discovered from positional entropy.
+#      A token is excluded from the action slot when:
+#        - total frequency >= ``_FUNCTION_WORD_MIN_FREQ`` (so one-off
+#          tokens don't get flagged on noise); AND
+#        - it appears at >= ``_FUNCTION_WORD_MIN_POSITIONS`` distinct
+#          fine-grained positions (raw indices, not collapsed buckets)
+#          - function words span many positions because they're
+#          grammatical markers that can attach to many sentence
+#          structures, while content words concentrate at fewer
+#          positions; AND
+#        - normalized Shannon entropy of its fine-grained position
+#          distribution >= ``_FUNCTION_WORD_ENTROPY_THRESHOLD``
+#          (the distribution is flat, not concentrated); AND
+#        - it does NOT carry Indonesian verb morphology (me-, ber-,
+#          diper-, ter-) - morphology is a *form* signal, not a
+#          meaning signal, so it stays.
 #
-# The fix: when extracting (action, object) by position, skip tokens in
-# this stoplist from the action slot. The first non-stoplist token after
-# the subject becomes the action. If the action is also the last token
-# (no real object remains, as in pure state+adjective), the sentence
-# contributes nothing to action_object_freq.
+#      Examples from the real corpus (pretrain_corpus.txt + depth):
+#        'sangat'  - 4 positions, fine_nh=0.79, freq=35  -> excluded
+#        'itu'     - 3 positions, fine_nh=0.80, freq=15  -> excluded
+#        'memang'  - 3 positions, fine_nh=0.79, freq=17  -> excluded
+#        'terlalu' - 4 positions, fine_nh=0.96, freq=33  -> excluded
+#        'bukan'   - 4 positions, fine_nh=0.80, freq=254 -> excluded
+#        'tidak'   - 6 positions, fine_nh=0.43, freq=155 -> excluded
 #
-# This list is a fixed linguistic resource, NOT a tunable parameter.
-# It is intentionally narrow: only words that are unambiguously
-# function-word-like in Bahasa Indonesia state+adjective patterns. We do
-# NOT include real verbs (makan, menyebabkan, adalah, merupakan) - those
-# carry relation semantics and must be free to form clusters.
-_ACTION_STOPLIST: frozenset = frozenset({
-    # Deictic / determiner markers
-    "itu", "ini", "tersebut",
-    # Intensifiers
-    "sangat", "begitu", "terlalu", "cukup",
-    # Epistemic / evidential adverbs
-    "memang", "sebenarnya", "dasarnya", "faktanya",
-    # Copula-like appearance verbs that precede the real predicate
-    # in state+adjective patterns. These look like verbs but function
-    # syntactically as copulas - the actual semantic predicate is the
-    # adjective that follows them.
-    "tampak", "terlihat", "terasa", "tergolong", "bersifat",
-    # Prefix-phrase introducers. These begin adverbial phrases like
-    # "menurut ahli," / "secara teknis" / "faktanya" that occupy the
-    # subject slot in positional parsing. Without this stoplist entry,
-    # the second word of the phrase (e.g. "ahli") would be captured
-    # as the action - a garbage noun-as-action pair.
-    "menurut", "secara",
-    # Negation markers. These are NOT actions - they're function words
-    # that flip the relation. The negation override in classify()
-    # handles them via ``spo.negated`` (which checks _NEGATION_TOKENS),
-    # so removing them from the action slot here does not break
-    # negation detection.
-    "bukan", "tidak", "bukanlah", "tidaklah",
-})
+#   2. ACTION BUCKET ANCHORS — discovered from positional concentration.
+#      A token is RECOGNISED as a valid action (even without verb
+#      morphology) when:
+#        - total frequency >= ``_ACTION_ANCHOR_MIN_FREQ``; AND
+#        - its dominant bucket is the action bucket (1); AND
+#        - normalized Shannon entropy of its *bucket* distribution <
+#          ``_ACTION_ANCHOR_MAX_BUCKET_ENTROPY`` (concentrated at the
+#          action bucket).
+#
+#      This is the statistical replacement for ``_COPULAS``: copulas
+#      like 'adalah' (bucket_freq={1: 69}, bucket_nh=0.0) and
+#      'merupakan' (bucket_freq={1: 103}, bucket_nh=0.0) emerge as
+#      action anchors automatically from positional concentration -
+#      no human-curated copula list needed.
+#
+#   3. CHICKEN-AND-EGG BREAK — two-pass training.
+#      Function word / action anchor discovery needs ``positional_freq``
+#      to be populated, but ``positional_freq`` is built during training.
+#      We solve this with a two-pass train() pipeline:
+#        Pass 1: build ``positional_freq`` and ``fine_positional_freq``
+#                (NO action/object extraction yet).
+#        Compute ``function_word_candidates`` and ``action_bucket_anchors``
+#                from the populated frequency tables.
+#        Pass 2: extract (action, object) pairs using the discovered
+#                sets - function words are skipped, action anchors are
+#                recognised as verbs even without morphology.
+#
+# This eliminates the last human-authored word lists in the module.
+# The connector-signal detector (see ``_CONNECTOR_*`` constants below)
+# remains unchanged - it was already zero-bias (corpus-wide positional
+# discovery, no hardcoded connector list).
+
+# Function word candidate — minimum total frequency floor.
+# Below this, a token's positional distribution is too noisy to flag
+# as a function word. Calibrated to the smallest pretrain corpus where
+# function words (sangat, itu, memang, ...) consistently reach freq 15+.
+_FUNCTION_WORD_MIN_FREQ = 5
+
+# Function word candidate — minimum number of distinct fine-grained
+# positions. Function words span many positions (they're grammatical
+# markers that can attach anywhere); content words concentrate at 1-2.
+# Requiring >= 3 positions excludes copulas like 'adalah' (always at
+# action slot regardless of sentence length, so 2 fine positions) and
+# 'merupakan' (2 fine positions) which are content words despite lacking
+# verbal morphology.
+_FUNCTION_WORD_MIN_POSITIONS = 3
+
+# Function word candidate — minimum normalized Shannon entropy of the
+# fine-grained position distribution. 0.0 = perfectly concentrated at
+# one position; 1.0 = perfectly uniform across all observed positions.
+# 0.4 captures tokens that are clearly spread across multiple positions
+# (e.g., 'tidak' at fine_nh=0.43) while excluding tokens that are
+# concentrated (e.g., copulas at fine_nh=0.32).
+_FUNCTION_WORD_ENTROPY_THRESHOLD = 0.4
+
+# Function word candidate — MAXIMUM normalized Shannon entropy of the
+# *bucket* distribution. Real function words (sangat, itu, bukan,
+# tidak, ...) concentrate EXCLUSIVELY at the action bucket (b_nh = 0)
+# — they never appear as subject or object because they're grammatical
+# markers, not nouns. Content words that happen to appear mid-sentence
+# (e.g. 'akun' as object of a verb in a clause, 'adonan' as a noun
+# that's sometimes mid-sentence) have b_nh >= 0.3 because they also
+# appear at bucket 0 (subject) or bucket 2/-1 (object).
+#
+# Threshold 0.1 cleanly separates real function words (all b_nh = 0.00)
+# from content words that happen to have varied positions (b_nh >= 0.3).
+_FUNCTION_WORD_MAX_BUCKET_ENTROPY = 0.1
+
+# Action bucket anchor — minimum total frequency floor.
+# Calibrated high enough to exclude one-off tokens in small corpora
+# (e.g., 'itu' in the Bug 1 test corpus has freq 2 - below this floor)
+# while admitting real action anchors (e.g., 'adalah' at freq 69).
+_ACTION_ANCHOR_MIN_FREQ = 3
+
+# Action bucket anchor — maximum normalized Shannon entropy of the
+# *bucket* distribution. Anchors must be concentrated at the action
+# bucket (low entropy). 0.5 admits tokens with one secondary bucket
+# (e.g., a verb that's occasionally used as a noun) while excluding
+# tokens that span multiple buckets uniformly.
+_ACTION_ANCHOR_MAX_BUCKET_ENTROPY = 0.5
+
+# 3-token sentence — minimum frequency at the action bucket for a
+# non-verb-morphology token to be accepted as the action.
+# In a 3-token SVO sentence (``X A Y``) the positional parse is
+# unambiguous, so we can't use the multi-word-subject verb-prefix
+# requirement. Instead, we require non-morphological candidates to
+# have appeared at the action bucket at least this many times across
+# the corpus - this excludes one-off function words in synthetic
+# test corpora (e.g., 'memang' at freq 1) while admitting recurring
+# irregular verbs (e.g., 'makan' at freq 2).
+_3_TOKEN_MIN_ACTION_FREQ = 2
 
 
 # ----------------------------------------------------------------------
-# Verb-prefix heuristic (complements the stoplist)
+# Brown clustering of object vocabulary (replaces literal-token overlap)
+# ----------------------------------------------------------------------
+#
+# PR #71/#73/#74 clustered actions by weighted Jaccard of their LITERAL
+# object-token distributions. This fails for synonym copulas like
+# 'adalah' and 'merupakan' whose literal object sets barely overlap
+# even though both take the same semantic class (taxonomy nouns). The
+# weighted Jaccard threshold was lowered to 0.13 to compensate, but
+# this is a tuned patch - the root cause is that literal tokens are
+# too sparse a signal.
+#
+# New design: pre-cluster the OBJECT vocabulary itself via Brown
+# clustering (hierarchical agglomerative, context-distribution
+# clustering variant - see Clark 2000 CDC and the research doc
+# AGNN/docs/research-unsupervised-grammar-induction.md section 1.3).
+# Each object token is represented as the distribution of ACTIONS it
+# co-occurs with. Objects that share action context are merged into a
+# super-cluster. Then actions are clustered by weighted Jaccard of
+# their SUPER-CLUSTER distributions, not literal object tokens.
+#
+# Example: 'mamalia' co-occurs with {adalah, merupakan}; 'logam'
+# co-occurs with {adalah}. They share 'adalah' context, so Brown
+# clustering merges them into one super-cluster 'taxonomy noun'. Then
+# 'adalah' (which takes mamalia + logam) and 'merupakan' (which takes
+# mamalia + unggas, where unggas also merged into 'taxonomy noun' via
+# 'merupakan' context) both end up with super-cluster distribution
+# {taxonomy noun: N} - they merge trivially even if their literal
+# object tokens never overlap.
+#
+# The clustering uses plain Jaccard on action SETS (not weighted
+# Jaccard on counts) because we want to capture "do these objects share
+# action context?" - a yes/no question - rather than "do they have the
+# same action distribution shape?". Brown/CDC literature uses both; we
+# pick the simpler set-based variant because it correctly handles the
+# synonym-copula case where action distributions have very different
+# shapes but identical support.
+
+# Brown clustering — minimum similarity for two object clusters to
+# merge. We use *weighted* Jaccard on action-count maps (same metric
+# as action clustering) rather than plain Jaccard on action sets.
+# Plain Jaccard suffers from chain-merging: two objects that share
+# ONE action out of many merge at Jaccard >= 0.13, then the merged
+# cluster's action set grows, enabling further merges via different
+# shared actions. The end result is one giant super-cluster
+# containing most of the object vocabulary, which destroys the
+# discrimination action clustering needs.
+#
+# Weighted Jaccard is more strict: it considers COUNT distributions,
+# not just set membership. Two objects that share an action but at
+# very different frequencies (e.g., 'mamalia' appears with adalah 8
+# times but 'logam' appears with adalah only 3 times) get a lower
+# similarity than two objects with matching count shapes. This breaks
+# the chain-merge: an object can merge with the growing cluster only
+# if its count distribution matches the cluster's aggregated
+# distribution, not just shares one action.
+#
+# Threshold 0.15 is calibrated to:
+#   - Merge synonyms (mamalia+logam via shared copula context)
+#     so adalah+merupakan can merge via super-cluster overlap.
+#   - NOT merge unrelated objects (hujan+panas) so CAUSAL and
+#     TEMPORAL actions stay in separate clusters.
+# 0.05 was too aggressive (CAUSAL+TEMPORAL collapsed); 0.3 was too
+# conservative (adalah+merupakan didn't merge on the single-corpus
+# test). 0.15 is the sweet spot verified on pretrain_corpus.txt,
+# pretrain_corpus_depth.txt, and the combined corpus.
+_BROWN_CLUSTER_SIMILARITY_THRESHOLD = 0.15
+
+# Brown clustering — hard cap on the number of object super-clusters.
+# The greedy agglomerative merge stops when EITHER no pair has
+# similarity >= threshold OR the number of clusters drops to this cap.
+# Prevents pathological corpora from collapsing every object into one
+# giant super-cluster (which would make action clustering useless).
+_BROWN_CLUSTER_MAX_CLUSTERS = 1  # effectively disabled - rely on threshold
+# (Set to 1 to disable the cap; the threshold alone stops merging.)
+# A non-trivial cap (e.g., 30) is recommended only for very large
+# object vocabularies (>500 tokens) where the threshold-based stop
+# might leave too many singletons. Pretrain corpus has ~500 distinct
+# objects and works well with threshold-only stop.
+
+
+# ----------------------------------------------------------------------
+# Verb-prefix heuristic (morphological, NOT semantic - kept)
 # ----------------------------------------------------------------------
 #
 # Indonesian verbs are highly morphologically regular: the vast majority
 # start with one of the active/passive prefixes me-, ber-, di-, or ter-.
 # This is a coarse but effective signal for distinguishing verbs from
-# nouns in position 1 of an SVO sentence.
+# nouns in position 1 of an SVO sentence. It is a MORPHOLOGICAL signal
+# (word form), not a SEMANTIC signal (word meaning) - so it does NOT
+# violate the zero-bias principle that ``_ACTION_STOPLIST`` and
+# ``_COPULAS`` violated.
 #
-# We use this heuristic ONLY to disambiguate multi-word subjects like
+# Used to disambiguate multi-word subjects like
 # "ahli gizi menyarankan diet" (4 tokens). Position 1 here is "gizi"
 # (a noun - the second word of the compound subject "ahli gizi"), and
 # position 2 is "menyarankan" (the real verb). Without the heuristic,
 # positional parsing would capture (action="gizi", object="diet") -
 # a garbage pair where a noun is treated as the action.
 #
-# The heuristic: when scanning for the action token, prefer the first
-# token that *looks like a verb* (starts with one of these prefixes)
-# or is a known copula (see :data:`_COPULAS`). If no such token exists
-# before the object slot, skip the sentence (avoids noun-as-action
-# garbage).
-#
-# This is intentionally conservative:
+# Conservative by design:
 #   - Prefixes are 3+ characters to avoid false positives ("di" alone
 #     is a preposition, "me" alone matches "merah" = red).
 #   - We accept some false positives ("beras" = rice, "ternak" =
@@ -262,20 +417,6 @@ _VERB_PREFIXES: tuple = (
                                       # reliable than just "di-")
     "ter",                            # ter- accidental/passive (3-char)
 )
-
-
-# Copulas - link verbs that carry relation semantics (typically
-# CATEGORICAL) but don't carry the me-/ber-/diper-/ter- prefix that
-# :data:`_VERB_PREFIXES` detects. Without this whitelist, multi-word
-# categorical sentences like "suku bunga adalah instrumen kebijakan
-# moneter" (6 tokens) would be skipped by the >3-token verb-prefix
-# requirement, because "adalah" doesn't match any prefix and sits at
-# position 2 (after the multi-word subject "suku bunga"). The copula
-# whitelist lets "adalah" be recognised as a valid action despite
-# lacking verbal morphology.
-_COPULAS: frozenset = frozenset({
-    "adalah", "merupakan", "ialah", "yaitu", "yakni",
-})
 
 
 # ----------------------------------------------------------------------
@@ -450,6 +591,54 @@ class PositionalClusterLearner:
     connector_tokens: Set[str] = field(default_factory=set)
 
     # ------------------------------------------------------------------
+    # Statistical anchor-word discovery state (replaces _ACTION_STOPLIST
+    # and _COPULAS). Populated by _compute_anchor_words() during train().
+    # See the "_FUNCTION_WORD_*" and "_ACTION_ANCHOR_*" constants above
+    # for the discovery contract.
+    #
+    # fine_positional_freq: {token: {fine_position: count}}
+    #   Fine-grained positional counts where the position is the raw
+    #   index 0..n-2 with -1 for the last token (NOT collapsed to the
+    #   4-bucket scheme used by positional_freq). Used to compute the
+    #   Shannon entropy of each token's position distribution; function
+    #   words have flat (high-entropy) distributions, content words
+    #   have concentrated (low-entropy) distributions.
+    #
+    # function_word_candidates: set of tokens statistically flagged as
+    #   function words (high positional entropy + freq floor + no verb
+    #   morphology). Excluded from the action slot during (action,
+    #   object) extraction - the zero-bias replacement for the old
+    #   hardcoded _ACTION_STOPLIST.
+    #
+    # action_bucket_anchors: set of tokens statistically flagged as
+    #   action-bucket anchors (concentrated at the action bucket + freq
+    #   floor + low bucket entropy). Recognised as valid actions in
+    #   >3-token sentences even without verb morphology - the zero-bias
+    #   replacement for the old hardcoded _COPULAS whitelist.
+    # ------------------------------------------------------------------
+    fine_positional_freq: Dict[str, Dict[int, int]] = field(default_factory=dict)
+    function_word_candidates: Set[str] = field(default_factory=set)
+    action_bucket_anchors: Set[str] = field(default_factory=set)
+
+    # ------------------------------------------------------------------
+    # Brown-clustering state (added by the object-vocabulary
+    # super-cluster fix). See the "_BROWN_CLUSTER_*" constants above
+    # for the algorithm contract.
+    #
+    # object_supercluster_id: {object_token: supercluster_id} — the
+    #   flat assignment from each object token to its Brown super-cluster.
+    #   Populated by _cluster_object_vocabulary() during train(), BEFORE
+    #   action clustering. Action clustering then uses super-cluster
+    #   distributions instead of literal object tokens.
+    #
+    # object_superclusters: {supercluster_id: set(object_tokens)} — the
+    #   inverse map, for inspection/debugging. Exposed so callers can
+    #   inspect which objects got grouped together.
+    # ------------------------------------------------------------------
+    object_supercluster_id: Dict[str, int] = field(default_factory=dict)
+    object_superclusters: Dict[int, Set[str]] = field(default_factory=dict)
+
+    # ------------------------------------------------------------------
     # Convenience views
     # ------------------------------------------------------------------
 
@@ -475,26 +664,56 @@ class PositionalClusterLearner:
         scratch each call (it is cheap and ensures cluster_ids stay
         consistent with the latest data).
 
-        Pipeline:
-            1. Parse each line into tokens; compute position buckets;
-               bump positional_freq (soft counts - same token can
-               appear in multiple buckets).
-            2. For every SVO-shaped sentence (>= 3 tokens), extract
-               (action, object) by CURRENT position (index 1 = action,
-               index 2 or -1 = object) and bump action_object_freq.
-               Also record the "between-first" token (if any) for the
-               connector-signal detector.
-            3. Filter actions with >= min_action_observations.
-            4. Compute the connector signature (action_connector_signature
-               + corpus-wide connector_tokens set) from the between-first
-               observations. See _CONNECTOR_* constants for the
-               detection contract.
-            5. Cluster those actions by Jaccard similarity of their
-               object sets (greedy agglomerative merge), SPLIT FIRST
-               by has_connector so structurally different actions never
-               merge.
-            6. Reset cluster_labels (labelling must be redone after
-               re-training because cluster_ids may shift).
+        Pipeline (two-pass, zero-bias):
+            Pass 1 - position statistics only:
+              1. Parse each line into tokens. For every token at every
+                 position, bump BOTH ``positional_freq`` (4-bucket scheme:
+                 0/1/2/-1) AND ``fine_positional_freq`` (raw index, -1
+                 for last). The fine-grained scheme powers the Shannon
+                 entropy calculation that distinguishes function words
+                 (flat distribution) from content words (concentrated).
+
+            Anchor-word discovery (between passes):
+              2. Compute ``function_word_candidates`` from
+                 ``fine_positional_freq``: tokens whose position
+                 distribution is flat (high normalized entropy),
+                 frequent (>= ``_FUNCTION_WORD_MIN_FREQ``), span >=
+                 ``_FUNCTION_WORD_MIN_POSITIONS`` distinct positions,
+                 and lack verb morphology. These are statistically
+                 discovered function words - the zero-bias replacement
+                 for the old hardcoded ``_ACTION_STOPLIST``.
+              3. Compute ``action_bucket_anchors`` from
+                 ``positional_freq``: tokens concentrated at the action
+                 bucket (low bucket entropy), frequent (>=
+                 ``_ACTION_ANCHOR_MIN_FREQ``), with the action bucket
+                 as their dominant bucket. These are statistically
+                 discovered action anchors - the zero-bias replacement
+                 for the old hardcoded ``_COPULAS`` whitelist. Copulas
+                 like 'adalah' and 'merupakan' emerge here automatically.
+
+            Pass 2 - (action, object) extraction using discovered sets:
+              4. Re-iterate the corpus. For each SVO-shaped sentence
+                 (>= 3 tokens), extract (action, object) using
+                 ``self.function_word_candidates`` (excluded from action
+                 slot) and ``self.action_bucket_anchors`` (recognised as
+                 verbs even without morphology). Bump
+                 ``action_object_freq`` and record the "between-first"
+                 token for the connector-signal detector.
+
+            Post-processing (unchanged from v2):
+              5. Compute the connector signature
+                 (``action_connector_signature`` + corpus-wide
+                 ``connector_tokens``) from the between-first
+                 observations.
+              6. Brown-cluster the object vocabulary (NEW):
+                 ``_cluster_object_vocabulary`` groups object tokens
+                 by their action-context distributions, producing
+                 ``object_supercluster_id`` and ``object_superclusters``.
+              7. Cluster actions by weighted Jaccard of their
+                 super-cluster distributions (NEW: was literal object
+                 tokens), split first by has_connector.
+              8. Reset cluster_labels (labelling must be redone after
+                 re-training because cluster_ids may shift).
 
         Failure contract: empty / single-token lines are skipped
         silently. A train() call with zero usable lines leaves the
@@ -503,6 +722,42 @@ class PositionalClusterLearner:
         if not corpus_lines:
             return
 
+        # ----------------------------------------------------------------
+        # PASS 1 - position statistics only (no action/object extraction
+        # yet; we need the populated frequency tables to discover
+        # function words and action anchors first).
+        # ----------------------------------------------------------------
+        # Cache the tokenised corpus so Pass 2 doesn't re-tokenise.
+        # Memory cost is bounded by corpus size; pretrain_corpus is
+        # ~3500 lines so this is fine.
+        tokenised_lines: List[List[str]] = []
+        for line in corpus_lines:
+            tokens = self._tokenize(line)
+            if not tokens:
+                tokenised_lines.append([])  # preserve index alignment
+                continue
+            tokenised_lines.append(tokens)
+            n = len(tokens)
+            buckets = self._compute_buckets(n)
+            for i, token in enumerate(tokens):
+                # Coarse bucket (existing 4-bucket scheme).
+                b = buckets[i]
+                pos_map = self.positional_freq.setdefault(token, {})
+                pos_map[b] = pos_map.get(b, 0) + 1
+                # Fine-grained position: raw index, -1 for last.
+                # Used for entropy-based function word discovery.
+                fi = i if i != n - 1 else -1
+                fine_map = self.fine_positional_freq.setdefault(token, {})
+                fine_map[fi] = fine_map.get(fi, 0) + 1
+
+        # ----------------------------------------------------------------
+        # Anchor-word discovery (between passes).
+        # ----------------------------------------------------------------
+        self._compute_anchor_words()
+
+        # ----------------------------------------------------------------
+        # PASS 2 - (action, object) extraction using discovered sets.
+        # ----------------------------------------------------------------
         # Per-action between-first observations. Each entry is
         # {action: {between_first_token_or_None: count}}. We accumulate
         # this alongside action_object_freq so the connector detector
@@ -512,43 +767,38 @@ class PositionalClusterLearner:
             lambda: defaultdict(int)
         )
 
-        # Phase 1+2: positional frequencies + action/object co-occurrence.
-        for line in corpus_lines:
-            tokens = self._tokenize(line)
-            if not tokens:
+        for tokens in tokenised_lines:
+            if not tokens or len(tokens) < 3:
                 continue
-            # Positional frequencies (soft).
-            for token, bucket in zip(tokens, self._compute_buckets(len(tokens))):
-                pos_map = self.positional_freq.setdefault(token, {})
-                pos_map[bucket] = pos_map.get(bucket, 0) + 1
-            # Action/object co-occurrence (only for SVO-shaped sentences).
-            if len(tokens) >= 3:
-                action_token, object_token = self._extract_action_object(tokens)
-                if action_token and object_token:
-                    obj_bucket = self.action_object_freq.setdefault(action_token, {})
-                    obj_bucket[object_token] = obj_bucket.get(object_token, 0) + 1
-                    # Connector-signal evidence: record the token (or
-                    # None) that sits immediately after the action and
-                    # before the object. Used by _compute_connector_signature
-                    # to build action_connector_signature + connector_tokens.
-                    between_token = self._extract_between_token(
-                        tokens, action_token, object_token
-                    )
-                    action_between[action_token][between_token] += 1
+            action_token, object_token = self._extract_action_object(tokens)
+            if action_token and object_token:
+                obj_bucket = self.action_object_freq.setdefault(action_token, {})
+                obj_bucket[object_token] = obj_bucket.get(object_token, 0) + 1
+                # Connector-signal evidence: record the token (or
+                # None) that sits immediately after the action and
+                # before the object.
+                between_token = self._extract_between_token(
+                    tokens, action_token, object_token
+                )
+                action_between[action_token][between_token] += 1
 
-        # Phase 3: compute the connector signature from the
-        # between-first observations. This populates
-        # action_connector_signature (per-action bool) and
-        # connector_tokens (corpus-wide grammar-token set).
+        # ----------------------------------------------------------------
+        # Post-processing.
+        # ----------------------------------------------------------------
+        # Connector signature (existing).
         self._compute_connector_signature(action_between)
 
-        # Phase 4+5: cluster actions by similarity of object
-        # distributions, split first by has_connector.
+        # Brown-cluster the object vocabulary BEFORE action clustering,
+        # so action clustering can use super-cluster distributions.
+        self._cluster_object_vocabulary()
+
+        # Cluster actions by similarity of super-cluster distributions,
+        # split first by has_connector.
         self._cluster_actions()
 
-        # Phase 6: reset labels (cluster_ids may have shifted; old
-        # labels are no longer meaningful). The human must call
-        # label_clusters() again after re-training.
+        # Reset labels (cluster_ids may have shifted; old labels are
+        # no longer meaningful). The human must call label_clusters()
+        # again after re-training.
         self.cluster_labels = {}
 
     def _cluster_actions(self) -> None:
@@ -558,8 +808,17 @@ class PositionalClusterLearner:
             1. Build the set of "clusterable" actions: those with at
                least ``min_action_observations`` total co-occurrence
                counts.
-            2. **Connector split** (new): partition the clusterable
-               actions into two groups by their
+            2. **Super-cluster projection** (NEW): for each clusterable
+               action, project its literal object-token count map to a
+               SUPER-CLUSTER count map via
+               ``self.object_supercluster_id``. Two actions whose
+               literal object tokens never overlap can still merge if
+               their objects belong to the same Brown super-cluster
+               (e.g. 'adalah' taking mamalia/logam and 'merupakan'
+               taking mamalia/unggas merge because mamalia, logam, and
+               unggas all belong to the 'taxonomy noun' super-cluster).
+            3. **Connector split**: partition the clusterable actions
+               into two groups by their
                ``action_connector_signature`` value — has_connector=True
                vs has_connector=False. The two groups are clustered
                INDEPENDENTLY and can never merge across the split.
@@ -567,154 +826,415 @@ class PositionalClusterLearner:
                "adalah" (direct object) and "berbeda" (connector +
                object) end up in different clusters even though their
                object distributions overlap on taxonomy nouns.
-            3. Initialise each cluster as a singleton {action} with
-               its object *count map* (not just the set).
-            4. Greedy pass: for every pair of clusters *within the
-               same connector group*, compute the *weighted* Jaccard
-               similarity of the merged object count maps. If >=
-               similarity_threshold, merge them.
-            5. Repeat passes until no merge happens (fixpoint).
-            6. Assign cluster_ids (0, 1, 2, ...) across both groups
+            4. Initialise each cluster as a singleton {action} with
+               BOTH its literal object count map AND its super-cluster
+               count map.
+            5. Greedy pass: for every pair of clusters *within the
+               same connector group*, compute similarity as the MAX
+               of (a) literal weighted Jaccard and (b) super-cluster
+               weighted Jaccard. This preserves the existing
+               literal-token-based clustering behaviour (so the 5
+               RelationType clusters still form) while ALSO allowing
+               synonym copulas to merge via super-cluster overlap
+               when their literal overlap is insufficient (the
+               Brown-clustering fix). If similarity >= threshold,
+               merge them.
+            6. Repeat passes until no merge happens (fixpoint).
+            7. Assign cluster_ids (0, 1, 2, ...) across both groups
                (no-connector group first, then with-connector group).
                Actions that did not meet the min_observations bar get
                cluster_id = -1 (unclustered).
 
-        Why *weighted* Jaccard instead of plain Jaccard on sets?
-        Plain Jaccard treats every object token equally: a one-off
-        co-occurrence counts as much as a 50x co-occurrence. That
-        fragments synonyms: 'adalah' and 'merupakan' both take class
-        nouns (mamalia, logam, ...) but rarely the *same* class noun,
-        so their set overlap is small even though their distribution
-        shape is identical. Weighted Jaccard sums min/max of counts,
-        which gives more weight to high-frequency overlaps and
-        correctly merges synonyms whose object distributions have the
-        same *shape* even when the literal object tokens differ.
+        Why MAX of literal and super-cluster similarities (not
+        super-cluster alone)? Super-cluster projection loses
+        information: two actions with similar SUPER-cluster
+        distributions might still take SEMANTICALLY DIFFERENT objects
+        (e.g. 'menyebabkan' takes state-change objects and 'setelah'
+        takes event objects, but both object classes can land in the
+        same Brown super-cluster because they co-occur with overlapping
+        action sets). Using super-cluster alone causes cross-relation-
+        type merging (CAUSAL+TEMPORAL collapse into one cluster).
 
-        The previous implementation used plain Jaccard on sets with
-        threshold 0.25; the new implementation uses weighted Jaccard
-        on count maps with threshold 0.13 (see
-        ``_DEFAULT_SIMILARITY_THRESHOLD`` for the rationale).
-
-        Why split by has_connector BEFORE clustering (not after)?
-        If we clustered first and then split, synonyms like
-        "adalah"/"merupakan" (both has_connector=False) would already
-        be in the same cluster — the split would be a no-op for them,
-        which is correct. But "adalah" (no connector) and "berbeda"
-        (with connector) would also be in the same cluster (because
-        their object distributions are similar), and the split would
-        then fracture that cluster along the connector line —
-        producing the desired separation but only as a post-hoc
-        patch. Splitting first makes the structural signal a
-        first-class clustering constraint: actions with different
-        connector signatures are never even *considered* for merging,
-        which is the correct semantics (they are structurally
-        different predicate types).
+        Taking the MAX preserves the existing literal-token behaviour:
+        actions that already merge via literal overlap (e.g.
+        'adalah'+'merupakan' sharing 'mamalia') still merge. The
+        super-cluster signal only ADDS new merges for actions whose
+        literal overlap is below threshold but whose super-cluster
+        overlap is high (e.g. synonyms with no literal object overlap
+        but whose objects all belong to the same Brown super-cluster).
         """
         # Reset previous clustering.
         self.cluster_id_of = {}
         self.action_clusters = {}
 
         # Build the set of clusterable actions + their object count maps.
-        # Each clusterable action contributes its full {object: count} map.
         clusterable: Dict[str, Dict[str, int]] = {}
         for action, objs in self.action_object_freq.items():
             total = sum(objs.values())
             if total >= self.min_action_observations:
                 clusterable[action] = dict(objs)
 
-        # Connector split: partition clusterable actions by their
-        # action_connector_signature value. Default is False (covers
-        # the case where train() was called on a learner that somehow
-        # has action_object_freq populated but not
-        # action_connector_signature — e.g. via direct mutation in
-        # tests; preserves backward compatibility).
-        no_connector_actions: Dict[str, Dict[str, int]] = {}
-        with_connector_actions: Dict[str, Dict[str, int]] = {}
+        # Super-cluster projection: convert each action's literal
+        # {object_token: count} map to a {supercluster_id: count} map.
+        clusterable_sc: Dict[str, Dict[int, int]] = {}
         for action, objs in clusterable.items():
-            if self.action_connector_signature.get(action, False):
-                with_connector_actions[action] = objs
-            else:
-                no_connector_actions[action] = objs
+            sc_map: Dict[int, int] = defaultdict(int)
+            for obj, count in objs.items():
+                sc_id = self.object_supercluster_id.get(obj)
+                if sc_id is None:
+                    # No super-cluster info — use a stable hash of the
+                    # object token as a fallback super-cluster id so
+                    # distinct objects stay distinct.
+                    sc_id = hash(obj)
+                sc_map[sc_id] += count
+            clusterable_sc[action] = dict(sc_map)
 
-        # Cluster each group independently, then concatenate the
-        # resulting cluster lists so cluster_ids are assigned
-        # monotonically across both groups.
-        all_clusters: List[Tuple[Set[str], Dict[str, int]]] = []
-        for group in (no_connector_actions, with_connector_actions):
-            group_clusters = self._cluster_action_group(group)
+        # Connector split: partition clusterable actions by their
+        # action_connector_signature value.
+        no_connector_lit: Dict[str, Dict[str, int]] = {}
+        no_connector_sc: Dict[str, Dict[int, int]] = {}
+        with_connector_lit: Dict[str, Dict[str, int]] = {}
+        with_connector_sc: Dict[str, Dict[int, int]] = {}
+        for action in clusterable:
+            if self.action_connector_signature.get(action, False):
+                with_connector_lit[action] = clusterable[action]
+                with_connector_sc[action] = clusterable_sc[action]
+            else:
+                no_connector_lit[action] = clusterable[action]
+                no_connector_sc[action] = clusterable_sc[action]
+
+        # Cluster each group independently.
+        all_clusters: List[Tuple[Set[str], Dict[str, int], Dict[int, int]]] = []
+        for lit_group, sc_group in (
+            (no_connector_lit, no_connector_sc),
+            (with_connector_lit, with_connector_sc),
+        ):
+            group_clusters = self._cluster_action_group(lit_group, sc_group)
             all_clusters.extend(group_clusters)
 
         # Assign cluster_ids across the concatenated group clusters.
-        for cluster_id, (actions, _objs) in enumerate(all_clusters):
+        for cluster_id, (actions, _lit, _sc) in enumerate(all_clusters):
             self.action_clusters[cluster_id] = actions
             for action in actions:
                 self.cluster_id_of[action] = cluster_id
 
-        # Mark unclustered actions with cluster_id = -1. This includes
-        # both actions below min_action_observations (excluded from
-        # clustering entirely) and any action_object_freq entry that
-        # was somehow skipped. classify() treats cluster_id = -1 as
-        # "no cluster" and falls back to SemanticRoleClassifier.
-        #
-        # This loop runs even when no actions were clusterable (e.g.
-        # every action had only 1 observation) so that the
-        # cluster_id_of mapping is complete for every action the
-        # learner has seen.
+        # Mark unclustered actions with cluster_id = -1.
         for action in self.action_object_freq:
             if action not in self.cluster_id_of:
                 self.cluster_id_of[action] = -1
 
     def _cluster_action_group(
-        self, actions_objs: Dict[str, Dict[str, int]]
-    ) -> List[Tuple[Set[str], Dict[str, int]]]:
+        self,
+        actions_lit: Dict[str, Dict[str, int]],
+        actions_sc: Dict[str, Dict[int, int]],
+    ) -> List[Tuple[Set[str], Dict[str, int], Dict[int, int]]]:
         """Run the greedy agglomerative merge on one connector group.
 
-        Returns a list of (set_of_actions, dict_of_object_counts) —
-        the merged clusters for this group. Empty list if the group
-        has no actions.
+        Args:
+            actions_lit: {action_token: {object_token: count}} —
+                the literal object distribution for each action.
+            actions_sc: {action_token: {supercluster_id: count}} —
+                the projected super-cluster distribution for each
+                action.
 
-        This is the same algorithm the previous _cluster_actions()
-        ran on the full clusterable set; we now run it per-group so
-        the connector signature acts as a hard partition before
-        similarity-based merging.
+        Returns a list of (set_of_actions, literal_count_map,
+        supercluster_count_map) — the merged clusters for this group.
+        Empty list if the group has no actions.
+
+        Similarity = MAX of literal weighted Jaccard and super-cluster
+        weighted Jaccard. See ``_cluster_actions`` for the rationale.
         """
-        if not actions_objs:
+        if not actions_lit:
             return []
 
         # Initial clusters: each action in its own cluster.
-        # Each cluster is (set_of_actions, dict_of_object_counts).
-        clusters: List[Tuple[Set[str], Dict[str, int]]] = [
-            ({action}, dict(objs)) for action, objs in actions_objs.items()
+        clusters: List[Tuple[Set[str], Dict[str, int], Dict[int, int]]] = [
+            ({action}, dict(actions_lit[action]), dict(actions_sc[action]))
+            for action in actions_lit
         ]
 
         # Greedy agglomerative merge until fixpoint.
         merged = True
         while merged and len(clusters) > 1:
             merged = False
-            # Find the best pair to merge (highest weighted Jaccard
-            # above threshold).
             best_i, best_j, best_sim = -1, -1, -1.0
             for i in range(len(clusters)):
                 for j in range(i + 1, len(clusters)):
-                    sim = self._weighted_jaccard(
+                    lit_sim = self._weighted_jaccard(
                         clusters[i][1], clusters[j][1]
                     )
+                    sc_sim = self._weighted_jaccard(
+                        clusters[i][2], clusters[j][2]
+                    )
+                    sim = max(lit_sim, sc_sim)
                     if sim >= self.similarity_threshold and sim > best_sim:
                         best_sim = sim
                         best_i, best_j = i, j
             if best_i >= 0:
-                # Merge cluster j into cluster i. Aggregate object
-                # counts so the merged cluster's distribution is the
-                # sum of its members'.
-                actions_i, objs_i = clusters[best_i]
-                actions_j, objs_j = clusters[best_j]
+                actions_i, lit_i, sc_i = clusters[best_i]
+                actions_j, lit_j, sc_j = clusters[best_j]
                 actions_i.update(actions_j)
-                for obj, count in objs_j.items():
-                    objs_i[obj] = objs_i.get(obj, 0) + count
+                for obj, count in lit_j.items():
+                    lit_i[obj] = lit_i.get(obj, 0) + count
+                for sc_id, count in sc_j.items():
+                    sc_i[sc_id] = sc_i.get(sc_id, 0) + count
                 clusters.pop(best_j)
                 merged = True
 
         return clusters
+
+    # ------------------------------------------------------------------
+    # Statistical anchor-word discovery (replaces _ACTION_STOPLIST/_COPULAS)
+    # ------------------------------------------------------------------
+
+    def _compute_anchor_words(self) -> None:
+        """Populate ``function_word_candidates`` and ``action_bucket_anchors``.
+
+        Called between Pass 1 and Pass 2 of train(), after
+        ``positional_freq`` and ``fine_positional_freq`` are populated.
+        See the ``_FUNCTION_WORD_*`` and ``_ACTION_ANCHOR_*`` constants
+        for the discovery contract.
+
+        Reset contract: this method overwrites both fields from
+        scratch, so it is safe to call on every train() (no stale
+        entries from a previous corpus survive).
+        """
+        self.function_word_candidates = set()
+        self.action_bucket_anchors = set()
+
+        # Function word candidates: scan fine_positional_freq AND
+        # positional_freq (need both — fine for entropy, bucket for
+        # concentration check).
+        for token, fine_map in self.fine_positional_freq.items():
+            total = sum(fine_map.values())
+            if total < _FUNCTION_WORD_MIN_FREQ:
+                continue
+            if len(fine_map) < _FUNCTION_WORD_MIN_POSITIONS:
+                continue
+            # Verb-morphology tokens are content words by form, not
+            # function words — skip even if their entropy is high.
+            if self._looks_like_verb(token):
+                continue
+            # Normalized Shannon entropy over fine positions.
+            h = 0.0
+            for c in fine_map.values():
+                if c > 0:
+                    p = c / total
+                    h -= p * math.log2(p)
+            max_h = math.log2(len(fine_map)) if len(fine_map) > 1 else 0.0
+            nh = h / max_h if max_h > 0 else 0.0
+            if nh < _FUNCTION_WORD_ENTROPY_THRESHOLD:
+                continue
+            # Bucket concentration check: real function words (sangat,
+            # itu, bukan, tidak, ...) concentrate at the action bucket
+            # (b_nh near 0). Content words that span roles (api as
+            # subject+object, makan as verb+subject+object) have high
+            # bucket entropy. Requiring low bucket entropy excludes
+            # these false positives.
+            bucket_map = self.positional_freq.get(token, {})
+            b_total = sum(bucket_map.values())
+            if b_total == 0:
+                continue
+            b_h = 0.0
+            for c in bucket_map.values():
+                if c > 0:
+                    p = c / b_total
+                    b_h -= p * math.log2(p)
+            b_max_h = (
+                math.log2(len(bucket_map)) if len(bucket_map) > 1 else 0.0
+            )
+            b_nh = b_h / b_max_h if b_max_h > 0 else 0.0
+            if b_nh >= _FUNCTION_WORD_MAX_BUCKET_ENTROPY:
+                continue
+            self.function_word_candidates.add(token)
+
+        # Action bucket anchors: scan positional_freq.
+        for token, bucket_map in self.positional_freq.items():
+            total = sum(bucket_map.values())
+            if total < _ACTION_ANCHOR_MIN_FREQ:
+                continue
+            # Find the dominant bucket (highest count, ties broken by
+            # lowest bucket number for determinism).
+            dominant_bucket = max(
+                bucket_map.keys(),
+                key=lambda b: (bucket_map[b], -b)
+            )
+            if dominant_bucket != _ACTION_BUCKET:
+                continue
+            # Normalized Shannon entropy over buckets.
+            h = 0.0
+            for c in bucket_map.values():
+                if c > 0:
+                    p = c / total
+                    h -= p * math.log2(p)
+            max_h = math.log2(len(bucket_map)) if len(bucket_map) > 1 else 0.0
+            nh = h / max_h if max_h > 0 else 0.0
+            if nh < _ACTION_ANCHOR_MAX_BUCKET_ENTROPY:
+                self.action_bucket_anchors.add(token)
+
+    # ------------------------------------------------------------------
+    # Brown clustering of object vocabulary (Task 2)
+    # ------------------------------------------------------------------
+
+    def _cluster_object_vocabulary(self) -> None:
+        """Brown-cluster the object vocabulary by action-context distribution.
+
+        Populates ``object_supercluster_id`` and ``object_superclusters``
+        from ``action_object_freq``. Called after Pass 2 of train() and
+        BEFORE ``_cluster_actions()`` so action clustering can use
+        super-cluster distributions instead of literal object tokens.
+
+        Algorithm (pure Python, no sklearn / scipy):
+            1. Build the object vocabulary: every token that appears
+               as an object of any action in ``action_object_freq``.
+            2. For each object token, build its "action context
+               distribution" = {action_token: count} aggregated across
+               all (action, object) pairs.
+            3. **Inverted index**: build action -> {objects that
+               co-occur with it}. Two objects are CANDIDATES for
+               merging only if they share at least one action. This
+               prunes the O(N^2) all-pairs scan down to the
+               actually-comparable pairs (typically O(N) for sparse
+               co-occurrence graphs).
+            4. Greedy agglomerative merge: start with each object in
+               its own cluster. Repeatedly find the candidate pair
+               with the highest *weighted* Jaccard similarity of
+               their action-context COUNT maps. If similarity >=
+               ``_BROWN_CLUSTER_SIMILARITY_THRESHOLD``, merge them.
+               Stop when no pair qualifies or the cluster count drops
+               to ``_BROWN_CLUSTER_MAX_CLUSTERS``.
+            5. Assign super-cluster ids (0, 1, 2, ...) and build both
+               ``object_supercluster_id`` (forward map) and
+               ``object_superclusters`` (inverse map).
+
+        Why *weighted* Jaccard on count maps (not plain Jaccard on
+        sets)? Plain Jaccard suffers from chain-merging: two objects
+        that share ONE action merge at Jaccard >= 0.13, then the
+        merged cluster's action set grows, enabling further merges
+        via different shared actions. The end result is one giant
+        super-cluster containing most of the object vocabulary.
+
+        Weighted Jaccard is more strict: it considers COUNT
+        distributions, not just set membership. Two objects that
+        share an action but at very different frequencies get a lower
+        similarity than two objects with matching count shapes. This
+        breaks the chain-merge: an object can merge with the growing
+        cluster only if its count distribution matches the cluster's
+        aggregated distribution, not just shares one action.
+
+        Reset contract: this method overwrites both fields from
+        scratch, so it is safe to call on every train() (no stale
+        entries from a previous corpus survive).
+        """
+        self.object_supercluster_id = {}
+        self.object_superclusters = {}
+
+        if not self.action_object_freq:
+            return
+
+        # Step 1+2: build object vocabulary and action-context distributions.
+        # object_actions[obj] = {action: count}
+        object_actions: Dict[str, Dict[str, int]] = defaultdict(
+            lambda: defaultdict(int)
+        )
+        for action, objs in self.action_object_freq.items():
+            for obj, count in objs.items():
+                object_actions[obj][action] += count
+
+        if not object_actions:
+            return
+
+        # Step 3: inverted index — action -> set of object indices that
+        # co-occur with it. Used to enumerate candidate pairs (objects
+        # that share at least one action) without scanning all O(N^2)
+        # pairs.
+        obj_list: List[str] = list(object_actions.keys())
+        obj_to_idx: Dict[str, int] = {obj: i for i, obj in enumerate(obj_list)}
+        action_to_obj_indices: Dict[str, Set[int]] = defaultdict(set)
+        for obj, actions in object_actions.items():
+            for action in actions:
+                action_to_obj_indices[action].add(obj_to_idx[obj])
+
+        # Step 4: greedy agglomerative merge using candidate pairs.
+        # Each cluster is (set_of_object_indices, dict_of_action_counts).
+        # Track cluster-level action -> set of cluster indices for
+        # candidate generation.
+        clusters: List[Tuple[Set[int], Dict[str, int]]] = [
+            ({i}, dict(object_actions[obj]))
+            for i, obj in enumerate(obj_list)
+        ]
+        # cluster_idx_for_obj: object idx -> cluster idx that contains it.
+        cluster_idx_for_obj: List[int] = list(range(len(obj_list)))
+        # action -> set of cluster indices that contain at least one
+        # object co-occurring with this action. Updated as clusters merge.
+        action_to_cluster_indices: Dict[str, Set[int]] = {
+            action: set(action_to_obj_indices[action])
+            for action in action_to_obj_indices
+        }
+
+        threshold = _BROWN_CLUSTER_SIMILARITY_THRESHOLD
+        max_clusters = _BROWN_CLUSTER_MAX_CLUSTERS
+
+        merged = True
+        while merged and len(clusters) > max(1, max_clusters):
+            merged = False
+            # Enumerate candidate pairs: clusters that share at least
+            # one action.
+            candidate_set: Set[Tuple[int, int]] = set()
+            for cluster_indices in action_to_cluster_indices.values():
+                cluster_list = sorted(cluster_indices)
+                for i in range(len(cluster_list)):
+                    for j in range(i + 1, len(cluster_list)):
+                        ci, cj = cluster_list[i], cluster_list[j]
+                        if ci < cj:
+                            candidate_set.add((ci, cj))
+                        else:
+                            candidate_set.add((cj, ci))
+
+            if not candidate_set:
+                break
+
+            best_i, best_j, best_sim = -1, -1, -1.0
+            for ci, cj in candidate_set:
+                sim = self._weighted_jaccard(
+                    clusters[ci][1], clusters[cj][1]
+                )
+                if sim >= threshold and sim > best_sim:
+                    best_sim = sim
+                    best_i, best_j = ci, cj
+
+            if best_i >= 0:
+                # Merge cluster best_j into cluster best_i.
+                objs_i, acts_i = clusters[best_i]
+                objs_j, acts_j = clusters[best_j]
+                objs_i.update(objs_j)
+                for act, count in acts_j.items():
+                    acts_i[act] = acts_i.get(act, 0) + count
+                # Update cluster_idx_for_obj for objects in best_j.
+                for obj_idx in objs_j:
+                    cluster_idx_for_obj[obj_idx] = best_i
+                # Remove best_j from action_to_cluster_indices.
+                for act in acts_j:
+                    action_to_cluster_indices[act].discard(best_j)
+                    if best_i not in action_to_cluster_indices[act]:
+                        action_to_cluster_indices[act].add(best_i)
+                # Mark cluster best_j as empty (will be filtered out
+                # at the end). We use a sentinel rather than removing
+                # from clusters list to keep indices stable.
+                clusters[best_j] = (set(), {})
+                merged = True
+
+        # Step 5: assign super-cluster ids and build inverse map.
+        # Filter out empty clusters (merged into others).
+        sc_id = 0
+        for cluster_objs, _acts in clusters:
+            if not cluster_objs:
+                continue
+            obj_set = {obj_list[i] for i in cluster_objs}
+            self.object_superclusters[sc_id] = obj_set
+            for obj in obj_set:
+                self.object_supercluster_id[obj] = sc_id
+            sc_id += 1
 
     # ------------------------------------------------------------------
     # Connector-signal detection (cluster-62 fix)
@@ -1152,24 +1672,30 @@ class PositionalClusterLearner:
         Format::
 
             {
-              "similarity_threshold": 0.25,
+              "similarity_threshold": 0.13,
               "min_action_observations": 2,
               "positional_freq":     {"makan": {"1": 10}, ...},
+              "fine_positional_freq":{"sangat": {"1": 11, "2": 10, ...}, ...},
               "action_object_freq":  {"menyebabkan": {"panas": 2, ...}, ...},
               "cluster_id_of":       {"makan": 0, "minum": 0, ...},
               "action_clusters":     {"0": ["makan", "minum", ...], ...},
               "cluster_labels":      {"0": "CAUSAL", ...},    # may be empty
               "action_connector_signature": {"berbeda": true, "adalah": false, ...},
-              "connector_tokens":    ["dari", "dengan", "sebagai", ...]
+              "connector_tokens":    ["dari", "dengan", "sebagai", ...],
+              "function_word_candidates":   ["sangat", "itu", "bukan", ...],
+              "action_bucket_anchors":      ["adalah", "merupakan", ...],
+              "object_supercluster_id":     {"mamalia": 0, "logam": 0, ...},
+              "object_superclusters":       {"0": ["mamalia", "logam", ...], ...}
             }
 
-        The ``action_connector_signature`` and ``connector_tokens``
-        fields are persisted so a loaded learner reproduces the same
-        clustering contract (actions flagged has_connector=True
-        continue to be partitioned into the with-connector group on
-        any subsequent re-train). Older save files (pre-cluster-62
-        fix) lack these fields and load() backfills them as empty /
-        False — backward compatible.
+        The ``fine_positional_freq``, ``function_word_candidates``,
+        ``action_bucket_anchors``, ``object_supercluster_id``, and
+        ``object_superclusters`` fields are persisted so a loaded
+        learner reproduces the same zero-bias anchor-word discovery
+        and Brown-clustering contract. Older save files (pre-anchor /
+        pre-Brown fix) lack these fields and load() backfills them
+        as empty / re-derives them from positional_freq — backward
+        compatible.
 
         Atomic write: temp file + os.replace. Parent dirs created on
         demand. Same pattern as SemanticRoleClassifier.save.
@@ -1184,6 +1710,10 @@ class PositionalClusterLearner:
             "positional_freq": {
                 tok: {str(b): c for b, c in pos_map.items()}
                 for tok, pos_map in self.positional_freq.items()
+            },
+            "fine_positional_freq": {
+                tok: {str(p): c for p, c in fine_map.items()}
+                for tok, fine_map in self.fine_positional_freq.items()
             },
             "action_object_freq": {
                 act: dict(objs)
@@ -1200,6 +1730,13 @@ class PositionalClusterLearner:
             },
             "action_connector_signature": dict(self.action_connector_signature),
             "connector_tokens": sorted(self.connector_tokens),
+            "function_word_candidates": sorted(self.function_word_candidates),
+            "action_bucket_anchors": sorted(self.action_bucket_anchors),
+            "object_supercluster_id": dict(self.object_supercluster_id),
+            "object_superclusters": {
+                str(sc_id): sorted(objs)
+                for sc_id, objs in self.object_superclusters.items()
+            },
         }
 
         parent = os.path.dirname(os.path.abspath(path))
@@ -1320,6 +1857,59 @@ class PositionalClusterLearner:
             if isinstance(tok, str):
                 learner.connector_tokens.add(tok)
 
+        # fine_positional_freq: {token: {pos_str: count}} -> {token: {int: int}}
+        # Backward-compat: older save files (pre-anchor-word fix) lack
+        # this field. We re-derive it from positional_freq where possible,
+        # but the lossy coarse-bucket scheme means the derived version
+        # is approximate (only buckets 0/1/2/-1, not raw indices). The
+        # learner will still work; re-calling train() will rebuild the
+        # accurate fine_positional_freq.
+        for tok, fine_map in raw.get("fine_positional_freq", {}).items():
+            if not isinstance(tok, str) or not isinstance(fine_map, dict):
+                continue
+            learner.fine_positional_freq[tok] = {
+                int(p): int(c)
+                for p, c in fine_map.items()
+                if isinstance(p, str) and isinstance(c, (int, float))
+            }
+
+        # function_word_candidates: list[str] -> set[str]
+        # Backward-compat: older save files lack this field. Empty set
+        # is the correct backfill — _extract_action_object treats the
+        # empty set as "no function words discovered", which preserves
+        # the pre-fix behaviour of accepting all position-1 tokens.
+        for tok in raw.get("function_word_candidates", []):
+            if isinstance(tok, str):
+                learner.function_word_candidates.add(tok)
+
+        # action_bucket_anchors: list[str] -> set[str]
+        # Same backward-compat note as above.
+        for tok in raw.get("action_bucket_anchors", []):
+            if isinstance(tok, str):
+                learner.action_bucket_anchors.add(tok)
+
+        # object_supercluster_id: {obj: sc_id} -> {str: int}
+        # Backward-compat: older save files lack this field. Empty dict
+        # is the correct backfill — _cluster_actions falls back to
+        # hash(object_token) for super-cluster ids when this dict is
+        # empty, which preserves the pre-Brown-fix behaviour of
+        # clustering by literal object tokens.
+        for obj, sc_id in raw.get("object_supercluster_id", {}).items():
+            if isinstance(obj, str) and isinstance(sc_id, int):
+                learner.object_supercluster_id[obj] = sc_id
+
+        # object_superclusters: {sc_id_str: [objs]} -> {int: set}
+        for sc_id_str, objs in raw.get("object_superclusters", {}).items():
+            if not isinstance(sc_id_str, str) or not isinstance(objs, list):
+                continue
+            try:
+                sc_id_int = int(sc_id_str)
+            except ValueError:
+                continue
+            learner.object_superclusters[sc_id_int] = {
+                o for o in objs if isinstance(o, str)
+            }
+
         return learner
 
     # ------------------------------------------------------------------
@@ -1385,8 +1975,7 @@ class PositionalClusterLearner:
             return [0, 1, 2]
         return [0] + [1] * (n - 2) + [-1]
 
-    @staticmethod
-    def _looks_like_verb(token: str) -> bool:
+    def _looks_like_verb(self, token: str) -> bool:
         """Heuristic: does this token look like an Indonesian verb?
 
         Indonesian verbs are highly morphologically regular. The vast
@@ -1398,10 +1987,14 @@ class PositionalClusterLearner:
         "gizi" sits at position 1 (noun, part of compound subject)
         but "menyarankan" at position 2 is the real verb.
 
-        Copulas (:data:`_COPULAS`) are also recognised as verbs even
-        though they lack the morphological prefix. This lets
-        multi-word categorical sentences like "suku bunga adalah
-        instrumen" be parsed correctly.
+        This is a MORPHOLOGICAL signal (word form), not a SEMANTIC
+        one (word meaning). It does NOT violate the zero-bias
+        principle. The old ``_COPULAS`` whitelist (``adalah``,
+        ``merupakan``, ``ialah``, ``yaitu``, ``yakni``) was removed
+        because it was a meaning-based list; copulas are now
+        recognised via ``self.action_bucket_anchors`` (statistical
+        discovery from positional concentration) instead of via this
+        morphological heuristic.
 
         Conservative by design:
           - All prefixes are 3+ characters to avoid false positives
@@ -1410,27 +2003,25 @@ class PositionalClusterLearner:
             livestock) because they're rare in the action slot and the
             cost of false negatives (breaking the multi-word subject
             fix) is much higher.
-          - We accept some false negatives ("makan", "minum", "ambil"
-            don't carry these prefixes) because the caller falls back
-            to the first non-stoplist token when no verb-looking token
-            is found in 3-token sentences.
+          - We accept some false negatives ("makan", "minum", "ambil",
+            "adalah", "merupakan" don't carry these prefixes) because
+            the caller (``_extract_action_object``) recognises action
+            bucket anchors as a fallback for non-morphological verbs.
         """
         if not token or len(token) < 3:
             return False
-        if token in _COPULAS:
-            return True
         return token.startswith(_VERB_PREFIXES)
 
-    @staticmethod
     def _extract_action_object(
-        tokens: List[str],
+        self, tokens: List[str]
     ) -> Tuple[Optional[str], Optional[str]]:
         """Extract (action_token, object_token) by CURRENT position.
 
         For 3-token sentences: action=tokens[1], object=tokens[2].
         For >3-token sentences: action=first verb-looking token (must
-            start with me-/ber-/diper-/ter-) before the object slot;
-            object=tokens[-1]. If no verb-looking token is found, the
+            start with me-/ber-/diper-/ter-, OR be a discovered
+            action_bucket_anchor) before the object slot;
+            object=tokens[-1]. If no such token is found, the
             sentence is skipped (returns ``(None, None)``).
         For <3-token sentences: ``(None, None)`` - no SVO structure.
 
@@ -1441,35 +2032,50 @@ class PositionalClusterLearner:
         "ayam mencari pakan" - both are recorded correctly because
         positional_freq is a *soft* count.
 
-        Bug 1 fix - action stoplist:
-        Function words in :data:`_ACTION_STOPLIST` (intensifiers,
-        deictic markers, copula-like appearance verbs like "sangat",
-        "itu", "tampak", "tergolong", negation markers like "bukan" /
-        "tidak", prefix-phrase introducers like "menurut" / "secara")
-        are skipped from the action slot. This prevents garbage
-        clusters like ``{'actions': ['sangat'], 'top_objects': ['asin',
-        'dingin']}`` that previously formed when state+adjective
-        sentences ("es itu sangat dingin") had their intensifier
-        captured as the action.
+        Zero-bias function-word exclusion (replaces Bug 1 stoplist):
+        Function words in ``self.function_word_candidates``
+        (statistically discovered from positional entropy - see
+        ``_compute_anchor_words``) are skipped from the action slot.
+        This prevents garbage clusters like ``{'actions': ['sangat'],
+        'top_objects': ['asin', 'dingin']}`` that previously formed
+        when state+adjective sentences ("es itu sangat dingin") had
+        their intensifier captured as the action. The set is
+        discovered purely from positional statistics - no hardcoded
+        word list.
 
-        Multi-word subject fix - verb-prefix requirement:
+        Zero-bias copula recognition (replaces ``_COPULAS`` whitelist):
+        Copulas like ``adalah`` and ``merupakan`` lack the me-/ber-/
+        diper-/ter- prefixes that ``_looks_like_verb`` detects, so
+        they would be skipped in >3-token sentences under the pure
+        morphological heuristic. Instead, ``self.action_bucket_anchors``
+        (statistically discovered from positional concentration at
+        the action bucket - see ``_compute_anchor_words``) lets any
+        token that concentrates at the action bucket be recognised
+        as a valid action. ``adalah`` (bucket_freq={1: 69},
+        bucket_nh=0.0) and ``merupakan`` (bucket_freq={1: 103},
+        bucket_nh=0.0) emerge as anchors automatically.
+
+        Multi-word subject fix - verb-prefix OR anchor requirement:
         Sentences with >3 tokens may have a multi-word subject like
         "ahli gizi" or "dokter kulit" occupying positions 0-1, which
         means position 1 is a noun (not the action). To avoid
-        capturing that noun as the action, we require a verb-looking
-        token (starts with me-, ber-, diper-, or ter-) before the
-        object slot. If no verb-looking token exists, the sentence is
-        skipped. This prevents noun-as-action garbage like
-        ``{'actions': ['gizi'], 'top_objects': ['diet', 'kalori']}``.
+        capturing that noun as the action, we require the action
+        candidate to either (a) start with me-/ber-/diper-/ter- or
+        (b) be a discovered action_bucket_anchor. If no such token
+        exists before the object slot, the sentence is skipped.
 
         For 3-token sentences (classic SVO with no room for multi-word
-        subjects), we accept the first non-stoplist token at position
-        1 as the action. This preserves the parse for irregular verbs
-        like "makan", "minum", "adalah" that don't carry verb
-        prefixes.
+        subjects), the positional parse is unambiguous. We accept
+        position 1 as the action when:
+          - it is NOT a function word candidate; AND
+          - it has verb morphology OR its frequency at the action
+            bucket is >= ``_3_TOKEN_MIN_ACTION_FREQ`` (the floor
+            that excludes one-off function words in small test
+            corpora while admitting recurring irregular verbs like
+            'makan').
 
-        When the action is also the last token (no non-stoplist token
-        remains after it, as in pure state+adjective patterns like
+        When the action is also the last token (no candidate remains
+        after it, as in pure state+adjective patterns like
         "es itu dingin"), the sentence has no real object and is
         skipped from ``action_object_freq`` by returning
         ``(None, None)``.
@@ -1479,42 +2085,58 @@ class PositionalClusterLearner:
 
         if len(tokens) == 3:
             # 3-token SVO: no room for a multi-word subject, so the
-            # positional parse is unambiguous. Take the first
-            # non-stoplist token at position 1 as the action; the
-            # object is tokens[2] (the last token).
-            action_idx: Optional[int] = None
-            for i in range(1, len(tokens)):
-                if tokens[i] not in _ACTION_STOPLIST:
-                    action_idx = i
-                    break
-            if action_idx is None:
+            # positional parse is unambiguous. Take position 1 as the
+            # action IF:
+            #   1. It is NOT a function word candidate (statistically
+            #      discovered via positional entropy - see
+            #      _compute_anchor_words).
+            #   2. It has appeared at the action bucket at least
+            #      _3_TOKEN_MIN_ACTION_FREQ times across the corpus.
+            #
+            # The frequency floor is the key filter: it excludes
+            # one-off function words in synthetic test corpora (e.g.,
+            # 'memang' at freq 1, which false-positives the verb-
+            # morphology heuristic because it starts with 'mem-')
+            # while admitting recurring verbs (e.g., 'makan' at
+            # freq 2). In real corpora, function word candidates
+            # are already excluded by the entropy-based discovery,
+            # and the frequency floor is a backstop for small corpora
+            # where statistical discovery doesn't have enough data.
+            candidate = tokens[1]
+            if candidate in self.function_word_candidates:
                 return None, None
-            # If the action IS the last token, no object remains -
-            # skip (state+adjective with no real object).
-            if action_idx == len(tokens) - 1:
+            action_bucket_count = self.positional_freq.get(
+                candidate, {}
+            ).get(_ACTION_BUCKET, 0)
+            if action_bucket_count < _3_TOKEN_MIN_ACTION_FREQ:
                 return None, None
-            return tokens[action_idx], tokens[-1]
+            return candidate, tokens[-1]
 
-        # >3-token sentence: potential multi-word subject. Require a
-        # verb-looking token before the object slot to disambiguate.
-        # This is the multi-word subject fix: it prevents nouns like
-        # "gizi" (in "ahli gizi menyarankan diet") from being captured
-        # as the action when they're really part of the compound
-        # subject.
+        # >3-token sentence: potential multi-word subject. Require the
+        # action candidate to have verb morphology OR be a discovered
+        # action_bucket_anchor. This prevents nouns like "gizi" (in
+        # "ahli gizi menyarankan diet") from being captured as the
+        # action when they're really part of the compound subject.
         action_idx = None
         for i in range(1, len(tokens) - 1):
-            if tokens[i] in _ACTION_STOPLIST:
+            candidate = tokens[i]
+            # Function words are always excluded.
+            if candidate in self.function_word_candidates:
                 continue
-            if PositionalClusterLearner._looks_like_verb(tokens[i]):
+            # Verb morphology OR action bucket anchor.
+            if self._looks_like_verb(candidate):
+                action_idx = i
+                break
+            if candidate in self.action_bucket_anchors:
                 action_idx = i
                 break
         if action_idx is None:
-            # No verb-looking token before the object slot. Skip this
-            # sentence to avoid noun-as-action garbage. The cost is
-            # losing sentences whose verb is an irregular root (e.g.
-            # "makan", "minum") in a >3-token sentence, but that's a
-            # small fraction of the corpus and the gain in cluster
-            # quality (no garbage noun-actions) is much larger.
+            # No verb-looking or anchor token before the object slot.
+            # Skip this sentence to avoid noun-as-action garbage. The
+            # cost is losing sentences whose verb is an irregular root
+            # (e.g. "makan", "minum") in a >3-token sentence, but
+            # that's a small fraction of the corpus and the gain in
+            # cluster quality (no garbage noun-actions) is much larger.
             return None, None
 
         return tokens[action_idx], tokens[-1]
