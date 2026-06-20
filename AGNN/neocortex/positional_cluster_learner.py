@@ -603,6 +603,40 @@ class PositionalClusterLearner:
     connector_tokens: Set[str] = field(default_factory=set)
 
     # ------------------------------------------------------------------
+    # Last-classification provenance (issue #88).
+    #
+    # ``classify()`` sets this flag on every call so downstream
+    # consumers can distinguish two cases that both return
+    # ``RelationType.CATEGORICAL``:
+    #
+    #   False — PCL returned CATEGORICAL from a LABELLED cluster
+    #           (the confident path; the cluster's label literally
+    #           IS CATEGORICAL). This is a high-confidence
+    #           classification that should NOT be overridden by a
+    #           weaker signal such as CA1's bag-of-words scan.
+    #
+    #   True  — PCL returned CATEGORICAL via its FALLBACK path: the
+    #           learner was untrained/unlabelled, the SPO parse
+    #           failed, the action token was not in any cluster, or
+    #           the cluster existed but had no human label. In every
+    #           fallback case, the returned CATEGORICAL is the
+    #           SemanticRoleClassifier's default — a low-confidence
+    #           "I don't know" answer that downstream signals (e.g.
+    #           CA1's stimulus-text scan) are allowed to override.
+    #
+    # Initial value ``True`` so a freshly-constructed (untrained)
+    # learner behaves the same as a fallback classification on its
+    # first classify() call — i.e. any CA1 override is allowed until
+    # the learner has actually produced a confident classification.
+    #
+    # See:
+    #   - AGNN/docs/dead-code-audit.md §4.1 (audit recommendation)
+    #   - AGNN/docs/dead-code-followup-investigation.md
+    #   - https://github.com/Wolfvin/AphantasicAbstractionModel/issues/88
+    #   - AGNN/tests/test_audit_4_1_ca1_fallback_misfire.py
+    _last_classification_was_fallback: bool = True
+
+    # ------------------------------------------------------------------
     # Statistical anchor-word discovery state (replaces _ACTION_STOPLIST
     # and _COPULAS). Populated by _compute_anchor_words() during train().
     # See the "_FUNCTION_WORD_*" and "_ACTION_ANCHOR_*" constants above
@@ -1772,34 +1806,77 @@ class PositionalClusterLearner:
             4. Look up the action's cluster_id. If that cluster is
                labelled, return its RelationType.
             5. Otherwise -> fallback.
+
+        Provenance flag (issue #88): every code path through this
+        method sets ``self._last_classification_was_fallback`` so
+        downstream consumers (notably ``TrisynapticCircuit.encode``'s
+        CA1 override block) can distinguish confident classifications
+        from fallback defaults. The flag is True on every fallback
+        path, False only on the confident-cluster-label path (step 4)
+        and on the negation-override path (step 3) — both of which
+        are high-confidence classifications that should NOT be
+        overridden by CA1's weaker bag-of-words scan.
         """
         if not self.is_trained or not self.is_labelled:
+            self._last_classification_was_fallback = True
             return self.fallback.classify(text)
 
         try:
             spo = self.spo(text)
         except Exception:
+            self._last_classification_was_fallback = True
             return self.fallback.classify(text)
 
-        # Step 3: negation beats everything.
+        # Step 3: negation beats everything. This is a confident
+        # classification (we successfully parsed SVO AND detected a
+        # negation token), so set the flag False — CA1 must not
+        # override a negation-driven DIFFERENTIAL.
         if spo.negated:
+            self._last_classification_was_fallback = False
             return RelationType.DIFFERENTIAL
 
         action_token = self._normalize_token(spo.predicate)
         if not action_token:
+            self._last_classification_was_fallback = True
+            return self.fallback.classify(text)
+
+        # ``spo().predicate`` for >3-token sentences is a space-joined
+        # phrase like ``"merupakan kota di selandia"`` (everything
+        # between the subject and the object). The cluster map is
+        # keyed by single action tokens (``"merupakan"``), so we must
+        # take the FIRST token of the predicate phrase — the actual
+        # verb/copula — for the cluster lookup. For 3-token sentences
+        # the predicate is already a single token, so this is a no-op.
+        #
+        # Without this fix, PCL fell through to its fallback for every
+        # >3-token sentence (issue #88 reproducer: "hamilton merupakan
+        # kota di selandia baru" — 5 tokens — fell through even though
+        # 'merupakan' is in the labelled CATEGORICAL cluster). The
+        # fallback then returned CATEGORICAL by default, and CA1's
+        # bag-of-words scan overrode it with CAUSAL/FUNCTIONAL on any
+        # English cue in the stimulus.
+        if " " in action_token:
+            action_token = action_token.split(" ")[0]
+        if not action_token:
+            self._last_classification_was_fallback = True
             return self.fallback.classify(text)
 
         cluster_id = self.cluster_id_of.get(action_token)
         if cluster_id is None or cluster_id < 0:
             # Action not in any cluster (unseen, or below
             # min_action_observations). Fallback.
+            self._last_classification_was_fallback = True
             return self.fallback.classify(text)
 
         relation_type = self.cluster_labels.get(cluster_id)
         if relation_type is None:
             # Cluster exists but human hasn't labelled it yet.
+            self._last_classification_was_fallback = True
             return self.fallback.classify(text)
 
+        # Confident classification: the cluster label literally says
+        # this action's relation type. No fallback was consulted.
+        self._last_classification_was_fallback = False
         return relation_type
 
     # ------------------------------------------------------------------

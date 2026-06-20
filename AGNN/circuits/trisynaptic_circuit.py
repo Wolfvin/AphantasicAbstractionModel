@@ -276,19 +276,53 @@ class TrisynapticCircuit:
         #    accepts the upper-case string form.
         #
         #    Failure contract: classify() never throws and always
-        #    returns at least CATEGORICAL, so we don't need a
-        #    try/except here. We do fall back to CA1 when the
-        #    classifier returns CATEGORICAL on a non-empty correction
-        #    - in that case CA1's stimulus-text scan may pick up a
-        #    more specific cue ("causes" in the question rather than
-        #    the correction) and we want to honor that signal too.
-        #    This dual path preserves every existing test's expectation
-        #    while still letting the classifier drive the new CAUSAL /
-        #    DIFFERENTIAL / TEMPORAL / DISCURSIVE cases.
+        #    returns at least CATEGORICAL. CATEGORICAL can mean either
+        #    of two things:
+        #
+        #      (a) CONFIDENT — PCL's labelled cluster for the action
+        #          literally has RelationType.CATEGORICAL as its label.
+        #          This is a high-confidence classification.
+        #
+        #      (b) FALLBACK — PCL fell through to its fallback
+        #          (SemanticRoleClassifier), which returns CATEGORICAL
+        #          as its default "I don't know" answer when no seed
+        #          matches. This is a low-confidence classification.
+        #
+        #    CA1's stimulus-text scan may pick up a more specific cue
+        #    ("causes" in the question rather than the correction) and
+        #    we DO want to honor that signal — but ONLY in case (b),
+        #    where the classifier's CATEGORICAL is a fallback. In case
+        #    (a), CA1's bag-of-words scan is strictly weaker than the
+        #    classifier's labelled-cluster decision, so overriding it
+        #    is wrong (issue #88: CA1 was overriding PCL's correct
+        #    CATEGORICAL for "X merupakan Y" sentences just because
+        #    the user's English stimulus contained "causes"/"requires"
+        #    /"affects").
+        #
+        #    Issue #88 fix: gate the CA1 override on
+        #    ``role_classifier._last_classification_was_fallback``,
+        #    which PCL exposes (see
+        #    neocortex/positional_cluster_learner.py:classify).
+        #    SemanticRoleClassifier does NOT expose this flag (it has
+        #    no confident-vs-fallback distinction internally — every
+        #    classification is "use the best signal I have"), so we
+        #    fall back to the pre-#88 behaviour when the classifier
+        #    is a plain SRC. This preserves every existing test's
+        #    expectation while still letting the classifier drive the
+        #    new CAUSAL / DIFFERENTIAL / TEMPORAL / DISCURSIVE cases.
         relation = self.role_classifier.classify(correction or stimulus)
         edge_type = relation.name
+        # Issue #88: only let CA1 override when the classifier's
+        # CATEGORICAL was a fallback (low-confidence). When the
+        # classifier exposes ``_last_classification_was_fallback``,
+        # check it; otherwise (SRC) preserve the pre-#88 behaviour
+        # and let CA1 override as before.
+        pcl_was_fallback = getattr(
+            self.role_classifier, "_last_classification_was_fallback", True,
+        )
         if (relation == RelationType.CATEGORICAL
-                and correction.strip()):
+                and correction.strip()
+                and pcl_was_fallback):
             # Classifier fell back to default. Give CA1 one more shot
             # at the combined stimulus + correction text - its cue
             # list includes tokens ("causes", "requires") that may

@@ -185,25 +185,44 @@ def test_audit_4_1_pcl_correctly_classifies_pure_indonesian_categorical():
 
 
 def test_audit_4_1_misfire_on_stimulus_with_english_causal_cue():
-    """PROOF of misfire: stimulus contains "causes" → CA1 overrides
-    PCL's correct CATEGORICAL to CAUSAL.
+    """Issue #88 regression test (was: PROOF of misfire).
 
     The correction "hamilton merupakan kota di selandia baru" is a
     textbook CATEGORICAL statement — PCL correctly returns
-    RelationType.CATEGORICAL. But the stimulus (the user's question)
-    "What causes Hamilton to be a city?" contains the English cue-word
-    "causes", which sits in CA1's CAUSAL cue table.
+    RelationType.CATEGORICAL via its labelled cluster. Before the
+    issue #88 fix, the stimulus (the user's question) "What causes
+    Hamilton to be a city?" contained the English cue-word "causes",
+    which sits in CA1's CAUSAL cue table. CA1's bag-of-words scan
+    over (stimulus + correction) found 1 CAUSAL cue ("causes") and
+    0 of any other type, so it returned "CAUSAL". The override
+    block at trisynaptic_circuit.py then set edge_type = "CAUSAL",
+    which was WRONG for a sentence that says "X merupakan Y".
 
-    CA1's bag-of-words scan over (stimulus + correction) finds 1
-    CAUSAL cue ("causes") and 0 of any other type, so it returns
-    "CAUSAL". The override block at trisynaptic_circuit.py:262-263
-    then sets edge_type = "CAUSAL", which is WRONG for a sentence
-    that says "X merupakan Y".
+    Issue #88 root cause had two layers:
+      1. ``PCL.classify()`` was falling through to its fallback for
+         every >3-token sentence because ``spo().predicate`` for
+         >3-token sentences is a multi-token phrase (e.g.
+         "merupakan kota di selandia"), but the cluster lookup was
+         keyed by single tokens. The lookup never matched, so PCL
+         always fell through to its fallback (which returns
+         CATEGORICAL by default).
+      2. ``TrisynapticCircuit.encode()``'s CA1 override block fired
+         whenever the classifier returned CATEGORICAL + correction
+         was non-empty — without distinguishing confident-PCL-
+         CATEGORICAL from fallback-default-CATEGORICAL. So even
+         when PCL *did* classify correctly, CA1 could override.
 
-    This test ASSERTS the misfire (i.e. edge_type == "CAUSAL"). If
-    the audit's suggested fix is implemented (gate the override on a
-    PCL-side "was-fallback" flag), this assertion will fail and the
-    test should be updated to assert edge_type == "CATEGORICAL".
+    Both layers are now fixed:
+      1. ``PCL.classify()`` takes the first token of multi-token
+         predicates for the cluster lookup (the verb/copula is
+         always the first token in positional SVO).
+      2. ``PCL.classify()`` exposes ``_last_classification_was_fallback``
+         so downstream consumers can distinguish confident from
+         fallback classifications. ``TrisynapticCircuit.encode()``
+         gates the CA1 override on this flag — CA1 only fires when
+         the classifier's CATEGORICAL was a fallback.
+
+    This test now asserts the CORRECT behaviour: edge_type == "CATEGORICAL".
     """
     circuit = _make_circuit_with_pcl()
 
@@ -211,11 +230,21 @@ def test_audit_4_1_misfire_on_stimulus_with_english_causal_cue():
     correction = "hamilton merupakan kota di selandia baru"
     episome = circuit.encode(stimulus=stimulus, correction=correction)
 
-    # Sanity: PCL alone returns CATEGORICAL (proven by the previous test).
+    # Sanity: PCL alone returns CATEGORICAL via its labelled cluster
+    # (not via fallback). The _last_classification_was_fallback flag
+    # must be False — this is the high-confidence signal that gates
+    # the CA1 override in the encode() pipeline.
     pcl_only = circuit.role_classifier.classify(correction)
     assert pcl_only == RelationType.CATEGORICAL
+    assert circuit.role_classifier._last_classification_was_fallback is False, (
+        "PCL must classify 'merupakan' sentences via its labelled "
+        "CATEGORICAL cluster, not via the fallback. If this fails, "
+        "the issue #88 root-cause fix in PCL.classify() (first-token "
+        "of multi-token predicate) has regressed."
+    )
 
-    # Sanity: CA1 alone returns CAUSAL (English cue "causes" fires).
+    # Sanity: CA1 alone still returns CAUSAL (English cue "causes" fires).
+    # This proves the fix is in the gating logic, not in CA1's cue table.
     ca1_only = CA1().integrate_context(stimulus, correction)
     assert ca1_only == "CAUSAL", (
         f"CA1 should fire CAUSAL on stimulus containing 'causes'; "
@@ -223,25 +252,25 @@ def test_audit_4_1_misfire_on_stimulus_with_english_causal_cue():
         f"longer reproduce."
     )
 
-    # The misfire: the encode() pipeline lets CA1 override PCL's
-    # correct CATEGORICAL with the wrong CAUSAL.
-    assert episome.edge_type == "CAUSAL", (
-        f"§4.1 misfire did NOT fire for this stimulus/correction pair. "
-        f"Either (a) the override block at trisynaptic_circuit.py:255-263 "
-        f"has been gated/removed, or (b) CA1's cue table changed so "
-        f"'causes' no longer fires CAUSAL. Either way, the audit's "
-        f"misfire claim no longer holds for this case — update the "
-        f"investigation doc accordingly."
+    # The fix: the encode() pipeline lets PCL's confident CATEGORICAL
+    # stand and does NOT let CA1 override it.
+    assert episome.edge_type == "CATEGORICAL", (
+        f"§4.1 misfire still fires for this stimulus/correction pair — "
+        f"PCL's confident CATEGORICAL was overridden by CA1's CAUSAL. "
+        f"If this fails, the issue #88 gating fix in "
+        f"trisynaptic_circuit.py:encode() (gate CA1 override on "
+        f"_last_classification_was_fallback) has regressed."
     )
 
 
 def test_audit_4_1_misfire_on_stimulus_with_english_functional_cue():
-    """PROOF of misfire (second variant): stimulus contains "requires"
-    → CA1 overrides PCL's CATEGORICAL to FUNCTIONAL.
+    """Issue #88 regression test (was: PROOF of misfire, second variant).
 
     Same scenario as the previous test but with a different English
     cue-word ("requires" sits in CA1's FUNCTIONAL cue table). Proves
-    the misfire is not specific to the "causes" cue.
+    the issue #88 fix is not specific to the "causes" cue — any
+    English cue in the stimulus is now correctly suppressed when PCL
+    has confidently classified the correction.
     """
     circuit = _make_circuit_with_pcl()
 
@@ -251,22 +280,23 @@ def test_audit_4_1_misfire_on_stimulus_with_english_functional_cue():
 
     pcl_only = circuit.role_classifier.classify(correction)
     assert pcl_only == RelationType.CATEGORICAL
+    assert circuit.role_classifier._last_classification_was_fallback is False
     ca1_only = CA1().integrate_context(stimulus, correction)
     assert ca1_only == "FUNCTIONAL"
 
-    assert episome.edge_type == "FUNCTIONAL", (
-        f"§4.1 misfire did NOT fire for the 'requires' variant. "
+    assert episome.edge_type == "CATEGORICAL", (
+        f"§4.1 misfire still fires for the 'requires' variant — "
+        f"PCL's confident CATEGORICAL was overridden by CA1's FUNCTIONAL. "
         f"See test_audit_4_1_misfire_on_stimulus_with_english_causal_cue "
         f"for the canonical case."
     )
 
 
 def test_audit_4_1_misfire_on_stimulus_with_english_affects_cue():
-    """PROOF of misfire (third variant): stimulus contains "affects"
-    → CA1 overrides PCL's CATEGORICAL to CAUSAL.
+    """Issue #88 regression test (was: PROOF of misfire, third variant).
 
     "affects" is in CA1's CAUSAL cue table. This third variant
-    demonstrates the misfire fires for any English cue that maps to a
+    demonstrates the fix works for any English cue that maps to a
     non-CATEGORICAL relation type, not just the canonical "causes".
     """
     circuit = _make_circuit_with_pcl()
@@ -277,11 +307,13 @@ def test_audit_4_1_misfire_on_stimulus_with_english_affects_cue():
 
     pcl_only = circuit.role_classifier.classify(correction)
     assert pcl_only == RelationType.CATEGORICAL
+    assert circuit.role_classifier._last_classification_was_fallback is False
     ca1_only = CA1().integrate_context(stimulus, correction)
     assert ca1_only == "CAUSAL"
 
-    assert episome.edge_type == "CAUSAL", (
-        f"§4.1 misfire did NOT fire for the 'affects' variant."
+    assert episome.edge_type == "CATEGORICAL", (
+        f"§4.1 misfire still fires for the 'affects' variant — "
+        f"PCL's confident CATEGORICAL was overridden by CA1's CAUSAL."
     )
 
 
