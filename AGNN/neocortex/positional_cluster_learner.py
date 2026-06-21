@@ -932,6 +932,36 @@ class PositionalClusterLearner:
     connector_tokens: Set[str] = field(default_factory=set)
 
     # ------------------------------------------------------------------
+    # Context-stratified object signature (post-round-18 architecture
+    # patch). See the section docstring further below for the full
+    # rationale. Short version: action_object_freq flattens EVERY
+    # (action, object) observation into one combined count map,
+    # destroying the distinction between an object that is an ordinary
+    # noun ("kebakaran" in "api menyebabkan kebakaran") and an object
+    # that is itself a bare embedded-predicate fragment ("naik" in
+    # "panas menyebabkan suhu naik" — _extract_action_object's >3-token
+    # rule grabs tokens[-1] regardless of what it structurally is).
+    # This generalises the SAME split-before-cluster pattern already
+    # proven by action_connector_signature (which splits actions into
+    # 2 groups BEFORE _cluster_actions runs) — here the split happens
+    # one level down, on individual (action, object) OBSERVATIONS
+    # rather than on whole actions, using a purely structural test
+    # (is the object token ALSO an independently-discovered bucket
+    # anchor?) with zero new word lists and zero new corpus-mining
+    # passes (reuses bucket_anchors, already computed earlier in
+    # train()).
+    #
+    # action_object_context_freq: {action: {context_tag: {object: count}}}
+    #   context_tag is one of "plain" or "embedded_candidate". Purely
+    #   additive — populated ALONGSIDE action_object_freq during the
+    #   SAME Pass 2 loop, never read by _is_action_token / tag_sentence
+    #   / spo / classify. Existing behaviour is unchanged; this is a
+    #   new, separate discovery view.
+    action_object_context_freq: Dict[str, Dict[str, Dict[str, int]]] = field(
+        default_factory=dict
+    )
+
+    # ------------------------------------------------------------------
     # Statistical anchor-word discovery state (replaces _ACTION_STOPLIST
     # and _COPULAS). Populated by _compute_anchor_words() during train().
     # See the "_FUNCTION_WORD_*" and "_ACTION_ANCHOR_*" constants above
@@ -1274,6 +1304,14 @@ class PositionalClusterLearner:
                     tokens, action_token, object_token
                 )
                 action_between[action_token][between_token] += 1
+
+                # Context-stratified view (additive, see
+                # action_object_context_freq's docstring above).
+                ctx_tag = self._object_context_tag(between_token)
+                ctx_bucket = self.action_object_context_freq.setdefault(
+                    action_token, {}
+                ).setdefault(ctx_tag, {})
+                ctx_bucket[object_token] = ctx_bucket.get(object_token, 0) + 1
 
         # ----------------------------------------------------------------
         # Post-processing.
@@ -2357,6 +2395,42 @@ class PositionalClusterLearner:
             for tok in toks:
                 self.particle_cluster_id_of[tok] = cluster_id
 
+    def _object_context_tag(self, between_token: Optional[str]) -> str:
+        """Classify an extracted (action, object) observation's
+        structural context, for ``action_object_context_freq``.
+
+        Returns ``"embedded_candidate"`` when there is a non-particle
+        content token sitting strictly BETWEEN the action and the
+        extracted object (``between_token`` is not ``None`` and is
+        not a particle) — i.e. the shape is "ACTION X OBJECT" where
+        X could itself be OBJECT's own agent ("menyebabkan suhu naik"
+        — "suhu" sits between "menyebabkan" and "naik", suggesting
+        "suhu naik" is its own subject+predicate pair, not a plain
+        2-word VP). Returns ``"plain"`` when the object sits
+        immediately after the action with nothing between
+        ("menyebabkan kebakaran" — a direct, unambiguous object).
+
+        ``between_token`` is the SAME value :meth:`_extract_between_token`
+        already computes in the same Pass-2 loop (originally for
+        ``action_connector_signature``) — no new corpus-mining pass,
+        no word list. Earlier draft of this method used bucket-anchor
+        membership instead; that was discovered (empirically, by
+        running it) to be the WRONG signal — it's the exact signature
+        already shown in rounds 16-18 to be too weak for single tokens
+        like "naik"/"turun" (they fail bucket-anchor thresholds
+        precisely BECAUSE their position splits, which is what makes
+        them embedded-predicate candidates in the first place). The
+        "is there a non-particle gap before the object" test looks at
+        the OBSERVATION's structure instead of the object token's
+        global signature, and does not depend on the object token
+        passing any frequency/entropy threshold on its own.
+        """
+        if between_token is None:
+            return "plain"
+        if self._is_particle_token(between_token):
+            return "plain"
+        return "embedded_candidate"
+
     @staticmethod
     def _extract_between_token(
         tokens: List[str],
@@ -2450,6 +2524,50 @@ class PositionalClusterLearner:
         if denominator == 0:
             return 0.0
         return numerator / denominator
+
+    def inspect_context_split(self, action: str) -> Optional[float]:
+        """Cosine similarity between an action's "plain" and
+        "embedded_candidate" object sub-signatures (see
+        ``action_object_context_freq``), projected to super-cluster
+        space via the SAME ``object_supercluster_id`` mapping
+        :meth:`_cluster_actions` uses — same feature space, so the
+        result is directly comparable to the similarity threshold
+        ``_cluster_actions`` uses to decide whether two actions merge.
+
+        Returns ``None`` when ``action`` has no observations in EITHER
+        context group (nothing to compare). Returns a float in
+        ``[0.0, 1.0]`` otherwise — LOW similarity means the action's
+        "plain" objects and "embedded-candidate" objects point in
+        different directions in super-cluster space, i.e. this
+        action's causal-relation cluster membership may be conflating
+        two structurally different things (an ordinary object vs. an
+        embedded-predicate fragment). HIGH similarity means both
+        contexts behave alike for this action — no real distinction.
+
+        Purely a diagnostic/inspection method — does not mutate any
+        state, does not affect ``cluster_id_of`` or any existing
+        public API. This is the post-round-18 architecture patch's
+        verification tool: it lets a human (or a future automated
+        step) check, action by action, whether the context split
+        hypothesis actually explains observed cluster contamination
+        BEFORE building any code that acts on it.
+        """
+        ctx_map = self.action_object_context_freq.get(action, {})
+        plain = ctx_map.get("plain", {})
+        embedded = ctx_map.get("embedded_candidate", {})
+        if not plain or not embedded:
+            return None
+
+        def to_supercluster_vec(objs: Dict[str, int]) -> Dict[int, float]:
+            sc_map: Dict[int, float] = {}
+            for obj, count in objs.items():
+                sc_id = self.object_supercluster_id.get(obj, hash(obj))
+                sc_map[sc_id] = sc_map.get(sc_id, 0.0) + count
+            return sc_map
+
+        return self._cosine_similarity_sparse(
+            to_supercluster_vec(plain), to_supercluster_vec(embedded)
+        )
 
     # ------------------------------------------------------------------
     # STAGE 2: post-hoc naming + inspection
@@ -4065,6 +4183,13 @@ class PositionalClusterLearner:
                 for cid, rt in self.cluster_labels.items()
             },
             "coordinator_cluster_ids": sorted(self.coordinator_cluster_ids),
+            "action_object_context_freq": {
+                action: {
+                    ctx_tag: dict(objs)
+                    for ctx_tag, objs in ctx_map.items()
+                }
+                for action, ctx_map in self.action_object_context_freq.items()
+            },
             "action_connector_signature": dict(self.action_connector_signature),
             "connector_tokens": sorted(self.connector_tokens),
             "function_word_candidates": sorted(self.function_word_candidates),
@@ -4261,6 +4386,18 @@ class PositionalClusterLearner:
         for cid in raw.get("coordinator_cluster_ids", []):
             if isinstance(cid, int):
                 learner.coordinator_cluster_ids.add(cid)
+
+        # action_object_context_freq: {action: {ctx_tag: {object: count}}}
+        # Backward-compat: older save files lack this field. Empty dict
+        # is the correct backfill — it's a purely additive discovery
+        # view, never consulted by _is_action_token/tag_sentence/spo.
+        for action, ctx_map in raw.get("action_object_context_freq", {}).items():
+            if not isinstance(ctx_map, dict):
+                continue
+            dest = learner.action_object_context_freq.setdefault(action, {})
+            for ctx_tag, objs in ctx_map.items():
+                if isinstance(objs, dict):
+                    dest[ctx_tag] = dict(objs)
 
         # action_connector_signature: {action: bool}
         # Backward-compat: older save files (pre-cluster-62 fix) lack
