@@ -1486,9 +1486,19 @@ class PositionalClusterLearner:
 
         # Sort by descending total count so the most statistically
         # reliable actions seed the initial clusters.
+        # Sort by descending total count; ties broken alphabetically.
+        # The alphabetical tiebreak carries no linguistic meaning — it
+        # exists ONLY so the processing order (and therefore which
+        # action seeds a cluster first) is reproducible independent of
+        # corpus insertion order. Before this, two actions with an
+        # identical total count were ordered by Python dict iteration
+        # order (= the order they were first inserted while scanning
+        # the corpus), an implicit, fragile dependency flagged during
+        # the post-round-9 architecture audit — explicit beats
+        # implicit for reproducibility.
         sorted_actions = sorted(
             actions_sc.keys(),
-            key=lambda a: -sum(actions_sc[a].values()),
+            key=lambda a: (-sum(actions_sc[a].values()), a),
         )
 
         # Each cluster: (set_of_action_tokens, running_sum_sc_map).

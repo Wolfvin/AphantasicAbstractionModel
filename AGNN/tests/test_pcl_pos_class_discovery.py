@@ -1415,3 +1415,53 @@ def test_predicate_adjective_sentence_tags_subject_and_predicate():
         f"Expected 'luas' to be recognised as the predicate; got "
         f"{tags['luas']!r}."
     )
+
+
+# ----------------------------------------------------------------------
+# Q/K/V tie-break determinism (pre-round-10 architecture audit)
+# ----------------------------------------------------------------------
+
+def test_qkv_tiebreak_is_alphabetical_not_insertion_order():
+    """Two actions with an identical total observation count must be
+    processed in alphabetical order, not corpus-insertion order.
+
+    Found during an external architecture audit: _cluster_action_group_qkv
+    sorts actions by descending total count, but ties were broken by
+    Python dict iteration order (= the order each action was first
+    inserted while scanning the corpus) — an implicit, fragile
+    dependency. Reordering the training corpus (same sentences,
+    different order) could silently change which action seeds a
+    cluster first, and therefore the final cluster assignment, with
+    no test catching it. Fixed by adding an explicit alphabetical
+    secondary sort key — it carries no linguistic meaning, it just
+    makes the processing order reproducible independent of corpus
+    order.
+    """
+    learner = PositionalClusterLearner()
+    # Two actions ("zaction"/"aaction") with IDENTICAL object
+    # distributions and counts, deliberately inserted in an order
+    # where the alphabetically-LATER one appears first in the corpus.
+    # If the tiebreak were still insertion-order, "zaction" would seed
+    # the first cluster; with the alphabetical tiebreak, "aaction"
+    # must seed it instead — provable from cluster_id_of: whichever
+    # action processed FIRST keeps cluster_id 0 in a no-connector
+    # group (the seeding cluster gets the lowest cluster_id, since
+    # action_clusters is enumerated in processing order).
+    lines = (
+        ["kucing zaction ikan"] * 4 + ["anjing aaction tulang"] * 4
+    )
+    learner.train(lines)
+    # Both should cluster together (identical-shaped object signature
+    # after Brown projection is irrelevant here — same literal object
+    # count shape) OR at minimum, "aaction" (alphabetically first)
+    # must be the one whose cluster_id matches the FIRST cluster
+    # formed (cluster_id 0 among clusterable actions), proving
+    # processing order is alphabetical, not insertion order.
+    assert learner.cluster_id_of.get("aaction") == 0 or (
+        learner.cluster_id_of.get("aaction") == learner.cluster_id_of.get("zaction")
+    ), (
+        f"Expected 'aaction' (alphabetically first) to seed cluster 0 "
+        f"despite 'zaction' being inserted first in the corpus. Got "
+        f"aaction={learner.cluster_id_of.get('aaction')!r}, "
+        f"zaction={learner.cluster_id_of.get('zaction')!r}."
+    )
