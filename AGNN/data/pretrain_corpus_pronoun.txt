@@ -1,0 +1,11 @@
+## POLA: saya sebagai AGENT (depth, predikat beragam)
+saya makan nasi
+saya membaca buku
+saya menulis surat
+saya pergi sekolah
+saya membeli baju
+saya menonton film
+saya mendengarkan musik
+saya mencuci piring
+saya memasak sup
+saya bermain bola

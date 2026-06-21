@@ -175,6 +175,7 @@ DEFAULT_CORPUS_PATHS: List[str] = [
     os.path.join(_DATA_DIR, "pretrain_corpus_ditransitive.txt"),
     os.path.join(_DATA_DIR, "pretrain_corpus_subordinate.txt"),
     os.path.join(_DATA_DIR, "pretrain_corpus_coordinate.txt"),
+    os.path.join(_DATA_DIR, "pretrain_corpus_pronoun.txt"),
 ]
 
 # Where the labelled learner state is persisted. AGNNCore loads this
