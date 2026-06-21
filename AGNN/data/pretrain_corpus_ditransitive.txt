@@ -1,0 +1,34 @@
+## POLA: Verb ditransitive — memberi (depth, agent+objek beragam)
+dia memberi saya buku
+ayah memberi adik mainan
+ibu memberi anak uang
+guru memberi murid nilai
+kakek memberi cucu nasihat
+
+## POLA: Verb ditransitive — membelikan (depth)
+ayah membelikan adik sepeda
+ibu membelikan kakak baju
+paman membelikan ponakan boneka
+suami membelikan istri bunga
+kakak membelikan adik permen
+
+## POLA: Verb ditransitive — mengajari (depth)
+guru mengajari murid matematika
+ayah mengajari anak berenang
+kakak mengajari adik membaca
+pelatih mengajari atlet teknik
+dosen mengajari mahasiswa statistik
+
+## POLA: Verb ditransitive — mengirim (depth)
+ibu mengirim nenek surat
+perusahaan mengirim pelanggan paket
+kurir mengirim penerima dokumen
+sekolah mengirim orangtua laporan
+bank mengirim nasabah pemberitahuan
+
+## POLA: Verb ditransitive — menunjukkan (depth)
+guru menunjukkan murid contoh
+pemandu menunjukkan turis arah
+dokter menunjukkan pasien hasil
+ayah menunjukkan anak jalan
+teman menunjukkan teman foto
