@@ -159,6 +159,7 @@ def _train_canonical_learner() -> PositionalClusterLearner:
         _AGNP_ROOT / "data" / "pretrain_corpus_depth.txt",
         _AGNP_ROOT / "data" / "pretrain_corpus_passive.txt",
         _AGNP_ROOT / "data" / "pretrain_corpus_ditransitive.txt",
+        _AGNP_ROOT / "data" / "pretrain_corpus_subordinate.txt",
     ]
     missing = [p for p in corpus_paths if not p.exists()]
     if missing:
@@ -1057,3 +1058,41 @@ def test_spo_parses_ditransitive_verbs():
             f"{sentence!r}: expected a non-empty object phrase "
             f"(both post-verbal arguments), got empty string"
         )
+
+
+# ----------------------------------------------------------------------
+# Subordinate conjunctions (sprint round 4)
+# ----------------------------------------------------------------------
+
+def test_subordinate_conjunctions_karena_ketika_are_particles():
+    """'karena' and 'ketika' must be recognised as particles.
+
+    Found during the BOS training sprint, round 4 (subordinate
+    conjunction diversity): "karena"/"ketika" enter
+    ``action_object_freq`` incidentally (some sentence in the corpus
+    happens to make them the first eligible bucket-1 candidate during
+    >3-token extraction), which lets the existing has_agent/has_action
+    soft-particle check recognise them. This is a permanent regression
+    guard for that working case.
+
+    Other subordinate conjunctions ("meskipun"/"agar"/"supaya"/
+    "walaupun") do NOT get this recognition — they never enter
+    action_object_freq because an earlier token in their sentences
+    (e.g. "tetap"/"harus") is picked first by the >3-token extraction
+    loop, which breaks at the first eligible candidate. Broadening the
+    has_agent/has_action check to bypass the action_object_freq gate
+    was attempted and REVERTED (see _is_soft_particle's docstring) —
+    it caused a regression where real content nouns used across many
+    different corpus sentences (e.g. "ikan") also coincidentally
+    satisfy has_agent+has_action, breaking the round-1 passive-voice
+    fix. Recognising "meskipun"-class conjunctions needs a different,
+    more targeted signal — tracked as a sprint follow-up.
+    """
+    learner = _train_canonical_learner()
+    assert learner._is_particle_token("karena"), (
+        "'karena' should be recognised as a particle (clause-boundary "
+        "anchor candidate) via the existing has_agent/has_action signal."
+    )
+    assert learner._is_particle_token("ketika"), (
+        "'ketika' should be recognised as a particle via the same signal."
+    )
