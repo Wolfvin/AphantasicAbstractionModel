@@ -1504,3 +1504,104 @@ def test_datang_tagged_action_in_simple_sentence():
     assert tags["datang"] == "ACTION", (
         f"Expected 'datang' to be tagged ACTION; got {tags['datang']!r}."
     )
+
+
+# ----------------------------------------------------------------------
+# Context-stratified object signature (round 19 — post-round-18
+# architecture patch, additive only)
+# ----------------------------------------------------------------------
+
+def test_action_object_context_freq_is_purely_additive():
+    """The new context-stratified view must not change ANY existing
+    public behaviour — tag_sentence/spo/classify/_is_action_token are
+    completely unaffected by action_object_context_freq's existence.
+
+    This is the core safety contract for round 19: the field is
+    populated during train() but never read by anything except the
+    new inspect_context_split() diagnostic method.
+    """
+    learner = _train_canonical_learner()
+    assert learner.action_object_context_freq, (
+        "Expected action_object_context_freq to be populated after "
+        "training on the canonical corpus."
+    )
+    # Spot-check a sentence whose behaviour is well-established by
+    # earlier rounds — must be byte-for-byte identical to what those
+    # rounds already verified.
+    tags = dict(learner.tag_sentence("api menyebabkan kebakaran"))
+    assert tags["api"] == "AGENT"
+    assert tags["menyebabkan"] == "ACTION"
+    assert tags["kebakaran"] == "OBJECT"
+
+
+def test_menyebabkan_context_split_separates_embedded_fragments():
+    """'menyebabkan' must have BOTH context groups populated, with
+    embedded-predicate fragments ("naik", "turun", "mahal") landing in
+    "embedded_candidate" and ordinary objects ("kebakaran", "diabetes")
+    landing in "plain".
+
+    This is the structural test the round-19 patch is built on:
+    "is there a non-particle token between the action and the
+    extracted object" — NOT bucket-anchor membership (an earlier draft
+    used that signal and got it backwards, because bucket-anchor
+    membership is exactly the signal rounds 16-18 already proved too
+    weak for these specific tokens).
+    """
+    learner = _train_canonical_learner()
+    ctx = learner.action_object_context_freq.get("menyebabkan", {})
+    assert "plain" in ctx and "embedded_candidate" in ctx, (
+        f"Expected both context groups for 'menyebabkan'; got keys "
+        f"{sorted(ctx.keys())}."
+    )
+    embedded_objects = set(ctx["embedded_candidate"].keys())
+    plain_objects = set(ctx["plain"].keys())
+    assert "naik" in embedded_objects or "turun" in embedded_objects, (
+        f"Expected at least one embedded-predicate fragment "
+        f"('naik'/'turun') in the embedded_candidate group; got "
+        f"{sorted(embedded_objects)}."
+    )
+    assert "kebakaran" in plain_objects or "diabetes" in plain_objects, (
+        f"Expected at least one ordinary object ('kebakaran'/'diabetes') "
+        f"in the plain group; got {sorted(plain_objects)}."
+    )
+
+
+def test_inspect_context_split_returns_none_without_both_groups():
+    """inspect_context_split() returns None when an action has no
+    observations in one of the two context groups (nothing to compare).
+    """
+    learner = _train_canonical_learner()
+    assert learner.inspect_context_split("this_action_does_not_exist") is None
+
+
+def test_inspect_context_split_returns_valid_cosine_range():
+    """When both context groups exist, the result is a valid cosine
+    similarity in [0.0, 1.0] (object counts are always non-negative,
+    so the projected vectors live in the non-negative cone — cosine
+    similarity can't go negative here).
+    """
+    learner = _train_canonical_learner()
+    sim = learner.inspect_context_split("menyebabkan")
+    assert sim is not None
+    assert 0.0 <= sim <= 1.0001, f"Expected a valid cosine similarity; got {sim!r}."
+
+
+def test_action_object_context_freq_persists_through_save_load():
+    """action_object_context_freq must survive a save()/load() roundtrip
+    byte-for-byte (issue #92's persistence contract, extended to the
+    new field)."""
+    import tempfile
+    import os
+
+    learner = _train_canonical_learner()
+    with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
+        path = f.name
+    try:
+        learner.save(path)
+        loaded = PositionalClusterLearner.load(path)
+        assert (
+            loaded.action_object_context_freq.get("menyebabkan")
+            == learner.action_object_context_freq.get("menyebabkan")
+        )
+    finally:
+        os.unlink(path)
