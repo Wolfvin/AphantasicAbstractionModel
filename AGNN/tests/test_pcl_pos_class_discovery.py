@@ -29,6 +29,7 @@ import os
 import sys
 import tempfile
 from pathlib import Path
+from typing import Dict
 
 import pytest
 
@@ -116,6 +117,35 @@ def _train_tiny_learner() -> PositionalClusterLearner:
     learner.train(_TINY_CORPUS)
     assert learner.is_trained, "Tiny corpus should produce a trained learner"
     return learner
+
+
+def _label_particle_clusters_by_content(
+    learner: PositionalClusterLearner,
+) -> None:
+    """Post-hoc-label the learner's particle clusters by content match.
+
+    Mirrors how RelationType clusters are labelled in
+    bootstrap_classifier.py (match by what's actually IN the cluster,
+    not by index/ID — cluster ids are an implementation detail that
+    shifts between train() calls). PR replacing the PRE-named
+    MODIFIER/CONNECTOR detection (which baked the name into the
+    detection function itself, calibrated against known tokens — the
+    same bias pattern PR #69 was rejected for) with a proper two-stage
+    discovery: train() clusters particle tokens by feature-vector
+    distance UNNAMED, and a human (this helper, playing that role in
+    tests) reviews + labels them afterward. tag_sentence() no longer
+    auto-names particle clusters, so tests that need MODIFIER /
+    CONNECTOR output must call this AFTER train() and BEFORE asserting.
+    """
+    clusters = learner.inspect_particle_clusters()
+    mapping: Dict[int, str] = {}
+    for cid, detail in clusters.items():
+        tokens = set(detail["tokens"])
+        if "sangat" in tokens or "bukan" in tokens:
+            mapping[cid] = "MODIFIER"
+        if "dari" in tokens or "dengan" in tokens:
+            mapping[cid] = "CONNECTOR"
+    learner.label_particle_clusters(mapping)
 
 
 def _train_canonical_learner() -> PositionalClusterLearner:
@@ -499,6 +529,7 @@ def test_tag_sentence_state_with_modifier():
     action), so it gets tagged MODIFIER, not ACTION.
     """
     learner = _train_tiny_learner()
+    _label_particle_clusters_by_content(learner)
     tags = learner.tag_sentence("es sangat dingin")
     assert tags == [("es", "AGENT"), ("sangat", "MODIFIER"), ("dingin", "OBJECT")], (
         f"Expected AGENT/MODIFIER/OBJECT; got {tags}. "
@@ -514,6 +545,7 @@ def test_tag_sentence_differential_with_connector():
     'dari' is a CONNECTOR sitting between the action and object.
     """
     learner = _train_tiny_learner()
+    _label_particle_clusters_by_content(learner)
     tags = learner.tag_sentence("kucing berbeda dari reptil")
     assert tags == [
         ("kucing", "AGENT"),
@@ -743,3 +775,125 @@ def test_zero_bias_no_hardcoded_connector_list():
                         f"Hardcoded connector {conn!r} found in PCL "
                         f"source at line: {line.strip()!r}."
                     )
+
+
+# ----------------------------------------------------------------------
+# PARTICLE clustering: zero-bias two-stage discovery (replaces the
+# PRE-named MODIFIER/CONNECTOR detection critiqued during review — see
+# the "PARTICLE clustering" section in positional_cluster_learner.py)
+# ----------------------------------------------------------------------
+
+def test_particle_clusters_are_unnamed_before_labelling():
+    """train() produces particle clusters with empty labels.
+
+    This is the core contract: clustering happens with ZERO awareness
+    of "MODIFIER"/"CONNECTOR" or any other name. particle_cluster_labels
+    must be empty immediately after train(), before any human calls
+    label_particle_clusters().
+    """
+    learner = _train_tiny_learner()
+    assert learner.particle_clusters, (
+        "Expected at least one particle cluster to form from the tiny "
+        "corpus's function words (sangat, dari, bukan, ...)."
+    )
+    assert learner.particle_cluster_labels == {}, (
+        "particle_cluster_labels must be empty right after train() — "
+        "naming is a separate, post-hoc, opt-in step via "
+        "label_particle_clusters(), never automatic."
+    )
+
+
+def test_tag_sentence_reports_unknown_before_labelling():
+    """tag_sentence() must NOT silently use the old pre-named sets.
+
+    Before label_particle_clusters() is called, a particle token
+    (e.g. 'sangat') must tag as UNKNOWN — not MODIFIER. Falling back
+    to the legacy modifier_tokens/connector_tokens membership would
+    defeat the entire point of the two-stage discovery: it would mean
+    every caller gets the OLD pre-named answer for free, with no
+    actual review step ever required.
+    """
+    learner = _train_tiny_learner()
+    tags = dict(learner.tag_sentence("es sangat dingin"))
+    assert tags["sangat"] == "UNKNOWN", (
+        f"Expected 'sangat' to be UNKNOWN before label_particle_clusters() "
+        f"is called (no auto-naming); got {tags['sangat']!r}."
+    )
+
+
+def test_particle_clustering_excludes_real_content_actions():
+    """Real action verbs must never appear in a particle cluster.
+
+    Regression guard for a bug found during implementation: the
+    connector-candidate pool's "never appears as object" check is
+    weak (true of nearly every verb, since verbs aren't nouns), so
+    verbs that incidentally sit in a between-first slot a few times
+    used to leak into the particle-clustering candidate pool. Any
+    token that has its own action_object_freq entry (i.e. is itself
+    the predicate of at least one sentence) must be excluded from
+    particle clustering — it's already a content action, not a
+    leftover grammar particle.
+    """
+    learner = _train_canonical_learner()
+    real_actions = set(learner.action_object_freq.keys())
+    for cluster_id, tokens in learner.particle_clusters.items():
+        leaked = tokens & real_actions
+        assert not leaked, (
+            f"Particle cluster {cluster_id} contains real content "
+            f"action(s) {leaked!r} — these have their own "
+            f"action_object_freq entry and must not compete for a "
+            f"leftover-particle cluster slot."
+        )
+
+
+def test_particle_cluster_can_discover_a_category_beyond_modifier_connector():
+    """The architecture must not presuppose only 2 particle categories.
+
+    On the canonical corpus, negators ('tidak', 'melainkan') form a
+    cluster behaviourally distinct from both the dari/dengan-style
+    CONNECTOR cluster and the sangat/begitu-style MODIFIER cluster.
+    This test asserts that AGNN is free to surface this as its own
+    named category (e.g. "NEGATOR") rather than being forced to
+    relabel it as one of the two pre-existing ideas — proving the
+    clustering doesn't hardcode "there are exactly 2 particle
+    classes".
+    """
+    learner = _train_canonical_learner()
+    clusters = learner.inspect_particle_clusters()
+
+    tidak_cluster_id = None
+    for cid, detail in clusters.items():
+        if "tidak" in set(detail["tokens"]):
+            tidak_cluster_id = cid
+            break
+    assert tidak_cluster_id is not None, (
+        "'tidak' should land in some particle cluster on the canonical "
+        "corpus (it has high positional entropy and is excluded from "
+        "the action slot)."
+    )
+
+    # Find the dari/dengan-style connector cluster (if 'tidak' isn't
+    # already in it).
+    connector_cluster_id = None
+    for cid, detail in clusters.items():
+        toks = set(detail["tokens"])
+        if {"dari", "dengan"} & toks:
+            connector_cluster_id = cid
+            break
+
+    if connector_cluster_id is not None:
+        assert tidak_cluster_id != connector_cluster_id, (
+            "'tidak' (negator) and 'dari'/'dengan' (connectors) should "
+            "be behaviourally distinct enough to land in different "
+            "unnamed clusters on the canonical corpus — they are "
+            "different grammar phenomena (negation vs. preposition)."
+        )
+
+    # The naming step is free to call this cluster anything —
+    # including a name that didn't exist before this test was written.
+    learner.label_particle_clusters({tidak_cluster_id: "NEGATOR"})
+    tags = dict(learner.tag_sentence("kucing tidak termasuk reptil"))
+    assert tags.get("tidak") == "NEGATOR", (
+        f"Expected 'tidak' to report the freshly-assigned 'NEGATOR' "
+        f"label; got {tags.get('tidak')!r}."
+    )
