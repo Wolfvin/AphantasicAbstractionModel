@@ -3723,6 +3723,116 @@ class PositionalClusterLearner:
 
         return (subject_tokens, action_token, object_tokens)
 
+    def _parse_all_clauses(
+        self, tokens: List[str],
+    ) -> List[Tuple[List[str], str, List[str]]]:
+        """Anchor-split ``tokens`` and parse EVERY resulting sub-clause.
+
+        Shared helper for :meth:`spo` (picks one "main" clause from
+        the result) and :meth:`spo_all` (returns every clause). Lives
+        here so both methods run the exact same anchor-split +
+        per-clause-parse pipeline — no duplicated logic, no risk of
+        the two methods drifting apart.
+
+        Returns a list of ``(subject_tokens, action_token,
+        object_tokens)`` — one entry per sub-clause that produced a
+        successful parse (sub-clauses with no ACTION and no particle
+        are silently dropped, same contract as before). Order matches
+        the sub-clauses' order in the original sentence (NOT reversed
+        — :meth:`spo` does its own "pick the last clause on a tie"
+        logic on top of this list; :meth:`spo_all` returns this order
+        as-is, which is reading order).
+        """
+        action_positions = self._find_action_positions(tokens)
+        particle_positions = self._find_particle_positions(tokens)
+        anchors = self._detect_clause_anchors(
+            tokens, action_positions, particle_positions,
+        )
+        boundaries = self._compute_clause_boundaries(anchors, action_positions)
+        sub_clauses = self._split_tokens_at_boundaries(tokens, boundaries)
+
+        parsed_clauses: List[Tuple[List[str], str, List[str]]] = []
+        for sc_tokens in sub_clauses:
+            parsed = self._parse_clause_spo(sc_tokens)
+            if parsed is not None:
+                parsed_clauses.append(parsed)
+        return parsed_clauses
+
+    def spo_all(self, text: str) -> List[SPO]:
+        """Parse ``text`` into ONE :class:`SPO` per independent clause.
+
+        Extends :meth:`spo` (which collapses a multi-clause sentence
+        down to a single "main" tuple) to expose EVERY clause the
+        anchor-split mechanism finds. Added in sprint round 6,
+        directly completing round 5's clause-coordinator fix: marking
+        "dan"/"atau" as coordinators already made
+        :meth:`tag_sentence` correctly tag every token across both
+        clauses of a coordinated sentence — but :meth:`spo` could
+        still only SURFACE one of them. This method surfaces all of
+        them.
+
+        Example
+        -------
+        >>> learner.spo_all("ayah membaca koran dan ibu memasak nasi")
+        [SPO(subject='ayah', predicate='membaca', object='koran', ...),
+         SPO(subject='ibu', predicate='memasak', object='nasi', ...)]
+
+        Strategy: identical anchor-split + per-clause cluster-driven
+        parse as :meth:`spo` (shares :meth:`_parse_all_clauses` so the
+        two methods can never disagree on HOW a sentence splits into
+        clauses — only on whether one or all of the results are
+        returned). Falls back to a single-element list wrapping
+        :meth:`spo`'s fallback result when:
+
+          - the learner is untrained,
+          - the sentence is too short (<3 tokens) for cluster-driven
+            parsing,
+          - no sub-clause produces a successful parse.
+
+        Negation is computed per-clause (same ``_has_negation_before``
+        check :meth:`spo` uses), so each returned SPO carries its OWN
+        ``negated`` flag — a negated dependent clause doesn't bleed
+        into an un-negated main clause or vice versa.
+
+        Returns:
+            A list of :class:`SPO`, one per clause, in reading order
+            (left to right in the original sentence). Always
+            non-empty for non-empty input (falls back to a
+            single-element list rather than returning ``[]``), so
+            callers can safely do ``spo_all(text)[0]`` for "give me
+            at least the first clause" without a length check.
+        """
+        if not self.is_trained:
+            return [self.fallback.spo(text)]
+
+        raw = (text or "").strip()
+        if not raw:
+            return [SPO(subject="", predicate="", object="", raw=raw)]
+
+        normalized = re.sub(r"\s+", " ", raw.lower())
+        tokens = normalized.split(" ")
+
+        if len(tokens) < 3:
+            return [self.fallback.spo(text)]
+
+        parsed_clauses = self._parse_all_clauses(tokens)
+        if not parsed_clauses:
+            return [self.fallback.spo(text)]
+
+        results: List[SPO] = []
+        for subj_tokens, action_token, obj_tokens in parsed_clauses:
+            subject = " ".join(subj_tokens)
+            results.append(
+                SPO(
+                    subject=subject,
+                    predicate=action_token,
+                    object=" ".join(obj_tokens),
+                    raw=raw,
+                    negated=self._has_negation_before(subject),
+                )
+            )
+        return results
+
     def spo(self, text: str) -> SPO:
         """Parse ``text`` into Subject-Predicate-Object.
 
@@ -3781,22 +3891,7 @@ class PositionalClusterLearner:
             # fallback's seed table.
             return self.fallback.spo(text)
 
-        # Lazy anchor-split: find clause-boundary particles and split
-        # the sentence into sub-clauses BEFORE role assignment.
-        action_positions = self._find_action_positions(tokens)
-        particle_positions = self._find_particle_positions(tokens)
-        anchors = self._detect_clause_anchors(
-            tokens, action_positions, particle_positions,
-        )
-        boundaries = self._compute_clause_boundaries(anchors, action_positions)
-        sub_clauses = self._split_tokens_at_boundaries(tokens, boundaries)
-
-        # Parse each sub-clause independently.
-        parsed_clauses: List[Tuple[List[str], str, List[str]]] = []
-        for sc_tokens in sub_clauses:
-            parsed = self._parse_clause_spo(sc_tokens)
-            if parsed is not None:
-                parsed_clauses.append(parsed)
+        parsed_clauses = self._parse_all_clauses(tokens)
 
         if not parsed_clauses:
             # No sub-clause produced a parse (e.g. no ACTION and no
