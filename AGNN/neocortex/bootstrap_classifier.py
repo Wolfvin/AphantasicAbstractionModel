@@ -143,6 +143,17 @@ EXPECTED_VERB_GROUPS: Dict[RelationType, Set[str]] = {
     },
 }
 
+# Clause-coordinator tokens (round 5 of the BOS training sprint).
+# "dan"/"atau" join two independent clauses ("X melakukan A dan Y
+# melakukan B") — they are action-bucket-anchored (true, discovered),
+# but are NOT a semantic relation between an agent and a patient like
+# RelationType represents; they're a structural/syntactic operator.
+# Matched by content (same robust pattern as EXPECTED_VERB_GROUPS)
+# AFTER zero-bias clustering, then marked via
+# PositionalClusterLearner.mark_clause_coordinator_clusters() — never
+# consulted during clustering itself.
+EXPECTED_COORDINATOR_TOKENS: Set[str] = {"dan", "atau"}
+
 
 # ----------------------------------------------------------------------
 # Default paths
@@ -163,6 +174,7 @@ DEFAULT_CORPUS_PATHS: List[str] = [
     os.path.join(_DATA_DIR, "pretrain_corpus_passive.txt"),
     os.path.join(_DATA_DIR, "pretrain_corpus_ditransitive.txt"),
     os.path.join(_DATA_DIR, "pretrain_corpus_subordinate.txt"),
+    os.path.join(_DATA_DIR, "pretrain_corpus_coordinate.txt"),
 ]
 
 # Where the labelled learner state is persisted. AGNNCore loads this
@@ -339,6 +351,29 @@ def build_labelled_cluster_learner(
 
     # 5. Label the clusters.
     learner.label_clusters(mapping)
+
+    # 5b. Mark clause-coordinator clusters (round 5). Unlike
+    # EXPECTED_VERB_GROUPS, coordinators are NOT required to land in
+    # the SAME cluster as each other — "dan" and "atau" have different
+    # "object" distributions (whatever starts the second clause after
+    # an "and" vs an "or") and may legitimately form separate
+    # clusters. We mark whichever cluster(s) each coordinator token
+    # ended up in. Missing coordinator tokens are non-fatal (warn,
+    # don't raise) — coordinator-cluster detection is an additive
+    # refinement on top of the core 5-RelationType contract, not part
+    # of it; a corpus that doesn't yet have "dan"/"atau" depth simply
+    # doesn't get this refinement, the same graceful-degradation
+    # contract as the rest of the zero-bias pipeline.
+    coordinator_cluster_ids: Set[int] = set()
+    missing_coordinators: List[str] = []
+    for token in EXPECTED_COORDINATOR_TOKENS:
+        cid = action_to_cluster.get(token)
+        if cid is None:
+            missing_coordinators.append(token)
+            continue
+        coordinator_cluster_ids.add(cid)
+    if coordinator_cluster_ids:
+        learner.mark_clause_coordinator_clusters(coordinator_cluster_ids)
 
     # 6. Return the labelled learner.
     return learner

@@ -1036,6 +1036,38 @@ class PositionalClusterLearner:
     particle_cluster_labels: Dict[int, str] = field(default_factory=dict)
 
     # ------------------------------------------------------------------
+    # Clause coordinator clusters (found during the coordinate-clause
+    # sprint round — round 5). "dan"/"atau" (coordinating conjunctions
+    # joining two independent clauses, "X melakukan A dan Y melakukan
+    # B") are NOT noise polluting the action category — _cluster_actions
+    # already, correctly, put them in their OWN cluster(s), separate
+    # from every labelled RelationType cluster (CAUSAL/FUNCTIONAL/...).
+    # This makes sense once you look at WHY: a real verb's object
+    # distribution is constrained (e.g. "makan" takes food nouns); a
+    # coordinator's "object" is whatever noun happens to start the
+    # SECOND clause — totally unconstrained, hence a diffuse,
+    # low-overlap object distribution that never merges with a real
+    # verb's tighter cluster.
+    #
+    # The earlier instinct (tried and reverted in round 4) was to
+    # EXCLUDE "dan"/"atau" from the action category entirely. That was
+    # the wrong frame: they ARE action-bucket-anchored (true,
+    # discovered, not a bug) — they just belong to a DIFFERENT semantic
+    # category than CAUSAL/FUNCTIONAL/etc. RelationType doesn't fit
+    # them (a coordinator isn't a semantic relation with a fuzzy-logic
+    # weight; it's a structural/syntactic clause-joining operator), so
+    # they get their own marking mechanism instead of going through
+    # label_clusters().
+    #
+    # coordinator_cluster_ids: set of action cluster_ids a human has
+    #   reviewed (via inspect_cluster_details()) and confirmed are
+    #   clause-coordinators, not real predicates. Populated ONLY by
+    #   mark_clause_coordinator_clusters() — post-hoc, exactly the same
+    #   two-stage contract as label_clusters()/label_particle_clusters().
+    # ------------------------------------------------------------------
+    coordinator_cluster_ids: Set[int] = field(default_factory=set)
+
+    # ------------------------------------------------------------------
     # Convenience views
     # ------------------------------------------------------------------
 
@@ -1247,6 +1279,10 @@ class PositionalClusterLearner:
         # no longer meaningful). The human must call label_clusters()
         # again after re-training.
         self.cluster_labels = {}
+        # Same reset contract for coordinator-cluster flags (round 5)
+        # — must call mark_clause_coordinator_clusters() again after
+        # re-training.
+        self.coordinator_cluster_ids = set()
 
     def _cluster_actions(self) -> None:
         """Q/K/V soft clustering of actions by super-cluster distribution.
@@ -2728,6 +2764,51 @@ class PositionalClusterLearner:
             if cluster_id in self.particle_clusters:
                 self.particle_cluster_labels[cluster_id] = name
 
+    def mark_clause_coordinator_clusters(self, cluster_ids: Set[int]) -> None:
+        """Flag ACTION clusters as clause-coordinators (post-hoc, once).
+
+        Mirrors :meth:`label_clusters` / :meth:`label_particle_clusters`
+        — a human reviews :meth:`inspect_cluster_details` first, then
+        calls this AFTER training (never during clustering itself).
+        Unlike those two methods, this does NOT assign a RelationType
+        or a free-form name; it marks the cluster_id(s) as structural
+        clause-joining operators ("dan"/"atau"-class tokens) rather
+        than semantic predicates.
+
+        Why a separate mechanism instead of ``label_clusters()``:
+        RelationType carries a fuzzy-logic weight used by BA44 (see
+        ``InferiorFrontalGyrus``) — it represents a semantic relation
+        between two entities. A coordinator isn't a relation between
+        an agent and a patient; it's a syntactic operator that JOINS
+        two otherwise-independent clauses. Forcing it into RelationType
+        would misrepresent what it does.
+
+        Effect: once marked, tokens in these clusters are excluded
+        from :meth:`_is_action_token` (so they don't get treated as a
+        verb with its own subject/object) and become anchor candidates
+        for :meth:`_detect_clause_anchors` (so a sentence like "ayah
+        membaca koran dan ibu memasak nasi" splits into two
+        independent clauses at "dan", instead of one clause whose
+        object-collection loop stops short at the first action it
+        meets).
+
+        Idempotent. Unknown cluster_ids are silently skipped (forward-
+        compat with a saved mapping from a corpus that had different
+        clusters).
+        """
+        for cluster_id in cluster_ids:
+            if cluster_id in self.action_clusters:
+                self.coordinator_cluster_ids.add(cluster_id)
+
+    def _is_clause_coordinator(self, token: str) -> bool:
+        """True iff ``token``'s action cluster has been marked a
+        clause-coordinator via :meth:`mark_clause_coordinator_clusters`.
+        """
+        cid = self.cluster_id_of.get(token)
+        if cid is None or cid < 0:
+            return False
+        return cid in self.coordinator_cluster_ids
+
     # ------------------------------------------------------------------
     # Public API: classification
     # ------------------------------------------------------------------
@@ -3230,7 +3311,18 @@ class PositionalClusterLearner:
         bucket; function words span multiple buckets. The
         :meth:`_is_soft_particle` check filters these out so the
         parser doesn't tag "sebelum" as ACTION.
+
+        **Clause-coordinator exclusion** (round 5): a token whose
+        action cluster has been marked via
+        :meth:`mark_clause_coordinator_clusters` (e.g. "dan"/"atau")
+        is action-bucket-anchored but is NOT a predicate with its own
+        subject/object — it's a structural operator joining two
+        independent clauses. Excluded here so the cluster-driven
+        parser treats it as a clause-boundary anchor (see
+        :meth:`_is_particle_token`) instead of a verb.
         """
+        if self._is_clause_coordinator(token):
+            return False
         if self._is_soft_particle(token):
             return False
         if token in self.action_object_freq:
@@ -3359,7 +3451,20 @@ class PositionalClusterLearner:
         like "sebelum makan saya mencuci tangan" wouldn't get split
         (no particle cluster member to anchor on), and the main
         clause's SVO would be mis-parsed.
+
+        **Clause coordinators included too** (round 5): "dan"/"atau"
+        join two independent clauses, structurally the SAME role as a
+        mid-sentence particle anchor ("X makan, Y minum" pattern) —
+        see :meth:`_detect_clause_anchors`'s "Mid-sentence anchor"
+        case, which already looks for "a particle between two
+        ACTIONs". A coordinator-cluster token is treated as a particle
+        for this purpose even though it lives in ``action_clusters``,
+        not ``particle_clusters`` — it's a different axis of
+        classification (syntactic role vs. discovery pipeline), not a
+        contradiction.
         """
+        if self._is_clause_coordinator(token):
+            return True
         pid = self.particle_cluster_id_of.get(token)
         if pid is not None and pid >= 0:
             return True
@@ -3813,6 +3918,7 @@ class PositionalClusterLearner:
                 str(cid): rt.name
                 for cid, rt in self.cluster_labels.items()
             },
+            "coordinator_cluster_ids": sorted(self.coordinator_cluster_ids),
             "action_connector_signature": dict(self.action_connector_signature),
             "connector_tokens": sorted(self.connector_tokens),
             "function_word_candidates": sorted(self.function_word_candidates),
@@ -4000,6 +4106,15 @@ class PositionalClusterLearner:
             except KeyError:
                 # Unknown relation type from a future version. Skip.
                 continue
+
+        # coordinator_cluster_ids: list[int] -> set[int]
+        # Backward-compat: older save files lack this field. Empty
+        # set is the correct backfill — dan/atau-class tokens fall
+        # back to pre-round-5 behaviour (treated as ACTION) until
+        # train() + mark_clause_coordinator_clusters() are re-run.
+        for cid in raw.get("coordinator_cluster_ids", []):
+            if isinstance(cid, int):
+                learner.coordinator_cluster_ids.add(cid)
 
         # action_connector_signature: {action: bool}
         # Backward-compat: older save files (pre-cluster-62 fix) lack

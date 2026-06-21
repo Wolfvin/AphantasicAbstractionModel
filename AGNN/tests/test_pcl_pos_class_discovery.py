@@ -160,6 +160,7 @@ def _train_canonical_learner() -> PositionalClusterLearner:
         _AGNP_ROOT / "data" / "pretrain_corpus_passive.txt",
         _AGNP_ROOT / "data" / "pretrain_corpus_ditransitive.txt",
         _AGNP_ROOT / "data" / "pretrain_corpus_subordinate.txt",
+        _AGNP_ROOT / "data" / "pretrain_corpus_coordinate.txt",
     ]
     missing = [p for p in corpus_paths if not p.exists()]
     if missing:
@@ -1096,3 +1097,104 @@ def test_subordinate_conjunctions_karena_ketika_are_particles():
     assert learner._is_particle_token("ketika"), (
         "'ketika' should be recognised as a particle via the same signal."
     )
+
+
+# ----------------------------------------------------------------------
+# Clause coordinators (sprint round 5 — "dan"/"atau")
+# ----------------------------------------------------------------------
+
+def test_coordinator_clusters_are_action_bucket_anchored_not_excluded():
+    """'dan'/'atau' must form their OWN action cluster(s), not noise.
+
+    This is the core insight from round 5 (raised by the user, not a
+    BOS-discovered bug): "dan"/"atau" being action-bucket-anchored is
+    NOT a misclassification to suppress — _cluster_actions() already,
+    correctly, puts them in their own cluster(s) separate from every
+    labelled RelationType cluster, because a coordinator's "object"
+    distribution (whatever noun starts the second clause) is far more
+    diffuse than a real verb's. This test pins that the clustering
+    itself produces this separation (zero-bias, unprompted).
+    """
+    learner = _train_canonical_learner()
+    clusters = learner.inspect_cluster_details()
+
+    dan_cluster = None
+    atau_cluster = None
+    for cid, detail in clusters.items():
+        actions = set(detail["actions"])
+        if "dan" in actions:
+            dan_cluster = cid
+        if "atau" in actions:
+            atau_cluster = cid
+    assert dan_cluster is not None, "'dan' should land in some action cluster."
+    assert atau_cluster is not None, "'atau' should land in some action cluster."
+
+    # Neither must be in a cluster labelled with a RelationType —
+    # they're a different category, not CAUSAL/FUNCTIONAL/etc.
+    assert dan_cluster not in learner.cluster_labels, (
+        "'dan' landed in a cluster that also got a RelationType label "
+        "— that would mean it merged with real predicates, which "
+        "should not happen given its diffuse object distribution."
+    )
+    assert atau_cluster not in learner.cluster_labels, (
+        "'atau' landed in a cluster that also got a RelationType label."
+    )
+
+
+def test_mark_clause_coordinator_clusters_enables_two_clause_parse():
+    """After marking, a coordinated sentence tags BOTH clauses correctly.
+
+    "ayah membaca koran dan ibu memasak nasi" has two independent
+    clauses joined by "dan". Before marking, "dan" is action-bucket-
+    anchored and the second clause's information is lost (the object-
+    collection loop for the FIRST clause breaks early at "dan",
+    treating it as a second predicate). After
+    mark_clause_coordinator_clusters(), "dan" is treated as a
+    clause-boundary anchor (same role as a particle), and the lazy
+    anchor-split mechanism (already proven for "sebelum"/"setelah" in
+    round 1) splits the sentence into two independent clauses, each
+    correctly tagged AGENT/ACTION/OBJECT.
+    """
+    learner = _train_canonical_learner()
+    clusters = learner.inspect_cluster_details()
+    coordinator_ids = {
+        cid for cid, detail in clusters.items()
+        if "dan" in set(detail["actions"]) or "atau" in set(detail["actions"])
+    }
+    assert coordinator_ids, "Expected to find 'dan'/'atau' clusters."
+    learner.mark_clause_coordinator_clusters(coordinator_ids)
+
+    tags = dict(learner.tag_sentence("ayah membaca koran dan ibu memasak nasi"))
+    assert tags["ayah"] == "AGENT"
+    assert tags["membaca"] == "ACTION"
+    assert tags["koran"] == "OBJECT"
+    assert tags["ibu"] == "AGENT", (
+        f"Expected 'ibu' (second clause's subject) to be AGENT after "
+        f"coordinator marking; got {tags['ibu']!r}. This is the round-5 "
+        f"fix: without marking, the second clause's subject is "
+        f"unreachable because the object-collection loop for the first "
+        f"clause never stops at 'dan'."
+    )
+    assert tags["memasak"] == "ACTION"
+    assert tags["nasi"] == "OBJECT"
+
+
+def test_bootstrap_classifier_marks_coordinator_clusters():
+    """build_labelled_cluster_learner() marks coordinators automatically.
+
+    This is the production wiring: EXPECTED_COORDINATOR_TOKENS in
+    bootstrap_classifier.py finds "dan"/"atau"'s cluster(s) by content
+    match (same robust pattern as EXPECTED_VERB_GROUPS for
+    RelationType) and marks them — so AGNNCore's default cluster
+    learner (loaded from the committed state file) already has this
+    refinement, no manual step needed.
+    """
+    from neocortex.bootstrap_classifier import build_labelled_cluster_learner
+
+    learner = build_labelled_cluster_learner()
+    assert learner.coordinator_cluster_ids, (
+        "build_labelled_cluster_learner() should have found and marked "
+        "at least one coordinator cluster on the canonical corpus."
+    )
+    tags = dict(learner.tag_sentence("ayah membaca koran dan ibu memasak nasi"))
+    assert tags["ibu"] == "AGENT"
