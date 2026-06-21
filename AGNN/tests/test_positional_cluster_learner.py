@@ -949,16 +949,62 @@ def test_spo_short_sentence_delegates_to_fallback(
     assert spo.predicate == "bukan"
 
 
-def test_spo_long_sentence_collapses_middle(
+def test_spo_long_sentence_cluster_driven(
     learner: PositionalClusterLearner, svo_corpus: list
 ):
-    """Long sentences: subject=tokens[0], predicate=tokens[1..-1], object=tokens[-1]."""
+    """Long sentences: cluster-driven role assignment.
+
+    With the cluster-driven parser (replacing the old positional
+    formula ``subject=tokens[0], predicate=tokens[1..-1],
+    object=tokens[-1]``), role is determined by cluster membership:
+
+      - "makan" is the only ACTION-candidate token (it's in
+        ``action_object_freq`` after training on svo_corpus).
+      - Tokens before "makan" that don't match any cluster → subject.
+        "saya" is not in any action/particle cluster → AGENT.
+        "sedang" is unknown to the learner (not in the training
+        corpus) → it falls through to AGENT (no cluster membership
+        to override the position-before-ACTION rule).
+      - Tokens after "makan" that don't match any cluster → object.
+        "nasi" is unknown → OBJECT. "ayam" is in the object
+        vocabulary (appears as object 3 times) but not in an action
+        or particle cluster → OBJECT.
+
+    The result: subject="saya sedang", predicate="makan",
+    object="nasi ayam". This is the new contract — the predicate is
+    the ACTION TOKEN ITSELF (not the position-1..-2 span), and
+    unknown tokens before/after the action are absorbed into the
+    subject/object phrases.
+
+    Contrast with the old positional behaviour:
+      subject="saya", predicate="sedang makan nasi", object="ayam"
+    The old behaviour forced the predicate to be the position-1..-2
+    span regardless of which token was the actual verb. For
+    sentences where the verb is NOT at index 1 (multi-word subjects,
+    subordinate clauses, passive voice), the old behaviour mis-
+    parsed the sentence. The new behaviour correctly identifies the
+    verb by cluster membership and splits subject/object around it.
+    """
     learner.train(svo_corpus)
     spo = learner.spo("saya sedang makan nasi ayam")
-    assert spo.subject == "saya"
-    # For >3-token sentences, predicate = all middle tokens joined.
-    assert spo.predicate == "sedang makan nasi"
-    assert spo.object == "ayam"
+    # "makan" is the ACTION token (in action_object_freq from training).
+    assert spo.predicate == "makan", (
+        f"Expected predicate 'makan' (the ACTION token, not the "
+        f"position-1..-2 span); got {spo.predicate!r}."
+    )
+    # Tokens before "makan" that don't match any cluster → subject.
+    # "saya" is not in any cluster → AGENT. "sedang" is not in the
+    # training corpus → also falls into AGENT (no cluster membership
+    # to override the position rule).
+    assert spo.subject == "saya sedang", (
+        f"Expected subject 'saya sedang' (tokens before ACTION that "
+        f"don't match any cluster); got {spo.subject!r}."
+    )
+    # Tokens after "makan" that don't match any cluster → object.
+    assert spo.object == "nasi ayam", (
+        f"Expected object 'nasi ayam' (tokens after ACTION that "
+        f"don't match any cluster); got {spo.object!r}."
+    )
 
 
 # ======================================================================
