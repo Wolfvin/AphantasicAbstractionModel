@@ -1,0 +1,120 @@
+## POLA: Passive voice — di- + verb + oleh + agent (depth per verb)
+
+## dimakan (5x)
+ikan dimakan oleh kucing
+tikus dimakan oleh ular
+ayam dimakan oleh serigala
+rumput dimakan oleh sapi
+biji dimakan oleh burung
+
+## dibaca (5x)
+buku dibaca oleh siswa
+koran dibaca oleh ayah
+surat dibaca oleh sekretaris
+puisi dibaca oleh penyair
+majalah dibaca oleh pelanggan
+
+## dimasak (5x)
+nasi dimasak oleh ibu
+sup dimasak oleh koki
+sayur dimasak oleh nenek
+daging dimasak oleh chef
+mie dimasak oleh penjual
+
+## dibangun (5x)
+rumah dibangun oleh tukang
+jembatan dibangun oleh kontraktor
+gedung dibangun oleh perusahaan
+benteng dibangun oleh tentara
+menara dibangun oleh insinyur
+
+## diperbaiki (5x)
+mobil diperbaiki oleh montir
+komputer diperbaiki oleh teknisi
+atap diperbaiki oleh tukang
+mesin diperbaiki oleh ahli
+pipa diperbaiki oleh tukang
+
+## ditulis (5x)
+surat ditulis oleh sekretaris
+artikel ditulis oleh jurnalis
+novel ditulis oleh penulis
+laporan ditulis oleh karyawan
+lagu ditulis oleh musisi
+
+## dicetak (5x)
+gol dicetak oleh pemain
+buku dicetak oleh penerbit
+poster dicetak oleh percetakan
+undangan dicetak oleh vendor
+brosur dicetak oleh agensi
+
+## diperiksa (5x)
+pasien diperiksa oleh dokter
+mesin diperiksa oleh teknisi
+dokumen diperiksa oleh petugas
+kendaraan diperiksa oleh polisi
+laporan diperiksa oleh auditor
+
+## diselidiki (5x)
+kasus diselidiki oleh polisi
+kebakaran diselidiki oleh petugas
+korupsi diselidiki oleh jaksa
+kecelakaan diselidiki oleh tim
+penipuan diselidiki oleh detektif
+
+## ditebang (5x)
+pohon ditebang oleh penebang
+hutan ditebang oleh perusahaan
+bambu ditebang oleh petani
+kayu ditebang oleh pekerja
+ranting ditebang oleh tukang
+
+## POLA: Passive voice — di- + verb + agent (tanpa oleh, depth per verb)
+
+## dibaca (5x, tanpa oleh)
+buku dibaca adik
+komik dibaca anak
+naskah dibaca aktor
+surat dibaca pegawai
+puisi dibaca murid
+
+## dimasak (5x, tanpa oleh)
+nasi dimasak ibu
+sup dimasak juru
+sayur dimasak pembantu
+roti dimasak tukang
+telur dimasak anak
+
+## dicuci (5x, tanpa oleh)
+mobil dicuci ayah
+baju dicuci pembantu
+piring dicuci pelayan
+sepatu dicuci tukang
+motor dicuci montir
+
+## POLA: ter- (accidental/stative passive, depth per verb)
+
+## terbuka (4x)
+pintu terbuka
+jendela terbuka
+gerbang terbuka
+laci terbuka
+
+## tertutup (4x)
+jendela tertutup
+pintu tertutup
+kotak tertutup
+tutup tertutup
+
+## terjatuh (4x)
+kunci terjatuh
+dompet terjatuh
+gelas terjatuh
+ponsel terjatuh
+
+## terputus (4x)
+kabel terputus
+jaringan terputus
+tali terputus
+sinyal terputus

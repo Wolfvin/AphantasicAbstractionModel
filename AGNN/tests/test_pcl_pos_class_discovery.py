@@ -157,6 +157,7 @@ def _train_canonical_learner() -> PositionalClusterLearner:
     corpus_paths = [
         _AGNP_ROOT / "data" / "pretrain_corpus.txt",
         _AGNP_ROOT / "data" / "pretrain_corpus_depth.txt",
+        _AGNP_ROOT / "data" / "pretrain_corpus_passive.txt",
     ]
     missing = [p for p in corpus_paths if not p.exists()]
     if missing:
@@ -947,4 +948,71 @@ def test_particle_cluster_purity_no_chain_merge_regression():
     assert not leaked, (
         f"Unrelated token(s) {leaked!r} leaked into the 'tidak' "
         f"cluster {tidak_cluster_tokens!r} — chain-merge regression."
+    )
+
+
+# ----------------------------------------------------------------------
+# Passive voice (sprint round 1 — BOS-driven structural diversity test)
+# ----------------------------------------------------------------------
+
+def test_spo_parses_passive_voice_with_oleh_agent_marker():
+    """spo() must correctly extract subject/predicate/object from
+    Indonesian passive voice ("X di-V oleh Y").
+
+    Found during BOS training sprint: "oleh" (the passive-voice agent
+    marker) is, on its own statistical profile, indistinguishable from
+    a copula like 'adalah' — it concentrates 100% at the action bucket
+    because it NEVER appears sentence-initially (unlike 'sebelum'/
+    'setelah', which the existing _is_soft_particle check already
+    handles). Left unfixed, "oleh" gets independently recognised as an
+    action_bucket_anchor and the extraction loop in
+    _extract_action_object picks it (or stops at it) instead of the
+    real verb, leaving spo().object empty.
+
+    Root cause was a DATA issue, not purely an algorithm bug: the
+    initial passive-voice corpus used 25 different di-verbs at 1
+    occurrence each (all below the action-anchor frequency floor),
+    while "oleh" itself accumulated frequency 25 — making "oleh" look
+    MORE like a real anchor than any individual verb. Fixed by (a)
+    giving the corpus verb depth (5+ occurrences per di-verb, so each
+    individually clears the frequency floor) and (b) a structural
+    exclusion in _extract_action_object: a bucket-1 candidate that is
+    NOT verb-morphology AND immediately follows another already-
+    recognised action token is treated as a post-verbal particle, not
+    an independent verb — a positional/structural signal (adjacency),
+    not a hardcoded word.
+    """
+    learner = _train_canonical_learner()
+
+    cases = [
+        ("ikan dimakan oleh kucing", "ikan", "dimakan", "kucing"),
+        ("buku dibaca oleh siswa", "buku", "dibaca", "siswa"),
+        ("mobil diperbaiki oleh montir", "mobil", "diperbaiki", "montir"),
+    ]
+    for sentence, expected_subj, expected_pred, expected_obj in cases:
+        spo = learner.spo(sentence)
+        assert spo.subject == expected_subj, (
+            f"{sentence!r}: expected subject={expected_subj!r}, "
+            f"got {spo.subject!r}"
+        )
+        assert spo.predicate == expected_pred, (
+            f"{sentence!r}: expected predicate={expected_pred!r}, "
+            f"got {spo.predicate!r}"
+        )
+        assert spo.object == expected_obj, (
+            f"{sentence!r}: expected object={expected_obj!r} (this was "
+            f"the original bug — object came out empty), got {spo.object!r}"
+        )
+
+
+def test_oleh_is_not_misclassified_as_action():
+    """'oleh' must never be tagged ACTION — it has no verb morphology
+    and exists purely as the passive-voice agent marker.
+    """
+    learner = _train_canonical_learner()
+    assert not learner._is_action_token("oleh"), (
+        "'oleh' was tagged as a valid ACTION candidate — this is the "
+        "passive-voice misclassification bug (oleh looks like a copula "
+        "by bucket concentration alone, since it never appears "
+        "sentence-initially)."
     )
