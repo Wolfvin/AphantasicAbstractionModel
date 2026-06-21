@@ -1198,3 +1198,87 @@ def test_bootstrap_classifier_marks_coordinator_clusters():
     )
     tags = dict(learner.tag_sentence("ayah membaca koran dan ibu memasak nasi"))
     assert tags["ibu"] == "AGENT"
+
+
+# ----------------------------------------------------------------------
+# spo_all() — multi-clause extraction (sprint round 6)
+# ----------------------------------------------------------------------
+
+def test_spo_all_returns_both_clauses_for_coordinated_sentence():
+    """spo_all() must surface BOTH clauses of a coordinated sentence.
+
+    Completes round 5's coordinator fix: tag_sentence() already
+    tagged every token across both clauses correctly, but spo()
+    could only surface one (the "main" clause, per its existing
+    tie-breaking rule). spo_all() exposes every clause the
+    anchor-split mechanism finds, sharing the exact same split logic
+    as spo() via _parse_all_clauses() (so the two methods can never
+    disagree on HOW a sentence splits, only on whether one or all
+    results are returned).
+    """
+    learner = _train_canonical_learner()
+    clusters = learner.inspect_cluster_details()
+    coordinator_ids = {
+        cid for cid, detail in clusters.items()
+        if "dan" in set(detail["actions"]) or "atau" in set(detail["actions"])
+    }
+    learner.mark_clause_coordinator_clusters(coordinator_ids)
+
+    clauses = learner.spo_all("ayah membaca koran dan ibu memasak nasi")
+    assert len(clauses) == 2, (
+        f"Expected 2 clauses (coordinated by 'dan'); got {len(clauses)}: "
+        f"{clauses!r}"
+    )
+    assert clauses[0].subject == "ayah"
+    assert clauses[0].predicate == "membaca"
+    assert clauses[0].object == "koran"
+    assert clauses[1].subject == "ibu"
+    assert clauses[1].predicate == "memasak"
+    assert clauses[1].object == "nasi"
+
+
+def test_spo_all_single_clause_sentence_returns_one_element():
+    """spo_all() on a simple sentence returns a single-element list."""
+    learner = _train_canonical_learner()
+    clauses = learner.spo_all("api menyebabkan kebakaran")
+    assert len(clauses) == 1
+    assert clauses[0].subject == "api"
+    assert clauses[0].predicate == "menyebabkan"
+    assert clauses[0].object == "kebakaran"
+
+
+def test_spo_all_never_returns_empty_list():
+    """spo_all() always returns at least one element, even on edge cases.
+
+    Callers should be able to do spo_all(text)[0] without a length
+    check — untrained learner, empty input, and short input all fall
+    back to a single-element list wrapping the fallback's result,
+    never an empty list.
+    """
+    learner = _train_canonical_learner()
+    assert len(learner.spo_all("")) >= 1
+    assert len(learner.spo_all("x")) >= 1
+
+    untrained = PositionalClusterLearner()
+    assert len(untrained.spo_all("api menyebabkan kebakaran")) >= 1
+
+
+def test_spo_all_agrees_with_spo_on_the_main_clause():
+    """spo() and spo_all() must never disagree on clause structure.
+
+    spo() picks the "main" clause (most complete, ties broken by
+    latest); that exact clause must also appear somewhere in
+    spo_all()'s result, since both share _parse_all_clauses().
+    """
+    learner = _train_canonical_learner()
+    sentence = "sebelum makan saya mencuci tangan"
+    single = learner.spo(sentence)
+    all_clauses = learner.spo_all(sentence)
+    matches = [
+        c for c in all_clauses
+        if c.predicate == single.predicate and c.object == single.object
+    ]
+    assert matches, (
+        f"spo()'s result {single!r} should appear in spo_all()'s "
+        f"result {all_clauses!r} — they must agree on clause structure."
+    )
