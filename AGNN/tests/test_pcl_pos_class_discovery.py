@@ -158,6 +158,7 @@ def _train_canonical_learner() -> PositionalClusterLearner:
         _AGNP_ROOT / "data" / "pretrain_corpus.txt",
         _AGNP_ROOT / "data" / "pretrain_corpus_depth.txt",
         _AGNP_ROOT / "data" / "pretrain_corpus_passive.txt",
+        _AGNP_ROOT / "data" / "pretrain_corpus_ditransitive.txt",
     ]
     missing = [p for p in corpus_paths if not p.exists()]
     if missing:
@@ -1016,3 +1017,43 @@ def test_oleh_is_not_misclassified_as_action():
         "by bucket concentration alone, since it never appears "
         "sentence-initially)."
     )
+
+
+# ----------------------------------------------------------------------
+# Ditransitive verbs (sprint round 3 — verb + 2 objects)
+# ----------------------------------------------------------------------
+
+def test_spo_parses_ditransitive_verbs():
+    """spo() must correctly extract subject/predicate/object-phrase
+    from ditransitive verbs ("X verb Y Z" — indirect + direct object).
+
+    Found during the BOS training sprint: this pattern already works
+    correctly with NO architecture changes needed — the cluster-driven
+    parser naturally absorbs multiple post-verbal tokens into the
+    object phrase (no particle sits between them to confuse it, unlike
+    passive voice's "oleh"). Recorded as a permanent regression guard
+    now that pretrain_corpus_ditransitive.txt is part of the default
+    training corpus.
+    """
+    learner = _train_canonical_learner()
+
+    cases = [
+        ("ayah membelikan adik sepeda", "ayah", "membelikan"),
+        ("guru mengajari murid matematika", "guru", "mengajari"),
+        ("ibu mengirim nenek surat", "ibu", "mengirim"),
+        ("pemandu menunjukkan turis arah", "pemandu", "menunjukkan"),
+    ]
+    for sentence, expected_subj, expected_pred in cases:
+        spo = learner.spo(sentence)
+        assert spo.subject == expected_subj, (
+            f"{sentence!r}: expected subject={expected_subj!r}, "
+            f"got {spo.subject!r}"
+        )
+        assert spo.predicate == expected_pred, (
+            f"{sentence!r}: expected predicate={expected_pred!r}, "
+            f"got {spo.predicate!r}"
+        )
+        assert spo.object, (
+            f"{sentence!r}: expected a non-empty object phrase "
+            f"(both post-verbal arguments), got empty string"
+        )
