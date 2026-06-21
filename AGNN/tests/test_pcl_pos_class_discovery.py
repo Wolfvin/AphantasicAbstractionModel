@@ -161,6 +161,7 @@ def _train_canonical_learner() -> PositionalClusterLearner:
         _AGNP_ROOT / "data" / "pretrain_corpus_ditransitive.txt",
         _AGNP_ROOT / "data" / "pretrain_corpus_subordinate.txt",
         _AGNP_ROOT / "data" / "pretrain_corpus_coordinate.txt",
+        _AGNP_ROOT / "data" / "pretrain_corpus_pronoun.txt",
     ]
     missing = [p for p in corpus_paths if not p.exists()]
     if missing:
@@ -1281,4 +1282,45 @@ def test_spo_all_agrees_with_spo_on_the_main_clause():
     assert matches, (
         f"spo()'s result {single!r} should appear in spo_all()'s "
         f"result {all_clauses!r} — they must agree on clause structure."
+    )
+
+
+# ----------------------------------------------------------------------
+# Pronoun positional diversity (sprint round 8)
+# ----------------------------------------------------------------------
+
+def test_saya_is_not_misclassified_as_particle():
+    """'saya' ("I") must not be a particle — it's a real pronoun.
+
+    Found during the BOS training sprint (first surfaced round 3,
+    recurred round 7): every pre-round-8 corpus usage of "saya" was as
+    an OBJECT (e.g. "dia memberi saya buku" — indirect object), never
+    as a subject. This gave "saya" a one-sided positional signature
+    (bucket 1 only), making it statistically indistinguishable from a
+    genuine particle by the has_agent/has_action soft-particle check
+    (which, ironically, requires BOTH buckets to fire for OTHER
+    particles like "karena" — but a token with ONLY bucket-1 presence
+    can still slip through other particle-detection paths depending on
+    entropy). Fixed by adding declarative sentences with "saya" as the
+    AGENT (pretrain_corpus_pronoun.txt), balancing its distribution
+    across both buckets — the same fix pattern as "dia" in round 3.
+    """
+    learner = _train_canonical_learner()
+    assert not learner._is_particle_token("saya"), (
+        "'saya' should not be classified as a particle — it's a "
+        "content pronoun, not a grammatical marker."
+    )
+
+
+def test_saya_correctly_tagged_object_in_ditransitive():
+    """'saya' as an indirect object must tag OBJECT, not UNKNOWN.
+
+    Regression guard for the round-8 fix on the exact sentence that
+    surfaced the bug in round 3.
+    """
+    learner = _train_canonical_learner()
+    tags = dict(learner.tag_sentence("dia memberi saya buku"))
+    assert tags["saya"] == "OBJECT", (
+        f"Expected 'saya' to be OBJECT in a ditransitive sentence; "
+        f"got {tags['saya']!r}."
     )
