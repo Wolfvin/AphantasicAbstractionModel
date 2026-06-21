@@ -3289,7 +3289,38 @@ class PositionalClusterLearner:
         pos_map = self.positional_freq.get(token, {})
         has_agent = pos_map.get(_AGENT_BUCKET, 0) > 0
         has_action = pos_map.get(_ACTION_BUCKET, 0) > 0
-        return has_agent and has_action
+        if has_agent and has_action:
+            return True
+
+        # SECOND signal (added after BOS review of passive-voice
+        # evaluation): the has_agent/has_action check misses tokens
+        # like "oleh" (the passive-voice agent marker in "X di-V oleh
+        # Y"). "oleh" is statistically indistinguishable from a real
+        # copula by bucket concentration alone — it sits at the
+        # action bucket 100% of the time, same profile as "adalah" —
+        # because it NEVER appears sentence-initially (unlike
+        # "sebelum"/"setelah", which DO appear at the agent bucket in
+        # subordinate-clause-first constructions). So the
+        # has_agent-bucket signal structurally cannot catch it.
+        #
+        # What DOES distinguish "oleh" from a real action: it
+        # routinely sits in the BETWEEN-FIRST slot (immediately after
+        # a genuine action, before the object) — the exact positional
+        # role the connector detector (_compute_connector_signature)
+        # already tracks in ``self._between_first_counts``. A real
+        # action/copula is never itself preceded immediately by
+        # another action in the same clause (it IS the predicate); a
+        # post-verbal particle/marker routinely is. We reuse the
+        # already-computed between-first counts (available at parse
+        # time, since training has finished by the time
+        # classify()/spo()/tag_sentence() run) rather than introduce
+        # any new corpus pass or hardcoded word.
+        between_count = self._between_first_counts.get(token, 0)
+        total_freq = sum(self.fine_positional_freq.get(token, {}).values())
+        if total_freq <= 0:
+            return False
+        between_rate = between_count / total_freq
+        return between_rate >= _CONNECTOR_RATE_THRESHOLD
 
     def _is_particle_token(self, token: str) -> bool:
         """True iff ``token`` is in a particle cluster (any label).
@@ -4277,6 +4308,31 @@ class PositionalClusterLearner:
             # MODIFIERs are also excluded (same rationale as 3-token).
             if candidate in self.modifier_tokens:
                 continue
+            # Post-verbal particle exclusion (found via BOS review of
+            # passive-voice evaluation): a candidate that is itself
+            # ONLY recognised via action_bucket_anchors (not verb
+            # morphology) AND immediately follows ANOTHER token that
+            # is already a recognised action (verb morphology or
+            # anchor) is very likely a post-verbal marker — e.g.
+            # "oleh" in "ikan dimakan oleh kucing" sits right after
+            # the real verb "dimakan" and is, BY ITSELF, statistically
+            # indistinguishable from a copula (100% concentrated at
+            # the action bucket, same profile as "adalah") because it
+            # never appears sentence-initially. A real independent verb
+            # is essentially never IMMEDIATELY preceded by another
+            # recognised action within the same simple clause — two
+            # adjacent action-bucket tokens means the second one is a
+            # particle attached to the first, not a separate predicate.
+            # This is a purely positional/structural check (adjacency
+            # to an already-established action), not a hardcoded word.
+            if not self._looks_like_verb(candidate) and i > 1:
+                prev = tokens[i - 1]
+                prev_is_action = (
+                    self._looks_like_verb(prev)
+                    or prev in self.action_bucket_anchors
+                )
+                if prev_is_action:
+                    continue
             # Verb morphology OR action bucket anchor.
             if self._looks_like_verb(candidate):
                 action_idx = i
