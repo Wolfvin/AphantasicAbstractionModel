@@ -471,6 +471,114 @@ _INSPECT_TOP_OBJECTS = 15
 
 
 # ----------------------------------------------------------------------
+# Statistical Q/K/V soft clustering parameters
+# ----------------------------------------------------------------------
+#
+# This section configures the Q/K/V soft clustering algorithm that
+# replaces the previous greedy agglomerative-merge-by-fixed-threshold
+# in ``_cluster_actions`` and ``_cluster_particles``.
+#
+# The Q/K/V pattern here is a PURE MATHEMATICAL pattern — not a
+# neural network. There is no torch / nn.Parameter / nn.Linear /
+# optimizer / loss / backprop anywhere. The "Q/K/V" terminology
+# refers to the structural roles in the scoring computation:
+#
+#   Query  = feature vector of the token/cluster being evaluated
+#   Key    = centroid feature vector of each existing cluster
+#   score  = cosine_similarity(Query, Key)  -- a math function
+#   weights = softmax(scores)               -- a normalizer
+#   assign = argmax(weights)                -- hard pick of best match
+#            OR create new cluster if max(score) < threshold
+#
+# Cosine similarity is in [-1, 1]; softmax exp() works directly.
+# Numerical stability is handled by subtracting the max before exp()
+# (standard trick — see _softmax docstring).
+#
+# Why this replaces the greedy threshold merge:
+#   - The greedy algorithm considered ALL pairs and merged the best
+#     pair, repeating to fixpoint. O(N^2) per pass, multiple passes.
+#   - Cosine similarity compares the DIRECTION of feature vectors,
+#     not just overlap. Two tokens with similar shape but different
+#     magnitudes get high cosine; the old weighted-Jaccard threshold
+#     would miss them.
+#   - Softmax provides a smooth comparison: instead of a binary
+#     "merge if >= threshold" decision, we get a probability
+#     distribution over candidate clusters, then take argmax. This
+#     produces cleaner cluster boundaries when the feature space is
+#     bimodal but the threshold lands in a noisy region.
+#
+# The thresholds below are the minimum cosine similarity required
+# for a token to JOIN an existing cluster. Below the threshold, the
+# token forms a new singleton cluster. Cosine ranges:
+#   1.0 = identical direction
+#   0.0 = orthogonal
+#  -1.0 = opposite direction
+#
+# For ACTION clustering, the feature is the SUPER-CLUSTER count map
+# (Dict[supercluster_id, count]). Two actions with similar object
+# distributions (same Brown super-cluster mix) get high cosine.
+# Threshold 0.3 admits actions with moderate overlap; the previous
+# weighted-Jaccard threshold of 0.13 was already permissive, so we
+# keep the new threshold in the same permissive regime.
+_DEFAULT_QKV_ACTION_SIMILARITY_THRESHOLD = 0.3
+
+# For PARTICLE clustering, the feature is the 4-dim positional
+# signature (pre_object_3tok_rate, between_first_rate, fine_entropy,
+# bucket_entropy). Two particles with similar positional behaviour
+# get high cosine. Threshold 0.85 (vs the old Euclidean 0.35) — this
+# is calibrated via the reproducer in scripts/reproducer_particle_clusters.py
+# to separate the three behaviourally-distinct particle groups on the
+# canonical corpus:
+#
+#   - "sangat"/"bukan"/"itu"/"memang" (modifiers/demonstratives that
+#     sit at the 3-token action slot) have pairwise cosine 0.97-0.99
+#     → merge into one cluster ✓
+#   - "dari"/"dengan" (prepositions that sit at the >3-token between-
+#     first slot) have pairwise cosine 0.97 → merge into one cluster ✓
+#   - "tidak" (negator with low pre_3tok_rate AND low between_first_rate
+#     but medium fine_entropy) has cosine 0.74-0.82 with the other two
+#     groups → forms its own cluster ✓
+#
+# A lower threshold (e.g. 0.5) merges "tidak" with the connector
+# cluster, producing one giant noisy cluster (the failure mode the
+# user explicitly called out). A higher threshold (e.g. 0.95) over-
+# fragments, leaving "sangat" alone because "bukan"/"itu" are at
+# 0.978-0.999 (just under 0.95 is fine, but other borderline pairs
+# would fragment). 0.85 lands in the gap between the "tidak vs other"
+# band (0.74-0.82) and the "same-group" band (0.97+).
+_DEFAULT_QKV_PARTICLE_SIMILARITY_THRESHOLD = 0.85
+
+
+# ----------------------------------------------------------------------
+# Cluster-driven role-assignment parameters
+# ----------------------------------------------------------------------
+#
+# When parsing a sentence via cluster membership (no `if n == 3`
+# branch), a token is recognised as an ACTION candidate when it has
+# been observed as an action in training (``action_object_freq``) or
+# is in a labelled action cluster (``cluster_id_of`` >= 0). Verbs
+# that the learner has never seen before but carry Indonesian verb
+# morphology (me-, ber-, diper-, ter-) are ALSO recognised — this
+# is the same morphological signal already used by
+# ``_extract_action_object`` and is a FORM signal (not meaning), so
+# it stays inside the zero-bias contract.
+#
+# A particle is recognised when it is in a particle cluster
+# (``particle_cluster_id_of`` >= 0), regardless of whether the
+# cluster has been post-hoc labelled. Tagging the token as the
+# cluster's label requires the post-hoc label to be set; otherwise
+# the token tags as UNKNOWN (per the two-stage discovery contract).
+#
+# Clause-anchor detection (lazy anchor-split):
+# A particle token acts as a clause anchor when it sits at a
+# potential clause boundary — either at sentence start (subordinate
+# clause marker like ``sebelum``/``setelah``/``ketika``) OR between
+# two ACTION tokens (mid-sentence clause connector). The detection
+# uses the cluster memberships already computed during training
+# (zero new compute at parse time — see the user's constraint).
+
+
+# ----------------------------------------------------------------------
 # Connector-signal detection parameters
 # ----------------------------------------------------------------------
 #
@@ -780,6 +888,19 @@ class PositionalClusterLearner:
     min_action_observations: int = _DEFAULT_MIN_ACTION_OBSERVATIONS
     fallback: SemanticRoleClassifier = field(
         default_factory=SemanticRoleClassifier
+    )
+
+    # Q/K/V soft-clustering thresholds (replace the greedy
+    # agglomerative-merge thresholds inside _cluster_actions and
+    # _cluster_particles). See the "_DEFAULT_QKV_*" constants above
+    # for the contract. Kept as dataclass fields so callers can tune
+    # them per-instance (e.g. tighter thresholds for cleaner clusters
+    # on noisy corpora).
+    qkv_action_similarity_threshold: float = (
+        _DEFAULT_QKV_ACTION_SIMILARITY_THRESHOLD
+    )
+    qkv_particle_similarity_threshold: float = (
+        _DEFAULT_QKV_PARTICLE_SIMILARITY_THRESHOLD
     )
 
     positional_freq: Dict[str, Dict[int, int]] = field(default_factory=dict)
@@ -1123,66 +1244,74 @@ class PositionalClusterLearner:
         self.cluster_labels = {}
 
     def _cluster_actions(self) -> None:
-        """Greedy agglomerative clustering of actions by weighted Jaccard.
+        """Q/K/V soft clustering of actions by super-cluster distribution.
 
-        Algorithm (pure Python, no sklearn / scipy):
+        Replaces the previous greedy agglomerative-merge-by-weighted-
+        Jaccard-threshold with a sequential Q/K/V soft-assignment
+        algorithm. See the "_DEFAULT_QKV_*" constants above for the
+        full contract. The Q/K/V pattern is a PURE MATHEMATICAL
+        scoring scheme — cosine similarity + softmax + argmax — not a
+        neural network. There is no torch / nn.Parameter / nn.Linear /
+        optimizer / loss / backprop anywhere in this method.
+
+        Algorithm:
             1. Build the set of "clusterable" actions: those with at
                least ``min_action_observations`` total co-occurrence
-               counts.
-            2. **Super-cluster projection** (NEW): for each clusterable
-               action, project its literal object-token count map to a
-               SUPER-CLUSTER count map via
-               ``self.object_supercluster_id``. Two actions whose
-               literal object tokens never overlap can still merge if
-               their objects belong to the same Brown super-cluster
-               (e.g. 'adalah' taking mamalia/logam and 'merupakan'
-               taking mamalia/unggas merge because mamalia, logam, and
-               unggas all belong to the 'taxonomy noun' super-cluster).
-            3. **Connector split**: partition the clusterable actions
-               into two groups by their
-               ``action_connector_signature`` value — has_connector=True
-               vs has_connector=False. The two groups are clustered
-               INDEPENDENTLY and can never merge across the split.
-               This is the structural-signal fix for cluster 62:
-               "adalah" (direct object) and "berbeda" (connector +
-               object) end up in different clusters even though their
-               object distributions overlap on taxonomy nouns.
-            4. Initialise each cluster as a singleton {action} with
-               BOTH its literal object count map AND its super-cluster
-               count map.
-            5. Greedy pass: for every pair of clusters *within the
-               same connector group*, compute similarity as the MAX
-               of (a) literal weighted Jaccard and (b) super-cluster
-               weighted Jaccard. This preserves the existing
-               literal-token-based clustering behaviour (so the 5
-               RelationType clusters still form) while ALSO allowing
-               synonym copulas to merge via super-cluster overlap
-               when their literal overlap is insufficient (the
-               Brown-clustering fix). If similarity >= threshold,
-               merge them.
-            6. Repeat passes until no merge happens (fixpoint).
-            7. Assign cluster_ids (0, 1, 2, ...) across both groups
+               counts. (Same as before.)
+            2. **Super-cluster projection** (unchanged): for each
+               clusterable action, project its literal object-token
+               count map to a SUPER-CLUSTER count map via
+               ``self.object_supercluster_id``. The super-cluster
+               count map IS the feature vector (Key/Query) for cosine
+               similarity.
+            3. **Connector split** (unchanged): partition the
+               clusterable actions into two groups by their
+               ``action_connector_signature`` value. The two groups
+               are clustered INDEPENDENTLY and can never merge across
+               the split (same structural-signal fix as before).
+            4. **Sequential Q/K/V assignment** (NEW): for each group,
+               process actions in order of descending total
+               observation count (so the most-observed actions define
+               the initial cluster centroids — they are the most
+               statistically reliable anchors). For each action:
+                 Query  = its super-cluster count map
+                 For each existing cluster:
+                   Key    = cluster's centroid super-cluster count map
+                            (running sum of member count maps,
+                             mean-aggregated)
+                   score  = cosine_similarity(Query, Key)
+                 weights = softmax(scores)
+                 Pick argmax(weights) = the highest-scoring cluster.
+                 If that cluster's score >=
+                   ``qkv_action_similarity_threshold`` → assign the
+                   action to it and update the centroid (running sum).
+                 Else → create a new singleton cluster with this
+                   action as its first member.
+            5. Assign cluster_ids (0, 1, 2, ...) across both groups
                (no-connector group first, then with-connector group).
                Actions that did not meet the min_observations bar get
-               cluster_id = -1 (unclustered).
+               cluster_id = -1 (unclustered) — same as before.
 
-        Why MAX of literal and super-cluster similarities (not
-        super-cluster alone)? Super-cluster projection loses
-        information: two actions with similar SUPER-cluster
-        distributions might still take SEMANTICALLY DIFFERENT objects
-        (e.g. 'menyebabkan' takes state-change objects and 'setelah'
-        takes event objects, but both object classes can land in the
-        same Brown super-cluster because they co-occur with overlapping
-        action sets). Using super-cluster alone causes cross-relation-
-        type merging (CAUSAL+TEMPORAL collapse into one cluster).
+        Why descending-frequency order? With sequential assignment,
+        the FIRST action processed in each group becomes a singleton
+        cluster whose centroid defines the initial "attractor" for
+        subsequent actions. Processing the most-frequent actions
+        first ensures the initial centroids are statistically
+        reliable (many observations → stable feature vector). A
+        rare-action-first order would create noisy centroids that
+        overfit to one observation, then attract other rare actions
+        into garbage clusters. This is the same rationale as Brown
+        clustering's "merge most frequent first" rule.
 
-        Taking the MAX preserves the existing literal-token behaviour:
-        actions that already merge via literal overlap (e.g.
-        'adalah'+'merupakan' sharing 'mamalia') still merge. The
-        super-cluster signal only ADDS new merges for actions whose
-        literal overlap is below threshold but whose super-cluster
-        overlap is high (e.g. synonyms with no literal object overlap
-        but whose objects all belong to the same Brown super-cluster).
+        Why cosine on super-cluster count maps (not literal)?
+        The super-cluster projection collapses the sparse literal-
+        object vocabulary into denser super-cluster ids, which gives
+        cosine similarity more signal to work with. Two synonym
+        copulas ('adalah' and 'merupakan') that take disjoint literal
+        objects but the same Brown super-cluster produce count maps
+        with identical DIRECTION — cosine = 1.0 — even though their
+        literal overlap is zero. Cosine captures this; the old
+        weighted-Jaccard threshold missed it.
         """
         # Reset previous clustering.
         self.cluster_id_of = {}
@@ -1212,29 +1341,25 @@ class PositionalClusterLearner:
 
         # Connector split: partition clusterable actions by their
         # action_connector_signature value.
-        no_connector_lit: Dict[str, Dict[str, int]] = {}
         no_connector_sc: Dict[str, Dict[int, int]] = {}
-        with_connector_lit: Dict[str, Dict[str, int]] = {}
         with_connector_sc: Dict[str, Dict[int, int]] = {}
         for action in clusterable:
             if self.action_connector_signature.get(action, False):
-                with_connector_lit[action] = clusterable[action]
                 with_connector_sc[action] = clusterable_sc[action]
             else:
-                no_connector_lit[action] = clusterable[action]
                 no_connector_sc[action] = clusterable_sc[action]
 
-        # Cluster each group independently.
-        all_clusters: List[Tuple[Set[str], Dict[str, int], Dict[int, int]]] = []
-        for lit_group, sc_group in (
-            (no_connector_lit, no_connector_sc),
-            (with_connector_lit, with_connector_sc),
+        # Cluster each group independently via Q/K/V soft assignment.
+        all_clusters: List[Tuple[Set[str], Dict[int, int]]] = []
+        for sc_group in (
+            no_connector_sc,
+            with_connector_sc,
         ):
-            group_clusters = self._cluster_action_group(lit_group, sc_group)
+            group_clusters = self._cluster_action_group_qkv(sc_group)
             all_clusters.extend(group_clusters)
 
         # Assign cluster_ids across the concatenated group clusters.
-        for cluster_id, (actions, _lit, _sc) in enumerate(all_clusters):
+        for cluster_id, (actions, _sc) in enumerate(all_clusters):
             self.action_clusters[cluster_id] = actions
             for action in actions:
                 self.cluster_id_of[action] = cluster_id
@@ -1244,65 +1369,206 @@ class PositionalClusterLearner:
             if action not in self.cluster_id_of:
                 self.cluster_id_of[action] = -1
 
-    def _cluster_action_group(
+    def _cluster_action_group_qkv(
         self,
-        actions_lit: Dict[str, Dict[str, int]],
         actions_sc: Dict[str, Dict[int, int]],
-    ) -> List[Tuple[Set[str], Dict[str, int], Dict[int, int]]]:
-        """Run the greedy agglomerative merge on one connector group.
+    ) -> List[Tuple[Set[str], Dict[int, int]]]:
+        """Run Q/K/V soft assignment on one connector group.
 
         Args:
-            actions_lit: {action_token: {object_token: count}} —
-                the literal object distribution for each action.
             actions_sc: {action_token: {supercluster_id: count}} —
-                the projected super-cluster distribution for each
-                action.
+                the projected super-cluster distribution (feature
+                vector) for each action.
 
-        Returns a list of (set_of_actions, literal_count_map,
-        supercluster_count_map) — the merged clusters for this group.
-        Empty list if the group has no actions.
+        Returns a list of (set_of_actions, supercluster_count_map)
+        — the soft-assigned clusters for this group. Empty list if
+        the group has no actions.
 
-        Similarity = MAX of literal weighted Jaccard and super-cluster
-        weighted Jaccard. See ``_cluster_actions`` for the rationale.
+        Algorithm (sequential Q/K/V):
+            1. Sort actions by descending total observation count so
+               the most-observed actions seed the initial clusters.
+            2. For each action:
+               - Query = its super-cluster count map.
+               - For each existing cluster, compute
+                 score = cosine(Query, cluster.centroid).
+               - weights = softmax(scores).
+               - best_cluster = argmax(weights).
+               - If score(best_cluster) >= threshold → assign and
+                 update centroid (running sum).
+               - Else → create a new singleton cluster.
+
+        The softmax is computed for completeness (the user's spec
+        explicitly mentions it as the normalizer). Argmax of softmax
+        equals argmax of raw scores, so the assignment decision is
+        the same either way — but having softmax in the code path
+        makes the Q/K/V pattern explicit and lets future callers
+        inspect the probability distribution if they want to do soft
+        (multi-cluster) assignment.
         """
-        if not actions_lit:
+        if not actions_sc:
             return []
 
-        # Initial clusters: each action in its own cluster.
-        clusters: List[Tuple[Set[str], Dict[str, int], Dict[int, int]]] = [
-            ({action}, dict(actions_lit[action]), dict(actions_sc[action]))
-            for action in actions_lit
-        ]
+        threshold = self.qkv_action_similarity_threshold
 
-        # Greedy agglomerative merge until fixpoint.
-        merged = True
-        while merged and len(clusters) > 1:
-            merged = False
-            best_i, best_j, best_sim = -1, -1, -1.0
-            for i in range(len(clusters)):
-                for j in range(i + 1, len(clusters)):
-                    lit_sim = self._weighted_jaccard(
-                        clusters[i][1], clusters[j][1]
-                    )
-                    sc_sim = self._weighted_jaccard(
-                        clusters[i][2], clusters[j][2]
-                    )
-                    sim = max(lit_sim, sc_sim)
-                    if sim >= self.similarity_threshold and sim > best_sim:
-                        best_sim = sim
-                        best_i, best_j = i, j
-            if best_i >= 0:
-                actions_i, lit_i, sc_i = clusters[best_i]
-                actions_j, lit_j, sc_j = clusters[best_j]
-                actions_i.update(actions_j)
-                for obj, count in lit_j.items():
-                    lit_i[obj] = lit_i.get(obj, 0) + count
-                for sc_id, count in sc_j.items():
-                    sc_i[sc_id] = sc_i.get(sc_id, 0) + count
-                clusters.pop(best_j)
-                merged = True
+        # Sort by descending total count so the most statistically
+        # reliable actions seed the initial clusters.
+        sorted_actions = sorted(
+            actions_sc.keys(),
+            key=lambda a: -sum(actions_sc[a].values()),
+        )
+
+        # Each cluster: (set_of_action_tokens, running_sum_sc_map).
+        # The running sum is the centroid * cluster_size; we divide
+        # by cluster_size when computing cosine similarity to get the
+        # mean-aggregated centroid. (Cosine is scale-invariant, so
+        # we could skip the division — but we keep it for clarity.)
+        clusters: List[Tuple[Set[str], Dict[int, int]]] = []
+
+        for action in sorted_actions:
+            query = actions_sc[action]
+
+            if not clusters:
+                # First action in the group — seed the first cluster.
+                clusters.append(({action}, dict(query)))
+                continue
+
+            # Compute cosine similarity between Query and each
+            # existing cluster's centroid (mean of member count maps).
+            scores: List[float] = []
+            for _actions, sc_sum in clusters:
+                cluster_size = len(_actions)
+                # Centroid = mean of member count maps (running sum
+                # divided by cluster size). Cosine is scale-invariant
+                # so we could use the running sum directly, but using
+                # the mean keeps the semantic interpretation clean.
+                centroid = {
+                    k: v / cluster_size for k, v in sc_sum.items()
+                }
+                score = self._cosine_similarity_sparse(query, centroid)
+                scores.append(score)
+
+            # Softmax over scores (numerically stable). The argmax of
+            # softmax equals the argmax of raw scores; softmax is
+            # computed here to make the Q/K/V pattern explicit and
+            # to surface the probability distribution for callers who
+            # want to do soft assignment.
+            weights = self._softmax(scores)
+            best_idx = max(range(len(weights)), key=lambda i: weights[i])
+            best_score = scores[best_idx]
+
+            if best_score >= threshold:
+                # Assign to existing cluster; update running sum.
+                member_set, sc_sum = clusters[best_idx]
+                member_set.add(action)
+                for k, v in query.items():
+                    sc_sum[k] = sc_sum.get(k, 0) + v
+            else:
+                # No existing cluster is similar enough — create a
+                # new singleton cluster with this action as its seed.
+                clusters.append(({action}, dict(query)))
 
         return clusters
+
+    # ------------------------------------------------------------------
+    # Q/K/V helpers (pure-math cosine similarity + softmax)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _cosine_similarity_sparse(
+        a: Dict[Any, float], b: Dict[Any, float],
+    ) -> float:
+        """Cosine similarity for two sparse dict vectors.
+
+        Formula::
+
+            dot(a, b) / (||a|| * ||b||)
+
+        where ``dot(a, b) = sum(a[k] * b[k] for k in a.keys() & b.keys())``
+        and ``||a|| = sqrt(sum(v * v for v in a.values()))``.
+
+        Returns 0.0 when either vector is empty (norm = 0) — this is
+        the standard convention for cosine-of-zero-vector (avoids
+        division by zero). Two empty vectors are "trivially similar"
+        but we return 0.0 so they don't accidentally cluster (an
+        action with zero observations should not be in any cluster
+        anyway — ``_cluster_actions`` filters those out before this
+        method is called).
+
+        Why sparse dict instead of dense numpy array? The action
+        feature vectors are super-cluster count maps — typically
+        5-50 non-zero entries out of hundreds of possible super-
+        cluster ids. Sparse representation is both faster (no need
+        to materialize zero entries) and clearer (the keys carry
+        meaning — they ARE the super-cluster ids).
+        """
+        if not a or not b:
+            return 0.0
+        # Dot product over shared keys (sparse optimisation).
+        smaller = a if len(a) < len(b) else b
+        larger = b if len(a) < len(b) else a
+        dot = 0.0
+        for k, v in smaller.items():
+            ov = larger.get(k)
+            if ov is not None:
+                dot += v * ov
+        # Norms.
+        norm_a = math.sqrt(sum(v * v for v in a.values()))
+        norm_b = math.sqrt(sum(v * v for v in b.values()))
+        if norm_a == 0.0 or norm_b == 0.0:
+            return 0.0
+        return dot / (norm_a * norm_b)
+
+    @staticmethod
+    def _cosine_similarity_dense(
+        a: Tuple[float, ...], b: Tuple[float, ...],
+    ) -> float:
+        """Cosine similarity for two dense tuple vectors.
+
+        Same formula as :meth:`_cosine_similarity_sparse` but for
+        fixed-length dense tuples (used by particle clustering where
+        the feature vector is a 4-dim positional signature).
+        """
+        if not a or not b:
+            return 0.0
+        dot = sum(x * y for x, y in zip(a, b))
+        norm_a = math.sqrt(sum(x * x for x in a))
+        norm_b = math.sqrt(sum(y * y for y in b))
+        if norm_a == 0.0 or norm_b == 0.0:
+            return 0.0
+        return dot / (norm_a * norm_b)
+
+    @staticmethod
+    def _softmax(scores: List[float]) -> List[float]:
+        """Numerically stable softmax over a list of scores.
+
+        Formula::
+
+            exp(s_i - max(scores)) / sum(exp(s_j - max(scores)))
+
+        Subtracting the max before exp() prevents overflow when
+        scores are large (e.g. cosine = 1.0 → exp(1.0) ≈ 2.72,
+        which is fine, but if we ever extend to other score
+        functions this protects against blow-up). The result is
+        invariant to the max subtraction (it cancels in the
+        numerator/denominator).
+
+        Returns a uniform distribution when the input is empty (no
+        clusters to compare against). This case shouldn't happen in
+        practice — the caller checks ``if not clusters`` before
+        computing scores — but defensive handling keeps the function
+        total.
+        """
+        if not scores:
+            return []
+        m = max(scores)
+        exps = [math.exp(s - m) for s in scores]
+        total = sum(exps)
+        if total == 0.0:
+            # All scores were -inf (extremely negative). Return
+            # uniform distribution as a fallback.
+            n = len(scores)
+            return [1.0 / n] * n
+        return [e / total for e in exps]
 
     # ------------------------------------------------------------------
     # Statistical anchor-word discovery (replaces _ACTION_STOPLIST/_COPULAS)
@@ -1791,7 +2057,7 @@ class PositionalClusterLearner:
         return (pre_object_3tok_rate, between_first_rate, fine_entropy, bucket_entropy)
 
     def _cluster_particles(self) -> None:
-        """Cluster particle tokens by feature-vector distance (unnamed).
+        """Cluster particle tokens via Q/K/V soft assignment (unnamed).
 
         STAGE 1 of the zero-bias particle discovery contract (see the
         module-level "PARTICLE clustering" section). Operates on the
@@ -1807,6 +2073,42 @@ class PositionalClusterLearner:
         A human must call :meth:`label_particle_clusters` afterward to
         assign names — that is a SEPARATE, optional, post-hoc step
         (mirroring :meth:`label_clusters` for RelationType).
+
+        Algorithm (Q/K/V soft assignment — same pattern as
+        :meth:`_cluster_actions`, replaces the previous greedy
+        agglomerative-merge-by-Euclidean-distance):
+            1. Build the clusterable particle candidate set (same
+               candidate-pool construction as before).
+            2. Compute the 4-dim feature vector (Query) for each
+               candidate via :meth:`_compute_particle_signature`.
+            3. Process candidates in descending total-frequency order
+               (most-observed seeds first, same rationale as action
+               clustering). For each candidate:
+                 Query  = its 4-dim feature vector.
+                 For each existing cluster:
+                   Key    = cluster's centroid (mean of member
+                            feature vectors).
+                   score  = cosine_similarity(Query, Key).
+                 weights = softmax(scores).
+                 best_cluster = argmax(weights).
+                 If score(best_cluster) >=
+                   ``qkv_particle_similarity_threshold`` → assign and
+                   update centroid (running sum).
+                 Else → create a new singleton cluster.
+            4. Assign cluster_ids (0, 1, 2, ...) to the resulting
+               clusters.
+
+        Why cosine instead of Euclidean distance? Euclidean distance
+        is sensitive to vector MAGNITUDE: two particles with similar
+        directional signatures but different overall magnitudes get
+        a high Euclidean distance even though their grammatical
+        behaviour is the same. Cosine compares only DIRECTION, which
+        is what we want — the 4-dim signature is already normalised
+        per-axis to [0, 1], so magnitude carries no extra
+        information. The previous Euclidean threshold of 0.35 was
+        calibrated to the same bimodal gap that cosine captures
+        natively; threshold 0.5 on cosine reproduces the same
+        separation with cleaner boundaries on noisy corpora.
 
         Reset contract: overwrites particle_cluster_id_of and
         particle_clusters from scratch on every call (cluster ids may
@@ -1856,48 +2158,56 @@ class PositionalClusterLearner:
             tok: self._compute_particle_signature(tok) for tok in clusterable
         }
 
-        # Greedy agglomerative merge by Euclidean distance over the
-        # 4-dim feature vector (mean-aggregated per cluster). Pure
-        # generic distance — no semantic awareness of any token.
-        clusters: List[Tuple[Set[str], Tuple[float, float, float, float]]] = [
-            ({tok}, sig) for tok, sig in signatures.items()
-        ]
+        # Sort by descending total frequency so the most statistically
+        # reliable particles seed the initial clusters (same rationale
+        # as action clustering).
+        sorted_particles = sorted(
+            clusterable,
+            key=lambda t: -_total_freq(t),
+        )
 
-        def _distance(
-            a: Tuple[float, float, float, float],
-            b: Tuple[float, float, float, float],
-        ) -> float:
-            return math.sqrt(sum((x - y) ** 2 for x, y in zip(a, b)))
+        threshold = self.qkv_particle_similarity_threshold
 
-        merged = True
-        while merged and len(clusters) > 1:
-            merged = False
-            best_i, best_j, best_dist = -1, -1, float("inf")
-            for i in range(len(clusters)):
-                for j in range(i + 1, len(clusters)):
-                    d = _distance(clusters[i][1], clusters[j][1])
-                    if d <= _PARTICLE_DISTANCE_THRESHOLD and d < best_dist:
-                        best_dist = d
-                        best_i, best_j = i, j
-            if best_i >= 0:
-                toks_i, sig_i = clusters[best_i]
-                toks_j, sig_j = clusters[best_j]
-                merged_toks = toks_i | toks_j
-                # Recompute the cluster's representative signature as
-                # the mean of its members' individual signatures
-                # (centroid), not the mean of the two merging
-                # sub-clusters' signatures, to avoid drift bias toward
-                # whichever sub-cluster was larger.
-                member_sigs = [signatures[t] for t in merged_toks]
-                centroid = tuple(
-                    sum(s[d] for s in member_sigs) / len(member_sigs)
-                    for d in range(4)
-                )
-                clusters[best_i] = (merged_toks, centroid)
-                clusters.pop(best_j)
-                merged = True
+        # Each cluster: (set_of_tokens, running_sum_signature).
+        # The running sum is the centroid * cluster_size; we divide
+        # by cluster_size when computing cosine similarity to get the
+        # mean-aggregated centroid. (Cosine is scale-invariant, so
+        # we could skip the division — but we keep it for clarity.)
+        clusters: List[Tuple[Set[str], List[float]]] = []
 
-        for cluster_id, (toks, _centroid) in enumerate(clusters):
+        for tok in sorted_particles:
+            query = signatures[tok]
+
+            if not clusters:
+                # First particle — seed the first cluster.
+                clusters.append(({tok}, list(query)))
+                continue
+
+            # Compute cosine similarity between Query and each
+            # existing cluster's centroid.
+            scores: List[float] = []
+            for _toks, sig_sum in clusters:
+                cluster_size = len(_toks)
+                centroid = tuple(s / cluster_size for s in sig_sum)
+                score = self._cosine_similarity_dense(query, centroid)
+                scores.append(score)
+
+            weights = self._softmax(scores)
+            best_idx = max(range(len(weights)), key=lambda i: weights[i])
+            best_score = scores[best_idx]
+
+            if best_score >= threshold:
+                # Assign to existing cluster; update running sum.
+                member_set, sig_sum = clusters[best_idx]
+                member_set.add(tok)
+                for d in range(4):
+                    sig_sum[d] += query[d]
+            else:
+                # No existing cluster is similar enough — create a
+                # new singleton cluster with this particle as its seed.
+                clusters.append(({tok}, list(query)))
+
+        for cluster_id, (toks, _sig_sum) in enumerate(clusters):
             self.particle_clusters[cluster_id] = toks
             for tok in toks:
                 self.particle_cluster_id_of[tok] = cluster_id
@@ -2560,42 +2870,52 @@ class PositionalClusterLearner:
         Returns a list of ``(token, pos_class)`` pairs for every token
         in the input sentence. ``pos_class`` is one of:
 
-            - ``"AGENT"``: the subject (position 0 in SVO).
-            - ``"ACTION"``: the predicate (position 1 in SVO, or the
-              action-bucket position in >3-token sentences). Only
-              assigned to tokens that are real actions (in
-              ``cluster_id_of`` or ``action_object_freq``, or with
-              verb morphology).
-            - ``"OBJECT"``: the object (last position in SVO).
-            - ``"MODIFIER"``: an adverb / intensifier (in
-              ``modifier_tokens`` — discovered via the pre-object
-              positional signal).
-            - ``"CONNECTOR"``: a preposition / complementizer (in
-              ``connector_tokens`` — discovered via the between-first
-              positional signal).
+            - ``"AGENT"``: the subject — token before the first ACTION
+              that doesn't match any cluster.
+            - ``"ACTION"``: the predicate — token in an action cluster
+              or with verb morphology. Can appear at any position;
+              role is determined by cluster membership, not by
+              sentence-position formula.
+            - ``"OBJECT"``: the object — token after the first ACTION
+              (within the same clause) that doesn't match any cluster.
+            - ``"MODIFIER"``/``"CONNECTOR"``/``"NEGATOR"``/...: a
+              particle token whose particle cluster has been post-hoc
+              labelled (via :meth:`label_particle_clusters`). The
+              exact label string is whatever the human assigned —
+              AGNN does not presuppose which grammar-class names exist.
             - ``"UNKNOWN"``: the token doesn't have enough data to be
-              classified into any of the above categories.
+              classified into any of the above categories (e.g. the
+              particle cluster hasn't been labelled yet).
 
-        The tagging is **purely positional + statistical** — no
-        hardcoded word lists. Each token's POS class is determined by:
+        The tagging is **cluster-driven** (no ``if n == 3`` /
+        ``if n > 3`` branches to determine role). For each token:
 
-          1. Parse SPO positionally via :meth:`spo` to identify the
-             AGENT (subject), ACTION (predicate), and OBJECT slots.
-          2. If the token at the ACTION slot is a real action (in
-             ``action_object_freq`` or ``cluster_id_of``, or has verb
-             morphology), tag it ``ACTION``. Otherwise it falls
-             through to step 3-5.
-          3. If the token is in ``modifier_tokens``, tag it
-             ``MODIFIER``.
-          4. If the token is in ``connector_tokens``, tag it
-             ``CONNECTOR``.
-          5. Otherwise tag it ``UNKNOWN``.
+          1. If the token is in an action cluster (or has verb
+             morphology, or has been observed as an action) →
+             ``ACTION``.
+          2. Else if the token is in a particle cluster → the
+             cluster's post-hoc label (or ``UNKNOWN`` if unlabelled).
+          3. Else, role depends on position relative to the first
+             ACTION in the clause:
+               - Before first ACTION → ``AGENT``.
+               - After first ACTION → ``OBJECT``.
 
-        Tokens at the AGENT and OBJECT slots are always tagged
-        ``AGENT`` and ``OBJECT`` respectively, regardless of their
-        membership in modifier/connector sets (positional role beats
-        grammatical class — a noun is still a noun even if it happens
-        to be in the modifier set by corpus noise).
+        Before role assignment, a lazy anchor-split step (see
+        :meth:`_detect_clause_anchors`) looks for clause-boundary
+        particles and splits the sentence into sub-clauses. Each
+        sub-clause is tagged independently — a token before the first
+        ACTION of *its own sub-clause* is ``AGENT``, even if there's
+        an earlier ACTION in a previous sub-clause.
+
+        Example
+        -------
+        >>> learner = PositionalClusterLearner.load("cluster_learner_state.json")
+        >>> learner.tag_sentence("es sangat dingin")
+        [("es", "AGENT"), ("sangat", "MODIFIER"), ("dingin", "OBJECT")]
+        >>> learner.tag_sentence("kucing berbeda dari reptil")
+        [("kucing", "AGENT"), ("berbeda", "ACTION"), ("dari", "CONNECTOR"), ("reptil", "OBJECT")]
+        >>> learner.tag_sentence("sebelum makan saya mencuci tangan")
+        [("sebelum", "CONNECTOR"), ("makan", "ACTION"), ("saya", "AGENT"), ("mencuci", "ACTION"), ("tangan", "OBJECT")]
 
         Args:
             text: The sentence to tag. Tokenized via :meth:`_tokenize`
@@ -2606,22 +2926,13 @@ class PositionalClusterLearner:
             List of ``(token, pos_class)`` pairs. Empty list for empty
             / unparseable input. For sentences shorter than 3 tokens,
             positional SVO parsing is ambiguous, so the method falls
-            back to per-token grammar-class lookup (MODIFIER /
-            CONNECTOR / UNKNOWN) without AGENT/ACTION/OBJECT
-            assignment.
-
-        Example
-        -------
-        >>> learner = PositionalClusterLearner.load("cluster_learner_state.json")
-        >>> learner.tag_sentence("es sangat dingin")
-        [("es", "AGENT"), ("sangat", "MODIFIER"), ("dingin", "OBJECT")]
-        >>> learner.tag_sentence("kucing berbeda dari reptil")
-        [("kucing", "AGENT"), ("berbeda", "ACTION"), ("dari", "CONNECTOR"), ("reptil", "OBJECT")]
+            back to per-token grammar-class lookup (particle label /
+            UNKNOWN) without AGENT/ACTION/OBJECT assignment.
         """
         if not self.is_trained:
-            # Untrained — can't do positional SVO parsing. Fall back
-            # to per-token grammar-class lookup (all UNKNOWN if no
-            # modifier/connector sets are populated).
+            # Untrained — can't do cluster-driven SVO parsing. Fall
+            # back to per-token grammar-class lookup (all UNKNOWN if
+            # no particle clusters are populated).
             tokens = self._tokenize(text)
             return [(t, self._lookup_grammar_class(t)) for t in tokens]
 
@@ -2636,67 +2947,82 @@ class PositionalClusterLearner:
         if n < 3:
             return [(t, self._lookup_grammar_class(t)) for t in tokens]
 
-        # Parse SVO positionally.
-        try:
-            spo = self.spo(text)
-        except Exception:
-            # spo() failed — fall back to per-token lookup.
-            return [(t, self._lookup_grammar_class(t)) for t in tokens]
-
-        subject = self._normalize_token(spo.subject) if spo.subject else ""
-        # spo() returns predicate as a phrase for >3-token sentences.
-        # The head verb is the first token of the predicate phrase.
-        predicate_head = ""
-        if spo.predicate:
-            predicate_head = self._normalize_token(spo.predicate.split()[0])
-        obj = self._normalize_token(spo.object) if spo.object else ""
+        # Lazy anchor-split: find clause-boundary particles and split
+        # the sentence into sub-clauses BEFORE role assignment. We
+        # keep track of the original token indices so we can write
+        # the tags back to the right positions in the final list.
+        action_positions = self._find_action_positions(tokens)
+        particle_positions = self._find_particle_positions(tokens)
+        anchors = self._detect_clause_anchors(
+            tokens, action_positions, particle_positions,
+        )
+        boundaries = self._compute_clause_boundaries(anchors, action_positions)
 
         # Build the tag list. Start with UNKNOWN for everything, then
-        # fill in AGENT/ACTION/OBJECT/MODIFIER/CONNECTOR.
+        # fill in AGENT/ACTION/OBJECT/particle-label per sub-clause.
         tags: List[str] = ["UNKNOWN"] * n
 
-        # Identify AGENT (position 0) and OBJECT (last position) by
-        # matching the SPO parse against the token list.
-        if subject and tokens[0] == subject:
-            tags[0] = "AGENT"
-        if obj and tokens[n - 1] == obj:
-            tags[n - 1] = "OBJECT"
+        if not boundaries:
+            # Single-clause sentence — parse the whole thing.
+            sub_clauses = [(0, tokens)]
+        else:
+            # Split at boundaries, but keep track of each sub-clause's
+            # starting index in the original tokens list.
+            sub_clauses: List[Tuple[int, List[str]]] = []
+            prev = 0
+            for boundary in boundaries:
+                if boundary > prev:
+                    sub_clauses.append((prev, tokens[prev:boundary]))
+                prev = boundary
+            sub_clauses.append((prev, tokens[prev:]))
 
-        # Identify ACTION (position 1, or the action-bucket position).
-        # The predicate head verb should be at index 1 in 3-token
-        # sentences, or at index 1 in >3-token sentences (per
-        # _compute_buckets: [0] + [1]*(n-2) + [-1]).
-        if predicate_head and n >= 2 and tokens[1] == predicate_head:
-            # Check if this token is a real action. It's a real action
-            # if it's in action_object_freq / cluster_id_of, or if it
-            # has verb morphology. Otherwise it might be a modifier
-            # sitting at the action slot (e.g. 'sangat' in
-            # "es sangat dingin").
-            #
-            # Note: we do NOT check action_bucket_anchors here. A
-            # token can be an action_bucket_anchor (sits at the action
-            # bucket frequently) AND a modifier — 'sangat' is both.
-            # The modifier classification takes priority for tokens
-            # that are NOT in action_object_freq (i.e. were excluded
-            # from action extraction because they're function words).
-            is_real_action = (
-                predicate_head in self.action_object_freq
-                or predicate_head in self.cluster_id_of
-                or self._looks_like_verb(predicate_head)
-            )
-            if is_real_action:
-                tags[1] = "ACTION"
-            # If not a real action, leave it as UNKNOWN for now —
-            # the grammar-class lookup below will classify it as
-            # MODIFIER if applicable.
-
-        # Fill in MODIFIER and CONNECTOR for tokens that aren't
-        # already tagged AGENT/ACTION/OBJECT.
-        for i, tok in enumerate(tokens):
-            if tags[i] != "UNKNOWN":
+        for start_idx, sc_tokens in sub_clauses:
+            if not sc_tokens:
                 continue
-            gc = self._lookup_grammar_class(tok)
-            tags[i] = gc
+            sc_action_positions = self._find_action_positions(sc_tokens)
+            sc_particle_positions = self._find_particle_positions(sc_tokens)
+
+            # Determine the split index for this sub-clause.
+            if sc_action_positions:
+                split_idx = sc_action_positions[0]
+            elif sc_particle_positions:
+                # No ACTION — use first particle as soft separator.
+                split_idx = sc_particle_positions[0]
+            else:
+                # No ACTION and no particle in this sub-clause —
+                # tag every token via grammar-class lookup.
+                for i, tok in enumerate(sc_tokens):
+                    tags[start_idx + i] = self._lookup_grammar_class(tok)
+                continue
+
+            # Tag each token in the sub-clause.
+            for i, tok in enumerate(sc_tokens):
+                global_idx = start_idx + i
+                if tags[global_idx] != "UNKNOWN":
+                    # Already tagged by a previous step — defensive,
+                    # shouldn't happen with non-overlapping sub-clauses.
+                    continue
+
+                # Check 1: ACTION candidate.
+                if self._is_action_token(tok):
+                    # Verify this is the FIRST action of the sub-clause
+                    # (we tag subsequent actions too — there can be
+                    # multiple if the anchor-split missed a clause
+                    # boundary, e.g. compound verbs).
+                    tags[global_idx] = "ACTION"
+                    continue
+
+                # Check 2: particle cluster member.
+                if self._is_particle_token(tok):
+                    label = self._particle_label_for(tok)
+                    tags[global_idx] = label if label is not None else "UNKNOWN"
+                    continue
+
+                # Check 3: position relative to the split index.
+                if i < split_idx:
+                    tags[global_idx] = "AGENT"
+                else:  # i > split_idx (i == split_idx is the action/particle itself)
+                    tags[global_idx] = "OBJECT"
 
         return list(zip(tokens, tags))
 
@@ -2785,36 +3111,445 @@ class PositionalClusterLearner:
         return relation_type
 
     # ------------------------------------------------------------------
-    # Public API: SPO parsing (positional, NOT cluster-based)
+    # Public API: SPO parsing (cluster-driven + lazy anchor-split)
     # ------------------------------------------------------------------
+    #
+    # The parser was previously position-based: ``subject=tokens[0]``,
+    # ``predicate=tokens[1]``, ``object=tokens[-1]``. This is a human
+    # prior (the same kind of bias PR #69 was rejected for): it
+    # assumes a fixed SVO layout regardless of clause structure.
+    # Sentences like "sebelum makan saya mencuci tangan" — a temporal
+    # dependent clause followed by the main clause — were mis-parsed:
+    # "sebelum" was forced into the AGENT slot.
+    #
+    # The new parser is cluster-driven:
+    #   - Scan tokens one-by-one.
+    #   - If a token is in an ACTION cluster (or has been observed as
+    #     an action in training) → ACTION.
+    #   - If a token is in a particle cluster → particle label.
+    #   - Tokens before the first ACTION that don't match any cluster
+    #     → AGENT.
+    #   - Tokens after the first ACTION that don't match any cluster
+    #     → OBJECT.
+    #
+    # Before role assignment, a lazy anchor-split step looks for
+    # clause-boundary particles (tokens in particle clusters that sit
+    # at sentence start or between two ACTIONs) and splits the
+    # sentence into sub-clauses. Each sub-clause is parsed
+    # independently; the SPO of the most complete sub-clause
+    # (AGENT+ACTION+OBJECT) is returned.
+    #
+    # No `if n == 3` / `if n > 3` branches determine role — role is
+    # purely from cluster membership. The only length-based branch
+    # left is the <3-token delegation to fallback, which preserves
+    # the "X bukan Y" -> DIFFERENTIAL path that lives in
+    # SemanticRoleClassifier's seed table.
+
+    def _is_action_token(self, token: str) -> bool:
+        """True iff ``token`` is recognised as an ACTION candidate.
+
+        A token is an ACTION candidate when any of:
+          - It has been observed as an action in training (present in
+            ``action_object_freq`` — includes tokens below
+            ``min_action_observations`` that didn't make it into a
+            cluster).
+          - It is in a labelled action cluster (``cluster_id_of[token]``
+            is a non-negative int).
+          - It carries Indonesian verb morphology (me-, ber-, diper-,
+            ter-) — a FORM signal (not meaning), same heuristic
+            ``_extract_action_object`` already uses for multi-word
+            subjects. This lets the parser recognise verbs the
+            learner has never seen before (e.g. a rare verb in a
+            test sentence that wasn't in the training corpus).
+
+        **Soft-particle exclusion**: a token that's in
+        ``action_object_freq`` BUT also appears at the AGENT bucket
+        (bucket 0) in the corpus is likely a mis-extracted function
+        word (connector/preposition that sits at sentence start in
+        some sentences and at the action slot in others — e.g.
+        "sebelum" appears at index 0 in "sebelum X, Y" and at index
+        1 in "X sebelum Y"). Real actions concentrate at the action
+        bucket; function words span multiple buckets. The
+        :meth:`_is_soft_particle` check filters these out so the
+        parser doesn't tag "sebelum" as ACTION.
+        """
+        if self._is_soft_particle(token):
+            return False
+        if token in self.action_object_freq:
+            return True
+        cid = self.cluster_id_of.get(token)
+        if cid is not None and cid >= 0:
+            return True
+        if self._looks_like_verb(token):
+            return True
+        return False
+
+    def _is_soft_particle(self, token: str) -> bool:
+        """True iff ``token`` is a mis-extracted function word.
+
+        The OLD extractor (``_extract_action_object``) puts a token
+        into ``action_object_freq`` whenever it sits at the action
+        slot (position 1) in a 3-token sentence. This is correct for
+        real verbs, but it also captures function words that happen
+        to sit at position 1 in 3-token patterns like "X sebelum Y"
+        (where "sebelum" is a preposition, not a verb).
+
+        We detect these mis-extracted function words by a positional
+        heuristic: a token that appears at BOTH the agent bucket
+        (position 0) AND the action bucket (position 1) in the
+        corpus is almost certainly a function word, not a real
+        action. Real actions concentrate at the action bucket; they
+        don't appear at the agent bucket (a verb is rarely the
+        subject of another verb). Function words like "sebelum",
+        "setelah", "karena" routinely appear at both positions
+        because they introduce subordinate clauses (sentence-start)
+        AND connect two nouns in 3-token patterns (mid-sentence).
+
+        This check is a PURE POSITIONAL signal — no hardcoded list
+        of "connector words". It's the same kind of statistics-
+        based detection the rest of the module uses. The check is
+        conservative: it requires presence at BOTH buckets (not
+        just one), so it doesn't flag real verbs that occasionally
+        appear in unusual positions due to corpus noise.
+
+        Why this matters for the cluster-driven parser: without this
+        check, "sebelum" would be tagged ACTION (it's in
+        ``action_object_freq``), and the lazy anchor-split wouldn't
+        fire (no particle to use as anchor). With this check,
+        "sebelum" is recognised as a soft particle, the anchor-split
+        splits the sentence at "sebelum", and the main clause gets
+        parsed correctly. See the DoD test case
+        "sebelum makan saya mencuci tangan".
+        """
+        if token not in self.action_object_freq:
+            return False
+        if self._looks_like_verb(token):
+            # Verb morphology is a strong FORM signal — even if the
+            # token appears at both buckets, the morphology says it's
+            # a verb. Don't second-guess.
+            return False
+        pos_map = self.positional_freq.get(token, {})
+        has_agent = pos_map.get(_AGENT_BUCKET, 0) > 0
+        has_action = pos_map.get(_ACTION_BUCKET, 0) > 0
+        return has_agent and has_action
+
+    def _is_particle_token(self, token: str) -> bool:
+        """True iff ``token`` is in a particle cluster (any label).
+
+        A token is a particle when it is in ``particle_cluster_id_of``
+        with a non-negative cluster id, OR when it is a "soft
+        particle" (a mis-extracted function word — see
+        :meth:`_is_soft_particle`). Whether the cluster has been
+        post-hoc labelled (via :meth:`label_particle_clusters`) is
+        irrelevant for this check — the token IS a particle either
+        way; the label only affects what name :meth:`tag_sentence`
+        reports.
+
+        Soft particles are included so the lazy anchor-split can use
+        them as clause-boundary anchors. Without this, a sentence
+        like "sebelum makan saya mencuci tangan" wouldn't get split
+        (no particle cluster member to anchor on), and the main
+        clause's SVO would be mis-parsed.
+        """
+        pid = self.particle_cluster_id_of.get(token)
+        if pid is not None and pid >= 0:
+            return True
+        return self._is_soft_particle(token)
+
+    def _particle_label_for(self, token: str) -> Optional[str]:
+        """Return the post-hoc label for ``token``'s particle cluster.
+
+        Returns ``None`` when the token isn't in any particle cluster
+        OR when the cluster hasn't been labelled yet. Callers that
+        need a string should fall back to ``"UNKNOWN"`` (see
+        :meth:`_lookup_grammar_class`).
+        """
+        pid = self.particle_cluster_id_of.get(token)
+        if pid is None or pid < 0:
+            return None
+        return self.particle_cluster_labels.get(pid)
+
+    def _find_action_positions(self, tokens: List[str]) -> List[int]:
+        """Indices of all ACTION-candidate tokens in ``tokens``.
+
+        Used by the cluster-driven parser and the lazy anchor-split
+        detector. Order is ascending by index.
+        """
+        return [i for i, t in enumerate(tokens) if self._is_action_token(t)]
+
+    def _find_particle_positions(self, tokens: List[str]) -> List[int]:
+        """Indices of all particle-cluster tokens in ``tokens``.
+
+        Used by the lazy anchor-split detector to find clause-boundary
+        candidates. Order is ascending by index.
+        """
+        return [i for i, t in enumerate(tokens) if self._is_particle_token(t)]
+
+    def _detect_clause_anchors(
+        self, tokens: List[str],
+        action_positions: List[int],
+        particle_positions: List[int],
+    ) -> List[int]:
+        """Identify clause-boundary anchor positions.
+
+        A particle token is a clause anchor when it sits at a
+        potential clause boundary:
+
+          - **Start-of-sentence anchor**: the particle is at index 0
+            AND there is at least one ACTION after it. This is the
+            "sebelum makan ..." pattern — a subordinate-clause marker
+            ("sebelum"/"setelah"/"ketika"/"karena") starts the
+            sentence, followed by its own ACTION, followed by the
+            main clause. Splitting here separates the dependent
+            clause from the main clause.
+
+          - **Mid-sentence anchor**: the particle is between two
+            ACTION tokens (at least one ACTION before AND at least
+            one ACTION after). This is the "X makan, Y minum"
+            pattern — a clause-connector particle sits between two
+            independent clauses, each with its own ACTION. Splitting
+            here separates the two independent clauses.
+
+        The detection is PURELY positional + cluster-membership-
+        based. It does NOT consult any hardcoded list of "clause
+        markers" — it reuses the particle clusters already built
+        during training (zero new compute, per the user's
+        constraint). A token qualifies as an anchor candidate because
+        (a) it's in a particle cluster (the training-time discovery
+        already decided it's grammatical, not lexical) AND (b) its
+        POSITION in the current sentence is consistent with a clause
+        boundary.
+
+        Returns the list of anchor indices in ascending order. May
+        be empty (no anchors → single-clause sentence → no split).
+        """
+        if not particle_positions:
+            return []
+        if not action_positions:
+            # No ACTIONs at all → no clause structure to split.
+            return []
+
+        anchors: List[int] = []
+        for p_pos in particle_positions:
+            # Start-of-sentence anchor: particle at index 0 with at
+            # least one ACTION after it.
+            if p_pos == 0 and any(a > p_pos for a in action_positions):
+                anchors.append(p_pos)
+                continue
+            # Mid-sentence anchor: particle between two ACTIONs.
+            has_action_before = any(a < p_pos for a in action_positions)
+            has_action_after = any(a > p_pos for a in action_positions)
+            if has_action_before and has_action_after:
+                anchors.append(p_pos)
+                continue
+        return anchors
+
+    @staticmethod
+    def _compute_clause_boundaries(
+        anchors: List[int],
+        action_positions: List[int],
+    ) -> List[int]:
+        """Compute sub-clause boundary indices from anchor positions.
+
+        A boundary is the index where one sub-clause ENDS and the
+        next BEGINS. The split logic differs by anchor type:
+
+          - **Start-of-sentence anchor** (anchor == 0): the
+            dependent clause is ``[anchor, next_action]`` — i.e.
+            the clause marker followed by its ACTION. The boundary
+            is ``next_action + 1`` (split AFTER the dependent
+            clause's ACTION). For "sebelum makan saya mencuci
+            tangan", the anchor is at 0 ("sebelum"), the next ACTION
+            is at 1 ("makan"), so the boundary is 2 — yielding
+            sub-clauses ["sebelum", "makan"] and ["saya", "mencuci",
+            "tangan"].
+
+          - **Mid-sentence anchor** (anchor > 0): the anchor itself
+            starts a new sub-clause (the connector goes with the
+            clause it introduces). The boundary is the anchor index.
+            For "X makan kemudian Y minum Z", the anchor is at 2
+            ("kemudian"), so the boundary is 2 — yielding
+            sub-clauses ["X", "makan"] and ["kemudian", "Y",
+            "minum", "Z"].
+
+        Returns a sorted list of boundary indices. Empty list when
+        no anchors are present (single-clause sentence).
+        """
+        if not anchors:
+            return []
+        boundaries: List[int] = []
+        for anchor in anchors:
+            if anchor == 0:
+                # Start-of-sentence anchor: find the next ACTION
+                # after the anchor. The dependent clause ends after
+                # that ACTION.
+                next_actions = [a for a in action_positions if a > anchor]
+                if next_actions:
+                    boundary = next_actions[0] + 1
+                    boundaries.append(boundary)
+                # If no next ACTION (shouldn't happen — the anchor
+                # detector requires an ACTION after), skip.
+            else:
+                # Mid-sentence anchor: the anchor starts a new sub-
+                # clause. Boundary is at the anchor.
+                boundaries.append(anchor)
+        return sorted(set(boundaries))
+
+    @staticmethod
+    def _split_tokens_at_boundaries(
+        tokens: List[str], boundaries: List[int],
+    ) -> List[List[str]]:
+        """Split ``tokens`` at the given boundary indices.
+
+        A boundary index ``b`` means: tokens[0:b] is one sub-clause,
+        tokens[b:] starts the next. Multiple boundaries produce
+        multiple sub-clauses.
+
+        Returns a list of non-empty sub-clause token lists. If
+        ``boundaries`` is empty, returns ``[tokens]`` (single clause).
+        """
+        if not boundaries:
+            return [tokens] if tokens else []
+        sub_clauses: List[List[str]] = []
+        prev = 0
+        for boundary in boundaries:
+            if boundary > prev:
+                sub_clauses.append(tokens[prev:boundary])
+            elif boundary == prev:
+                # Empty sub-clause (shouldn't happen with non-zero
+                # boundaries, but defensive). Skip.
+                pass
+            prev = boundary
+        sub_clauses.append(tokens[prev:])
+        return [sc for sc in sub_clauses if sc]
+
+    def _parse_clause_spo(
+        self, tokens: List[str],
+    ) -> Optional[Tuple[List[str], str, List[str]]]:
+        """Parse a single clause into (subject_tokens, action, object_tokens).
+
+        Cluster-driven role assignment within one clause (no anchor
+        splitting — that's done by the caller). Algorithm:
+
+          1. Find the first ACTION-candidate token in the clause.
+             That's the predicate. If no ACTION is found:
+               - If the clause has a particle token, treat the FIRST
+                 particle as a soft separator (pseudo-ACTION). This
+                 handles state+adjective patterns like "es sangat
+                 dingin" where there is no real verb — "sangat" is
+                 the particle that separates subject from object.
+               - Otherwise return None (no parse possible).
+          2. Tokens before the predicate:
+               - Particle tokens → not part of subject (they get
+                 their own grammar-class label in tag_sentence).
+               - ACTION tokens → cannot happen before the first
+                 ACTION (contradiction); defensive skip.
+               - Other tokens → subject tokens.
+          3. Tokens after the predicate:
+               - Particle tokens → not part of object.
+               - ACTION tokens → would start a new clause, but the
+                 caller already split at anchors so this shouldn't
+                 happen. Defensive: stop here.
+               - Other tokens → object tokens.
+
+        Returns ``(subject_tokens, action_token, object_tokens)`` or
+        ``None`` when no parse is possible.
+        """
+        if not tokens:
+            return None
+
+        action_positions = self._find_action_positions(tokens)
+        particle_positions = self._find_particle_positions(tokens)
+
+        if action_positions:
+            split_idx = action_positions[0]
+            action_token = tokens[split_idx]
+        elif particle_positions:
+            # No ACTION — use the first particle as a soft separator.
+            # The particle itself is NOT the predicate; we return it
+            # as the "action_token" so the caller knows where the
+            # subject/object split lies, but downstream code that
+            # looks up the predicate in cluster_id_of will miss (it's
+            # a particle, not an action) and fall back gracefully.
+            split_idx = particle_positions[0]
+            action_token = tokens[split_idx]
+        else:
+            # No ACTION and no particle — can't parse.
+            return None
+
+        subject_tokens: List[str] = []
+        for i in range(split_idx):
+            tok = tokens[i]
+            if self._is_action_token(tok):
+                # Defensive: shouldn't happen since split_idx is the
+                # FIRST action position. Skip just in case.
+                continue
+            if self._is_particle_token(tok):
+                # Particle before the ACTION — modifier/connector,
+                # not part of subject. (E.g. "es sangat dingin" has
+                # "sangat" between subject and the no-ACTION split,
+                # but with a real ACTION like "makan" the particle
+                # before would be e.g. "tidak" in "tidak makan" —
+                # a negator, not subject.)
+                continue
+            subject_tokens.append(tok)
+
+        object_tokens: List[str] = []
+        for i in range(split_idx + 1, len(tokens)):
+            tok = tokens[i]
+            if self._is_action_token(tok):
+                # New ACTION starts — would be a new clause, but the
+                # caller should have split here. Defensive stop.
+                break
+            if self._is_particle_token(tok):
+                # Particle after the ACTION — connector/modifier,
+                # not part of object.
+                continue
+            object_tokens.append(tok)
+
+        return (subject_tokens, action_token, object_tokens)
 
     def spo(self, text: str) -> SPO:
-        """Parse ``text`` into Subject-Predicate-Object positionally.
+        """Parse ``text`` into Subject-Predicate-Object.
 
-        Roles are derived from CURRENT sentence position, not from any
-        global cluster membership. This is the polysemy fix:
-
-            "ayam mencari pakan"   -> subject="ayam"  (index 0)
-            "manusia potong ayam"  -> object="ayam"   (index 2 or -1)
-
-        Both sentences can be parsed by the same learner instance
-        because role = position in THIS sentence.
+        Cluster-driven role assignment with lazy anchor-split clause
+        boundary detection. See the section docstring above for the
+        full contract. Public API signature is unchanged.
 
         Strategy:
             - If untrained -> delegate to fallback (preserves the
               seed-based predicate extraction + middle-token
               heuristic for short sentences like "X bukan Y").
-            - If trained -> positional SVO split:
-                * 3 tokens: subject=tokens[0], predicate=tokens[1],
-                  object=tokens[2]
-                * >3 tokens: subject=tokens[0], predicate=tokens[1],
-                  object=tokens[-1]
-                * <3 tokens: delegate to fallback.
+            - If trained:
+                * Tokenize. <3 tokens -> delegate to fallback
+                  (preserves "X bukan Y" -> DIFFERENTIAL path).
+                * Find ACTION positions and particle positions in
+                  the sentence.
+                * Detect clause anchors (particles at sentence start
+                  with an ACTION after, or particles between two
+                  ACTIONs).
+                * Split at anchors into sub-clauses; parse each sub-
+                  clause independently via cluster-driven role
+                  assignment.
+                * Return the SPO of the most complete sub-clause
+                  (the one with the most AGENT+ACTION+OBJECT tokens
+                  present). Ties broken by latest sub-clause (main
+                  clause conventionally comes last in Indonesian).
 
-        Negation detection: same logic as SemanticRoleClassifier -
-        check the last token of the subject for a negation token. We
-        only check the LAST token because in both Indonesian and
-        English the negation sits immediately before the predicate.
+        Polysemy preservation:
+            Role is still derived from the CURRENT sentence's cluster
+            membership, not from any global lookup. "ayam" can be
+            AGENT in one sentence ("ayam makan pakan" — "ayam" before
+            ACTION "makan") and OBJECT in another ("manusia potong
+            ayam" — "ayam" after ACTION "potong"), because the
+            learner checks the token's position relative to the
+            ACTION in *this* sentence, not a global "ayam = agent"
+            assignment.
+
+        Negation detection: same as before — check the last token of
+        the subject for a negation token, because in both Indonesian
+        and English the negation sits immediately before the
+        predicate.
         """
         if not self.is_trained:
             return self.fallback.spo(text)
@@ -2827,23 +3562,63 @@ class PositionalClusterLearner:
         tokens = normalized.split(" ")
 
         if len(tokens) < 3:
-            # Too short for positional SVO. Delegate so we keep the
-            # "X bukan Y" -> DIFFERENTIAL path that lives in the
+            # Too short for cluster-driven SVO. Delegate so we keep
+            # the "X bukan Y" -> DIFFERENTIAL path that lives in the
             # fallback's seed table.
             return self.fallback.spo(text)
 
-        # Positional SVO: index 0 = subject, index 1 = predicate,
-        # index 2 (3-token) or -1 (>3-token) = object.
-        subject = tokens[0]
-        predicate = tokens[1]
-        obj = tokens[2] if len(tokens) == 3 else tokens[-1]
-        # For >3-token sentences, include all middle tokens between
-        # predicate and object in the predicate slot so downstream
-        # negation/seed matching still works on the full predicate
-        # phrase (e.g. "saya sedang makan nasi" -> predicate
-        # "sedang makan", object "nasi").
-        if len(tokens) > 3:
-            predicate = " ".join(tokens[1:-1])
+        # Lazy anchor-split: find clause-boundary particles and split
+        # the sentence into sub-clauses BEFORE role assignment.
+        action_positions = self._find_action_positions(tokens)
+        particle_positions = self._find_particle_positions(tokens)
+        anchors = self._detect_clause_anchors(
+            tokens, action_positions, particle_positions,
+        )
+        boundaries = self._compute_clause_boundaries(anchors, action_positions)
+        sub_clauses = self._split_tokens_at_boundaries(tokens, boundaries)
+
+        # Parse each sub-clause independently.
+        parsed_clauses: List[Tuple[List[str], str, List[str]]] = []
+        for sc_tokens in sub_clauses:
+            parsed = self._parse_clause_spo(sc_tokens)
+            if parsed is not None:
+                parsed_clauses.append(parsed)
+
+        if not parsed_clauses:
+            # No sub-clause produced a parse (e.g. no ACTION and no
+            # particle in any sub-clause). Fall back to fallback's
+            # SVO parse so downstream code still gets a best-effort
+            # SPO rather than an empty one.
+            return self.fallback.spo(text)
+
+        # Pick the "main" clause: the one with the most complete SPO
+        # (most non-empty slots). Ties broken by LATEST sub-clause
+        # (in Indonesian, the main clause conventionally comes after
+        # any dependent clause — "sebelum X, Y" → Y is the main
+        # clause).
+        def _completeness_score(parsed: Tuple[List[str], str, List[str]]) -> int:
+            subj, _act, obj = parsed
+            score = 0
+            if subj:
+                score += 1
+            score += 1  # action always present (else parsed would be None)
+            if obj:
+                score += 1
+            return score
+
+        # Find max score; pick the LAST clause with that score.
+        max_score = max(_completeness_score(p) for p in parsed_clauses)
+        main_clause = None
+        for p in parsed_clauses:
+            if _completeness_score(p) == max_score:
+                main_clause = p
+        # main_clause is now the last clause with max score.
+        assert main_clause is not None  # for type-checkers
+
+        subj_tokens, action_token, obj_tokens = main_clause
+        subject = " ".join(subj_tokens)
+        predicate = action_token
+        obj = " ".join(obj_tokens)
 
         negated = self._has_negation_before(subject)
         return SPO(
@@ -2903,6 +3678,11 @@ class PositionalClusterLearner:
         serialisable = {
             "similarity_threshold": self.similarity_threshold,
             "min_action_observations": self.min_action_observations,
+            # Q/K/V soft-clustering thresholds (may be tuned per-instance
+            # before train(); persisted so a saved+loaded learner
+            # reproduces the same clustering behaviour).
+            "qkv_action_similarity_threshold": self.qkv_action_similarity_threshold,
+            "qkv_particle_similarity_threshold": self.qkv_particle_similarity_threshold,
             "positional_freq": {
                 tok: {str(b): c for b, c in pos_map.items()}
                 for tok, pos_map in self.positional_freq.items()
@@ -3045,6 +3825,18 @@ class PositionalClusterLearner:
             ),
             min_action_observations=int(
                 raw.get("min_action_observations", _DEFAULT_MIN_ACTION_OBSERVATIONS)
+            ),
+            qkv_action_similarity_threshold=float(
+                raw.get(
+                    "qkv_action_similarity_threshold",
+                    _DEFAULT_QKV_ACTION_SIMILARITY_THRESHOLD,
+                )
+            ),
+            qkv_particle_similarity_threshold=float(
+                raw.get(
+                    "qkv_particle_similarity_threshold",
+                    _DEFAULT_QKV_PARTICLE_SIMILARITY_THRESHOLD,
+                )
             ),
         )
 
