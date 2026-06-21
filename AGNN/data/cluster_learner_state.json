@@ -323,15 +323,18 @@
       "berkategori",
       "bukanlah",
       "klasifikasi",
+      "memeriksa",
+      "menangkap",
+      "mencatat",
+      "mengukur",
+      "menjual",
       "merupakan",
       "pemakan",
-      "sakit",
       "teknis",
       "tergolong",
       "termasuk"
     ],
     "1": [
-      "baja",
       "berakibat",
       "deras",
       "dibiaskan",
@@ -344,7 +347,6 @@
       "menghindari",
       "menimbulkan",
       "menyebabkan",
-      "merancang",
       "merilis",
       "terungkap"
     ],
@@ -385,6 +387,7 @@
       "atmosfer"
     ],
     "11": [
+      "dicuci",
       "dimasak"
     ],
     "110": [
@@ -473,8 +476,7 @@
       "berdengung"
     ],
     "132": [
-      "longgar",
-      "terduga"
+      "longgar"
     ],
     "133": [
       "jalar"
@@ -507,37 +509,40 @@
       "tereksitasi"
     ],
     "142": [
-      "bersorak"
+      "terduga"
     ],
     "143": [
-      "mengembang"
+      "bersorak"
     ],
     "144": [
-      "berdemo"
+      "mengembang"
     ],
     "145": [
-      "menumpuk"
+      "berdemo"
     ],
     "146": [
-      "tercemar"
+      "menumpuk"
     ],
     "147": [
-      "terputus-putus"
+      "tercemar"
     ],
     "148": [
-      "terlaksana"
+      "terputus-putus"
     ],
     "149": [
-      "berkali-kali"
+      "terlaksana"
     ],
     "15": [
       "mengalir",
       "tombol"
     ],
     "150": [
-      "mendesak"
+      "berkali-kali"
     ],
     "151": [
+      "mendesak"
+    ],
+    "152": [
       "belajar"
     ],
     "16": [
@@ -560,7 +565,7 @@
       "membayar",
       "membutuhkan",
       "memerlukan",
-      "mencatat",
+      "mencari",
       "mengumpulkan",
       "menyajikan",
       "mutlak",
@@ -607,7 +612,6 @@
       "pertandingan"
     ],
     "29": [
-      "menahan",
       "menyita"
     ],
     "3": [
@@ -618,7 +622,6 @@
       "membawa",
       "membelikan",
       "mengandalkan",
-      "mengukur",
       "olahraga",
       "raksa",
       "saat",
@@ -626,183 +629,202 @@
       "setelah"
     ],
     "30": [
-      "menutupi"
+      "menggali",
+      "menjadi"
     ],
     "31": [
-      "memakan"
+      "menutupi"
     ],
     "32": [
+      "memakan"
+    ],
+    "33": [
       "berlebihan",
       "dilupakan"
     ],
-    "33": [
+    "34": [
       "tiroid"
     ],
-    "34": [
+    "35": [
       "diteteskan",
       "nipis"
     ],
-    "35": [
+    "36": [
       "clic"
     ],
-    "36": [
-      "sebab"
-    ],
     "37": [
-      "dicuci"
-    ],
-    "38": [
       "mengajari"
     ],
-    "39": [
+    "38": [
       "menunjukkan"
     ],
-    "4": [
-      "terasa"
-    ],
-    "40": [
+    "39": [
       "mengamati"
     ],
-    "41": [
-      "memutar"
-    ],
-    "42": [
-      "memukul",
-      "menangkap",
-      "menendang"
-    ],
-    "43": [
-      "membeli"
-    ],
-    "44": [
-      "melakukan"
-    ],
-    "45": [
-      "menyalakan"
-    ],
-    "46": [
-      "menerima"
-    ],
-    "47": [
-      "memeriksa"
-    ],
-    "48": [
-      "memantau"
-    ],
-    "49": [
-      "menguji",
-      "terus-menerus"
-    ],
-    "5": [
+    "4": [
       "begitu",
       "berlebih",
       "bersifat",
       "cukup",
       "ditambah",
       "high-end",
-      "memang",
-      "menjadi",
       "sebenarnya",
       "tampak",
-      "terlalu",
+      "terasa",
       "terlihat"
     ],
-    "50": [
+    "40": [
+      "memutar"
+    ],
+    "41": [
+      "membeli"
+    ],
+    "42": [
+      "melakukan"
+    ],
+    "43": [
+      "menyalakan"
+    ],
+    "44": [
+      "menerima"
+    ],
+    "45": [
+      "memantau"
+    ],
+    "46": [
+      "terus-menerus"
+    ],
+    "47": [
       "menembus"
     ],
-    "51": [
+    "48": [
+      "anorganik",
+      "bergoyang",
+      "berpembuluh",
+      "darat",
+      "eksekutif",
+      "koheren",
+      "kokoh",
+      "legislatif",
+      "licin",
+      "luas",
+      "lusuh",
+      "mengeras",
+      "menguntungkan",
+      "organik",
+      "pencernaan",
+      "pendek",
+      "perkebunan",
+      "primer",
+      "responsif",
+      "serealia",
+      "terdistribusi",
+      "tunggal"
+    ],
+    "49": [
       "higgs"
     ],
-    "52": [
+    "5": [
+      "memang",
+      "terlalu"
+    ],
+    "50": [
       "pemerintah"
     ],
-    "53": [
+    "51": [
       "usb-c"
     ],
-    "54": [
+    "52": [
       "mulai"
     ],
-    "55": [
+    "53": [
       "terluka"
     ],
-    "56": [
+    "54": [
       "internet"
     ],
-    "57": [
+    "55": [
       "menguning"
     ],
-    "58": [
+    "56": [
       "video"
     ],
-    "59": [
+    "57": [
+      "selesai",
+      "tersebar"
+    ],
+    "58": [
       "menyala"
     ],
-    "6": [
-      "harus",
-      "menjual"
-    ],
-    "60": [
+    "59": [
       "dan"
     ],
-    "61": [
+    "6": [
+      "harus"
+    ],
+    "60": [
       "lapuk"
     ],
-    "62": [
+    "61": [
       "atau"
     ],
-    "63": [
+    "62": [
       "memangsa",
       "menelan"
     ],
-    "64": [
+    "63": [
       "mengikuti"
     ],
-    "65": [
+    "64": [
       "menutup"
     ],
-    "66": [
+    "65": [
       "mengganti"
     ],
-    "67": [
+    "66": [
       "menanam",
       "merawat"
     ],
+    "67": [
+      "sakit"
+    ],
     "68": [
-      "mencari"
+      "neural"
     ],
     "69": [
-      "neural"
+      "unggul"
     ],
     "7": [
       "keliru",
-      "selesai",
-      "terjadi",
-      "tersebar"
+      "sebab",
+      "terjadi"
     ],
     "70": [
-      "unggul"
-    ],
-    "71": [
       "berputar",
       "optik"
     ],
-    "72": [
+    "71": [
       "kaktus"
     ],
-    "73": [
+    "72": [
       "lawas"
     ],
-    "74": [
+    "73": [
       "berlalu"
     ],
-    "75": [
+    "74": [
       "terhubung"
     ],
-    "76": [
+    "75": [
       "menurun"
     ],
-    "77": [
+    "76": [
       "berbau"
+    ],
+    "77": [
+      "baja",
+      "menguji",
+      "merancang"
     ],
     "78": [
       "tersangkut"
@@ -833,7 +855,9 @@
       "mencampur"
     ],
     "86": [
-      "menggali"
+      "memukul",
+      "menahan",
+      "menendang"
     ],
     "87": [
       "mengangkat"
@@ -881,13 +905,16 @@
   },
   "action_connector_signature": {
     "adalah": false,
+    "akuatik": false,
     "akun": false,
+    "anorganik": false,
     "aroma": false,
     "atau": false,
     "atmosfer": false,
     "bahan": false,
     "baja": false,
     "bandang": false,
+    "banting": false,
     "batas": false,
     "begitu": false,
     "bela": false,
@@ -900,8 +927,10 @@
     "berbuah": false,
     "berdemo": true,
     "berdengung": true,
+    "beregu": false,
     "bergantung": true,
     "bergerak": false,
+    "bergoyang": false,
     "berhembus": false,
     "berjalan": true,
     "berkali-kali": true,
@@ -916,6 +945,7 @@
     "berlebihan": false,
     "bermigrasi": true,
     "bermuatan": false,
+    "berpembuluh": false,
     "berputar": false,
     "bersandar": true,
     "bersifat": false,
@@ -932,6 +962,7 @@
     "cukup": false,
     "curah": false,
     "dan": false,
+    "darat": false,
     "datang": false,
     "deras": false,
     "dibaca": true,
@@ -946,6 +977,7 @@
     "dimakan": true,
     "dimasak": false,
     "dimulai": true,
+    "dioksida": false,
     "dipangkas": false,
     "diperbaiki": true,
     "diperiksa": true,
@@ -959,11 +991,14 @@
     "diterapkan": true,
     "diteteskan": false,
     "ditulis": true,
+    "eksekutif": false,
     "festival": true,
     "global": true,
     "goreng": false,
+    "grafis": false,
     "gunung": false,
     "harus": false,
+    "hewani": false,
     "higgs": false,
     "high-end": false,
     "ihsg": false,
@@ -973,16 +1008,26 @@
     "jual": false,
     "kaki": true,
     "kaktus": false,
+    "kaldu": false,
     "keliru": false,
     "kemudian": false,
+    "ketahanan": false,
     "ketika": false,
     "klasifikasi": false,
+    "koheren": false,
+    "kokoh": false,
     "kue": false,
     "lalu": false,
+    "lambat": false,
     "lapuk": false,
     "lawas": false,
+    "legislatif": false,
+    "liat": false,
+    "licin": false,
     "lima": false,
     "longgar": true,
+    "luas": false,
+    "lusuh": false,
     "makan": false,
     "masuk": true,
     "melakukan": false,
@@ -1004,6 +1049,7 @@
     "membeli": false,
     "membelikan": false,
     "membendung": false,
+    "memberatkan": false,
     "memberi": false,
     "membersihkan": false,
     "membuat": false,
@@ -1063,6 +1109,7 @@
     "mengejar": false,
     "mengembang": true,
     "mengenai": true,
+    "mengeras": false,
     "mengering": false,
     "menggagalkan": false,
     "menggali": false,
@@ -1079,6 +1126,7 @@
     "mengumpulkan": false,
     "mengundang": false,
     "menguning": false,
+    "menguntungkan": false,
     "menimbang": false,
     "menimbulkan": false,
     "meningkat": true,
@@ -1114,37 +1162,51 @@
     "meresepkan": false,
     "merilis": false,
     "merupakan": false,
+    "mikro": false,
     "minum": false,
     "mudah": false,
     "mulai": false,
     "mustahil": true,
     "mutlak": false,
+    "nabati": false,
     "neural": false,
     "nipis": false,
     "olahraga": false,
     "optik": false,
+    "organik": false,
     "pada": true,
     "pemakan": false,
     "pemerintah": false,
     "pemutusan": true,
+    "pencernaan": false,
+    "pendapatan": false,
+    "pendek": false,
     "penentu": false,
     "pengumuman": false,
+    "perairan": false,
     "perdebatan": false,
     "pergi": false,
+    "perkebunan": false,
     "perlu": false,
     "perlukan": false,
     "pertandingan": false,
     "phishing": false,
     "pollinasi": false,
+    "positif": false,
+    "primer": false,
     "raksa": false,
     "rakyat": true,
+    "responsif": false,
     "saat": false,
     "sakit": false,
+    "saku": false,
     "sama": true,
     "sebab": false,
     "sebelum": false,
     "sebenarnya": false,
+    "segar": false,
     "selesai": false,
+    "serealia": false,
     "set": true,
     "setelah": false,
     "siap": false,
@@ -1166,6 +1228,7 @@
     "tercemar": true,
     "tercipta": false,
     "terdengar": true,
+    "terdistribusi": false,
     "terduga": true,
     "tereksitasi": true,
     "terganggu": false,
@@ -1178,6 +1241,7 @@
     "terjadi": false,
     "terlaksana": true,
     "terlalu": false,
+    "terlarut": false,
     "terlihat": false,
     "terluka": false,
     "termasuk": false,
@@ -1192,6 +1256,7 @@
     "tetap": false,
     "tiroid": false,
     "tombol": false,
+    "tunggal": false,
     "unggul": false,
     "usb-c": false,
     "uv": true,
@@ -1242,8 +1307,14 @@
       "unsur": 1,
       "utang": 1
     },
+    "akuatik": {
+      "": 1
+    },
     "akun": {
       "phishing": 1
+    },
+    "anorganik": {
+      "": 3
     },
     "aroma": {
       "digiling": 1,
@@ -1268,6 +1339,9 @@
     },
     "bandang": {
       "hanyut": 6
+    },
+    "banting": {
+      "": 1
     },
     "batas": {
       "renggang": 2
@@ -1377,6 +1451,9 @@
       "mekar": 1,
       "taman": 3
     },
+    "beregu": {
+      "": 1
+    },
     "bergantung": {
       "air": 4,
       "anggaran": 1,
@@ -1424,6 +1501,9 @@
     },
     "bergerak": {
       "turun": 1
+    },
+    "bergoyang": {
+      "": 4
     },
     "berhembus": {
       "bergoyang": 2
@@ -1539,6 +1619,9 @@
     },
     "bermuatan": {
       "positif": 1
+    },
+    "berpembuluh": {
+      "": 2
     },
     "berputar": {
       "cepat": 3
@@ -1676,6 +1759,9 @@
     "dan": {
       "terbentang": 4
     },
+    "darat": {
+      "": 3
+    },
     "datang": {
       "bermekaran": 1
     },
@@ -1758,6 +1844,9 @@
       "dilakukan": 1,
       "tenang": 4
     },
+    "dioksida": {
+      "": 1
+    },
     "dipangkas": {
       "naik": 3
     },
@@ -1817,6 +1906,9 @@
       "penulis": 1,
       "sekretaris": 1
     },
+    "eksekutif": {
+      "": 3
+    },
     "festival": {
       "berdatangan": 3
     },
@@ -1827,6 +1919,9 @@
     "goreng": {
       "bawang": 8,
       "nasi": 4
+    },
+    "grafis": {
+      "": 1
     },
     "gunung": {
       "abu": 1,
@@ -1849,6 +1944,9 @@
       "rapi": 1,
       "sayur": 1,
       "sehat": 2
+    },
+    "hewani": {
+      "": 1
     },
     "higgs": {
       "massa": 4
@@ -1878,6 +1976,9 @@
     },
     "kaktus": {
       "tajam": 3
+    },
+    "kaldu": {
+      "": 1
     },
     "keliru": {
       "link": 2
@@ -1915,6 +2016,9 @@
       "sore": 1,
       "tanam": 1,
       "terang": 1
+    },
+    "ketahanan": {
+      "": 1
     },
     "ketika": {
       "abu": 1,
@@ -1971,6 +2075,12 @@
       "primer": 1,
       "serealia": 1
     },
+    "koheren": {
+      "": 2
+    },
+    "kokoh": {
+      "": 2
+    },
     "kue": {
       "mentega": 5,
       "telur": 6,
@@ -2010,17 +2120,35 @@
       "tanam": 1,
       "terang": 1
     },
+    "lambat": {
+      "": 1
+    },
     "lapuk": {
       "tumbang": 4
     },
     "lawas": {
       "lambat": 3
     },
+    "legislatif": {
+      "": 2
+    },
+    "liat": {
+      "": 1
+    },
+    "licin": {
+      "": 2
+    },
     "lima": {
       "pecah": 1
     },
     "longgar": {
       "terputus": 3
+    },
+    "luas": {
+      "": 4
+    },
+    "lusuh": {
+      "": 4
     },
     "makan": {
       "nasi": 1,
@@ -2186,6 +2314,9 @@
     },
     "membendung": {
       "smash": 1
+    },
+    "memberatkan": {
+      "": 1
     },
     "memberi": {
       "buku": 1,
@@ -2681,6 +2812,9 @@
     "mengenai": {
       "terjadi": 5
     },
+    "mengeras": {
+      "": 2
+    },
     "mengering": {
       "bermigrasi": 1,
       "melanda": 1
@@ -2786,6 +2920,9 @@
     "menguning": {
       "dilakukan": 3,
       "hara": 1
+    },
+    "menguntungkan": {
+      "": 2
     },
     "menimbang": {
       "ayam": 1,
@@ -3025,6 +3162,9 @@
       "tumbuhan": 4,
       "umum": 1
     },
+    "mikro": {
+      "": 1
+    },
     "minum": {
       "air": 1
     },
@@ -3053,6 +3193,9 @@
       "terlarut": 3,
       "udara": 1
     },
+    "nabati": {
+      "": 1
+    },
     "neural": {
       "gpu": 3
     },
@@ -3065,6 +3208,9 @@
     },
     "optik": {
       "cepat": 3
+    },
+    "organik": {
+      "": 3
     },
     "pada": {
       "air": 1,
@@ -3085,17 +3231,32 @@
       "dilakukan": 2,
       "rugi": 1
     },
+    "pencernaan": {
+      "": 3
+    },
+    "pendapatan": {
+      "": 1
+    },
+    "pendek": {
+      "": 2
+    },
     "penentu": {
       "bersorak": 1
     },
     "pengumuman": {
       "bergerak": 2
     },
+    "perairan": {
+      "": 1
+    },
     "perdebatan": {
       "menyebar": 2
     },
     "pergi": {
       "sekolah": 1
+    },
+    "perkebunan": {
+      "": 4
     },
     "perlu": {
       "air": 4,
@@ -3160,12 +3321,21 @@
     "pollinasi": {
       "lebat": 1
     },
+    "positif": {
+      "": 1
+    },
+    "primer": {
+      "": 2
+    },
     "raksa": {
       "cair": 3
     },
     "rakyat": {
       "dilaksanakan": 1,
       "suara": 2
+    },
+    "responsif": {
+      "": 3
     },
     "saat": {
       "abu": 1,
@@ -3204,6 +3374,9 @@
     "sakit": {
       "medis": 2,
       "sekolah": 1
+    },
+    "saku": {
+      "": 1
     },
     "sama": {
       "air": 1,
@@ -3276,9 +3449,15 @@
       "mulia": 1,
       "panas": 1
     },
+    "segar": {
+      "": 1
+    },
     "selesai": {
       "muncul": 2,
       "restart": 1
+    },
+    "serealia": {
+      "": 4
     },
     "set": {
       "istirahat": 4
@@ -3427,6 +3606,9 @@
     },
     "terdengar": {
       "angkasa": 1
+    },
+    "terdistribusi": {
+      "": 2
     },
     "terduga": {
       "down": 2
@@ -3654,6 +3836,9 @@
       "sejuk": 1,
       "terkontrol": 1
     },
+    "terlarut": {
+      "": 1
+    },
     "terlihat": {
       "asin": 1,
       "dalam": 1,
@@ -3812,6 +3997,9 @@
       "terbuka": 3,
       "terhapus": 3
     },
+    "tunggal": {
+      "": 3
+    },
     "unggul": {
       "produktif": 3
     },
@@ -3865,46 +4053,52 @@
   },
   "cluster_id_of": {
     "adalah": 0,
+    "akuatik": -1,
     "akun": -1,
+    "anorganik": 48,
     "aroma": 27,
-    "atau": 62,
+    "atau": 61,
     "atmosfer": 109,
     "bahan": 104,
-    "baja": 1,
+    "baja": 77,
     "bandang": 23,
+    "banting": -1,
     "batas": 107,
-    "begitu": 5,
+    "begitu": 4,
     "bela": 0,
-    "belajar": 151,
+    "belajar": 152,
     "beli": 25,
     "beliung": 111,
     "berakibat": 1,
-    "berbau": 77,
+    "berbau": 76,
     "berbeda": 111,
     "berbuah": 25,
-    "berdemo": 144,
+    "berdemo": 145,
     "berdengung": 131,
+    "beregu": -1,
     "bergantung": 112,
     "bergerak": -1,
+    "bergoyang": 48,
     "berhembus": 100,
     "berjalan": -1,
-    "berkali-kali": 149,
+    "berkali-kali": 150,
     "berkategori": 0,
     "berkembang": -1,
     "berkicau": 110,
     "berkurang": -1,
-    "berlalu": 74,
+    "berlalu": 73,
     "berlandaskan": 2,
     "berlawanan": 111,
-    "berlebih": 5,
-    "berlebihan": 32,
+    "berlebih": 4,
+    "berlebihan": 33,
     "bermigrasi": -1,
     "bermuatan": -1,
-    "berputar": 71,
+    "berpembuluh": 48,
+    "berputar": 70,
     "bersandar": 112,
-    "bersifat": 5,
+    "bersifat": 4,
     "bersih": -1,
-    "bersorak": 142,
+    "bersorak": 143,
     "bersyukur": -1,
     "bertepuk": -1,
     "bertumpu": 112,
@@ -3912,10 +4106,11 @@
     "bukanlah": 0,
     "butuh": 2,
     "cedera": 98,
-    "clic": 35,
-    "cukup": 5,
+    "clic": 36,
+    "cukup": 4,
     "curah": -1,
-    "dan": 60,
+    "dan": 59,
+    "darat": 48,
     "datang": -1,
     "deras": 1,
     "dibaca": 113,
@@ -3924,12 +4119,13 @@
     "dibiaskan": 1,
     "dibuka": 26,
     "dicetak": 123,
-    "dicuci": 37,
+    "dicuci": 11,
     "didiamkan": 128,
-    "dilupakan": 32,
+    "dilupakan": 33,
     "dimakan": 114,
     "dimasak": 11,
     "dimulai": 119,
+    "dioksida": -1,
     "dipangkas": 21,
     "diperbaiki": 121,
     "diperiksa": 121,
@@ -3938,46 +4134,59 @@
     "disedu": 138,
     "diselidiki": 121,
     "disiram": 25,
-    "ditambah": 5,
+    "ditambah": 4,
     "ditebang": 120,
     "diterapkan": 124,
-    "diteteskan": 34,
+    "diteteskan": 35,
     "ditulis": 122,
+    "eksekutif": 48,
     "festival": 134,
     "global": 116,
     "goreng": 10,
+    "grafis": -1,
     "gunung": 3,
     "harus": 6,
-    "higgs": 51,
-    "high-end": 5,
+    "hewani": -1,
+    "higgs": 49,
+    "high-end": 4,
     "ihsg": -1,
-    "internet": 56,
+    "internet": 54,
     "jalanan": 9,
     "jalar": 133,
     "jual": 106,
     "kaki": -1,
-    "kaktus": 72,
+    "kaktus": 71,
+    "kaldu": -1,
     "keliru": 7,
     "kemudian": 3,
+    "ketahanan": -1,
     "ketika": 3,
     "klasifikasi": 0,
+    "koheren": 48,
+    "kokoh": 48,
     "kue": 8,
     "lalu": 3,
-    "lapuk": 61,
-    "lawas": 73,
+    "lambat": -1,
+    "lapuk": 60,
+    "lawas": 72,
+    "legislatif": 48,
+    "liat": -1,
+    "licin": 48,
     "lima": -1,
     "longgar": 132,
+    "luas": 48,
+    "lusuh": 48,
     "makan": 10,
     "masuk": 111,
-    "melakukan": 44,
+    "melakukan": 42,
     "melekat": 139,
     "meluruh": 17,
     "memakai": -1,
-    "memakan": 31,
+    "memakan": 32,
     "memancarkan": 115,
     "memang": 5,
-    "memangsa": 63,
-    "memantau": 48,
+    "memangsa": 62,
+    "memantau": 45,
     "memasak": 10,
     "memasang": 95,
     "membaca": 10,
@@ -3985,14 +4194,15 @@
     "membakar": -1,
     "membawa": 3,
     "membayar": 2,
-    "membeli": 43,
+    "membeli": 41,
     "membelikan": 3,
     "membendung": -1,
+    "memberatkan": -1,
     "memberi": 13,
     "membersihkan": 83,
     "membuat": 1,
     "membutuhkan": 2,
-    "memeriksa": 47,
+    "memeriksa": 0,
     "memerlukan": 2,
     "memetik": 90,
     "memicu": 1,
@@ -4003,85 +4213,87 @@
     "memprediksi": -1,
     "memproses": -1,
     "memuai": 21,
-    "memukul": 42,
+    "memukul": 86,
     "memulai": -1,
     "memunculkan": 1,
-    "memutar": 41,
+    "memutar": 40,
     "menabung": -1,
-    "menahan": 29,
+    "menahan": 86,
     "menambatkan": -1,
     "menampilkan": -1,
-    "menanam": 67,
+    "menanam": 66,
     "menandatangani": 19,
-    "menangkap": 42,
+    "menangkap": 0,
     "menarik": 93,
     "mencabut": -1,
     "mencair": 21,
     "mencampur": 85,
     "mencangkok": -1,
-    "mencari": 68,
-    "mencatat": 2,
+    "mencari": 2,
+    "mencatat": 0,
     "mencetak": 22,
     "mencurigakan": 80,
     "mendatangkan": 1,
     "mendekat": 16,
     "mendekati": 97,
     "mendengarkan": 96,
-    "mendesak": 150,
+    "mendesak": 151,
     "menduduki": 108,
     "menebal": 9,
-    "menelan": 63,
+    "menelan": 62,
     "menembak": -1,
-    "menembus": 50,
-    "menendang": 42,
-    "menerima": 46,
+    "menembus": 47,
+    "menendang": 86,
+    "menerima": 44,
     "mengajar": 113,
-    "mengajari": 38,
+    "mengajari": 37,
     "mengakibatkan": 1,
     "mengalir": 15,
-    "mengamati": 40,
+    "mengamati": 39,
     "mengandalkan": 3,
     "mengangkat": 87,
     "mengantri": -1,
     "mengatur": -1,
     "mengejar": 88,
-    "mengembang": 143,
+    "mengembang": 144,
     "mengenai": 118,
+    "mengeras": 48,
     "mengering": 81,
     "menggagalkan": -1,
-    "menggali": 86,
-    "mengganti": 66,
+    "menggali": 30,
+    "mengganti": 65,
     "menggiling": -1,
     "menghasilkan": 1,
     "menghindari": 1,
-    "mengikuti": 64,
+    "mengikuti": 63,
     "mengirim": 19,
     "mengkalibrasi": 92,
     "menguat": 140,
-    "menguji": 49,
-    "mengukur": 3,
+    "menguji": 77,
+    "mengukur": 0,
     "mengumpulkan": 2,
     "mengundang": 21,
-    "menguning": 57,
+    "menguning": 55,
+    "menguntungkan": 48,
     "menimbang": 84,
     "menimbulkan": 1,
     "meningkat": -1,
-    "menjadi": 5,
+    "menjadi": 30,
     "menjaga": 103,
-    "menjual": 6,
+    "menjual": 0,
     "menkalibrasi": -1,
     "mentimun": -1,
     "menulis": 19,
-    "menumpuk": 145,
+    "menumpuk": 146,
     "menunda": 91,
-    "menunjukkan": 39,
-    "menurun": 76,
+    "menunjukkan": 38,
+    "menurun": 75,
     "menusukkan": -1,
-    "menutup": 65,
-    "menutupi": 30,
+    "menutup": 64,
+    "menutupi": 31,
     "menyajikan": 2,
-    "menyala": 59,
-    "menyalakan": 45,
+    "menyala": 58,
+    "menyalakan": 43,
     "menyambar": 20,
     "menyarankan": -1,
     "menyebabkan": 1,
@@ -4093,42 +4305,56 @@
     "menyiram": 25,
     "menyita": 29,
     "menyusut": -1,
-    "merancang": 1,
-    "merawat": 67,
+    "merancang": 77,
+    "merawat": 66,
     "meresepkan": -1,
     "merilis": 1,
     "merupakan": 0,
+    "mikro": -1,
     "minum": -1,
     "mudah": 102,
-    "mulai": 54,
+    "mulai": 52,
     "mustahil": -1,
     "mutlak": 2,
-    "neural": 69,
-    "nipis": 34,
+    "nabati": -1,
+    "neural": 68,
+    "nipis": 35,
     "olahraga": 3,
-    "optik": 71,
+    "optik": 70,
+    "organik": 48,
     "pada": 112,
     "pemakan": 0,
-    "pemerintah": 52,
+    "pemerintah": 50,
     "pemutusan": 135,
+    "pencernaan": 48,
+    "pendapatan": -1,
+    "pendek": 48,
     "penentu": -1,
     "pengumuman": 99,
+    "perairan": -1,
     "perdebatan": 27,
     "pergi": -1,
+    "perkebunan": 48,
     "perlu": 2,
     "perlukan": 2,
     "pertandingan": 28,
     "phishing": 24,
     "pollinasi": -1,
+    "positif": -1,
+    "primer": 48,
     "raksa": 3,
     "rakyat": 137,
+    "responsif": 48,
     "saat": 3,
-    "sakit": 0,
+    "sakit": 67,
+    "saku": -1,
     "sama": 111,
-    "sebab": 36,
+    "sebab": 7,
     "sebelum": 3,
-    "sebenarnya": 5,
-    "selesai": 7,
+    "sebenarnya": 4,
+    "segar": -1,
+    "selesai": 57,
+    "serealia": 48,
     "set": 127,
     "setelah": 3,
     "siap": -1,
@@ -4136,7 +4362,7 @@
     "stres": -1,
     "sumber": 81,
     "surya": 2,
-    "tampak": 5,
+    "tampak": 4,
     "teknis": 0,
     "tekstur": 130,
     "terasa": 4,
@@ -4147,39 +4373,42 @@
     "terbentuk": 117,
     "terbit": 21,
     "tercapai": -1,
-    "tercemar": 146,
+    "tercemar": 147,
     "tercipta": 101,
     "terdengar": -1,
-    "terduga": 132,
+    "terdistribusi": 48,
+    "terduga": 142,
     "tereksitasi": 141,
     "terganggu": 79,
     "tergantung": 2,
     "tergolong": 0,
     "terhitung": 111,
-    "terhubung": 75,
+    "terhubung": 74,
     "terik": 129,
     "terinfeksi": 21,
     "terjadi": 7,
-    "terlaksana": 148,
+    "terlaksana": 149,
     "terlalu": 5,
-    "terlihat": 5,
-    "terluka": 55,
+    "terlarut": -1,
+    "terlihat": 4,
+    "terluka": 53,
     "termasuk": 0,
-    "terputus-putus": 147,
+    "terputus-putus": 148,
     "tersangkut": 78,
-    "tersebar": 7,
+    "tersebar": 57,
     "tersenyum": -1,
     "tertawa": -1,
     "tertinggal": -1,
     "terungkap": 1,
-    "terus-menerus": 49,
+    "terus-menerus": 46,
     "tetap": 12,
-    "tiroid": 33,
+    "tiroid": 34,
     "tombol": 15,
-    "unggul": 70,
-    "usb-c": 53,
+    "tunggal": 48,
+    "unggul": 69,
+    "usb-c": 51,
     "uv": 136,
-    "video": 58,
+    "video": 56,
     "wajib": 112,
     "warna": -1
   },
@@ -4283,8 +4512,8 @@
     "wajib"
   ],
   "coordinator_cluster_ids": [
-    60,
-    62
+    59,
+    61
   ],
   "fine_positional_freq": {
     "100m": {
@@ -4648,7 +4877,8 @@
     },
     "baju": {
       "-1": 2,
-      "0": 1
+      "0": 1,
+      "1": 1
     },
     "bakar": {
       "2": 2,
@@ -5180,6 +5410,7 @@
     "buku": {
       "-1": 3,
       "0": 3,
+      "1": 1,
       "2": 2,
       "4": 1
     },
@@ -6182,6 +6413,9 @@
       "0": 5,
       "2": 2
     },
+    "halaman": {
+      "0": 1
+    },
     "halus": {
       "-1": 3
     },
@@ -6257,6 +6491,9 @@
     "header": {
       "0": 1,
       "1": 2
+    },
+    "helai": {
+      "0": 1
     },
     "helium": {
       "-1": 6
@@ -6485,7 +6722,7 @@
     },
     "itu": {
       "1": 8,
-      "2": 6,
+      "2": 14,
       "3": 1
     },
     "iuran": {
@@ -6632,6 +6869,9 @@
     "kadal": {
       "0": 6
     },
+    "kain": {
+      "1": 1
+    },
     "kakak": {
       "0": 3,
       "2": 1
@@ -6668,7 +6908,7 @@
       "-1": 11
     },
     "kamar": {
-      "0": 1,
+      "0": 2,
       "2": 1
     },
     "kambing": {
@@ -6968,7 +7208,7 @@
     },
     "kertas": {
       "0": 1,
-      "1": 2
+      "1": 3
     },
     "kerugian": {
       "-1": 6
@@ -7288,6 +7528,7 @@
     },
     "lahan": {
       "-1": 1,
+      "1": 1,
       "2": 1,
       "3": 1,
       "4": 3
@@ -7321,6 +7562,7 @@
     },
     "lapangan": {
       "-1": 2,
+      "1": 1,
       "3": 1,
       "4": 4
     },
@@ -7444,6 +7686,9 @@
     "lembap": {
       "-1": 2
     },
+    "lembar": {
+      "0": 1
+    },
     "lembut": {
       "-1": 9,
       "3": 1
@@ -7520,6 +7765,9 @@
       "0": 4,
       "2": 2
     },
+    "lipatan": {
+      "0": 1
+    },
     "lipo": {
       "3": 1
     },
@@ -7576,6 +7824,9 @@
       "4": 1,
       "9": 1
     },
+    "luas": {
+      "-1": 4
+    },
     "ludah": {
       "-1": 2,
       "3": 2
@@ -7594,6 +7845,9 @@
       "0": 16,
       "1": 2,
       "2": 1
+    },
+    "lusuh": {
+      "-1": 4
     },
     "macet": {
       "-1": 4,
@@ -9780,6 +10034,9 @@
     "pesilat": {
       "0": 1
     },
+    "petak": {
+      "0": 1
+    },
     "petani": {
       "-1": 1,
       "0": 23,
@@ -10257,6 +10514,7 @@
     },
     "rumah": {
       "0": 4,
+      "1": 1,
       "2": 2,
       "3": 3,
       "4": 3
@@ -10354,6 +10612,9 @@
     },
     "sambar": {
       "2": 2
+    },
+    "sampul": {
+      "0": 1
     },
     "sangat": {
       "1": 19,
@@ -10685,6 +10946,9 @@
     "sirus": {
       "1": 1
     },
+    "sisi": {
+      "0": 1
+    },
     "sistem": {
       "0": 1,
       "1": 1,
@@ -10894,6 +11158,7 @@
     },
     "taman": {
       "-1": 4,
+      "1": 1,
       "3": 1
     },
     "tamat": {
@@ -11737,197 +12002,197 @@
   "min_action_observations": 2,
   "modifier_tokens": [
     "bukan",
-    "itu",
     "sangat"
   ],
   "object_supercluster_id": {
+    "": 63,
     "abu": 12,
-    "adik": 67,
-    "agensi": 207,
-    "ahli": 206,
+    "adik": 64,
+    "agensi": 209,
+    "ahli": 208,
     "air": 18,
-    "aktor": 67,
-    "akuatik": 57,
-    "akun": 4,
-    "alami": 57,
-    "alat": 52,
-    "alfa": 69,
+    "aktor": 64,
+    "akuatik": 11,
+    "akun": 47,
+    "alami": 11,
+    "alat": 50,
+    "alfa": 66,
     "alkohol": 12,
-    "aman": 126,
-    "amfibi": 57,
+    "aman": 129,
+    "amfibi": 123,
     "amplitudo": 11,
-    "anak": 67,
+    "anak": 139,
     "anggaran": 18,
-    "anggota": 60,
-    "angin": 60,
-    "angkasa": 197,
-    "anjlok": 104,
-    "anorganik": 57,
-    "antarmuka": 64,
-    "antibiotik": 65,
-    "api": 4,
-    "aplikasi": 57,
-    "arah": 189,
+    "anggota": 18,
+    "angin": 56,
+    "angkasa": 199,
+    "anjlok": 106,
+    "anorganik": 11,
+    "antarmuka": 60,
+    "antibiotik": 61,
+    "api": 47,
+    "aplikasi": 123,
+    "arah": 191,
     "arus": 11,
-    "asam": 109,
+    "asam": 111,
     "asap": 4,
-    "asin": 83,
-    "atap": 37,
-    "atom": 57,
-    "auditor": 206,
-    "autotrof": 57,
-    "aves": 57,
-    "awal": 188,
-    "awan": 59,
-    "ayah": 67,
+    "asin": 86,
+    "atap": 36,
+    "atom": 11,
+    "auditor": 208,
+    "autotrof": 11,
+    "aves": 11,
+    "awal": 190,
+    "awan": 56,
+    "ayah": 139,
     "ayam": 8,
     "badai": 3,
-    "badan": 18,
-    "baik": 131,
+    "badan": 114,
+    "baik": 134,
     "baju": 24,
     "bakteri": 12,
-    "bangkrut": 190,
+    "bangkrut": 192,
     "banjir": 4,
-    "banting": 99,
-    "banyak": 75,
-    "barang": 33,
+    "banting": 84,
+    "banyak": 73,
+    "barang": 11,
     "baru": 4,
-    "basah": 84,
-    "basi": 4,
-    "baterai": 58,
-    "bawah": 4,
+    "basah": 88,
+    "basi": 47,
+    "baterai": 55,
+    "bawah": 79,
     "bawang": 21,
     "bayi": 8,
-    "bekerja": 210,
+    "bekerja": 212,
     "belajar": 32,
     "benih": 12,
     "bensin": 18,
-    "berat": 75,
-    "berbahaya": 83,
-    "berbau": 177,
-    "berbulu": 3,
+    "berat": 73,
+    "berbahaya": 86,
+    "berbau": 179,
+    "berbulu": 81,
     "berbunga": 12,
     "berdandan": 32,
-    "berdatangan": 147,
-    "berdemo": 184,
-    "beregu": 57,
-    "berenang": 209,
-    "bergerak": 87,
+    "berdatangan": 149,
+    "berdemo": 186,
+    "beregu": 11,
+    "berenang": 211,
+    "bergerak": 91,
     "bergoyang": 74,
-    "berkayu": 33,
-    "berkembang": 171,
-    "berkicau": 140,
-    "berkurang": 4,
-    "berlapis": 57,
-    "berlarian": 56,
-    "berlebih": 110,
-    "berlebihan": 174,
-    "bermain": 216,
-    "bermekaran": 157,
-    "bermigrasi": 170,
-    "bermuatan": 57,
+    "berkayu": 11,
+    "berkembang": 173,
+    "berkicau": 142,
+    "berkurang": 47,
+    "berlapis": 11,
+    "berlarian": 54,
+    "berlebih": 112,
+    "berlebihan": 176,
+    "bermain": 217,
+    "bermekaran": 159,
+    "bermigrasi": 172,
+    "bermuatan": 11,
     "berolahraga": 32,
-    "berpembuluh": 57,
+    "berpembuluh": 11,
     "bersih": 32,
-    "bersorak": 159,
-    "bertepuk": 141,
-    "berubah": 136,
+    "bersorak": 161,
+    "bertepuk": 143,
+    "berubah": 139,
     "besi": 18,
-    "biasa": 119,
+    "biasa": 122,
     "bibit": 0,
-    "biji": 35,
+    "biji": 34,
     "bisnis": 18,
-    "bocor": 3,
+    "bocor": 11,
     "bola": 20,
-    "boneka": 24,
-    "boot": 139,
+    "boneka": 131,
+    "boot": 141,
     "bootloop": 4,
-    "bryophyta": 57,
-    "buah": 35,
-    "buatan": 57,
-    "buffer": 156,
+    "bryophyta": 11,
+    "buah": 34,
+    "buatan": 11,
+    "buffer": 158,
     "buku": 25,
     "bunga": 12,
     "burung": 11,
     "cabai": 18,
-    "cacing": 47,
+    "cacing": 46,
     "cahaya": 18,
     "cair": 12,
     "cantik": 32,
-    "cepat": 100,
-    "ceria": 210,
-    "chef": 136,
-    "contoh": 189,
-    "cpu": 33,
-    "crash": 200,
-    "crustacea": 57,
+    "cepat": 102,
+    "ceria": 212,
+    "chef": 139,
+    "contoh": 191,
+    "cpu": 11,
+    "crash": 202,
+    "crustacea": 11,
     "d": 18,
-    "dalam": 83,
-    "dana": 45,
+    "dalam": 86,
+    "dana": 44,
     "darah": 18,
-    "darat": 57,
+    "darat": 11,
     "data": 18,
     "database": 18,
-    "dataset": 63,
-    "daun": 35,
+    "dataset": 59,
+    "daun": 34,
     "daya": 11,
     "dekomposisi": 4,
     "demam": 4,
-    "demokrasi": 57,
-    "destruktif": 83,
-    "detail": 140,
-    "detektif": 208,
-    "devisa": 45,
+    "demokrasi": 11,
+    "destruktif": 86,
+    "detail": 142,
+    "detektif": 210,
+    "devisa": 44,
     "diabetes": 4,
-    "diakses": 185,
-    "dialirkan": 161,
-    "dibersihkan": 212,
-    "diet": 46,
-    "digiling": 142,
-    "diistirahatkan": 176,
-    "dikocok": 178,
-    "dilaksanakan": 155,
-    "dilakukan": 146,
-    "dilelehkan": 166,
-    "diluruskan": 4,
-    "dinding": 192,
+    "diakses": 187,
+    "dialirkan": 163,
+    "dibersihkan": 213,
+    "diet": 45,
+    "digiling": 144,
+    "diistirahatkan": 178,
+    "dikocok": 180,
+    "dilaksanakan": 157,
+    "dilakukan": 148,
+    "dilelehkan": 168,
+    "diluruskan": 47,
+    "dinding": 194,
     "dingin": 12,
-    "dini": 44,
+    "dini": 43,
     "dioksida": 18,
-    "dipancarkan": 168,
+    "dipancarkan": 170,
     "dirapikan": 32,
-    "diretas": 105,
-    "diri": 57,
-    "ditanam": 130,
-    "ditekan": 161,
-    "ditunda": 108,
-    "dividen": 45,
+    "diretas": 107,
+    "diri": 11,
+    "ditanam": 133,
+    "ditekan": 163,
+    "ditunda": 110,
+    "dividen": 44,
     "dokter": 18,
-    "dokumen": 44,
-    "down": 49,
+    "dokumen": 43,
+    "down": 87,
     "dribble": 26,
-    "dunk": 40,
-    "eksekutif": 57,
-    "ekskresi": 119,
-    "ekspresif": 99,
-    "elastis": 83,
-    "elektromagnetik": 57,
+    "dunk": 39,
+    "eksekutif": 11,
+    "ekskresi": 11,
+    "ekspresif": 84,
+    "elastis": 86,
+    "elektromagnetik": 11,
     "elektron": 14,
     "embun": 12,
     "empuk": 16,
     "energi": 18,
-    "es": 75,
-    "eukariotik": 57,
+    "es": 73,
+    "eukariotik": 11,
     "fajar": 12,
-    "finish": 129,
-    "fitur": 49,
-    "foto": 189,
-    "frekuensi": 42,
-    "fungi": 57,
-    "gagal": 98,
+    "finish": 132,
+    "fitur": 47,
+    "foto": 191,
+    "frekuensi": 41,
+    "fungi": 11,
+    "gagal": 101,
     "garam": 11,
-    "gas": 57,
-    "gedung": 196,
+    "gas": 11,
+    "gedung": 198,
     "gejolak": 4,
     "gelap": 12,
     "gelombang": 12,
@@ -11936,562 +12201,562 @@
     "getaran": 12,
     "gigi": 27,
     "glukosa": 18,
-    "gol": 40,
-    "gpu": 118,
-    "grafis": 57,
-    "greenhouse": 37,
+    "gol": 39,
+    "gpu": 121,
+    "grafis": 11,
+    "greenhouse": 36,
     "gula": 9,
     "guru": 18,
-    "habis": 198,
-    "halus": 83,
-    "hangat": 83,
-    "hangus": 99,
-    "hanyut": 90,
-    "hara": 146,
-    "harga": 57,
-    "hari": 3,
-    "harum": 83,
-    "hasil": 189,
-    "hati": 4,
+    "habis": 200,
+    "halus": 86,
+    "hangat": 86,
+    "hangus": 84,
+    "hanyut": 94,
+    "hara": 148,
+    "harga": 11,
+    "hari": 82,
+    "harum": 86,
+    "hasil": 191,
+    "hati": 47,
     "helium": 11,
     "hewan": 11,
-    "hewani": 57,
-    "hiburan": 57,
-    "hijau": 83,
-    "hipertensi": 4,
-    "hortikultura": 57,
+    "hewani": 11,
+    "hiburan": 11,
+    "hijau": 86,
+    "hipertensi": 47,
+    "hortikultura": 11,
     "hujan": 12,
-    "hukum": 57,
-    "hutan": 4,
-    "ibu": 136,
+    "hukum": 11,
+    "hutan": 72,
+    "ibu": 139,
     "ikan": 11,
     "infeksi": 12,
-    "infus": 58,
+    "infus": 55,
     "inovasi": 18,
-    "insinyur": 205,
-    "instruksi": 47,
-    "interpreter": 33,
-    "invertebrata": 57,
+    "insinyur": 207,
+    "instruksi": 46,
+    "interpreter": 11,
+    "invertebrata": 11,
     "investor": 18,
-    "irigasi": 138,
+    "irigasi": 140,
     "iritasi": 4,
-    "isolator": 120,
+    "isolator": 86,
     "isotop": 14,
-    "istirahat": 152,
-    "iuran": 76,
-    "jaket": 213,
-    "jaksa": 206,
-    "jalan": 189,
-    "jaminan": 41,
+    "istirahat": 154,
+    "iuran": 75,
+    "jaket": 214,
+    "jaksa": 208,
+    "jalan": 191,
+    "jaminan": 40,
     "jamur": 11,
-    "jantung": 78,
-    "jaring": 53,
-    "jaringan": 57,
-    "jarum": 70,
+    "jantung": 77,
+    "jaring": 51,
+    "jaringan": 86,
+    "jarum": 67,
     "jatuh": 4,
-    "jauh": 119,
-    "jurnalis": 115,
-    "juru": 136,
-    "kabel": 62,
-    "kabur": 108,
-    "kacang": 35,
+    "jauh": 122,
+    "jurnalis": 118,
+    "juru": 139,
+    "kabel": 58,
+    "kabur": 110,
+    "kacang": 34,
     "kaldu": 18,
-    "kalori": 59,
-    "kalorimeter": 50,
+    "kalori": 56,
+    "kalorimeter": 48,
     "kalsium": 18,
-    "kampung": 84,
-    "kapal": 77,
+    "kampung": 88,
+    "kapal": 76,
     "karat": 12,
-    "karbohidrat": 57,
+    "karbohidrat": 11,
     "karbon": 18,
-    "karyawan": 115,
+    "karyawan": 118,
     "katak": 13,
     "kaya": 32,
     "kayu": 11,
     "kebakaran": 4,
-    "kejang": 4,
+    "kejang": 47,
     "kekeringan": 4,
     "kelangkaan": 4,
-    "keluar": 94,
-    "kembali": 135,
-    "kembung": 99,
+    "keluar": 97,
+    "kembali": 138,
+    "kembung": 84,
     "kemiskinan": 4,
     "kenop": 17,
-    "kental": 120,
-    "kenyal": 83,
+    "kental": 84,
+    "kenyal": 86,
     "kepanikan": 4,
-    "kepemilikan": 57,
+    "kepemilikan": 11,
     "keracunan": 4,
-    "keras": 120,
-    "kerdil": 4,
+    "keras": 86,
+    "kerdil": 47,
     "kering": 12,
     "kerugian": 4,
     "kerusakan": 4,
-    "keseleo": 4,
-    "ketahanan": 33,
+    "keseleo": 79,
+    "ketahanan": 122,
     "kipas": 6,
-    "kode": 61,
-    "koheren": 75,
-    "koki": 136,
-    "kokoh": 83,
-    "kolektif": 57,
+    "kode": 57,
+    "koheren": 86,
+    "koki": 139,
+    "kokoh": 86,
+    "kolektif": 11,
     "kompas": 17,
-    "kompetitif": 95,
-    "kompleks": 75,
-    "komputer": 57,
+    "kompetitif": 98,
+    "kompleks": 86,
+    "komputer": 11,
     "komunikasi": 18,
     "kondensasi": 12,
-    "konduktif": 75,
-    "konsentrasi": 111,
-    "kontainer": 44,
-    "kontak": 57,
-    "kontrak": 43,
-    "kontraktor": 205,
+    "konduktif": 86,
+    "konsentrasi": 115,
+    "kontainer": 43,
+    "kontak": 11,
+    "kontrak": 42,
+    "kontraktor": 207,
     "kopi": 23,
-    "kota": 86,
+    "kota": 90,
     "krill": 13,
     "kriminalitas": 4,
-    "kuat": 83,
-    "kucing": 82,
+    "kuat": 86,
+    "kucing": 85,
     "kuliah": 31,
     "kuncup": 12,
     "kutil": 28,
     "kutub": 4,
     "lahan": 18,
-    "lama": 99,
-    "lambat": 121,
-    "lapangan": 148,
+    "lama": 84,
+    "lambat": 124,
+    "lapangan": 150,
     "laporan": 15,
-    "lari": 215,
+    "lari": 216,
     "laser": 30,
     "latih": 18,
     "laut": 13,
     "lawan": 20,
-    "layar": 134,
+    "layar": 137,
     "layu": 80,
-    "lebat": 204,
-    "lebih": 164,
+    "lebat": 206,
+    "lebih": 166,
     "ledakan": 4,
-    "legal": 75,
-    "legislatif": 57,
-    "leher": 38,
-    "lelah": 211,
-    "lembap": 83,
-    "lembut": 123,
-    "lemot": 4,
-    "lengah": 40,
-    "lengket": 83,
-    "lentur": 83,
-    "liat": 33,
-    "licin": 91,
-    "likuid": 75,
+    "legal": 86,
+    "legislatif": 11,
+    "leher": 37,
+    "lelah": 212,
+    "lembap": 16,
+    "lembut": 126,
+    "lemot": 47,
+    "lengah": 39,
+    "lengket": 86,
+    "lentur": 86,
+    "liat": 11,
+    "licin": 82,
+    "likuid": 86,
     "likuiditas": 18,
     "limbah": 4,
-    "link": 103,
+    "link": 112,
     "lintas": 1,
     "listrik": 18,
     "log": 14,
-    "logam": 57,
-    "logo": 169,
-    "lokal": 57,
+    "logam": 11,
+    "logo": 171,
+    "lokal": 11,
     "lomba": 2,
-    "longitudinal": 57,
-    "longsor": 49,
-    "ludah": 119,
+    "longitudinal": 11,
+    "longsor": 71,
+    "ludah": 123,
     "lulus": 32,
-    "macet": 151,
-    "madu": 71,
+    "macet": 153,
+    "madu": 68,
     "magma": 12,
-    "magnet": 81,
+    "magnet": 11,
     "mahal": 4,
-    "mahasiswa": 49,
-    "mainan": 47,
-    "makan": 183,
+    "mahasiswa": 47,
+    "mainan": 46,
+    "makan": 185,
     "makanan": 18,
-    "makroekonomi": 3,
+    "makroekonomi": 11,
     "malam": 12,
-    "mamalia": 57,
-    "mangsa": 60,
-    "manis": 83,
-    "manusia": 119,
-    "massa": 122,
-    "massal": 88,
-    "mata": 54,
-    "matahari": 114,
-    "matematika": 209,
+    "mamalia": 11,
+    "mangsa": 18,
+    "manis": 86,
+    "manusia": 11,
+    "massa": 125,
+    "massal": 92,
+    "mata": 52,
+    "matahari": 18,
+    "matematika": 211,
     "material": 18,
     "mati": 4,
-    "media": 83,
-    "medis": 57,
-    "mekanik": 57,
-    "mekanis": 57,
-    "mekar": 85,
-    "melambat": 4,
-    "melanda": 170,
+    "media": 11,
+    "medis": 120,
+    "mekanik": 117,
+    "mekanis": 11,
+    "mekar": 89,
+    "melambat": 47,
+    "melanda": 172,
     "melemah": 5,
-    "melonjak": 4,
-    "meluap": 106,
-    "meluas": 179,
-    "memanas": 89,
-    "membaca": 209,
-    "membaik": 158,
-    "membeli": 210,
-    "memberatkan": 83,
-    "membusuk": 99,
-    "memerah": 4,
-    "memuai": 4,
-    "memudar": 181,
+    "melonjak": 47,
+    "meluap": 108,
+    "meluas": 181,
+    "memanas": 93,
+    "membaca": 211,
+    "membaik": 160,
+    "membeli": 212,
+    "memberatkan": 86,
+    "membusuk": 84,
+    "memerah": 79,
+    "memuai": 47,
+    "memudar": 183,
     "menabung": 32,
-    "menangis": 214,
+    "menangis": 215,
     "mendung": 12,
-    "mengalir": 132,
-    "mengapung": 191,
-    "mengeksekusi": 47,
-    "mengeras": 143,
-    "mengering": 186,
-    "menggambar": 61,
-    "menggelap": 153,
-    "mengikat": 83,
-    "menguar": 160,
+    "mengalir": 135,
+    "mengapung": 193,
+    "mengeksekusi": 46,
+    "mengeras": 145,
+    "mengering": 188,
+    "menggambar": 57,
+    "menggelap": 155,
+    "mengikat": 86,
+    "menguar": 162,
     "menguning": 4,
-    "menguntungkan": 75,
+    "menguntungkan": 73,
     "meningkat": 4,
-    "menjelang": 162,
+    "menjelang": 164,
     "menjual": 0,
-    "mentega": 113,
+    "mentega": 116,
     "menulis": 25,
-    "menumpuk": 103,
+    "menumpuk": 112,
     "menurun": 4,
-    "menyala": 96,
-    "menyebar": 142,
-    "menyingsing": 203,
-    "menyusut": 182,
-    "merah": 57,
-    "merusak": 83,
-    "mikro": 33,
-    "mikroorganisme": 33,
-    "minum": 67,
-    "mobil": 201,
+    "menyala": 99,
+    "menyebar": 144,
+    "menyingsing": 205,
+    "menyusut": 184,
+    "merah": 112,
+    "merusak": 16,
+    "mikro": 81,
+    "mikroorganisme": 11,
+    "minum": 64,
+    "mobil": 203,
     "modal": 18,
-    "moluska": 57,
-    "monera": 57,
-    "moneter": 57,
-    "montir": 137,
-    "motor": 57,
-    "muatan": 81,
-    "mulia": 83,
-    "mulsa": 62,
-    "mulut": 180,
-    "muncul": 103,
-    "murid": 67,
-    "musik": 78,
+    "moluska": 11,
+    "monera": 11,
+    "moneter": 11,
+    "montir": 139,
+    "motor": 11,
+    "muatan": 11,
+    "mulia": 86,
+    "mulsa": 58,
+    "mulut": 182,
+    "muncul": 105,
+    "murid": 64,
+    "musik": 77,
     "musim": 12,
-    "musisi": 115,
+    "musisi": 118,
     "musyawarah": 7,
     "mutasi": 4,
-    "nabati": 57,
-    "naik": 72,
+    "nabati": 11,
+    "naik": 69,
     "nasabah": 18,
     "nasi": 21,
-    "nasihat": 47,
-    "naungan": 112,
-    "negara": 57,
-    "negatif": 33,
+    "nasihat": 46,
+    "naungan": 18,
+    "negara": 11,
+    "negatif": 11,
     "negeri": 18,
-    "nektar": 60,
-    "nenek": 136,
-    "netral": 3,
-    "ngos-ngosan": 99,
-    "nilai": 47,
-    "nol": 60,
-    "non-pembuluh": 57,
-    "nonlogam": 57,
+    "nektar": 18,
+    "nenek": 139,
+    "netral": 81,
+    "ngos-ngosan": 84,
+    "nilai": 46,
+    "nol": 113,
+    "non-pembuluh": 11,
+    "nonlogam": 11,
     "nutrisi": 18,
-    "nyeri": 107,
-    "obat": 3,
+    "nyeri": 109,
+    "obat": 11,
     "obligasi": 24,
     "oksigen": 18,
     "oli": 18,
-    "organ": 51,
-    "organik": 57,
+    "organ": 49,
+    "organik": 11,
     "osiloskop": 30,
-    "otot": 81,
-    "output": 57,
-    "padat": 57,
+    "otot": 83,
+    "output": 11,
+    "padat": 11,
     "padi": 0,
     "pagi": 12,
-    "pahit": 83,
+    "pahit": 86,
     "pajak": 18,
-    "pakan": 47,
-    "paket": 44,
+    "pakan": 46,
+    "paket": 43,
     "panas": 12,
     "panda": 4,
-    "panen": 34,
-    "panjang": 145,
-    "pantai": 4,
-    "parasit": 57,
+    "panen": 33,
+    "panjang": 147,
+    "pantai": 47,
+    "parasit": 11,
     "partikel": 11,
     "paru": 4,
-    "paru-paru": 66,
-    "pasien": 54,
+    "paru-paru": 62,
+    "pasien": 52,
     "pasir": 16,
     "payau": 18,
-    "pecah": 199,
-    "pedas": 4,
-    "pegawai": 67,
-    "pekat": 154,
+    "pecah": 201,
+    "pedas": 79,
+    "pegawai": 64,
+    "pekat": 156,
     "pekerja": 18,
-    "pelanggan": 67,
-    "pelayan": 137,
-    "pelet": 47,
-    "pelindung": 57,
-    "pemain": 207,
+    "pelanggan": 64,
+    "pelayan": 139,
+    "pelet": 46,
+    "pelindung": 11,
+    "pemain": 209,
     "pemanasan": 26,
-    "pembantu": 137,
-    "pemberitahuan": 44,
-    "pembuluh": 3,
-    "pemilih": 60,
+    "pembantu": 139,
+    "pemberitahuan": 43,
+    "pembuluh": 81,
+    "pemilih": 18,
     "pencernaan": 18,
-    "penciuman": 57,
+    "penciuman": 117,
     "pencuri": 20,
-    "pendapatan": 57,
-    "pendek": 57,
-    "pendengaran": 3,
-    "pendidik": 57,
+    "pendapatan": 123,
+    "pendek": 11,
+    "pendengaran": 11,
+    "pendidik": 11,
     "pendingin": 18,
-    "penebang": 205,
-    "penerbangan": 34,
-    "penerbit": 207,
-    "pengecap": 57,
-    "penglihatan": 33,
-    "penjual": 111,
+    "penebang": 207,
+    "penerbangan": 33,
+    "penerbit": 209,
+    "pengecap": 11,
+    "penglihatan": 11,
+    "penjual": 115,
     "penuh": 18,
-    "penulis": 115,
-    "penyair": 67,
+    "penulis": 118,
+    "penyair": 64,
     "penyakit": 4,
-    "penyimpanan": 33,
+    "penyimpanan": 11,
     "penyumbatan": 4,
-    "perahu": 53,
-    "perairan": 57,
+    "perahu": 51,
+    "perairan": 11,
     "perawatan": 12,
     "percepatan": 11,
-    "percetakan": 207,
-    "pergi": 210,
-    "perih": 75,
+    "percetakan": 209,
+    "pergi": 212,
+    "perih": 73,
     "peringatan": 15,
-    "perkebunan": 57,
-    "permanen": 57,
-    "permen": 119,
-    "pernapasan": 119,
-    "perseroan": 119,
-    "perusahaan": 205,
-    "perut": 74,
-    "petani": 205,
-    "petugas": 206,
-    "phishing": 167,
+    "perkebunan": 11,
+    "permanen": 11,
+    "permen": 131,
+    "pernapasan": 123,
+    "perseroan": 131,
+    "perusahaan": 207,
+    "perut": 72,
+    "petani": 207,
+    "petugas": 208,
+    "phishing": 169,
     "pijar": 30,
-    "pinjaman": 33,
+    "pinjaman": 11,
     "pintar": 32,
-    "pisang": 39,
-    "pisces": 57,
-    "pohon": 202,
-    "pointer": 40,
-    "polisi": 206,
+    "pisang": 38,
+    "pisces": 11,
+    "pohon": 204,
+    "pointer": 39,
+    "polisi": 208,
     "polusi": 4,
-    "port": 37,
-    "positif": 3,
+    "port": 36,
+    "positif": 11,
     "prakiraan": 31,
-    "praktis": 127,
-    "primer": 57,
+    "praktis": 130,
+    "primer": 11,
     "prisma": 17,
-    "produktif": 124,
-    "prokariotik": 57,
+    "produktif": 127,
+    "prokariotik": 11,
     "protein": 18,
-    "protista": 57,
-    "pteridophyta": 57,
-    "publik": 93,
-    "pulen": 99,
-    "punggung": 38,
+    "protista": 11,
+    "pteridophyta": 11,
+    "publik": 96,
+    "pulen": 84,
+    "punggung": 37,
     "pupuk": 18,
-    "pusing": 4,
-    "putih": 48,
+    "pusing": 47,
+    "putih": 84,
     "radar": 14,
     "radiasi": 12,
-    "radio": 60,
-    "radioaktif": 99,
-    "raket": 57,
-    "ram": 58,
+    "radio": 113,
+    "radioaktif": 84,
+    "raket": 11,
+    "ram": 55,
     "rapi": 32,
-    "rapuh": 83,
-    "reboot": 135,
-    "rebound": 39,
-    "refleks": 60,
-    "rendah": 60,
-    "renggang": 194,
-    "renyah": 83,
-    "reptil": 57,
+    "rapuh": 86,
+    "reboot": 138,
+    "rebound": 123,
+    "refleks": 113,
+    "rendah": 18,
+    "renggang": 196,
+    "renyah": 16,
+    "reptil": 11,
     "reruntuhan": 4,
-    "responsif": 83,
-    "restart": 144,
-    "rilis": 165,
-    "ringan": 75,
-    "risiko": 103,
-    "roti": 68,
+    "responsif": 86,
+    "restart": 146,
+    "rilis": 167,
+    "ringan": 86,
+    "risiko": 112,
+    "roti": 65,
     "router": 18,
-    "rugi": 150,
-    "rumput": 35,
+    "rugi": 152,
+    "rumput": 34,
     "rusa": 13,
-    "rutin": 83,
-    "sah": 75,
+    "rutin": 86,
+    "sah": 86,
     "saham": 24,
     "saklar": 17,
-    "saku": 57,
-    "salju": 57,
-    "sama": 60,
+    "saku": 11,
+    "salju": 11,
+    "sama": 113,
     "santan": 9,
-    "sapi": 82,
-    "saraf": 57,
-    "sate": 79,
-    "saus": 128,
-    "sawah": 98,
+    "sapi": 85,
+    "saraf": 11,
+    "sate": 78,
+    "saus": 11,
+    "sawah": 101,
     "sayur": 32,
-    "sayuran": 57,
-    "sebelumnya": 92,
-    "segar": 83,
+    "sayuran": 11,
+    "sebelumnya": 95,
+    "segar": 16,
     "sehat": 32,
-    "sejuk": 99,
-    "sekolah": 117,
-    "sekretaris": 67,
-    "seluler": 60,
-    "semalaman": 75,
-    "sembako": 55,
-    "sementara": 82,
-    "sempurna": 178,
+    "sejuk": 84,
+    "sekolah": 120,
+    "sekretaris": 64,
+    "seluler": 18,
+    "semalaman": 73,
+    "sembako": 53,
+    "sementara": 85,
+    "sempurna": 180,
     "sengatan": 4,
     "senja": 12,
-    "sensor": 52,
-    "sepat": 83,
-    "sepeda": 24,
-    "serangga": 57,
-    "serealia": 57,
-    "serigala": 82,
+    "sensor": 50,
+    "sepat": 86,
+    "sepeda": 131,
+    "serangga": 11,
+    "serealia": 11,
+    "serigala": 85,
     "server": 18,
     "servis": 26,
-    "setia": 210,
+    "setia": 212,
     "sewa": 19,
-    "shu": 55,
+    "shu": 53,
     "shuttlecock": 20,
     "siang": 12,
     "sinyal": 18,
-    "siput": 71,
-    "sirkulasi": 33,
+    "siput": 68,
+    "sirkulasi": 11,
     "sirosis": 4,
-    "siswa": 67,
+    "siswa": 64,
     "smash": 26,
     "sore": 12,
-    "sosial": 103,
-    "source": 57,
-    "spam": 187,
-    "stabil": 83,
+    "sosial": 112,
+    "source": 11,
+    "spam": 189,
+    "stabil": 86,
     "stamina": 18,
-    "statis": 192,
-    "statistik": 209,
-    "suara": 155,
-    "sub-seluler": 33,
-    "subur": 83,
+    "statis": 194,
+    "statistik": 211,
+    "suara": 157,
+    "sub-seluler": 11,
+    "subur": 16,
     "suhu": 11,
-    "sukarela": 57,
-    "sulit": 210,
+    "sukarela": 123,
+    "sulit": 212,
     "sup": 22,
-    "surat": 44,
-    "susu": 57,
+    "surat": 43,
+    "susu": 11,
     "tagihan": 19,
-    "tahun": 110,
-    "tajam": 125,
-    "taman": 85,
-    "tamat": 145,
+    "tahun": 112,
+    "tajam": 128,
+    "taman": 89,
+    "tamat": 147,
     "tanah": 16,
     "tanam": 12,
     "tanaman": 0,
-    "tangan": 145,
-    "tawar": 163,
+    "tangan": 147,
+    "tawar": 165,
     "tegangan": 10,
-    "tegas": 57,
+    "tegas": 11,
     "teh": 18,
-    "teknik": 209,
-    "teknisi": 206,
+    "teknik": 211,
+    "teknisi": 208,
     "telinga": 6,
-    "telur": 113,
-    "tenang": 149,
+    "telur": 116,
+    "tenang": 151,
     "tendangan": 29,
-    "tenggorokan": 54,
+    "tenggorokan": 52,
     "tensi": 10,
-    "tentara": 205,
-    "tepung": 113,
+    "tentara": 207,
+    "tepung": 116,
     "terang": 12,
-    "terasi": 60,
-    "teratur": 57,
-    "terbakar": 56,
-    "terbaru": 110,
-    "terbatas": 39,
-    "terbenam": 140,
-    "terbentang": 175,
+    "terasi": 18,
+    "teratur": 11,
+    "terbakar": 54,
+    "terbaru": 112,
+    "terbatas": 123,
+    "terbenam": 142,
+    "terbentang": 177,
     "terbentuk": 4,
-    "terbuka": 96,
-    "tercipta": 173,
-    "tercium": 142,
-    "terdistribusi": 57,
-    "terganggu": 110,
-    "terhapus": 96,
-    "terhubung": 193,
-    "terik": 75,
-    "terjadi": 3,
-    "terkecil": 57,
-    "terkontrol": 83,
-    "terkunci": 133,
+    "terbuka": 99,
+    "tercipta": 175,
+    "tercium": 144,
+    "terdistribusi": 11,
+    "terganggu": 112,
+    "terhapus": 99,
+    "terhubung": 195,
+    "terik": 86,
+    "terjadi": 81,
+    "terkecil": 11,
+    "terkontrol": 86,
+    "terkunci": 136,
     "terlarut": 18,
-    "terlepas": 94,
-    "terlihat": 102,
-    "terluka": 97,
-    "terputus": 49,
-    "terputus-putus": 172,
-    "terungkap": 176,
-    "terurai": 101,
-    "throttling": 4,
-    "tiba": 103,
+    "terlepas": 97,
+    "terlihat": 104,
+    "terluka": 100,
+    "terputus": 71,
+    "terputus-putus": 174,
+    "terungkap": 178,
+    "terurai": 103,
+    "throttling": 47,
+    "tiba": 112,
     "tidur": 18,
-    "tikus": 36,
-    "tim": 206,
-    "tinggal": 215,
-    "tinggi": 57,
-    "tomat": 39,
-    "trafik": 59,
-    "tsunami": 4,
-    "tubuh": 57,
-    "tukang": 137,
-    "tulang": 215,
-    "tumbang": 73,
-    "tumbuh": 130,
-    "tumbuhan": 57,
+    "tikus": 35,
+    "tim": 208,
+    "tinggal": 216,
+    "tinggi": 11,
+    "tomat": 38,
+    "trafik": 56,
+    "tsunami": 72,
+    "tubuh": 11,
+    "tukang": 139,
+    "tulang": 216,
+    "tumbang": 70,
+    "tumbuh": 133,
+    "tumbuhan": 11,
     "tumor": 28,
-    "tunggal": 57,
+    "tunggal": 11,
     "turun": 80,
-    "turun-temurun": 195,
-    "uang": 48,
+    "turun-temurun": 197,
+    "uang": 3,
     "udara": 18,
-    "ular": 82,
-    "umum": 57,
-    "unsur": 57,
+    "ular": 85,
+    "umum": 11,
+    "unsur": 11,
     "upacara": 31,
-    "utang": 57,
+    "utang": 11,
     "valas": 24,
-    "vendor": 207,
-    "vertebrata": 3,
-    "vital": 75,
+    "vendor": 209,
+    "vertebrata": 11,
+    "vital": 73,
     "warga": 18,
-    "web": 57,
-    "yodium": 116,
-    "zebra": 36
+    "web": 11,
+    "yodium": 119,
+    "zebra": 35
   },
   "object_superclusters": {
     "0": [
@@ -12508,101 +12773,209 @@
       "tensi"
     ],
     "100": [
-      "cepat"
+      "terluka"
     ],
     "101": [
-      "terurai"
+      "gagal",
+      "sawah"
     ],
     "102": [
-      "terlihat"
+      "cepat"
     ],
     "103": [
-      "link",
-      "menumpuk",
-      "muncul",
-      "risiko",
-      "sosial",
-      "tiba"
+      "terurai"
     ],
     "104": [
-      "anjlok"
+      "terlihat"
     ],
     "105": [
-      "diretas"
+      "muncul"
     ],
     "106": [
-      "meluap"
+      "anjlok"
     ],
     "107": [
-      "nyeri"
+      "diretas"
     ],
     "108": [
+      "meluap"
+    ],
+    "109": [
+      "nyeri"
+    ],
+    "11": [
+      "akuatik",
+      "alami",
+      "amplitudo",
+      "anorganik",
+      "arus",
+      "atom",
+      "autotrof",
+      "aves",
+      "barang",
+      "beregu",
+      "berkayu",
+      "berlapis",
+      "bermuatan",
+      "berpembuluh",
+      "bocor",
+      "bryophyta",
+      "buatan",
+      "burung",
+      "cpu",
+      "crustacea",
+      "darat",
+      "daya",
+      "demokrasi",
+      "diri",
+      "eksekutif",
+      "ekskresi",
+      "elektromagnetik",
+      "eukariotik",
+      "fungi",
+      "garam",
+      "gas",
+      "grafis",
+      "harga",
+      "helium",
+      "hewan",
+      "hewani",
+      "hiburan",
+      "hortikultura",
+      "hukum",
+      "ikan",
+      "interpreter",
+      "invertebrata",
+      "jamur",
+      "karbohidrat",
+      "kayu",
+      "kepemilikan",
+      "kolektif",
+      "komputer",
+      "kontak",
+      "legislatif",
+      "liat",
+      "logam",
+      "lokal",
+      "longitudinal",
+      "magnet",
+      "makroekonomi",
+      "mamalia",
+      "manusia",
+      "media",
+      "mekanis",
+      "mikroorganisme",
+      "moluska",
+      "monera",
+      "moneter",
+      "motor",
+      "muatan",
+      "nabati",
+      "negara",
+      "negatif",
+      "non-pembuluh",
+      "nonlogam",
+      "obat",
+      "organik",
+      "output",
+      "padat",
+      "parasit",
+      "partikel",
+      "pelindung",
+      "pendek",
+      "pendengaran",
+      "pendidik",
+      "pengecap",
+      "penglihatan",
+      "penyimpanan",
+      "perairan",
+      "percepatan",
+      "perkebunan",
+      "permanen",
+      "pinjaman",
+      "pisces",
+      "positif",
+      "primer",
+      "prokariotik",
+      "protista",
+      "pteridophyta",
+      "raket",
+      "reptil",
+      "saku",
+      "salju",
+      "saraf",
+      "saus",
+      "sayuran",
+      "serangga",
+      "serealia",
+      "sirkulasi",
+      "source",
+      "sub-seluler",
+      "suhu",
+      "susu",
+      "tegas",
+      "teratur",
+      "terdistribusi",
+      "terkecil",
+      "tinggi",
+      "tubuh",
+      "tumbuhan",
+      "tunggal",
+      "umum",
+      "unsur",
+      "utang",
+      "vertebrata",
+      "web"
+    ],
+    "110": [
       "ditunda",
       "kabur"
     ],
-    "109": [
+    "111": [
       "asam"
     ],
-    "11": [
-      "amplitudo",
-      "arus",
-      "burung",
-      "daya",
-      "garam",
-      "helium",
-      "hewan",
-      "ikan",
-      "jamur",
-      "kayu",
-      "partikel",
-      "percepatan",
-      "suhu"
-    ],
-    "110": [
+    "112": [
       "berlebih",
+      "link",
+      "menumpuk",
+      "merah",
+      "risiko",
+      "sosial",
       "tahun",
       "terbaru",
-      "terganggu"
+      "terganggu",
+      "tiba"
     ],
-    "111": [
+    "113": [
+      "nol",
+      "radio",
+      "refleks",
+      "sama"
+    ],
+    "114": [
+      "badan"
+    ],
+    "115": [
       "konsentrasi",
       "penjual"
     ],
-    "112": [
-      "naungan"
-    ],
-    "113": [
+    "116": [
       "mentega",
       "telur",
       "tepung"
     ],
-    "114": [
-      "matahari"
+    "117": [
+      "mekanik",
+      "penciuman"
     ],
-    "115": [
+    "118": [
       "jurnalis",
       "karyawan",
       "musisi",
       "penulis"
     ],
-    "116": [
-      "yodium"
-    ],
-    "117": [
-      "sekolah"
-    ],
-    "118": [
-      "gpu"
-    ],
     "119": [
-      "biasa",
-      "ekskresi",
-      "jauh",
-      "ludah",
-      "manusia",
-      "permen",
-      "pernapasan",
-      "perseroan"
+      "yodium"
     ],
     "12": [
       "abu",
@@ -12639,36 +13012,44 @@
       "terang"
     ],
     "120": [
-      "isolator",
-      "kental",
-      "keras"
+      "medis",
+      "sekolah"
     ],
     "121": [
-      "lambat"
+      "gpu"
     ],
     "122": [
-      "massa"
+      "biasa",
+      "jauh",
+      "ketahanan"
     ],
     "123": [
-      "lembut"
+      "amfibi",
+      "aplikasi",
+      "ludah",
+      "pendapatan",
+      "pernapasan",
+      "rebound",
+      "sukarela",
+      "terbatas"
     ],
     "124": [
-      "produktif"
+      "lambat"
     ],
     "125": [
-      "tajam"
+      "massa"
     ],
     "126": [
-      "aman"
+      "lembut"
     ],
     "127": [
-      "praktis"
+      "produktif"
     ],
     "128": [
-      "saus"
+      "tajam"
     ],
     "129": [
-      "finish"
+      "aman"
     ],
     "13": [
       "katak",
@@ -12677,44 +13058,50 @@
       "rusa"
     ],
     "130": [
+      "praktis"
+    ],
+    "131": [
+      "boneka",
+      "permen",
+      "perseroan",
+      "sepeda"
+    ],
+    "132": [
+      "finish"
+    ],
+    "133": [
       "ditanam",
       "tumbuh"
     ],
-    "131": [
+    "134": [
       "baik"
     ],
-    "132": [
+    "135": [
       "mengalir"
     ],
-    "133": [
+    "136": [
       "terkunci"
     ],
-    "134": [
+    "137": [
       "layar"
     ],
-    "135": [
+    "138": [
       "kembali",
       "reboot"
     ],
-    "136": [
+    "139": [
+      "anak",
+      "ayah",
       "berubah",
       "chef",
       "ibu",
       "juru",
       "koki",
-      "nenek"
-    ],
-    "137": [
       "montir",
+      "nenek",
       "pelayan",
       "pembantu",
       "tukang"
-    ],
-    "138": [
-      "irigasi"
-    ],
-    "139": [
-      "boot"
     ],
     "14": [
       "elektron",
@@ -12723,112 +13110,117 @@
       "radar"
     ],
     "140": [
+      "irigasi"
+    ],
+    "141": [
+      "boot"
+    ],
+    "142": [
       "berkicau",
       "detail",
       "terbenam"
     ],
-    "141": [
+    "143": [
       "bertepuk"
     ],
-    "142": [
+    "144": [
       "digiling",
       "menyebar",
       "tercium"
     ],
-    "143": [
+    "145": [
       "mengeras"
     ],
-    "144": [
+    "146": [
       "restart"
     ],
-    "145": [
+    "147": [
       "panjang",
       "tamat",
       "tangan"
     ],
-    "146": [
+    "148": [
       "dilakukan",
       "hara"
     ],
-    "147": [
-      "berdatangan"
-    ],
-    "148": [
-      "lapangan"
-    ],
     "149": [
-      "tenang"
+      "berdatangan"
     ],
     "15": [
       "laporan",
       "peringatan"
     ],
     "150": [
-      "rugi"
+      "lapangan"
     ],
     "151": [
-      "macet"
+      "tenang"
     ],
     "152": [
-      "istirahat"
+      "rugi"
     ],
     "153": [
-      "menggelap"
+      "macet"
     ],
     "154": [
-      "pekat"
+      "istirahat"
     ],
     "155": [
+      "menggelap"
+    ],
+    "156": [
+      "pekat"
+    ],
+    "157": [
       "dilaksanakan",
       "suara"
     ],
-    "156": [
+    "158": [
       "buffer"
     ],
-    "157": [
-      "bermekaran"
-    ],
-    "158": [
-      "membaik"
-    ],
     "159": [
-      "bersorak"
+      "bermekaran"
     ],
     "16": [
       "empuk",
+      "lembap",
+      "merusak",
       "pasir",
+      "renyah",
+      "segar",
+      "subur",
       "tanah"
     ],
     "160": [
-      "menguar"
+      "membaik"
     ],
     "161": [
+      "bersorak"
+    ],
+    "162": [
+      "menguar"
+    ],
+    "163": [
       "dialirkan",
       "ditekan"
     ],
-    "162": [
+    "164": [
       "menjelang"
     ],
-    "163": [
+    "165": [
       "tawar"
     ],
-    "164": [
+    "166": [
       "lebih"
     ],
-    "165": [
+    "167": [
       "rilis"
     ],
-    "166": [
+    "168": [
       "dilelehkan"
     ],
-    "167": [
-      "phishing"
-    ],
-    "168": [
-      "dipancarkan"
-    ],
     "169": [
-      "logo"
+      "phishing"
     ],
     "17": [
       "kenop",
@@ -12837,42 +13229,41 @@
       "saklar"
     ],
     "170": [
+      "dipancarkan"
+    ],
+    "171": [
+      "logo"
+    ],
+    "172": [
       "bermigrasi",
       "melanda"
     ],
-    "171": [
+    "173": [
       "berkembang"
     ],
-    "172": [
+    "174": [
       "terputus-putus"
     ],
-    "173": [
+    "175": [
       "tercipta"
     ],
-    "174": [
+    "176": [
       "berlebihan"
     ],
-    "175": [
+    "177": [
       "terbentang"
     ],
-    "176": [
+    "178": [
       "diistirahatkan",
       "terungkap"
     ],
-    "177": [
-      "berbau"
-    ],
-    "178": [
-      "dikocok",
-      "sempurna"
-    ],
     "179": [
-      "meluas"
+      "berbau"
     ],
     "18": [
       "air",
       "anggaran",
-      "badan",
+      "anggota",
       "bensin",
       "besi",
       "bisnis",
@@ -12898,99 +13289,108 @@
       "likuiditas",
       "listrik",
       "makanan",
+      "mangsa",
+      "matahari",
       "material",
       "modal",
       "nasabah",
+      "naungan",
       "negeri",
+      "nektar",
       "nutrisi",
       "oksigen",
       "oli",
       "pajak",
       "payau",
       "pekerja",
+      "pemilih",
       "pencernaan",
       "pendingin",
       "penuh",
       "protein",
       "pupuk",
+      "rendah",
       "router",
+      "seluler",
       "server",
       "sinyal",
       "stamina",
       "teh",
+      "terasi",
       "terlarut",
       "tidur",
       "udara",
       "warga"
     ],
     "180": [
-      "mulut"
+      "dikocok",
+      "sempurna"
     ],
     "181": [
-      "memudar"
+      "meluas"
     ],
     "182": [
-      "menyusut"
+      "mulut"
     ],
     "183": [
-      "makan"
+      "memudar"
     ],
     "184": [
-      "berdemo"
+      "menyusut"
     ],
     "185": [
-      "diakses"
+      "makan"
     ],
     "186": [
-      "mengering"
+      "berdemo"
     ],
     "187": [
-      "spam"
+      "diakses"
     ],
     "188": [
-      "awal"
+      "mengering"
     ],
     "189": [
-      "arah",
-      "contoh",
-      "foto",
-      "hasil",
-      "jalan"
+      "spam"
     ],
     "19": [
       "sewa",
       "tagihan"
     ],
     "190": [
-      "bangkrut"
+      "awal"
     ],
     "191": [
-      "mengapung"
+      "arah",
+      "contoh",
+      "foto",
+      "hasil",
+      "jalan"
     ],
     "192": [
+      "bangkrut"
+    ],
+    "193": [
+      "mengapung"
+    ],
+    "194": [
       "dinding",
       "statis"
     ],
-    "193": [
+    "195": [
       "terhubung"
     ],
-    "194": [
+    "196": [
       "renggang"
     ],
-    "195": [
+    "197": [
       "turun-temurun"
     ],
-    "196": [
+    "198": [
       "gedung"
     ],
-    "197": [
-      "angkasa"
-    ],
-    "198": [
-      "habis"
-    ],
     "199": [
-      "pecah"
+      "angkasa"
     ],
     "2": [
       "lomba"
@@ -13002,21 +13402,27 @@
       "shuttlecock"
     ],
     "200": [
-      "crash"
+      "habis"
     ],
     "201": [
-      "mobil"
+      "pecah"
     ],
     "202": [
-      "pohon"
+      "crash"
     ],
     "203": [
-      "menyingsing"
+      "mobil"
     ],
     "204": [
-      "lebat"
+      "pohon"
     ],
     "205": [
+      "menyingsing"
+    ],
+    "206": [
+      "lebat"
+    ],
+    "207": [
       "insinyur",
       "kontraktor",
       "penebang",
@@ -13024,7 +13430,7 @@
       "petani",
       "tentara"
     ],
-    "206": [
+    "208": [
       "ahli",
       "auditor",
       "jaksa",
@@ -13033,53 +13439,51 @@
       "teknisi",
       "tim"
     ],
-    "207": [
+    "209": [
       "agensi",
       "pemain",
       "penerbit",
       "percetakan",
       "vendor"
     ],
-    "208": [
+    "21": [
+      "bawang",
+      "nasi"
+    ],
+    "210": [
       "detektif"
     ],
-    "209": [
+    "211": [
       "berenang",
       "matematika",
       "membaca",
       "statistik",
       "teknik"
     ],
-    "21": [
-      "bawang",
-      "nasi"
-    ],
-    "210": [
+    "212": [
       "bekerja",
       "ceria",
+      "lelah",
       "membeli",
       "pergi",
       "setia",
       "sulit"
     ],
-    "211": [
-      "lelah"
-    ],
-    "212": [
+    "213": [
       "dibersihkan"
     ],
-    "213": [
+    "214": [
       "jaket"
     ],
-    "214": [
+    "215": [
       "menangis"
     ],
-    "215": [
+    "216": [
       "lari",
       "tinggal",
       "tulang"
     ],
-    "216": [
+    "217": [
       "bermain"
     ],
     "22": [
@@ -13090,10 +13494,8 @@
     ],
     "24": [
       "baju",
-      "boneka",
       "obligasi",
       "saham",
-      "sepeda",
       "valas"
     ],
     "25": [
@@ -13118,17 +13520,7 @@
     ],
     "3": [
       "badai",
-      "berbulu",
-      "bocor",
-      "hari",
-      "makroekonomi",
-      "netral",
-      "obat",
-      "pembuluh",
-      "pendengaran",
-      "positif",
-      "terjadi",
-      "vertebrata"
+      "uang"
     ],
     "30": [
       "generator",
@@ -13157,129 +13549,89 @@
       "sehat"
     ],
     "33": [
-      "barang",
-      "berkayu",
-      "cpu",
-      "interpreter",
-      "ketahanan",
-      "liat",
-      "mikro",
-      "mikroorganisme",
-      "negatif",
-      "penglihatan",
-      "penyimpanan",
-      "pinjaman",
-      "sirkulasi",
-      "sub-seluler"
-    ],
-    "34": [
       "panen",
       "penerbangan"
     ],
-    "35": [
+    "34": [
       "biji",
       "buah",
       "daun",
       "kacang",
       "rumput"
     ],
-    "36": [
+    "35": [
       "tikus",
       "zebra"
     ],
-    "37": [
+    "36": [
       "atap",
       "greenhouse",
       "port"
     ],
-    "38": [
+    "37": [
       "leher",
       "punggung"
     ],
-    "39": [
+    "38": [
       "pisang",
-      "rebound",
-      "terbatas",
       "tomat"
     ],
-    "4": [
-      "akun",
-      "api",
-      "asap",
-      "banjir",
-      "baru",
-      "basi",
-      "bawah",
-      "berkurang",
-      "bootloop",
-      "dekomposisi",
-      "demam",
-      "diabetes",
-      "diluruskan",
-      "gejolak",
-      "genangan",
-      "hati",
-      "hipertensi",
-      "hutan",
-      "iritasi",
-      "jatuh",
-      "kebakaran",
-      "kejang",
-      "kekeringan",
-      "kelangkaan",
-      "kemiskinan",
-      "kepanikan",
-      "keracunan",
-      "kerdil",
-      "kerugian",
-      "kerusakan",
-      "keseleo",
-      "kriminalitas",
-      "kutub",
-      "ledakan",
-      "lemot",
-      "limbah",
-      "mahal",
-      "mati",
-      "melambat",
-      "melonjak",
-      "memerah",
-      "memuai",
-      "menguning",
-      "meningkat",
-      "menurun",
-      "mutasi",
-      "panda",
-      "pantai",
-      "paru",
-      "pedas",
-      "penyakit",
-      "penyumbatan",
-      "polusi",
-      "pusing",
-      "reruntuhan",
-      "sengatan",
-      "sirosis",
-      "terbentuk",
-      "throttling",
-      "tsunami"
-    ],
-    "40": [
+    "39": [
       "dunk",
       "gol",
       "lengah",
       "pointer"
     ],
-    "41": [
+    "4": [
+      "asap",
+      "banjir",
+      "baru",
+      "bootloop",
+      "dekomposisi",
+      "demam",
+      "diabetes",
+      "gejolak",
+      "genangan",
+      "iritasi",
+      "jatuh",
+      "kebakaran",
+      "kekeringan",
+      "kelangkaan",
+      "kemiskinan",
+      "kepanikan",
+      "keracunan",
+      "kerugian",
+      "kerusakan",
+      "kriminalitas",
+      "kutub",
+      "ledakan",
+      "limbah",
+      "mahal",
+      "mati",
+      "menguning",
+      "meningkat",
+      "menurun",
+      "mutasi",
+      "panda",
+      "paru",
+      "penyakit",
+      "penyumbatan",
+      "polusi",
+      "reruntuhan",
+      "sengatan",
+      "sirosis",
+      "terbentuk"
+    ],
+    "40": [
       "jaminan"
     ],
-    "42": [
+    "41": [
       "frekuensi"
     ],
-    "43": [
+    "42": [
       "kontrak"
     ],
-    "44": [
+    "43": [
       "dini",
       "dokumen",
       "kontainer",
@@ -13287,15 +13639,15 @@
       "pemberitahuan",
       "surat"
     ],
-    "45": [
+    "44": [
       "dana",
       "devisa",
       "dividen"
     ],
-    "46": [
+    "45": [
       "diet"
     ],
-    "47": [
+    "46": [
       "cacing",
       "instruksi",
       "mainan",
@@ -13305,196 +13657,97 @@
       "pakan",
       "pelet"
     ],
+    "47": [
+      "akun",
+      "api",
+      "basi",
+      "berkurang",
+      "diluruskan",
+      "fitur",
+      "hati",
+      "hipertensi",
+      "kejang",
+      "kerdil",
+      "lemot",
+      "mahasiswa",
+      "melambat",
+      "melonjak",
+      "memuai",
+      "pantai",
+      "pusing",
+      "throttling"
+    ],
     "48": [
-      "putih",
-      "uang"
+      "kalorimeter"
     ],
     "49": [
-      "down",
-      "fitur",
-      "longsor",
-      "mahasiswa",
-      "terputus"
+      "organ"
     ],
     "5": [
       "melemah"
     ],
     "50": [
-      "kalorimeter"
-    ],
-    "51": [
-      "organ"
-    ],
-    "52": [
       "alat",
       "sensor"
     ],
-    "53": [
+    "51": [
       "jaring",
       "perahu"
     ],
-    "54": [
+    "52": [
       "mata",
       "pasien",
       "tenggorokan"
     ],
-    "55": [
+    "53": [
       "sembako",
       "shu"
     ],
-    "56": [
+    "54": [
       "berlarian",
       "terbakar"
     ],
-    "57": [
-      "akuatik",
-      "alami",
-      "amfibi",
-      "anorganik",
-      "aplikasi",
-      "atom",
-      "autotrof",
-      "aves",
-      "beregu",
-      "berlapis",
-      "bermuatan",
-      "berpembuluh",
-      "bryophyta",
-      "buatan",
-      "crustacea",
-      "darat",
-      "demokrasi",
-      "diri",
-      "eksekutif",
-      "elektromagnetik",
-      "eukariotik",
-      "fungi",
-      "gas",
-      "grafis",
-      "harga",
-      "hewani",
-      "hiburan",
-      "hortikultura",
-      "hukum",
-      "invertebrata",
-      "jaringan",
-      "karbohidrat",
-      "kepemilikan",
-      "kolektif",
-      "komputer",
-      "kontak",
-      "legislatif",
-      "logam",
-      "lokal",
-      "longitudinal",
-      "mamalia",
-      "medis",
-      "mekanik",
-      "mekanis",
-      "merah",
-      "moluska",
-      "monera",
-      "moneter",
-      "motor",
-      "nabati",
-      "negara",
-      "non-pembuluh",
-      "nonlogam",
-      "organik",
-      "output",
-      "padat",
-      "parasit",
-      "pelindung",
-      "penciuman",
-      "pendapatan",
-      "pendek",
-      "pendidik",
-      "pengecap",
-      "perairan",
-      "perkebunan",
-      "permanen",
-      "pisces",
-      "primer",
-      "prokariotik",
-      "protista",
-      "pteridophyta",
-      "raket",
-      "reptil",
-      "saku",
-      "salju",
-      "saraf",
-      "sayuran",
-      "serangga",
-      "serealia",
-      "source",
-      "sukarela",
-      "susu",
-      "tegas",
-      "teratur",
-      "terdistribusi",
-      "terkecil",
-      "tinggi",
-      "tubuh",
-      "tumbuhan",
-      "tunggal",
-      "umum",
-      "unsur",
-      "utang",
-      "web"
-    ],
-    "58": [
+    "55": [
       "baterai",
       "infus",
       "ram"
     ],
-    "59": [
+    "56": [
+      "angin",
       "awan",
       "kalori",
       "trafik"
+    ],
+    "57": [
+      "kode",
+      "menggambar"
+    ],
+    "58": [
+      "kabel",
+      "mulsa"
+    ],
+    "59": [
+      "dataset"
     ],
     "6": [
       "kipas",
       "telinga"
     ],
     "60": [
-      "anggota",
-      "angin",
-      "mangsa",
-      "nektar",
-      "nol",
-      "pemilih",
-      "radio",
-      "refleks",
-      "rendah",
-      "sama",
-      "seluler",
-      "terasi"
-    ],
-    "61": [
-      "kode",
-      "menggambar"
-    ],
-    "62": [
-      "kabel",
-      "mulsa"
-    ],
-    "63": [
-      "dataset"
-    ],
-    "64": [
       "antarmuka"
     ],
-    "65": [
+    "61": [
       "antibiotik"
     ],
-    "66": [
+    "62": [
       "paru-paru"
     ],
-    "67": [
+    "63": [
+      ""
+    ],
+    "64": [
       "adik",
       "aktor",
-      "anak",
-      "ayah",
       "minum",
       "murid",
       "pegawai",
@@ -13503,61 +13756,67 @@
       "sekretaris",
       "siswa"
     ],
-    "68": [
+    "65": [
       "roti"
     ],
-    "69": [
+    "66": [
       "alfa"
+    ],
+    "67": [
+      "jarum"
+    ],
+    "68": [
+      "madu",
+      "siput"
+    ],
+    "69": [
+      "naik"
     ],
     "7": [
       "musyawarah"
     ],
     "70": [
-      "jarum"
-    ],
-    "71": [
-      "madu",
-      "siput"
-    ],
-    "72": [
-      "naik"
-    ],
-    "73": [
       "tumbang"
     ],
-    "74": [
-      "bergoyang",
-      "perut"
+    "71": [
+      "longsor",
+      "terputus"
     ],
-    "75": [
+    "72": [
+      "hutan",
+      "perut",
+      "tsunami"
+    ],
+    "73": [
       "banyak",
       "berat",
       "es",
-      "koheren",
-      "kompleks",
-      "konduktif",
-      "legal",
-      "likuid",
       "menguntungkan",
       "perih",
-      "ringan",
-      "sah",
       "semalaman",
-      "terik",
       "vital"
     ],
-    "76": [
+    "74": [
+      "bergoyang"
+    ],
+    "75": [
       "iuran"
     ],
-    "77": [
+    "76": [
       "kapal"
     ],
-    "78": [
+    "77": [
       "jantung",
       "musik"
     ],
-    "79": [
+    "78": [
       "sate"
+    ],
+    "79": [
+      "bawah",
+      "keseleo",
+      "memerah",
+      "pedas"
     ],
     "8": [
       "ayam",
@@ -13568,18 +13827,41 @@
       "turun"
     ],
     "81": [
-      "magnet",
-      "muatan",
-      "otot"
+      "berbulu",
+      "mikro",
+      "netral",
+      "pembuluh",
+      "terjadi"
     ],
     "82": [
+      "hari",
+      "licin"
+    ],
+    "83": [
+      "otot"
+    ],
+    "84": [
+      "banting",
+      "ekspresif",
+      "hangus",
+      "kembung",
+      "kental",
+      "lama",
+      "membusuk",
+      "ngos-ngosan",
+      "pulen",
+      "putih",
+      "radioaktif",
+      "sejuk"
+    ],
+    "85": [
       "kucing",
       "sapi",
       "sementara",
       "serigala",
       "ular"
     ],
-    "83": [
+    "86": [
       "asin",
       "berbahaya",
       "dalam",
@@ -13589,95 +13871,81 @@
       "hangat",
       "harum",
       "hijau",
+      "isolator",
+      "jaringan",
       "kenyal",
+      "keras",
+      "koheren",
       "kokoh",
+      "kompleks",
+      "konduktif",
       "kuat",
-      "lembap",
+      "legal",
       "lengket",
       "lentur",
+      "likuid",
       "manis",
-      "media",
       "memberatkan",
       "mengikat",
-      "merusak",
       "mulia",
       "pahit",
       "rapuh",
-      "renyah",
       "responsif",
+      "ringan",
       "rutin",
-      "segar",
+      "sah",
       "sepat",
       "stabil",
-      "subur",
+      "terik",
       "terkontrol"
     ],
-    "84": [
+    "87": [
+      "down"
+    ],
+    "88": [
       "basah",
       "kampung"
     ],
-    "85": [
+    "89": [
       "mekar",
       "taman"
-    ],
-    "86": [
-      "kota"
-    ],
-    "87": [
-      "bergerak"
-    ],
-    "88": [
-      "massal"
-    ],
-    "89": [
-      "memanas"
     ],
     "9": [
       "gula",
       "santan"
     ],
     "90": [
-      "hanyut"
+      "kota"
     ],
     "91": [
-      "licin"
+      "bergerak"
     ],
     "92": [
-      "sebelumnya"
+      "massal"
     ],
     "93": [
-      "publik"
+      "memanas"
     ],
     "94": [
+      "hanyut"
+    ],
+    "95": [
+      "sebelumnya"
+    ],
+    "96": [
+      "publik"
+    ],
+    "97": [
       "keluar",
       "terlepas"
     ],
-    "95": [
+    "98": [
       "kompetitif"
     ],
-    "96": [
+    "99": [
       "menyala",
       "terbuka",
       "terhapus"
-    ],
-    "97": [
-      "terluka"
-    ],
-    "98": [
-      "gagal",
-      "sawah"
-    ],
-    "99": [
-      "banting",
-      "ekspresif",
-      "hangus",
-      "kembung",
-      "lama",
-      "membusuk",
-      "ngos-ngosan",
-      "pulen",
-      "radioaktif",
-      "sejuk"
     ]
   },
   "positional_freq": {
@@ -13995,6 +14263,7 @@
     "baju": {
       "-1": 1,
       "0": 1,
+      "1": 1,
       "2": 1
     },
     "bakar": {
@@ -14468,7 +14737,7 @@
     "buku": {
       "-1": 1,
       "0": 3,
-      "1": 3,
+      "1": 4,
       "2": 2
     },
     "bulan": {
@@ -15370,6 +15639,9 @@
       "0": 5,
       "1": 2
     },
+    "halaman": {
+      "0": 1
+    },
     "halus": {
       "-1": 1,
       "2": 2
@@ -15437,6 +15709,9 @@
     "header": {
       "0": 1,
       "1": 2
+    },
+    "helai": {
+      "0": 1
     },
     "helium": {
       "-1": 5,
@@ -15644,7 +15919,7 @@
       "1": 6
     },
     "itu": {
-      "1": 15
+      "1": 23
     },
     "iuran": {
       "-1": 1
@@ -15772,6 +16047,9 @@
     "kadal": {
       "0": 6
     },
+    "kain": {
+      "1": 1
+    },
     "kakak": {
       "0": 3,
       "1": 1
@@ -15806,7 +16084,7 @@
       "2": 4
     },
     "kamar": {
-      "0": 1,
+      "0": 2,
       "1": 1
     },
     "kambing": {
@@ -16074,7 +16352,7 @@
     },
     "kertas": {
       "0": 1,
-      "1": 2
+      "1": 3
     },
     "kerugian": {
       "2": 6
@@ -16364,7 +16642,7 @@
       "0": 1
     },
     "lahan": {
-      "1": 5,
+      "1": 6,
       "2": 1
     },
     "lalu": {
@@ -16390,7 +16668,7 @@
     },
     "lapangan": {
       "-1": 2,
-      "1": 5
+      "1": 6
     },
     "lapar": {
       "1": 2
@@ -16492,6 +16770,9 @@
       "-1": 1,
       "2": 1
     },
+    "lembar": {
+      "0": 1
+    },
     "lembut": {
       "-1": 4,
       "1": 1,
@@ -16565,6 +16846,9 @@
       "0": 4,
       "1": 2
     },
+    "lipatan": {
+      "0": 1
+    },
     "lipo": {
       "1": 1
     },
@@ -16615,6 +16899,9 @@
     "luar": {
       "1": 7
     },
+    "luas": {
+      "-1": 4
+    },
     "ludah": {
       "-1": 2,
       "1": 2
@@ -16632,6 +16919,9 @@
     "lumut": {
       "0": 16,
       "1": 3
+    },
+    "lusuh": {
+      "-1": 4
     },
     "macet": {
       "-1": 4,
@@ -18600,6 +18890,9 @@
     "pesilat": {
       "0": 1
     },
+    "petak": {
+      "0": 1
+    },
     "petani": {
       "-1": 1,
       "0": 23,
@@ -19032,7 +19325,7 @@
     },
     "rumah": {
       "0": 4,
-      "1": 8
+      "1": 9
     },
     "rumahsakit": {
       "0": 6
@@ -19118,6 +19411,9 @@
     },
     "sambar": {
       "1": 2
+    },
+    "sampul": {
+      "0": 1
     },
     "sangat": {
       "1": 35
@@ -19419,6 +19715,9 @@
     "sirus": {
       "1": 1
     },
+    "sisi": {
+      "0": 1
+    },
     "sistem": {
       "0": 1,
       "1": 12
@@ -19603,7 +19902,7 @@
     },
     "taman": {
       "-1": 4,
-      "1": 1
+      "1": 2
     },
     "tamat": {
       "-1": 4,
@@ -20617,7 +20916,7 @@
     "investasi": 2,
     "istri": 1,
     "isu": 2,
-    "itu": 6,
+    "itu": 14,
     "jadi": 1,
     "jalan": 13,
     "jalanan": 9,
