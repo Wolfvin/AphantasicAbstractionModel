@@ -897,3 +897,54 @@ def test_particle_cluster_can_discover_a_category_beyond_modifier_connector():
         f"Expected 'tidak' to report the freshly-assigned 'NEGATOR' "
         f"label; got {tags.get('tidak')!r}."
     )
+
+
+def test_particle_cluster_purity_no_chain_merge_regression():
+    """Regression guard: the negator cluster must stay small and clean.
+
+    Found during BOS review of the Q/K/V soft-clustering PR: cosine
+    similarity on the 4-dim particle signature is degenerate (two of
+    the four dimensions are 0.0 for nearly every candidate, so cosine
+    measures direction over ~2 effective dims and is blind to
+    magnitude). This let an unrelated noise token ('di', a locative
+    preposition) chain-merge into the cluster seeded by 'tidak' on the
+    very first comparison (cosine('tidak', 'di') = 0.909, well above
+    the 0.85 threshold then in use), and the cluster ballooned to 29
+    tokens including clearly unrelated nouns ('asupan', 'benda',
+    'galah', 'instrumen', ...).
+
+    test_particle_cluster_can_discover_a_category_beyond_modifier_connector
+    (above) did NOT catch this — it only checks that 'tidak' lands in
+    a cluster distinct from 'dari'/'dengan', never the cluster's SIZE
+    or whether obviously-unrelated tokens leaked in. This test closes
+    that gap: on the canonical corpus, the cluster containing 'tidak'
+    must stay small (real negators: tidak, tak, melainkan — at most a
+    handful of tokens), not balloon into a grab-bag.
+    """
+    learner = _train_canonical_learner()
+    clusters = learner.inspect_particle_clusters()
+
+    tidak_cluster_tokens = None
+    for cid, detail in clusters.items():
+        if "tidak" in set(detail["tokens"]):
+            tidak_cluster_tokens = detail["tokens"]
+            break
+    assert tidak_cluster_tokens is not None, (
+        "'tidak' should land in some particle cluster on the canonical corpus."
+    )
+    assert len(tidak_cluster_tokens) <= 6, (
+        f"The cluster containing 'tidak' has {len(tidak_cluster_tokens)} "
+        f"tokens: {tidak_cluster_tokens!r}. Real Indonesian negators "
+        f"(tidak/tak/melainkan/bukan-as-negator) are a small closed "
+        f"class — a cluster this large indicates a chain-merge "
+        f"regression (unrelated nouns/verbs absorbed via a degenerate "
+        f"similarity metric), not genuine negator discovery."
+    )
+    # Obviously unrelated tokens (locative prepositions, random nouns
+    # from the corpus) must NOT be in the negator cluster.
+    unrelated_examples = {"di", "asupan", "benda", "galah", "instrumen"}
+    leaked = unrelated_examples & set(tidak_cluster_tokens)
+    assert not leaked, (
+        f"Unrelated token(s) {leaked!r} leaked into the 'tidak' "
+        f"cluster {tidak_cluster_tokens!r} — chain-merge regression."
+    )

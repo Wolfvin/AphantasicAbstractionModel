@@ -524,29 +524,34 @@ _DEFAULT_QKV_ACTION_SIMILARITY_THRESHOLD = 0.3
 
 # For PARTICLE clustering, the feature is the 4-dim positional
 # signature (pre_object_3tok_rate, between_first_rate, fine_entropy,
-# bucket_entropy). Two particles with similar positional behaviour
-# get high cosine. Threshold 0.85 (vs the old Euclidean 0.35) — this
-# is calibrated via the reproducer in scripts/reproducer_particle_clusters.py
-# to separate the three behaviourally-distinct particle groups on the
-# canonical corpus:
+# bucket_entropy).
 #
-#   - "sangat"/"bukan"/"itu"/"memang" (modifiers/demonstratives that
-#     sit at the 3-token action slot) have pairwise cosine 0.97-0.99
-#     → merge into one cluster ✓
-#   - "dari"/"dengan" (prepositions that sit at the >3-token between-
-#     first slot) have pairwise cosine 0.97 → merge into one cluster ✓
-#   - "tidak" (negator with low pre_3tok_rate AND low between_first_rate
-#     but medium fine_entropy) has cosine 0.74-0.82 with the other two
-#     groups → forms its own cluster ✓
+# BOS REVIEW FINDING (post-merge of the original cosine-based version):
+# cosine similarity is the WRONG metric here. Two of the four
+# dimensions (pre_object_3tok_rate, bucket_entropy) are 0.0 for nearly
+# every particle candidate, so cosine effectively measures direction
+# over only ~2 active dimensions — and direction-only comparison is
+# blind to MAGNITUDE differences that matter. Concretely: 'tidak'
+# (0.0, 0.019, 0.433, 0.0) scored 0.909 cosine against the unrelated
+# noise token 'di' (0.0, 0.429, 0.835, 0.0), despite their
+# between_first_rate differing by 22x — because both vectors happen to
+# point in a "similar enough" direction. This let a noise token chain
+# into the negator cluster on the very first comparison (seed 'tidak'
+# vs candidate 'di'), independent of any centroid-drift issue, and the
+# cluster ballooned to 29 tokens (vs. PR #105's clean 2-token
+# {melainkan, tidak} on the identical corpus).
 #
-# A lower threshold (e.g. 0.5) merges "tidak" with the connector
-# cluster, producing one giant noisy cluster (the failure mode the
-# user explicitly called out). A higher threshold (e.g. 0.95) over-
-# fragments, leaving "sangat" alone because "bukan"/"itu" are at
-# 0.978-0.999 (just under 0.95 is fine, but other borderline pairs
-# would fragment). 0.85 lands in the gap between the "tidak vs other"
-# band (0.74-0.82) and the "same-group" band (0.97+).
-_DEFAULT_QKV_PARTICLE_SIMILARITY_THRESHOLD = 0.85
+# Fix: score similarity as NEGATIVE EUCLIDEAN DISTANCE (magnitude-
+# sensitive) instead of cosine. The threshold below is therefore in
+# "-distance" units: a candidate joins a cluster when
+# -euclidean_distance(query, seed) >= threshold, i.e. when
+# euclidean_distance <= 0.35 — the exact threshold PR #105 validated
+# as producing a clean separation of MODIFIER-like, CONNECTOR-like,
+# and NEGATOR-like particles on this corpus (see
+# _PARTICLE_DISTANCE_THRESHOLD historically; kept here under the
+# qkv_particle_similarity_threshold name for API/persistence
+# continuity with this PR's field naming).
+_DEFAULT_QKV_PARTICLE_SIMILARITY_THRESHOLD = -0.35
 
 
 # ----------------------------------------------------------------------
@@ -2168,46 +2173,99 @@ class PositionalClusterLearner:
 
         threshold = self.qkv_particle_similarity_threshold
 
-        # Each cluster: (set_of_tokens, running_sum_signature).
-        # The running sum is the centroid * cluster_size; we divide
-        # by cluster_size when computing cosine similarity to get the
-        # mean-aggregated centroid. (Cosine is scale-invariant, so
-        # we could skip the division — but we keep it for clarity.)
-        clusters: List[Tuple[Set[str], List[float]]] = []
+        # Each cluster: (set_of_tokens, seed_signature). ``seed_signature``
+        # is the signature of the FIRST (highest-frequency) token that
+        # founded the cluster, and is NEVER updated as more members
+        # join. This is a deliberate anti-chain-merge guard.
+        #
+        # BUG FOUND DURING BOS REVIEW (PR #106 follow-up): the original
+        # implementation compared each new candidate against the
+        # cluster's running-mean CENTROID (recomputed every merge).
+        # On this 4-dim signature, two of the four dimensions
+        # (pre_object_3tok_rate, bucket_entropy) are 0.0 for nearly
+        # every particle candidate — e.g. 'tidak'=(0.0, 0.019, 0.433,
+        # 0.0) vs 'asupan'=(0.0, 0.2, 0.865, 0.0). Cosine similarity on
+        # vectors that are mostly-zero in the same dimensions is
+        # DEGENERATE: it measures direction, not magnitude, so two
+        # vectors with very different "how often" magnitudes but the
+        # same "which dimensions are nonzero" pattern score spuriously
+        # high (~0.98 for the tidak/asupan pair above, despite them
+        # being unrelated). As low-frequency noise tokens got admitted
+        # one at a time, the running centroid drifted toward this
+        # degenerate "mostly-zero, medium-entropy" region, and kept
+        # admitting MORE unrelated tokens — a classic chain-merge
+        # (verified: pre-fix, the cluster containing 'tidak' ballooned
+        # from a clean 2-token {melainkan, tidak} — the PR #105 result
+        # — to a noisy 29-token grab-bag including 'asupan', 'benda',
+        # 'di', 'galah', etc.).
+        #
+        # Fix: compare against the immutable SEED signature instead of
+        # a drifting mean. The seed is the highest-frequency (most
+        # statistically reliable) member of each cluster, so later
+        # low-frequency candidates are judged against a stable,
+        # trustworthy reference point rather than an average that they
+        # themselves could have helped distort.
+        clusters: List[Tuple[Set[str], Tuple[float, float, float, float]]] = []
 
         for tok in sorted_particles:
             query = signatures[tok]
 
             if not clusters:
-                # First particle — seed the first cluster.
-                clusters.append(({tok}, list(query)))
+                # First (highest-frequency) particle — seed the first
+                # cluster. Its signature becomes the permanent seed.
+                clusters.append(({tok}, query))
                 continue
 
-            # Compute cosine similarity between Query and each
-            # existing cluster's centroid.
+            # Compute similarity between Query and each existing
+            # cluster's SEED signature (not a recomputed centroid —
+            # see the anti-chain-merge note above).
+            #
+            # SECOND BUG FOUND DURING BOS REVIEW: even comparing
+            # against the (non-drifting) seed, COSINE similarity
+            # itself is the wrong metric for this signature. Cosine
+            # measures DIRECTION only, ignoring MAGNITUDE. On this
+            # 4-dim vector, two of four dimensions are 0.0 for nearly
+            # every token, so cosine effectively compares just 2
+            # dimensions — and a real negator like 'tidak'
+            # (0.0, 0.019, 0.433, 0.0) scores 0.909 cosine against an
+            # unrelated noise token like 'di' (0.0, 0.429, 0.835, 0.0)
+            # DESPITE their second dimension differing by 22x (0.019
+            # vs 0.429) — cosine only cares that both point in a
+            # "similar enough" direction, not that one token almost
+            # never sits in that position and the other often does.
+            # Euclidean distance, which IS magnitude-sensitive, gives
+            # 0.574 for the same pair (correctly far apart) — this is
+            # also the metric PR #105 validated as producing a clean
+            # {melainkan, tidak} cluster on this exact corpus.
+            #
+            # We keep the Q/K/V terminology (Query/Key roles, softmax
+            # weighting) but score similarity as negative Euclidean
+            # distance, so "higher score = more similar" still holds
+            # and the existing argmax/threshold logic below is
+            # unchanged.
             scores: List[float] = []
-            for _toks, sig_sum in clusters:
-                cluster_size = len(_toks)
-                centroid = tuple(s / cluster_size for s in sig_sum)
-                score = self._cosine_similarity_dense(query, centroid)
-                scores.append(score)
+            for _toks, seed_sig in clusters:
+                dist = math.sqrt(
+                    sum((query[d] - seed_sig[d]) ** 2 for d in range(4))
+                )
+                scores.append(-dist)
 
             weights = self._softmax(scores)
             best_idx = max(range(len(weights)), key=lambda i: weights[i])
             best_score = scores[best_idx]
 
             if best_score >= threshold:
-                # Assign to existing cluster; update running sum.
-                member_set, sig_sum = clusters[best_idx]
+                # Assign to existing cluster. Seed signature is NOT
+                # updated — it stays anchored to the founding member.
+                member_set, _seed_sig = clusters[best_idx]
                 member_set.add(tok)
-                for d in range(4):
-                    sig_sum[d] += query[d]
             else:
-                # No existing cluster is similar enough — create a
-                # new singleton cluster with this particle as its seed.
-                clusters.append(({tok}, list(query)))
+                # No existing cluster's seed is similar enough —
+                # create a new singleton cluster with this particle as
+                # its own (future) seed.
+                clusters.append(({tok}, query))
 
-        for cluster_id, (toks, _sig_sum) in enumerate(clusters):
+        for cluster_id, (toks, _seed_sig) in enumerate(clusters):
             self.particle_clusters[cluster_id] = toks
             for tok in toks:
                 self.particle_cluster_id_of[tok] = cluster_id
