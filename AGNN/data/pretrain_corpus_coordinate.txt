@@ -1,0 +1,17 @@
+## POLA: dan (depth, agent+predikat+posisi beragam)
+ayah membaca koran dan ibu memasak nasi
+kakak menulis surat dan adik menggambar
+guru mengajar dan murid belajar
+dia tertawa dan kamu menangis
+burung terbang dan ikan berenang
+matahari terbit dan bulan terbenam
+petani menanam dan pedagang menjual
+
+## POLA: atau (depth, agent+predikat+posisi beragam)
+kucing makan ikan atau anjing makan tulang
+kamu belajar atau kamu bermain
+dia pergi atau dia tinggal
+kita jalan atau kita lari
+ayah bekerja atau ayah istirahat
+anak membaca atau anak menulis
+murid belajar atau murid bermain
