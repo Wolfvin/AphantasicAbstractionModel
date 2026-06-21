@@ -1,0 +1,65 @@
+## POLA: karena (depth, agent+successor beragam)
+karena hujan jalanan basah
+karena malas dia gagal
+karena sakit adik tidak sekolah
+karena macet ayah terlambat
+karena lapar kucing mengeong
+karena panas es mencair
+karena gempa rumah retak
+
+## POLA: meskipun (depth + variasi posisi: awal dan tengah)
+meskipun lelah dia tetap bekerja
+meskipun miskin mereka bahagia
+meskipun hujan kami tetap pergi
+meskipun sulit siswa tetap belajar
+meskipun mahal orang tetap membeli
+dia tetap bekerja meskipun lelah
+mereka bahagia meskipun miskin
+kami tetap pergi meskipun hujan
+siswa tetap belajar meskipun sulit
+orang tetap membeli meskipun mahal
+
+## POLA: agar (depth + variasi posisi)
+agar lulus kamu harus belajar
+agar sehat kita harus berolahraga
+agar kaya dia harus menabung
+agar pintar anak harus membaca
+agar cantik dia harus berdandan
+kamu harus belajar agar lulus
+kita harus berolahraga agar sehat
+dia harus menabung agar kaya
+anak harus membaca agar pintar
+dia harus berdandan agar cantik
+
+## POLA: supaya (depth + variasi posisi)
+supaya sehat kita harus makan sayur
+supaya pintar siswa harus belajar
+supaya kuat tubuh harus istirahat
+supaya bersih rumah harus dibersihkan
+supaya rapi kamar harus dirapikan
+kita harus makan sayur supaya sehat
+siswa harus belajar supaya pintar
+tubuh harus istirahat supaya kuat
+rumah harus dibersihkan supaya bersih
+kamar harus dirapikan supaya rapi
+
+## POLA: walaupun (depth + variasi posisi)
+walaupun miskin dia bahagia
+walaupun lelah mereka tersenyum
+walaupun gagal dia bersyukur
+walaupun sulit anak tetap ceria
+walaupun jauh mereka tetap setia
+dia bahagia walaupun miskin
+mereka tersenyum walaupun lelah
+dia bersyukur walaupun gagal
+anak tetap ceria walaupun sulit
+mereka tetap setia walaupun jauh
+
+## POLA: ketika (depth, agent+successor beragam)
+ketika lapar dia makan nasi
+ketika haus kucing minum air
+ketika hujan jalanan basah
+ketika malam bintang bersinar
+ketika pagi ayam berkokok
+ketika dingin orang memakai jaket
+ketika senang anak tertawa

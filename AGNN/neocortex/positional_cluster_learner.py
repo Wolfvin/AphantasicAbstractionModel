@@ -3278,6 +3278,26 @@ class PositionalClusterLearner:
         splits the sentence at "sebelum", and the main clause gets
         parsed correctly. See the DoD test case
         "sebelum makan saya mencuci tangan".
+
+        **Gate KEPT (attempted removal during the subordinate-
+        conjunction sprint round, reverted)**: conjunctions like
+        "meskipun"/"agar"/"supaya" don't get into
+        ``action_object_freq`` because the >3-token extraction loop
+        breaks at the FIRST eligible candidate, which can be an
+        earlier token in the sentence. Removing the
+        ``action_object_freq`` gate to catch these via
+        has_agent/has_action alone caused a real regression: real
+        content nouns used across many different corpus sentences
+        (e.g. "ikan") can ALSO coincidentally show up at both bucket
+        0 and bucket 1 somewhere in a large corpus, and without the
+        action_object_freq gate as a narrower pre-filter, they get
+        misclassified as particles too — breaking the passive-voice
+        fix from sprint round 1 (verified: removing the gate dropped
+        "ikan" from "ikan dimakan oleh kucing"'s subject). The gate
+        stays; recognising conjunctions that never enter
+        action_object_freq needs a different, more targeted signal
+        (tracked as a sprint follow-up, not solved by broadening this
+        check).
         """
         if token not in self.action_object_freq:
             return False
