@@ -3,6 +3,43 @@
 **Date:** 2026-06-22
 **Mode:** **Scoping only — no code changes.** Per BOS/researcher review after sprint round 10 (two reverted attempts: `final_bucket_anchors`, `belalai` index-0 morphology guard), this document exists so the next attempt has a design to implement against instead of another ad-hoc patch.
 
+> **CORRECTION (round 12, before any implementation started):** the claim
+> below that `spo()` "silently loses `harga`/`suhu`" is **wrong** for the
+> user-facing inference path. Verified empirically:
+> `spo("panas menyebabkan suhu naik")` already returns
+> `object='suhu naik'` (the full span) — `_parse_clause_spo`'s object-
+> collection loop appends "naik" as an ordinary content token (it isn't
+> flagged ACTION, so nothing stops the loop), which happens to produce a
+> correct flat result *by accident*, not by design.
+>
+> The information loss this document describes is real, but it is
+> **training-time only**: `_extract_action_object` (>3-token case) returns
+> `tokens[-1]` alone as the object, so `action_object_freq['menyebabkan']`
+> records `{'naik': 1, 'turun': 1, 'mahal': 1, 'diabetes': 2, ...}` — a
+> signature that conflates genuine simple objects ("diabetes",
+> "kebakaran") with bare embedded-predicate fragments stripped of their
+> own subject ("naik", "turun", "mahal"). This can degrade
+> `_cluster_actions`' Q/K/V clustering quality for causal verbs, but it
+> does **not** corrupt `spo()`/`tag_sentence()`'s user-facing output the
+> way this document originally implied.
+>
+> **Net effect on scope:** the `EmbeddedSPO`/`spo_embedded()` design in
+> §2.2 below solves a narrower, less urgent problem than originally
+> framed — inference-time output for the 2 sentence shapes in §3 is
+> already reasonable without it. The higher-value, better-scoped fix is
+> likely at the training-time extraction signature instead (give causal
+> verbs a richer/cleaner object signature for clustering purposes), which
+> is a **smaller, more surgical, lower-risk change** than building a new
+> nested-SPO API. That fix has NOT been scoped or attempted yet — it
+> needs its own investigation pass (specifically: how to detect "this
+> last token is itself a bare embedded-predicate fragment, strip it from
+> the clustering signature" without reintroducing a round-9/10-style
+> over-broad bucket-anchor signal). Treat everything below as the
+> embedding-API design that remains available if a future round
+> determines the inference-time gap is real after all (e.g. for sentence
+> shapes NOT yet checked against the held-out corpus) — it is not
+> currently the recommended next implementation step.
+
 ---
 
 ## 0. TL;DR
