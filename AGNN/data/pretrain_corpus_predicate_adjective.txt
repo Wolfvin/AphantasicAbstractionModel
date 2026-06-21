@@ -1,0 +1,9 @@
+## POLA: predikat-adjektiva tanpa kopula (subjek 2 kata, tanpa objek)
+kamar rumah itu luas
+halaman taman itu luas
+petak lahan itu luas
+sisi lapangan itu luas
+lipatan baju itu lusuh
+lembar kertas itu lusuh
+sampul buku itu lusuh
+helai kain itu lusuh

@@ -162,6 +162,7 @@ def _train_canonical_learner() -> PositionalClusterLearner:
         _AGNP_ROOT / "data" / "pretrain_corpus_subordinate.txt",
         _AGNP_ROOT / "data" / "pretrain_corpus_coordinate.txt",
         _AGNP_ROOT / "data" / "pretrain_corpus_pronoun.txt",
+        _AGNP_ROOT / "data" / "pretrain_corpus_predicate_adjective.txt",
     ]
     missing = [p for p in corpus_paths if not p.exists()]
     if missing:
@@ -1323,4 +1324,94 @@ def test_saya_correctly_tagged_object_in_ditransitive():
     assert tags["saya"] == "OBJECT", (
         f"Expected 'saya' to be OBJECT in a ditransitive sentence; "
         f"got {tags['saya']!r}."
+    )
+
+
+# ----------------------------------------------------------------------
+# Predicate-final adjectives (sprint round 9 reframe)
+# ----------------------------------------------------------------------
+#
+# Background: the original anchor-discovery test (concentration at one
+# bucket + low bucket-entropy + freq floor) was always bucket-agnostic
+# by construction, but was only EVER applied to bucket 1
+# (_ACTION_BUCKET) — every other bucket's anchors were discarded even
+# when AGNN found a real, low-entropy concentration there. This was
+# the human imposing "predicates are verbs in the action slot" rather
+# than letting AGNN discover what predicate-shapes actually exist in
+# the data. Generalizing the SAME test to every bucket (bucket_anchors)
+# and using it as a fallback in _extract_action_object (when no verb-
+# looking/anchor token exists anywhere in the clause, check whether
+# the LAST token is itself a bucket(-1) anchor) lets Indonesian's
+# copula-less predicate adjectives ("rumah itu luas" — no verb at
+# all) surface as real predicates instead of being silently dropped.
+#
+# No adjective list, no POS category, no "this is an adjective" rule
+# was written anywhere — "luas"/"lusuh" get recorded with an empty-
+# string object sentinel ("luas" has NO object, unlike a real verb),
+# which gives every predicate-final token an IDENTICAL {"": count}
+# object signature. They then cluster together via the EXISTING
+# Q/K/V cosine-similarity step (_cluster_actions) — the same
+# machinery real verbs go through — purely because their signature
+# is similar, not because any code said "group adjectives together".
+
+def test_predicate_final_token_recorded_with_empty_object_sentinel():
+    """A copula-less predicate adjective gets the {"": count} sentinel.
+
+    "rumah itu sangat luas" has NO verb anywhere and NO object slot —
+    "luas" itself is the predicate. _extract_action_object's fallback
+    should record it in action_object_freq with the empty-string
+    sentinel object (not skip the sentence, not invent a fake object).
+    """
+    learner = _train_canonical_learner()
+    assert "" in learner.action_object_freq.get("luas", {}), (
+        f"Expected 'luas' to have the empty-object sentinel recorded; "
+        f"got {learner.action_object_freq.get('luas')!r}."
+    )
+    assert learner._is_action_token("luas"), (
+        "'luas' should be recognised as a predicate token via the "
+        "predicate-final fallback."
+    )
+
+
+def test_predicate_final_adjectives_cluster_together():
+    """Predicate-final tokens with identical empty-object signatures
+    land in the SAME action cluster via the existing Q/K/V step.
+
+    This is the round-9 payoff: no clustering code was written for
+    this category specifically. "luas" and "lusuh" cluster together
+    purely because _cluster_actions sees their {"": count} object
+    distributions as maximally similar — the same mechanism that
+    clusters real verbs by shared object vocabulary.
+    """
+    learner = _train_canonical_learner()
+    clusters = learner.inspect_cluster_details()
+    luas_cluster = None
+    lusuh_cluster = None
+    for cid, detail in clusters.items():
+        actions = set(detail["actions"])
+        if "luas" in actions:
+            luas_cluster = cid
+        if "lusuh" in actions:
+            lusuh_cluster = cid
+    assert luas_cluster is not None, "'luas' should land in some cluster."
+    assert lusuh_cluster is not None, "'lusuh' should land in some cluster."
+    assert luas_cluster == lusuh_cluster, (
+        f"Expected 'luas' (cluster {luas_cluster}) and 'lusuh' "
+        f"(cluster {lusuh_cluster}) to cluster together — both are "
+        f"predicate-final adjectives with identical empty-object "
+        f"signatures."
+    )
+
+
+def test_predicate_adjective_sentence_tags_subject_and_predicate():
+    """"rumah itu sangat luas" tags 'rumah' AGENT and 'luas' as the
+    recognised predicate, even though there is no verb and no
+    object in the sentence at all.
+    """
+    learner = _train_canonical_learner()
+    tags = dict(learner.tag_sentence("rumah itu sangat luas"))
+    assert tags["rumah"] == "AGENT"
+    assert tags["luas"] != "UNKNOWN", (
+        f"Expected 'luas' to be recognised as the predicate; got "
+        f"{tags['luas']!r}."
     )

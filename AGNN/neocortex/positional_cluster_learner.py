@@ -962,6 +962,39 @@ class PositionalClusterLearner:
     action_bucket_anchors: Set[str] = field(default_factory=set)
 
     # ------------------------------------------------------------------
+    # Generalised bucket anchors (round 9 reframe). The discovery test
+    # itself (concentration at one bucket + low bucket-entropy + freq
+    # floor) was ALWAYS bucket-agnostic — it just happened to only be
+    # APPLIED to bucket 1 (_ACTION_BUCKET), because the original
+    # architecture assumed every predicate is a verb sitting in the
+    # action slot. That filter (`dominant_bucket != _ACTION_BUCKET:
+    # continue`) was AGNN finding something real and us discarding it
+    # for not matching our own preconceived slot.
+    #
+    # bucket_anchors: {bucket_id: {tokens whose dominant bucket is
+    #   bucket_id, with low bucket-entropy and freq >= the floor}} —
+    #   computed for EVERY bucket that appears in positional_freq, not
+    #   just bucket 1. ``action_bucket_anchors`` is kept as a thin view
+    #   (bucket_anchors[_ACTION_BUCKET]) for backward compatibility
+    #   with every existing call site; nothing about its CONTENTS
+    #   changes.
+    #
+    # What this buys: a clause whose predicate slot (bucket 1) is
+    # genuinely empty (no verb morphology, no bucket-1 anchor) is no
+    # longer silently dropped. If the LAST bucket of that same clause
+    # has its own anchor (a token AGNN found concentrates there, e.g.
+    # predicate-final adjectives like "mahal"/"rusak" in "barang ini
+    # mahal" — never engineered or named in advance), that becomes a
+    # real predicate candidate instead of invisible. Whether such a
+    # token gets its own cluster, merges with an existing one, or
+    # forms something nobody anticipated is still entirely up to the
+    # Q/K/V clustering step downstream — this only stops the
+    # information from being thrown away before clustering even sees
+    # it.
+    # ------------------------------------------------------------------
+    bucket_anchors: Dict[int, Set[str]] = field(default_factory=dict)
+
+    # ------------------------------------------------------------------
     # Brown-clustering state (added by the object-vocabulary
     # super-cluster fix). See the "_BROWN_CLUSTER_*" constants above
     # for the algorithm contract.
@@ -1231,7 +1264,7 @@ class PositionalClusterLearner:
             if not tokens or len(tokens) < 3:
                 continue
             action_token, object_token = self._extract_action_object(tokens)
-            if action_token and object_token:
+            if action_token and object_token is not None:
                 obj_bucket = self.action_object_freq.setdefault(action_token, {})
                 obj_bucket[object_token] = obj_bucket.get(object_token, 0) + 1
                 # Connector-signal evidence: record the token (or
@@ -1629,6 +1662,7 @@ class PositionalClusterLearner:
         """
         self.function_word_candidates = set()
         self.action_bucket_anchors = set()
+        self.bucket_anchors = {}
 
         # Function word candidates: scan fine_positional_freq AND
         # positional_freq (need both — fine for entropy, bucket for
@@ -1676,7 +1710,14 @@ class PositionalClusterLearner:
                 continue
             self.function_word_candidates.add(token)
 
-        # Action bucket anchors: scan positional_freq.
+        # Bucket anchors: scan positional_freq. The discovery test
+        # (freq floor + dominant-bucket concentration + low bucket
+        # entropy) is applied to EVERY bucket that shows up, not just
+        # _ACTION_BUCKET — see the ``bucket_anchors`` field docstring
+        # for why. ``action_bucket_anchors`` is then just the
+        # bucket-1 slice, kept as its own field so every existing
+        # call site (action recognition, soft-particle detection,
+        # extraction) is unaffected.
         for token, bucket_map in self.positional_freq.items():
             total = sum(bucket_map.values())
             if total < _ACTION_ANCHOR_MIN_FREQ:
@@ -1687,8 +1728,6 @@ class PositionalClusterLearner:
                 bucket_map.keys(),
                 key=lambda b: (bucket_map[b], -b)
             )
-            if dominant_bucket != _ACTION_BUCKET:
-                continue
             # Normalized Shannon entropy over buckets.
             h = 0.0
             for c in bucket_map.values():
@@ -1698,7 +1737,9 @@ class PositionalClusterLearner:
             max_h = math.log2(len(bucket_map)) if len(bucket_map) > 1 else 0.0
             nh = h / max_h if max_h > 0 else 0.0
             if nh < _ACTION_ANCHOR_MAX_BUCKET_ENTROPY:
-                self.action_bucket_anchors.add(token)
+                self.bucket_anchors.setdefault(dominant_bucket, set()).add(token)
+                if dominant_bucket == _ACTION_BUCKET:
+                    self.action_bucket_anchors.add(token)
 
     # ------------------------------------------------------------------
     # Brown clustering of object vocabulary (Task 2)
@@ -4572,11 +4613,34 @@ class PositionalClusterLearner:
                 break
         if action_idx is None:
             # No verb-looking or anchor token before the object slot.
-            # Skip this sentence to avoid noun-as-action garbage. The
-            # cost is losing sentences whose verb is an irregular root
-            # (e.g. "makan", "minum") in a >3-token sentence, but
-            # that's a small fraction of the corpus and the gain in
-            # cluster quality (no garbage noun-actions) is much larger.
+            #
+            # Predicate-final fallback (round 9 reframe): before
+            # giving up, check whether the LAST token is itself a
+            # discovered bucket(-1) anchor (see ``bucket_anchors`` —
+            # concentrates at the final position across the corpus,
+            # low entropy, same statistical test used for action_
+            # bucket_anchors, just no longer restricted to bucket 1).
+            # This is the "barang ini mahal" / "rumah itu luas"
+            # pattern: a predicate adjective with NO verb anywhere in
+            # the clause and NO object slot at all (the adjective
+            # itself sits where the object would, because Indonesian
+            # predicate adjectives need no copula). Returning the
+            # empty-string sentinel as the "object" (not None) lets
+            # this flow through the SAME action_object_freq /
+            # _cluster_actions pipeline real verbs use — every
+            # predicate-final token gets an identical {"": count}
+            # object signature, so they naturally cluster together
+            # via the existing Q/K/V cosine-similarity step, without
+            # any new clustering code or a hardcoded adjective list.
+            last = tokens[-1]
+            if last in self.bucket_anchors.get(-1, set()):
+                return last, ""
+            # Otherwise: skip this sentence to avoid noun-as-action
+            # garbage. The cost is losing sentences whose verb is an
+            # irregular root (e.g. "makan", "minum") in a >3-token
+            # sentence, but that's a small fraction of the corpus and
+            # the gain in cluster quality (no garbage noun-actions)
+            # is much larger.
             return None, None
 
         return tokens[action_idx], tokens[-1]
