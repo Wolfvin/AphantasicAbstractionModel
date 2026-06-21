@@ -163,6 +163,7 @@ def _train_canonical_learner() -> PositionalClusterLearner:
         _AGNP_ROOT / "data" / "pretrain_corpus_coordinate.txt",
         _AGNP_ROOT / "data" / "pretrain_corpus_pronoun.txt",
         _AGNP_ROOT / "data" / "pretrain_corpus_predicate_adjective.txt",
+        _AGNP_ROOT / "data" / "pretrain_corpus_datang.txt",
     ]
     missing = [p for p in corpus_paths if not p.exists()]
     if missing:
@@ -1464,4 +1465,42 @@ def test_qkv_tiebreak_is_alphabetical_not_insertion_order():
         f"despite 'zaction' being inserted first in the corpus. Got "
         f"aaction={learner.cluster_id_of.get('aaction')!r}, "
         f"zaction={learner.cluster_id_of.get('zaction')!r}."
+    )
+
+
+# ----------------------------------------------------------------------
+# Corpus expansion sprint (round 15) — 'datang' as a standalone verb
+# ----------------------------------------------------------------------
+
+def test_datang_is_not_misclassified_as_soft_particle():
+    """'datang' must be recognised as ACTION, not excluded as a particle.
+
+    Found in round 10/14: the pre-round-15 corpus only used "datang" in
+    a modal-complement construction ("diperkirakan datang") in 2 of its
+    3 occurrences, which made it sit in the between-first slot relative
+    to the OUTER extraction's action("diperkirakan")/object("awal") pair
+    — a real, structurally-driven signal, not a bug in
+    _is_soft_particle. The system generalised correctly from
+    insufficient data; the fix (per the round-14 user/researcher
+    correction) is to ADD variety, never to change the detection logic.
+    pretrain_corpus_datang.txt adds 8 sentences using "datang" as an
+    ordinary standalone verb across varied subjects, with no modal
+    construction repeated.
+    """
+    learner = _train_canonical_learner()
+    assert not learner._is_soft_particle("datang"), (
+        "'datang' should not be classified as a soft particle anymore "
+        "now that its between-first rate is diluted by varied usage."
+    )
+    assert learner._is_action_token("datang"), (
+        "'datang' should be recognised as a valid ACTION candidate."
+    )
+
+
+def test_datang_tagged_action_in_simple_sentence():
+    """'datang' tags ACTION in a plain, non-modal sentence."""
+    learner = _train_canonical_learner()
+    tags = dict(learner.tag_sentence("tamu itu datang tiba-tiba"))
+    assert tags["datang"] == "ACTION", (
+        f"Expected 'datang' to be tagged ACTION; got {tags['datang']!r}."
     )
