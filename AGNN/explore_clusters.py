@@ -52,11 +52,25 @@ def _load_or_init() -> PositionalClusterLearner:
     return build_labelled_cluster_learner()
 
 
-def _snapshot(learner: PositionalClusterLearner) -> Dict[str, List[str]]:
-    """{cluster_id_as_str: sorted list of member action tokens}."""
+def _snapshot(learner: PositionalClusterLearner) -> Dict[str, Dict[str, List[str]]]:
+    """{"action": {cid_str: members}, "particle": {cid_str: members}}.
+
+    Both axes are snapshotted because both are full-retrain outputs of
+    train() and both can shift on any feed() call — `diff` was
+    previously blind to particle_clusters (only read action_clusters),
+    which meant a real movement (e.g. a token leaving a particle
+    cluster after corpus expansion) was invisible to the CLI even
+    though the underlying state had genuinely changed.
+    """
     return {
-        str(cid): sorted(actions)
-        for cid, actions in learner.action_clusters.items()
+        "action": {
+            str(cid): sorted(members)
+            for cid, members in learner.action_clusters.items()
+        },
+        "particle": {
+            str(cid): sorted(members)
+            for cid, members in learner.particle_clusters.items()
+        },
     }
 
 
@@ -209,24 +223,18 @@ def cmd_feed_many(sources: List[str]) -> None:
     _commit_batch(merged, batch_label=f"{len(sources)} sources merged")
 
 
-def cmd_diff() -> None:
-    if not os.path.exists(_SNAPSHOT_PATH):
-        print("No previous snapshot found — run `feed` at least once first.")
-        return
-    if not os.path.exists(_STATE_PATH):
-        print("No exploration state found — run `feed` at least once first.")
-        return
-
-    with open(_SNAPSHOT_PATH, encoding="utf-8") as f:
-        before = json.load(f)
-    learner = PositionalClusterLearner.load(_STATE_PATH)
-    after = _snapshot(learner)
-
+def _print_cluster_diff(
+    before: Dict[str, List[str]], after: Dict[str, List[str]], label: str,
+) -> None:
+    """Print the before->after diff for one cluster axis (action or
+    particle). Extracted so both axes share identical diff logic —
+    see cmd_diff's docstring for why both need to run.
+    """
     before_sets = {cid: set(members) for cid, members in before.items()}
     after_sets = {cid: set(members) for cid, members in after.items()}
 
     print("=" * 70)
-    print("CLUSTER DIFF: before -> after most recent feed()")
+    print(f"{label} CLUSTER DIFF: before -> after most recent feed()")
     print("=" * 70)
 
     matched_before = set()
@@ -240,10 +248,17 @@ def cmd_diff() -> None:
         before_members = before_sets[best_before_cid]
         added = after_members - before_members
         removed = before_members - after_members
-        if not added and not removed:
-            continue  # identical, not interesting to print
+        # Mark matched BEFORE the "skip if identical" check below — a
+        # cluster that didn't change at all is still a real match (its
+        # content survived the retrain unchanged), not an absence.
+        # Bug found via the particle-axis test: identical clusters were
+        # `continue`-d before being marked, so the NEW/DISAPPEARED
+        # sections below incorrectly reported every unchanged cluster
+        # as both newly created AND disappeared.
         matched_before.add(best_before_cid)
         matched_after.add(after_cid)
+        if not added and not removed:
+            continue  # identical, nothing to print beyond the match
         print(f"\ncluster {best_before_cid} -> {after_cid} (overlap={score:.2f})")
         if added:
             print(f"  + gained: {sorted(added)}")
@@ -273,6 +288,34 @@ def cmd_diff() -> None:
     print(f"\nSummary: {len(before_sets)} clusters before -> "
           f"{len(after_sets)} clusters after. "
           f"{new_count} new, {gone_count} disappeared.")
+
+
+def cmd_diff() -> None:
+    if not os.path.exists(_SNAPSHOT_PATH):
+        print("No previous snapshot found — run `feed` at least once first.")
+        return
+    if not os.path.exists(_STATE_PATH):
+        print("No exploration state found — run `feed` at least once first.")
+        return
+
+    with open(_SNAPSHOT_PATH, encoding="utf-8") as f:
+        before = json.load(f)
+    learner = PositionalClusterLearner.load(_STATE_PATH)
+    after = _snapshot(learner)
+
+    # Backward-compat: older snapshot files (pre-particle-tracking) are
+    # flat {cid: members} for action clusters only, with no "particle"
+    # key at all.
+    if "action" in before or "particle" in before:
+        before_action = before.get("action", {})
+        before_particle = before.get("particle", {})
+    else:
+        before_action = before
+        before_particle = {}
+
+    _print_cluster_diff(before_action, after["action"], "ACTION")
+    print()
+    _print_cluster_diff(before_particle, after["particle"], "PARTICLE")
 
 
 def cmd_query(sentence: str) -> None:
