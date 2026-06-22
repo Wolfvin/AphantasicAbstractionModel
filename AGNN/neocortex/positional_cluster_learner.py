@@ -802,50 +802,6 @@ _MODIFIER_3TOK_RATE = 0.5
 #       either of those two pre-existing ideas at all — that's fine;
 #       AGNN is allowed to surface a grammar class nobody anticipated).
 #
-# The feature vector (4 dimensions, all derived from data already
-# computed during Pass 1 of train() — no new corpus pass needed):
-#
-#   1. pre_object_3tok_rate = pre_object_3tok_freq[tok] /
-#      (pre_object_3tok_freq[tok] + pre_object_long_freq[tok])
-#      -> high for tokens that sit at the pre-object slot mostly in
-#         3-token sentences (the historical "MODIFIER" signature);
-#         low for tokens that sit there mostly in long sentences (the
-#         historical "CONNECTOR" signature). Tokens with zero
-#         pre-object observations get 0.5 (neutral - no signal either
-#         way), so they don't artificially cluster with either pole.
-#
-#   2. between_first_rate = corpus-wide between-first count /
-#      total frequency
-#      -> how often this token shows up specifically in the
-#         between-action-and-object slot (vs elsewhere in the
-#         sentence). Connectors score high here; modifiers, which sit
-#         in the 3-token action slot rather than a >3-token
-#         between-first slot, score lower.
-#
-#   3. fine_position_entropy = normalized Shannon entropy of
-#      fine_positional_freq[tok] (already computed for function-word
-#      discovery) -> how "spread out" the token's positions are.
-#
-#   4. bucket_entropy = normalized Shannon entropy of
-#      positional_freq[tok] (coarse 4-bucket scheme) -> same idea at
-#      the coarse-bucket level.
-#
-# Two particle tokens merge into the same cluster when the Euclidean
-# distance between their (normalized 0..1) feature vectors is below
-# ``_PARTICLE_DISTANCE_THRESHOLD``. This is a GENERIC distance
-# metric over GENERIC statistics — it has no awareness of what
-# "sangat" or "dari" mean, and no part of the threshold was reverse-
-# engineered by checking where those specific tokens land. The
-# threshold instead targets a natural separation in the data: the
-# combined corpus's particle population is genuinely bimodal on
-# dimension 1 (pre_object_3tok_rate clusters near 0.0 for one group
-# and near 0.6-0.85 for another, with a near-empty gap around
-# 0.2-0.5 -- see the calibration note on ``_PARTICLE_DISTANCE_THRESHOLD``
-# for the actual gap measurement), so a threshold landing inside that
-# gap separates the two natural groups regardless of which specific
-# tokens happen to populate them.
-_PARTICLE_DISTANCE_THRESHOLD = 0.35
-
 # Minimum total frequency for a particle token to be clustered.
 # Below this, the feature vector is too noisy (one observation can
 # swing pre_object_3tok_rate from 0.0 to 1.0). Particle tokens below
@@ -1636,25 +1592,6 @@ class PositionalClusterLearner:
         # Norms.
         norm_a = math.sqrt(sum(v * v for v in a.values()))
         norm_b = math.sqrt(sum(v * v for v in b.values()))
-        if norm_a == 0.0 or norm_b == 0.0:
-            return 0.0
-        return dot / (norm_a * norm_b)
-
-    @staticmethod
-    def _cosine_similarity_dense(
-        a: Tuple[float, ...], b: Tuple[float, ...],
-    ) -> float:
-        """Cosine similarity for two dense tuple vectors.
-
-        Same formula as :meth:`_cosine_similarity_sparse` but for
-        fixed-length dense tuples (used by particle clustering where
-        the feature vector is a 4-dim positional signature).
-        """
-        if not a or not b:
-            return 0.0
-        dot = sum(x * y for x, y in zip(a, b))
-        norm_a = math.sqrt(sum(x * x for x in a))
-        norm_b = math.sqrt(sum(y * y for y in b))
         if norm_a == 0.0 or norm_b == 0.0:
             return 0.0
         return dot / (norm_a * norm_b)
