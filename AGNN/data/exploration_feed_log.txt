@@ -2884,3 +2884,29 @@ di sarawak dan brunei diperkirakan terdapat antara 1800-2300 spesies pohon.
 hutan hujan ini adalah yang paling kaya keanekaragaman hayatinya di antara jenis hutan lainnya.
 hutan tidak memiliki musim kemarau yang nyata dengan jumlah bulan kering kurang dari dua.
 ketika tajuk tersibak karena pohon yang tumbang, lantai hutan akan diinvasi berbagai jenis terna dan semak.
+=== BATCH (25 lines, source=_batch_vaksin.txt) ===
+vaksin adalah sediaan biologis yang menghasilkan kekebalan adaptif terhadap penyakit infeksi tertentu.
+vaksin biasanya mengandung agen yang menyerupai mikroorganisme penyebab penyakit.
+agen dalam vaksin merangsang sistem imun untuk mengenali ancaman dan menghancurkannya.
+pemberian vaksin disebut vaksinasi, merupakan salah satu bentuk imunisasi.
+vaksinasi adalah metode paling efektif untuk mencegah penyakit menular.
+penerapan vaksinasi luas telah menciptakan kekebalan kelompok penting dalam pemberantasan cacar.
+organisasi kesehatan dunia melaporkan telah diterbitkan izin untuk vaksin bagi 25 jenis infeksi.
+istilah vaksin berasal dari kata latin yang berarti cacar sapi.
+edward jenner mengembangkan konsep vaksin pertama pada tahun 1796.
+ada berbagai jenis vaksin yang diklasifikasikan menurut zat yang dikandungnya.
+vaksin yang dilemahkan mengandung mikroorganisme hidup yang telah dimodifikasi virulensinya.
+vaksin inaktif mengandung mikroorganisme yang telah dihancurkan secara kimia.
+vaksin toksoid mengandung toksin yang sudah diinaktifkan.
+vaksin subunit mengandung antigen murni daripada seluruh mikroorganisme.
+vaksin genetik mengandung asam nukleat seperti dna atau rna.
+vaksin yang dimasukkan dapat merangsang sistem imun membentuk antibodi.
+beberapa efek samping vaksin mencakup mual, pusing, dan muntah.
+efektivitas vaksin bergantung pada jenis penyakit, strain vaksin, dan jadwal imunisasi.
+pada tahun 1958, amerika serikat mengalami 763.094 kasus campak dengan 552 kematian.
+setelah penggunaan vaksin campak, kasus menurun menjadi kurang dari 150 per tahun.
+vaksin dapat diberikan melalui berbagai metode termasuk injeksi dan oral.
+pengembangan vaksin baru umumnya memerlukan waktu 15-20 tahun dari konsep hingga produk final.
+vaksin influenza, hpv, dan cacar air telah terbukti sangat efektif mencegah penyakit.
+cacar telah berhasil dimusnahkan dari seluruh dunia melalui program vaksinasi massal.
+edward jenner menemukan bahwa orang yang terinfeksi cacar sapi tidak akan terkena cacar sejati.
