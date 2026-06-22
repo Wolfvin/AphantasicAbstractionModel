@@ -15,11 +15,15 @@ Usage (run from AGNN/):
     python explore_clusters.py status
     python explore_clusters.py feed <path-to-text-file>
     python explore_clusters.py feed -          # read from stdin
+    python explore_clusters.py feed-many <file1> <file2> ... <fileN>
+                                                # read all concurrently,
+                                                # train() ONCE on the merge
     python explore_clusters.py diff
     python explore_clusters.py query "<kalimat>"
 """
 from __future__ import annotations
 
+import concurrent.futures
 import json
 import os
 import sys
@@ -101,40 +105,108 @@ def cmd_status() -> None:
         print(f"  Feed batches so far : {batches}")
 
 
-def cmd_feed(source: str) -> None:
+def _read_lines(source: str) -> List[str]:
     if source == "-":
         text = sys.stdin.read()
     else:
         with open(source, encoding="utf-8") as f:
             text = f.read()
-    lines = [
+    return [
         ln.strip() for ln in text.splitlines()
         if ln.strip() and not ln.strip().startswith("#")
     ]
+
+
+def _fetch_sources_concurrently(sources: List[str]) -> Dict[str, List[str]]:
+    """Read N source files CONCURRENTLY (I/O-bound — threads are safe
+    here, no shared mutable state between reads). Returns
+    {source: lines}, preserving input order on the caller side.
+
+    This is the part of the pipeline that is SAFE to parallelize:
+    independent file reads, no writes, no shared learner state. The
+    write side (train() + save()) below this is run sequentially on
+    purpose — see cmd_feed_many's docstring for why.
+    """
+    results: Dict[str, List[str]] = {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+        future_to_source = {
+            pool.submit(_read_lines, src): src for src in sources
+        }
+        for future in concurrent.futures.as_completed(future_to_source):
+            src = future_to_source[future]
+            results[src] = future.result()
+    return results
+
+
+def _commit_batch(lines: List[str], batch_label: str) -> None:
+    """Shared commit logic for both cmd_feed and cmd_feed_many:
+    snapshot -> train() -> save() -> append to the feed log.
+
+    train()/save() are NOT parallelized and never will be — every
+    feed() call is a FULL RETRAIN over the entire accumulated corpus
+    (Brown clustering + Q/K/V re-cluster ALL actions seen so far, not
+    just the new lines), so running two of these concurrently would
+    have both processes load the SAME state, mutate independent
+    in-memory copies, and whichever save() finishes last silently
+    discards the other's work (a classic lost-update race). The real
+    lever for speed is reducing the NUMBER of train() calls — feed
+    many sources in one call instead of one-at-a-time — which is
+    exactly what cmd_feed_many does by merging concurrently-read
+    sources into a single batch before this function ever runs.
+    """
     if not lines:
         print("No usable lines found in input (empty or all comments).")
         return
 
     learner = _load_or_init()
 
-    # Snapshot BEFORE this batch, for the next `diff` call.
     before = _snapshot(learner)
     with open(_SNAPSHOT_PATH, "w", encoding="utf-8") as f:
         json.dump(before, f, ensure_ascii=False, indent=2)
 
-    print(f"Feeding {len(lines)} new lines (accumulates on top of "
-          f"existing state)...")
+    print(f"Feeding {len(lines)} new lines ({batch_label}) — accumulates "
+          f"on top of existing state...")
     learner.train(lines)
     learner.save(_STATE_PATH)
 
     os.makedirs(_DATA_DIR, exist_ok=True)
     with open(_LOG_PATH, "a", encoding="utf-8") as f:
-        f.write(f"=== BATCH ({len(lines)} lines) ===\n")
+        f.write(f"=== BATCH ({len(lines)} lines, {batch_label}) ===\n")
         for ln in lines:
             f.write(ln + "\n")
 
     print(f"Saved exploration state to {_STATE_PATH}")
     print(f"Run `python explore_clusters.py diff` to see what changed.")
+
+
+def cmd_feed(source: str) -> None:
+    _commit_batch(_read_lines(source), batch_label=f"source={source}")
+
+
+def cmd_feed_many(sources: List[str]) -> None:
+    """Feed MULTIPLE sources in one go: read them all CONCURRENTLY
+    (parallel I/O, safe — independent file reads), merge into a
+    single combined batch, then commit with exactly ONE train() call.
+
+    This is the formalized version of what every multi-article batch
+    in this exploration session did manually (concatenate N articles
+    into one file, then `feed` once) — now an explicit, reusable
+    feature instead of an ad-hoc Write-tool step each time.
+
+    Why this is the correct place to parallelize, and why feeding
+    each source with its own train() call would NOT be faster: see
+    _commit_batch's docstring on the full-retrain cost. N sequential
+    `feed` calls pay the full-corpus reclustering cost N times; one
+    `feed-many` call pays it ONCE for the same total amount of new
+    data.
+    """
+    print(f"Reading {len(sources)} sources concurrently...")
+    results = _fetch_sources_concurrently(sources)
+    merged: List[str] = []
+    for src in sources:  # preserve caller-specified order
+        merged.extend(results.get(src, []))
+    print(f"Merged {len(merged)} total lines from {len(sources)} sources.")
+    _commit_batch(merged, batch_label=f"{len(sources)} sources merged")
 
 
 def cmd_diff() -> None:
@@ -224,6 +296,11 @@ def main() -> None:
             print("Usage: explore_clusters.py feed <path-or-->")
             sys.exit(1)
         cmd_feed(sys.argv[2])
+    elif cmd == "feed-many":
+        if len(sys.argv) < 3:
+            print("Usage: explore_clusters.py feed-many <file1> <file2> ...")
+            sys.exit(1)
+        cmd_feed_many(sys.argv[2:])
     elif cmd == "diff":
         cmd_diff()
     elif cmd == "query":
