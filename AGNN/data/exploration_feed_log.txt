@@ -2693,3 +2693,69 @@ saksi bersaksi bahwa terdakwa hadir di lokasi.
 analis memperkirakan bahwa harga saham akan naik.
 === BATCH (1 lines, source=-) ===
 ini hanya tes diff particle cluster setelah fix tooling.
+=== BATCH (65 lines, source=_batch_lebah_kopi_sepakbola.txt) ===
+lebah adalah serangga bersayap yang membentuk klad anthophila dalam ordo hymenoptera dengan lebih dari 20.000 spesies.
+lebah adalah herbivor yang secara khusus memakan nektar dan serbuk sari untuk kebutuhan energi dan nutrisi.
+lebah ditemukan di setiap benua kecuali antartika, di habitat manapun dengan tumbuhan berbunga.
+ukuran lebah sangat bervariasi, dari spesies tanpa sengat kurang dari 2mm hingga megachile pluto mencapai 39mm.
+beberapa spesies lebah hidup sosial dalam koloni hierarkis, sementara lebih dari 90% spesies bersifat soliter.
+dalam koloni terdapat tiga kasta yaitu ratu, pekerja betina, dan jantan.
+ratu lebah dapat menelurkan sekitar 2.000 telur per hari dan hidup hingga tiga tahun.
+lebah menjalani metamorfosis lengkap dengan empat tahap yaitu telur, larva, pupa, dan imago.
+ratu diberi makan royal jelly sejak larva sehingga tubuhnya lebih besar dari lebah pekerja lainnya.
+lebah pekerja mengumpulkan serbuk sari dan nektar untuk disimpan sebagai madu cadangan koloni.
+madu adalah campuran kental dari monosakarida yang dicerna sebagian, dimuntahkan, dan dihidrasi.
+sengat lebah bersifat fatal bagi dirinya karena kantong kelenjar akan terlepas saat menyengat.
+lebah berfungsi penting sebagai penyerbuk utama untuk penyerbukan silang tumbuhan berbunga.
+manusia memanfaatkan madu sebagai makanan dan obat sejak zaman mesir kuno dan yunani kuno.
+ilmu tentang pemeliharaan lebah disebut apiari yang menghasilkan madu secara komersial.
+peternakan lebah manusia telah dipraktikkan sebagai disiplin peternakan hewan selama ribuan tahun.
+bangsa maya telah mempraktikkan meliponikultur intensif skala besar sejak masa pra-columbus.
+racun lebah dapat dikumpulkan modern tanpa membunuh lebah menggunakan jebakan berarus listrik.
+terapi lebah menggunakan sengat lebah untuk pengobatan serupa akupunktur.
+pejantan lebah hanya berfungsi mengawini ratu muda dan akan mati setelah kawin.
+perkawinan ratu lebah hanya terjadi sekali seumur hidup dengan cara terbang tinggi di angkasa.
+lebah pekerja hidup sekitar tiga bulan, jauh lebih pendek dibanding ratu yang hidup tiga tahun.
+kopi merupakan minuman yang diseduh dengan biji kopi yang sudah disangrai dan dihaluskan.
+kopi berwarna gelap, pahit, dan sedikit asam dengan efek stimulan pada manusia.
+produksi kopi dimulai ketika benih dari buah kopi dipisahkan untuk menghasilkan biji kopi hijau.
+biji kopi kemudian disangrai dan dihaluskan menjadi partikel-partikel kecil sebelum diseduh.
+kopi biasanya disajikan panas meskipun kopi dingin juga umum dijumpai.
+kopi mulai dibudidayakan di jawa pada abad ke-17 dan di amerika sejak abad ke-18.
+tanaman kopi dibudidayakan di lebih dari 70 negara, terutama di wilayah khatulistiwa.
+brasil merupakan produsen utama biji kopi dengan menghasilkan 31% dari total dunia.
+kata koffie belanda dipinjam dari kata kahve dalam bahasa turki utsmaniyah.
+dalam bahasa indonesia, kata kopi merupakan kata serapan dari bahasa belanda.
+semua tanaman kopi diklasifikasikan dalam famili rubiaceae.
+tanaman kopi merupakan perdu yang dapat tumbuh setinggi 5 meter.
+setiap buah beri kopi biasanya berisi dua biji.
+brasil adalah negara pengekspor kopi terbesar dengan menyumbang 15% dari seluruh ekspor dunia.
+kopi arabika umumnya lebih dihargai tinggi daripada kopi robusta.
+galur robusta mengandung lebih banyak kafeina daripada arabika.
+penyangraian kopi hijau dimulai ketika suhu di dalam biji mencapai sekitar 200 derajat celsius.
+ekstraksi kopi yang optimal terjadi antara 91 dan 96 derajat celsius.
+biji kopi dapat digiling dengan penggiling burr, penggiling pisau, atau dengan lesung dan alu.
+metode espresso memaksa air panas bertekanan melewati kopi yang digiling halus.
+sepak bola adalah cabang olahraga yang dimainkan antara dua tim yang terdiri dari 11 pemain.
+permainan sepak bola menggunakan bola sepak dan dimainkan di lapangan berbentuk persegi panjang.
+tujuan permainan adalah untuk mencetak lebih banyak gol daripada tim lawan.
+aturan permainan sepak bola telah berlaku sejak tahun 1863.
+hanya penjaga gawang yang boleh menggunakan tangan dan lengan mereka di area pinalti.
+pertandingan sepak bola normal terdiri dari dua babak selama 45 menit.
+sepak bola adalah salah satu olahraga paling populer di dunia.
+fifa merupakan badan sepak bola internasional yang mengatur permainan di tingkat internasional.
+piala dunia fifa adalah kompetisi internasional yang paling populer dalam olahraga ini.
+permainan sepak bola muncul secara independen beberapa kali di berbagai budaya kuno.
+di tiongkok terdapat permainan bernama cuju yang menyerupai sepak bola modern.
+peraturan cambridge dibuat di universitas cambridge pada tahun 1848.
+asosiasi sepak bola inggris didirikan pada tahun 1863 sebagai organisasi pertama yang menstandarisasi aturan permainan.
+piala fa adalah kompetisi sepak bola tertua di dunia yang diperebutkan sejak 1872.
+pertandingan sepak bola internasional resmi pertama terjadi pada 1872 antara skotlandia dan inggris.
+liga sepak bola profesional pertama di dunia didirikan di inggris pada 1888.
+fifa selaku induk organisasi sepak bola dunia didirikan pada 1904.
+piala dunia fifa digelar perdana pada 1930 di uruguay.
+lapangan sepak bola internasional memiliki panjang berkisar antara 100 sampai 120 meter.
+gawang memiliki lebar 7,32 meter dan tinggi 2,44 meter.
+wasit dapat menentukan waktu tambahan di setiap akhir babak.
+pemain yang menerima dua kartu kuning akan mendapatkan kartu merah.
+penyerang memiliki tugas utama untuk mencetak gol ke gawang lawan.

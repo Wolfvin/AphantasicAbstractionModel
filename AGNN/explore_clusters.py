@@ -152,6 +152,37 @@ def _fetch_sources_concurrently(sources: List[str]) -> Dict[str, List[str]]:
     return results
 
 
+# Same content-match set bootstrap_classifier.py uses
+# (EXPECTED_COORDINATOR_TOKENS) — re-derived here rather than imported
+# because explore_clusters.py is deliberately decoupled from the
+# production module's labelling contract (see module docstring).
+_EXPECTED_COORDINATOR_TOKENS = {"dan", "atau"}
+
+
+def _mark_coordinator_clusters(learner: PositionalClusterLearner) -> None:
+    """Auto-mark clause-coordinator clusters after every train() call.
+
+    Gap found (Round 28): every retrain here left
+    ``coordinator_cluster_ids`` empty, because nothing in this script
+    ever called ``mark_clause_coordinator_clusters()`` — unlike
+    ``bootstrap_classifier.py``, which does this automatically. Effect:
+    ``dan``/``atau`` got wrongly tagged ACTION by ``tag_sentence()`` in
+    every exploration query (verified: "dan" had
+    ``_is_action_token('dan') == True`` here vs ``False`` in
+    production). Same content-match pattern as production — mark
+    whichever cluster(s) "dan"/"atau" landed in this retrain. Missing
+    coordinators are non-fatal (same graceful-degradation contract as
+    production), and this never touches PCL's own clustering logic.
+    """
+    coordinator_cluster_ids = {
+        learner.cluster_id_of[token]
+        for token in _EXPECTED_COORDINATOR_TOKENS
+        if token in learner.cluster_id_of
+    }
+    if coordinator_cluster_ids:
+        learner.mark_clause_coordinator_clusters(coordinator_cluster_ids)
+
+
 def _commit_batch(lines: List[str], batch_label: str) -> None:
     """Shared commit logic for both cmd_feed and cmd_feed_many:
     snapshot -> train() -> save() -> append to the feed log.
@@ -181,6 +212,7 @@ def _commit_batch(lines: List[str], batch_label: str) -> None:
     print(f"Feeding {len(lines)} new lines ({batch_label}) — accumulates "
           f"on top of existing state...")
     learner.train(lines)
+    _mark_coordinator_clusters(learner)
     learner.save(_STATE_PATH)
 
     os.makedirs(_DATA_DIR, exist_ok=True)
