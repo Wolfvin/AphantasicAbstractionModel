@@ -553,6 +553,39 @@ _DEFAULT_QKV_ACTION_SIMILARITY_THRESHOLD = 0.3
 # continuity with this PR's field naming).
 _DEFAULT_QKV_PARTICLE_SIMILARITY_THRESHOLD = -0.35
 
+# For OBJECT vocabulary clustering (Brown clustering replacement —
+# Round 24/25), the feature is the action-context count map
+# (Dict[action_token, count]) — the same shape of feature ACTION
+# clustering uses, just transposed (objects keyed by which actions
+# they co-occur with, instead of actions keyed by which objects).
+#
+# WHY THIS REPLACED THE ORIGINAL GREEDY ALL-PAIRS MERGE: profiling
+# (Round 24) found _cluster_object_vocabulary's greedy agglomerative
+# merge consuming 99.9% of a full train() call's time (1378s of
+# 1380s on a 6346-token corpus) — 27 MILLION calls to
+# _weighted_jaccard. The original docstring assumed the action-
+# co-occurrence graph is SPARSE ("typically O(N) candidate pairs"),
+# but at this corpus scale popular objects (e.g. "air", "manusia")
+# co-occur with dozens of distinct actions, making the candidate-pair
+# graph nearly DENSE — collapsing the intended pruning and producing
+# genuine O(N^2) behavior (27M ~ N^2/2 for N~7400 objects).
+#
+# Calibration (Round 25): 0.3 (matching the full-corpus granularity —
+# 213 clusters / 111 singletons vs the original's 219 / 123) was tried
+# first but FAILED the bootstrap_classifier's depth-only-corpus subset
+# test: CAUSAL (mengakibatkan/menyebabkan/memicu/...) and TEMPORAL
+# (ketika/sebelum/setelah/...) actions merged into one action cluster,
+# because on a smaller corpus subset their object-context distributions
+# were similar enough in cosine terms to cross 0.3. Raised to 0.4 —
+# verified to cleanly separate CAUSAL from TEMPORAL on BOTH the depth-
+# only subset and the full corpus, stable through 0.8 (no further
+# leakage), while staying close to the full-corpus granularity target
+# (233 clusters / 130 singletons vs original 219 / 123). Validated
+# 690x faster on the 6346-token exploration corpus (2.0s vs 1378.5s)
+# with the SAME sequential Q/K/V pattern already proven for ACTION
+# clustering above — not a new algorithm family, a reuse of one.
+_DEFAULT_QKV_OBJECT_SIMILARITY_THRESHOLD = 0.4
+
 
 # ----------------------------------------------------------------------
 # Cluster-driven role-assignment parameters
@@ -862,6 +895,9 @@ class PositionalClusterLearner:
     )
     qkv_particle_similarity_threshold: float = (
         _DEFAULT_QKV_PARTICLE_SIMILARITY_THRESHOLD
+    )
+    qkv_object_similarity_threshold: float = (
+        _DEFAULT_QKV_OBJECT_SIMILARITY_THRESHOLD
     )
 
     positional_freq: Dict[str, Dict[int, int]] = field(default_factory=dict)
@@ -1738,43 +1774,41 @@ class PositionalClusterLearner:
         BEFORE ``_cluster_actions()`` so action clustering can use
         super-cluster distributions instead of literal object tokens.
 
-        Algorithm (pure Python, no sklearn / scipy):
+        Algorithm (sequential Q/K/V — replaces the original greedy
+        all-pairs merge, see ``_DEFAULT_QKV_OBJECT_SIMILARITY_THRESHOLD``
+        for the full rationale and Round 24/25 profiling evidence):
             1. Build the object vocabulary: every token that appears
                as an object of any action in ``action_object_freq``.
             2. For each object token, build its "action context
                distribution" = {action_token: count} aggregated across
-               all (action, object) pairs.
-            3. **Inverted index**: build action -> {objects that
-               co-occur with it}. Two objects are CANDIDATES for
-               merging only if they share at least one action. This
-               prunes the O(N^2) all-pairs scan down to the
-               actually-comparable pairs (typically O(N) for sparse
-               co-occurrence graphs).
-            4. Greedy agglomerative merge: start with each object in
-               its own cluster. Repeatedly find the candidate pair
-               with the highest *weighted* Jaccard similarity of
-               their action-context COUNT maps. If similarity >=
-               ``_BROWN_CLUSTER_SIMILARITY_THRESHOLD``, merge them.
-               Stop when no pair qualifies or the cluster count drops
-               to ``_BROWN_CLUSTER_MAX_CLUSTERS``.
+               all (action, object) pairs — this is the feature
+               vector (Query/Key), the SAME shape ``_cluster_actions``
+               uses for actions, just transposed.
+            3. Sort objects by descending total observation count, so
+               the most-observed objects seed the initial clusters
+               (same rationale as ``_cluster_action_group_qkv``: a
+               rare object's count map is too noisy to trust as a
+               cluster seed).
+            4. Sequential Q/K/V assignment: for each object, compute
+               cosine similarity between its feature vector (Query)
+               and every existing cluster's centroid (mean of member
+               feature vectors). If the best score >=
+               ``qkv_object_similarity_threshold``, join that cluster
+               and update its running centroid sum. Otherwise start a
+               new singleton cluster.
             5. Assign super-cluster ids (0, 1, 2, ...) and build both
                ``object_supercluster_id`` (forward map) and
                ``object_superclusters`` (inverse map).
 
-        Why *weighted* Jaccard on count maps (not plain Jaccard on
-        sets)? Plain Jaccard suffers from chain-merging: two objects
-        that share ONE action merge at Jaccard >= 0.13, then the
-        merged cluster's action set grows, enabling further merges
-        via different shared actions. The end result is one giant
-        super-cluster containing most of the object vocabulary.
-
-        Weighted Jaccard is more strict: it considers COUNT
-        distributions, not just set membership. Two objects that
-        share an action but at very different frequencies get a lower
-        similarity than two objects with matching count shapes. This
-        breaks the chain-merge: an object can merge with the growing
-        cluster only if its count distribution matches the cluster's
-        aggregated distribution, not just shares one action.
+        Why this replaced the weighted-Jaccard greedy merge: that
+        algorithm re-scanned ALL share-an-action candidate pairs on
+        EVERY merge step, which degrades to O(N^2) once the object
+        co-occurrence graph stops being sparse (common at corpus
+        scale — popular objects like "air" co-occur with dozens of
+        actions). Sequential Q/K/V assigns each object ONCE against
+        the current cluster set (a few dozen clusters, not thousands
+        of pairs) — same algorithmic shape already proven correct and
+        fast for ACTION clustering above.
 
         Reset contract: this method overwrites both fields from
         scratch, so it is safe to call on every train() (no stale
@@ -1786,7 +1820,7 @@ class PositionalClusterLearner:
         if not self.action_object_freq:
             return
 
-        # Step 1+2: build object vocabulary and action-context distributions.
+        # Build object vocabulary and action-context distributions.
         # object_actions[obj] = {action: count}
         object_actions: Dict[str, Dict[str, int]] = defaultdict(
             lambda: defaultdict(int)
@@ -1798,97 +1832,50 @@ class PositionalClusterLearner:
         if not object_actions:
             return
 
-        # Step 3: inverted index — action -> set of object indices that
-        # co-occur with it. Used to enumerate candidate pairs (objects
-        # that share at least one action) without scanning all O(N^2)
-        # pairs.
-        obj_list: List[str] = list(object_actions.keys())
-        obj_to_idx: Dict[str, int] = {obj: i for i, obj in enumerate(obj_list)}
-        action_to_obj_indices: Dict[str, Set[int]] = defaultdict(set)
-        for obj, actions in object_actions.items():
-            for action in actions:
-                action_to_obj_indices[action].add(obj_to_idx[obj])
+        threshold = self.qkv_object_similarity_threshold
 
-        # Step 4: greedy agglomerative merge using candidate pairs.
-        # Each cluster is (set_of_object_indices, dict_of_action_counts).
-        # Track cluster-level action -> set of cluster indices for
-        # candidate generation.
-        clusters: List[Tuple[Set[int], Dict[str, int]]] = [
-            ({i}, dict(object_actions[obj]))
-            for i, obj in enumerate(obj_list)
-        ]
-        # cluster_idx_for_obj: object idx -> cluster idx that contains it.
-        cluster_idx_for_obj: List[int] = list(range(len(obj_list)))
-        # action -> set of cluster indices that contain at least one
-        # object co-occurring with this action. Updated as clusters merge.
-        action_to_cluster_indices: Dict[str, Set[int]] = {
-            action: set(action_to_obj_indices[action])
-            for action in action_to_obj_indices
-        }
+        # Sort by descending total count; ties broken alphabetically
+        # for reproducibility (same rationale as _cluster_action_group_qkv).
+        sorted_objs = sorted(
+            object_actions.keys(),
+            key=lambda o: (-sum(object_actions[o].values()), o),
+        )
 
-        threshold = _BROWN_CLUSTER_SIMILARITY_THRESHOLD
-        max_clusters = _BROWN_CLUSTER_MAX_CLUSTERS
+        # Each cluster: (set_of_object_tokens, running_sum_action_count_map).
+        clusters: List[Tuple[Set[str], Dict[str, int]]] = []
 
-        merged = True
-        while merged and len(clusters) > max(1, max_clusters):
-            merged = False
-            # Enumerate candidate pairs: clusters that share at least
-            # one action.
-            candidate_set: Set[Tuple[int, int]] = set()
-            for cluster_indices in action_to_cluster_indices.values():
-                cluster_list = sorted(cluster_indices)
-                for i in range(len(cluster_list)):
-                    for j in range(i + 1, len(cluster_list)):
-                        ci, cj = cluster_list[i], cluster_list[j]
-                        if ci < cj:
-                            candidate_set.add((ci, cj))
-                        else:
-                            candidate_set.add((cj, ci))
+        for obj in sorted_objs:
+            query = object_actions[obj]
 
-            if not candidate_set:
-                break
-
-            best_i, best_j, best_sim = -1, -1, -1.0
-            for ci, cj in candidate_set:
-                sim = self._weighted_jaccard(
-                    clusters[ci][1], clusters[cj][1]
-                )
-                if sim >= threshold and sim > best_sim:
-                    best_sim = sim
-                    best_i, best_j = ci, cj
-
-            if best_i >= 0:
-                # Merge cluster best_j into cluster best_i.
-                objs_i, acts_i = clusters[best_i]
-                objs_j, acts_j = clusters[best_j]
-                objs_i.update(objs_j)
-                for act, count in acts_j.items():
-                    acts_i[act] = acts_i.get(act, 0) + count
-                # Update cluster_idx_for_obj for objects in best_j.
-                for obj_idx in objs_j:
-                    cluster_idx_for_obj[obj_idx] = best_i
-                # Remove best_j from action_to_cluster_indices.
-                for act in acts_j:
-                    action_to_cluster_indices[act].discard(best_j)
-                    if best_i not in action_to_cluster_indices[act]:
-                        action_to_cluster_indices[act].add(best_i)
-                # Mark cluster best_j as empty (will be filtered out
-                # at the end). We use a sentinel rather than removing
-                # from clusters list to keep indices stable.
-                clusters[best_j] = (set(), {})
-                merged = True
-
-        # Step 5: assign super-cluster ids and build inverse map.
-        # Filter out empty clusters (merged into others).
-        sc_id = 0
-        for cluster_objs, _acts in clusters:
-            if not cluster_objs:
+            if not clusters:
+                clusters.append(({obj}, dict(query)))
                 continue
-            obj_set = {obj_list[i] for i in cluster_objs}
-            self.object_superclusters[sc_id] = obj_set
+
+            scores: List[float] = []
+            for _objs, action_sum in clusters:
+                cluster_size = len(_objs)
+                centroid = {
+                    k: v / cluster_size for k, v in action_sum.items()
+                }
+                scores.append(self._cosine_similarity_sparse(query, centroid))
+
+            weights = self._softmax(scores)
+            best_idx = max(range(len(weights)), key=lambda i: weights[i])
+            best_score = scores[best_idx]
+
+            if best_score >= threshold:
+                member_set, action_sum = clusters[best_idx]
+                member_set.add(obj)
+                for k, v in query.items():
+                    action_sum[k] = action_sum.get(k, 0) + v
+            else:
+                clusters.append(({obj}, dict(query)))
+
+        # Assign super-cluster ids and build the inverse map.
+        for sc_id, (obj_set, _action_sum) in enumerate(clusters):
+            self.object_superclusters[sc_id] = set(obj_set)
             for obj in obj_set:
                 self.object_supercluster_id[obj] = sc_id
-            sc_id += 1
 
     # ------------------------------------------------------------------
     # Connector-signal detection (cluster-62 fix)
@@ -4098,6 +4085,7 @@ class PositionalClusterLearner:
             # reproduces the same clustering behaviour).
             "qkv_action_similarity_threshold": self.qkv_action_similarity_threshold,
             "qkv_particle_similarity_threshold": self.qkv_particle_similarity_threshold,
+            "qkv_object_similarity_threshold": self.qkv_object_similarity_threshold,
             "positional_freq": {
                 tok: {str(b): c for b, c in pos_map.items()}
                 for tok, pos_map in self.positional_freq.items()
@@ -4265,6 +4253,12 @@ class PositionalClusterLearner:
                 raw.get(
                     "qkv_particle_similarity_threshold",
                     _DEFAULT_QKV_PARTICLE_SIMILARITY_THRESHOLD,
+                )
+            ),
+            qkv_object_similarity_threshold=float(
+                raw.get(
+                    "qkv_object_similarity_threshold",
+                    _DEFAULT_QKV_OBJECT_SIMILARITY_THRESHOLD,
                 )
             ),
         )
