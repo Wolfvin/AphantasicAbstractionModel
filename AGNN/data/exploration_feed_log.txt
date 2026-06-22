@@ -2675,3 +2675,21 @@ buaya terbesar yang pernah tercatat adalah seekor buaya muara sepanjang 8,6 mete
 === BATCH (2 lines, 2 sources merged) ===
 kucing makan ikan
 anjing makan tulang
+=== BATCH (15 lines, source=_batch_bahwa_variasi.txt) ===
+john berpendapat bahwa pasar perlu dikontrol.
+dia percaya bahwa dunia ini adil.
+setelah semua ini kamu masih berpikir bahwa kamu orang pintar.
+guru menyatakan bahwa semua murid harus belajar.
+ilmuwan menyimpulkan bahwa percobaan itu berhasil.
+dokter mengatakan bahwa pasien sudah sembuh.
+ahli menjelaskan bahwa fenomena ini wajar terjadi.
+peneliti menemukan bahwa suhu bumi terus meningkat.
+warga mengaku bahwa mereka tidak tahu apa-apa.
+pemerintah mengumumkan bahwa pajak akan dinaikkan.
+kritikus menulis bahwa film itu sangat membosankan.
+murid itu sadar bahwa dia salah selama ini.
+manajer menegaskan bahwa proyek harus selesai tepat waktu.
+saksi bersaksi bahwa terdakwa hadir di lokasi.
+analis memperkirakan bahwa harga saham akan naik.
+=== BATCH (1 lines, source=-) ===
+ini hanya tes diff particle cluster setelah fix tooling.
