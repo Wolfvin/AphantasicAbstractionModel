@@ -1288,6 +1288,89 @@ def test_spo_all_agrees_with_spo_on_the_main_clause():
 
 
 # ----------------------------------------------------------------------
+# spo_embedded() — recursive embedded-clause detection (sprint round 25)
+# ----------------------------------------------------------------------
+
+def test_spo_embedded_detects_genuine_embedded_clause():
+    """spo_embedded() must recognise when the object span is itself a
+    clause (has its own subject + ACTION), not a flat noun phrase.
+
+    Background: Round 22-23 proved empirically that no single-token
+    surface statistic (span-length, particle cluster membership,
+    bigram conditioning) can distinguish a complementizer ("bahwa")
+    from a passive agent-marker ("oleh") — they are statistically
+    identical on every signal tried. The only remaining signal is
+    STRUCTURAL: does the span, re-parsed with the same SVO machinery,
+    contain a real ACTION of its own?
+    """
+    learner = _train_canonical_learner()
+    result = learner.spo_embedded(
+        "guru menyatakan bahwa murid berkembang pesat"
+    )
+    assert result.embedded is not None, (
+        "the object span ('...murid berkembang pesat') contains its "
+        "own ACTION ('berkembang') and should be recognised as an "
+        "embedded clause, not flattened into a single object string"
+    )
+    assert result.embedded.predicate == "berkembang"
+
+
+def test_spo_embedded_flat_object_for_passive_voice_stays_flat():
+    """spo_embedded() must NOT treat a passive-voice agent ("oleh X")
+    as an embedded clause — there is no ACTION in that span, so
+    ``embedded`` must stay ``None``. This is the precise case the
+    'oleh' vs 'bahwa' disambiguation work (Round 22-23) needed to get
+    right: both particles look identical on every surface statistic,
+    so this guards against a recursion that fires on EVERY post-
+    predicate span regardless of content.
+    """
+    learner = _train_canonical_learner()
+    cases = [
+        "ikan dimakan oleh kucing",
+        "buku dibaca oleh siswa",
+    ]
+    for sentence in cases:
+        result = learner.spo_embedded(sentence)
+        assert result.embedded is None, (
+            f"{sentence!r}: 'oleh <agent>' has no ACTION of its own — "
+            f"embedded should be None, got {result.embedded!r}"
+        )
+
+
+def test_spo_embedded_flat_object_for_simple_causal_stays_flat():
+    """A plain noun object ("menyebabkan banjir") must never be
+    mistaken for an embedded clause — there's no second ACTION at all.
+    """
+    learner = _train_canonical_learner()
+    result = learner.spo_embedded("hujan menyebabkan banjir")
+    assert result.embedded is None
+
+
+def test_spo_embedded_flat_fields_agree_with_spo():
+    """spo_embedded()'s subject/predicate/object must match spo()'s
+    output for the SAME sentence — spo_embedded() only ADDS the
+    ``embedded`` field, it must never change the flat result.
+    """
+    learner = _train_canonical_learner()
+    sentence = "ikan dimakan oleh kucing"
+    flat = learner.spo(sentence)
+    rich = learner.spo_embedded(sentence)
+    assert rich.subject == flat.subject
+    assert rich.predicate == flat.predicate
+    assert rich.object == flat.object
+    assert rich.negated == flat.negated
+
+
+def test_spo_embedded_untrained_delegates_to_fallback():
+    """An untrained learner must delegate to the fallback classifier,
+    same contract as spo()/spo_all(), with embedded always None.
+    """
+    untrained = PositionalClusterLearner()
+    result = untrained.spo_embedded("api menyebabkan kebakaran")
+    assert result.embedded is None
+
+
+# ----------------------------------------------------------------------
 # Pronoun positional diversity (sprint round 8)
 # ----------------------------------------------------------------------
 

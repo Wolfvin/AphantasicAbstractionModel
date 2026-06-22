@@ -148,6 +148,41 @@ from neocortex.semantic_role_classifier import (
 )
 
 
+@dataclass
+class EmbeddedSPO:
+    """SPO result where the object slot may itself be a clause.
+
+    Additive companion to ``SPO`` (same pattern as ``spo_all()``'s
+    relationship to ``spo()`` from Round 6) — does NOT modify SPO's
+    existing field shape, per Round 11's explicit decision against
+    breaking changes to that contract. See
+    :meth:`PositionalClusterLearner.spo_embedded` for the full
+    rationale.
+
+    Attributes:
+        subject:   Same as SPO.subject — the main clause's subject.
+        predicate: Same as SPO.predicate — the main clause's verb.
+        object:    Same as SPO.object — the FLAT object string
+                   (unchanged from what ``spo()`` would return).
+        embedded:  ``None`` when ``object`` is a flat noun/agent
+                   phrase. A nested ``EmbeddedSPO`` when ``object``
+                   itself decomposes into its own (subject, action,
+                   object) — i.e. it's an embedded clause, not a
+                   single argument.
+        raw:       The original input text (subject's raw) or, for a
+                   nested ``embedded`` instance, the object span text
+                   that was recursively parsed.
+        negated:   Same negation contract as SPO.
+    """
+
+    subject: str
+    predicate: str
+    object: str
+    embedded: Optional["EmbeddedSPO"]
+    raw: str
+    negated: bool
+
+
 # ----------------------------------------------------------------------
 # Position buckets
 # ----------------------------------------------------------------------
@@ -4027,6 +4062,169 @@ class PositionalClusterLearner:
             subject=subject,
             predicate=predicate,
             object=obj,
+            raw=raw,
+            negated=negated,
+        )
+
+    def spo_embedded(self, text: str) -> "EmbeddedSPO":
+        """Like :meth:`spo`, but recursively re-parses the object span
+        as its OWN clause when it contains a real ACTION token.
+
+        Background (Round 22-23 investigation): ``spo()`` flattens
+        everything after the predicate into one object string,
+        regardless of whether it's a flat noun/agent phrase ("oleh
+        kucing" -> object="kucing") or itself a full embedded clause
+        with its own subject+predicate ("bahwa pasar perlu dikontrol"
+        -> object="pasar dikontrol secara kuat", losing the fact that
+        "pasar" is the embedded clause's OWN subject, not part of a
+        flat noun phrase). Proven empirically (Round 23) that no
+        single-token surface statistic (span-length, particle cluster
+        membership, bigram conditioning) can distinguish these two
+        cases from the PARTICLE alone — `oleh` and `bahwa` are
+        statistically identical on every signal tried. The only
+        remaining signal is STRUCTURAL: does the object span, when
+        parsed with the SAME SVO machinery, contain a real ACTION of
+        its own?
+
+        Why this is INFERENCE-time, not training-time: training-time
+        recursion (cleaning ``action_object_freq`` at extraction) was
+        considered and rejected for Round 24 scoping — Pass 2
+        extraction runs BEFORE clustering, so ``cluster_id_of`` /
+        ``_is_action_token`` (which this recursion needs) don't exist
+        yet at that point (chicken-egg). At INFERENCE time, training
+        is already complete, so no such ordering problem exists. This
+        means ``action_object_freq`` itself is NOT cleaned by this
+        method — Cluster 96-style noise in the training statistics is
+        unaffected; only the user-facing ``spo()``-shaped query result
+        gets the more accurate, structured answer.
+
+        Returns an :class:`EmbeddedSPO` with ``embedded=None`` when
+        the object span has no ACTION of its own (the `oleh`-class:
+        flat agent/noun phrase) and a nested :class:`EmbeddedSPO` when
+        it does (the `bahwa`-class: object span is itself a clause).
+        Only ONE level of recursion — Round 11's scoping found no
+        evidence of multi-level nesting in the corpus, so a second
+        recursive call is not attempted.
+
+        Implementation note — why this does NOT simply recurse on
+        ``spo(text).object``: ``_parse_clause_spo`` defensively BREAKS
+        on the first new ACTION token it meets after the predicate
+        (the assumption being the caller's anchor-split already
+        separated independent clauses, so a second ACTION inside one
+        clause means stop). For an un-anchored `bahwa`-clause (`bahwa`
+        is statistically unremarkable — see this method's docstring
+        above — so it often does NOT get recognised as a clause-anchor
+        particle), that defensive break truncates the object BEFORE
+        the embedded predicate is ever reached, so recursing on the
+        already-truncated string would never see it. This method
+        instead re-derives the RAW (untruncated) sub-clause tokens via
+        the same anchor-split pipeline ``spo()`` uses internally, and
+        recurses on everything after the predicate's position in that
+        raw token list.
+        """
+        if not self.is_trained:
+            flat = self.fallback.spo(text)
+            return EmbeddedSPO(
+                subject=flat.subject, predicate=flat.predicate,
+                object=flat.object, embedded=None, raw=flat.raw,
+                negated=flat.negated,
+            )
+
+        raw = (text or "").strip()
+        if not raw:
+            return EmbeddedSPO(
+                subject="", predicate="", object="", embedded=None,
+                raw=raw, negated=False,
+            )
+
+        normalized = re.sub(r"\s+", " ", raw.lower())
+        tokens = normalized.split(" ")
+
+        if len(tokens) < 3:
+            flat = self.fallback.spo(text)
+            return EmbeddedSPO(
+                subject=flat.subject, predicate=flat.predicate,
+                object=flat.object, embedded=None, raw=flat.raw,
+                negated=flat.negated,
+            )
+
+        # Same anchor-split pipeline as _parse_all_clauses, but keep
+        # the RAW sub-clause tokens alongside each parse result so we
+        # can recurse on the untruncated span below.
+        action_positions = self._find_action_positions(tokens)
+        particle_positions = self._find_particle_positions(tokens)
+        anchors = self._detect_clause_anchors(
+            tokens, action_positions, particle_positions,
+        )
+        boundaries = self._compute_clause_boundaries(anchors, action_positions)
+        sub_clauses = self._split_tokens_at_boundaries(tokens, boundaries)
+
+        parsed_with_raw: List[
+            Tuple[Tuple[List[str], str, List[str]], List[str]]
+        ] = []
+        for sc_tokens in sub_clauses:
+            parsed = self._parse_clause_spo(sc_tokens)
+            if parsed is not None:
+                parsed_with_raw.append((parsed, sc_tokens))
+
+        if not parsed_with_raw:
+            flat = self.fallback.spo(text)
+            return EmbeddedSPO(
+                subject=flat.subject, predicate=flat.predicate,
+                object=flat.object, embedded=None, raw=flat.raw,
+                negated=flat.negated,
+            )
+
+        # Same "most complete, ties broken by latest" selection as spo().
+        def _completeness(p: Tuple[List[str], str, List[str]]) -> int:
+            subj, _act, obj = p
+            score = 1  # action always present
+            if subj:
+                score += 1
+            if obj:
+                score += 1
+            return score
+
+        max_score = max(_completeness(p) for p, _ in parsed_with_raw)
+        main_parsed, main_raw = None, None
+        for p, sc in parsed_with_raw:
+            if _completeness(p) == max_score:
+                main_parsed, main_raw = p, sc
+        assert main_parsed is not None and main_raw is not None
+
+        subj_tokens, action_token, obj_tokens = main_parsed
+        subject = " ".join(subj_tokens)
+        flat_object = " ".join(obj_tokens)
+        negated = self._has_negation_before(subject)
+
+        # Recurse on the RAW span after the predicate's position in
+        # the sub-clause's untruncated token list — NOT on flat_object,
+        # which may already be cut short by _parse_clause_spo's
+        # defensive break (see this method's implementation note).
+        action_idx = main_raw.index(action_token)
+        raw_after = main_raw[action_idx + 1:]
+
+        embedded: Optional["EmbeddedSPO"] = None
+        if self._find_action_positions(raw_after):
+            sub_parse = self._parse_clause_spo(raw_after)
+            if sub_parse is not None:
+                sub_subj_tokens, sub_action, sub_obj_tokens = sub_parse
+                if self._is_action_token(sub_action):
+                    sub_subject = " ".join(sub_subj_tokens)
+                    embedded = EmbeddedSPO(
+                        subject=sub_subject,
+                        predicate=sub_action,
+                        object=" ".join(sub_obj_tokens),
+                        embedded=None,
+                        raw=" ".join(raw_after),
+                        negated=self._has_negation_before(sub_subject),
+                    )
+
+        return EmbeddedSPO(
+            subject=subject,
+            predicate=action_token,
+            object=flat_object,
+            embedded=embedded,
             raw=raw,
             negated=negated,
         )
