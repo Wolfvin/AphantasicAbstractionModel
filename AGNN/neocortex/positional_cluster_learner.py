@@ -387,47 +387,17 @@ _SUBJECT_DISCOURSE_MARKER_MIN_FREQ = 10
 # synonym-copula case where action distributions have very different
 # shapes but identical support.
 
-# Brown clustering — minimum similarity for two object clusters to
-# merge. We use *weighted* Jaccard on action-count maps (same metric
-# as action clustering) rather than plain Jaccard on action sets.
-# Plain Jaccard suffers from chain-merging: two objects that share
-# ONE action out of many merge at Jaccard >= 0.13, then the merged
-# cluster's action set grows, enabling further merges via different
-# shared actions. The end result is one giant super-cluster
-# containing most of the object vocabulary, which destroys the
-# discrimination action clustering needs.
-#
-# Weighted Jaccard is more strict: it considers COUNT distributions,
-# not just set membership. Two objects that share an action but at
-# very different frequencies (e.g., 'mamalia' appears with adalah 8
-# times but 'logam' appears with adalah only 3 times) get a lower
-# similarity than two objects with matching count shapes. This breaks
-# the chain-merge: an object can merge with the growing cluster only
-# if its count distribution matches the cluster's aggregated
-# distribution, not just shares one action.
-#
-# Threshold 0.15 is calibrated to:
-#   - Merge synonyms (mamalia+logam via shared copula context)
-#     so adalah+merupakan can merge via super-cluster overlap.
-#   - NOT merge unrelated objects (hujan+panas) so CAUSAL and
-#     TEMPORAL actions stay in separate clusters.
-# 0.05 was too aggressive (CAUSAL+TEMPORAL collapsed); 0.3 was too
-# conservative (adalah+merupakan didn't merge on the single-corpus
-# test). 0.15 is the sweet spot verified on pretrain_corpus.txt,
-# pretrain_corpus_depth.txt, and the combined corpus.
-_BROWN_CLUSTER_SIMILARITY_THRESHOLD = 0.15
-
-# Brown clustering — hard cap on the number of object super-clusters.
-# The greedy agglomerative merge stops when EITHER no pair has
-# similarity >= threshold OR the number of clusters drops to this cap.
-# Prevents pathological corpora from collapsing every object into one
-# giant super-cluster (which would make action clustering useless).
-_BROWN_CLUSTER_MAX_CLUSTERS = 1  # effectively disabled - rely on threshold
-# (Set to 1 to disable the cap; the threshold alone stops merging.)
-# A non-trivial cap (e.g., 30) is recommended only for very large
-# object vocabularies (>500 tokens) where the threshold-based stop
-# might leave too many singletons. Pretrain corpus has ~500 distinct
-# objects and works well with threshold-only stop.
+# Brown clustering's original greedy weighted-Jaccard merge (and its
+# two tuning constants, _BROWN_CLUSTER_SIMILARITY_THRESHOLD=0.15 and
+# _BROWN_CLUSTER_MAX_CLUSTERS) was replaced in Round 24-25 by the same
+# sequential Q/K/V pattern action clustering uses — see
+# _DEFAULT_QKV_OBJECT_SIMILARITY_THRESHOLD above and
+# _cluster_object_vocabulary's docstring for the full rationale
+# (profiling found the greedy merge consuming 99.9% of train() time at
+# corpus scale; Q/K/V is the same algorithmic shape, ~690x faster).
+# The two constants and _weighted_jaccard's call site were removed as
+# dead code in Round 40 cleanup — _weighted_jaccard itself is kept
+# (still directly unit-tested as a pure-math helper).
 
 
 # ----------------------------------------------------------------------
