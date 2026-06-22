@@ -1423,6 +1423,38 @@ def test_tokenize_preserves_hyphens():
     assert "kupu-kupu" == PositionalClusterLearner._tokenize("kupu-kupu")[0]
 
 
+def test_tokenize_keeps_decimal_and_thousands_separators_intact():
+    """_tokenize must not fragment numbers at a digit-flanked comma or
+    period (Indonesian decimal/thousands separator).
+
+    Found via held-out Wikipedia text (Round 28): "gawang memiliki
+    lebar 7,32 meter" was fragmenting into separate "7" and "32"
+    tokens (the comma was treated as ordinary punctuation and replaced
+    with a space), each polluting OBJECT spans as spurious standalone
+    numbers. A digit-flanked separator is now stripped (merging the
+    digits into one token) instead of replaced with a space; a real
+    sentence-ending period is never digit-flanked, so normal sentence
+    splitting is unaffected.
+    """
+    tokens = PositionalClusterLearner._tokenize(
+        "gawang memiliki lebar 7,32 meter dan tinggi 2,44 meter."
+    )
+    assert "7" not in tokens and "32" not in tokens
+    assert "732" in tokens
+    assert "2" not in tokens and "44" not in tokens
+    assert "244" in tokens
+
+    tokens = PositionalClusterLearner._tokenize("lebih dari 20.000 spesies.")
+    assert "20" not in tokens and "000" not in tokens
+    assert "20000" in tokens
+
+    # Sentence-ending periods (never digit-flanked) must still split
+    # normally — this is the existing trailing-punctuation contract.
+    tokens = PositionalClusterLearner._tokenize("ikan adalah hewan air.")
+    assert "air." not in tokens
+    assert "air" in tokens
+
+
 # ----------------------------------------------------------------------
 # Bug 2 regression: synonyms must merge via weighted Jaccard
 # ----------------------------------------------------------------------

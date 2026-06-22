@@ -4678,12 +4678,27 @@ class PositionalClusterLearner:
 
         Hyphens are preserved (e.g. ``"lumba-lumba"`` stays one token)
         because they're part of the word in Bahasa Indonesia.
+
+        Round 28 fix: a comma/period flanked by digits on both sides
+        (Indonesian decimal separator "7,32" or thousands separator
+        "20.000") is stripped rather than turned into a space — found
+        via held-out Wikipedia text, where "gawang memiliki lebar
+        7,32 meter" was fragmenting into separate "7" and "32" tokens,
+        each polluting OBJECT spans as spurious standalone numbers.
+        A true sentence-ending period is never digit-flanked (it's
+        followed by whitespace/end-of-string), so this doesn't affect
+        normal sentence splitting.
         """
         if not text:
             return []
+        # Merge digit-flanked comma/period into the surrounding number
+        # (decimal/thousands separator) BEFORE the general punctuation
+        # pass below, so "7,32"/"20.000" stay one token instead of
+        # fragmenting at the separator.
+        no_numeric_sep = re.sub(r"(?<=\d)[,.](?=\d)", "", text.lower())
         # Replace common punctuation with spaces (NOT hyphens, which
         # are intra-word in Indonesian: "lumba-lumba", "kupu-kupu").
-        no_punct = re.sub(r"[,\.;:!?()\[\]{}\"'/\\]", " ", text.lower())
+        no_punct = re.sub(r"[,\.;:!?()\[\]{}\"'/\\]", " ", no_numeric_sep)
         normalized = re.sub(r"\s+", " ", no_punct.strip())
         if not normalized:
             return []
