@@ -31,7 +31,10 @@ from typing import Dict, List, Set
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from neocortex.bootstrap_classifier import build_labelled_cluster_learner
+from neocortex.bootstrap_classifier import (
+    DEFAULT_CORPUS_PATHS as _PRODUCTION_BASE_CORPUS_PATHS,
+    build_labelled_cluster_learner,
+)
 from neocortex.positional_cluster_learner import PositionalClusterLearner
 
 _DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
@@ -183,9 +186,74 @@ def _mark_coordinator_clusters(learner: PositionalClusterLearner) -> None:
         learner.mark_clause_coordinator_clusters(coordinator_cluster_ids)
 
 
+def _read_full_history() -> List[str]:
+    """Every line ever fed to this sandbox, in feed order, PLUS the
+    production base corpus it started from. Used by
+    ``_rebuild_from_scratch`` — see that function's docstring for why
+    a full single-call retrain (not incremental train() on top of
+    loaded state) is required.
+    """
+    lines: List[str] = []
+    for p in _PRODUCTION_BASE_CORPUS_PATHS:
+        with open(p, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#"):
+                    lines.append(line)
+    if os.path.exists(_LOG_PATH):
+        with open(_LOG_PATH, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("==="):
+                    lines.append(line)
+    return lines
+
+
+def _rebuild_from_scratch(new_lines: List[str]) -> PositionalClusterLearner:
+    """Build a learner via ONE train() call over the COMPLETE history
+    (production base + every line ever fed + the new batch).
+
+    Round 33 fix — order-sensitivity bug: this sandbox used to load
+    the SAVED (digested) state and call ``train(new_lines)`` on top
+    of it. That's wrong because anchor-word discovery
+    (``function_word_candidates``/``action_bucket_anchors``, computed
+    fresh at the START of every train() call from whatever
+    ``positional_freq`` has accumulated SO FAR) only gets applied to
+    the lines passed to THAT call — earlier-fed lines were already
+    extracted using an IMMATURE anchor set and are never re-extracted
+    once later data would have produced better anchors. Verified
+    empirically: feeding the same two corpus halves in opposite orders
+    produced DIFFERENT ``action_object_freq``/``cluster_id_of`` (the
+    earlier-fed half stays locked to its own immature anchors).
+
+    A single train() call over the full history does not have this
+    problem — anchor discovery runs once against the COMPLETE
+    ``positional_freq``, then Pass 2 extracts every line with that
+    same mature anchor set. Verified: a single train() call is
+    order-invariant for line order WITHIN that call (155/157 action
+    clusters byte-identical when the same corpus is shuffled before
+    one train() call — the 2 remaining differences are a single
+    borderline token landing in either of two near-tied clusters, a
+    separate effect from feed-order, not chased here).
+
+    Cost: this re-tokenizes the ENTIRE history every feed() call
+    instead of just the new lines, but Pass 1/2 (tokenizing + counting)
+    is cheap — the dominant cost is the Q/K/V clustering step at the
+    end, which was ALREADY re-running over the full accumulated stats
+    every call (see Round 24-25's profiling). Memory cost is bounded
+    by total corpus size, same accepted trade-off ``train()``'s own
+    docstring already documents.
+    """
+    full_corpus = _read_full_history() + new_lines
+    learner = PositionalClusterLearner()
+    learner.train(full_corpus)
+    _mark_coordinator_clusters(learner)
+    return learner
+
+
 def _commit_batch(lines: List[str], batch_label: str) -> None:
     """Shared commit logic for both cmd_feed and cmd_feed_many:
-    snapshot -> train() -> save() -> append to the feed log.
+    snapshot -> full rebuild -> save() -> append to the feed log.
 
     train()/save() are NOT parallelized and never will be — every
     feed() call is a FULL RETRAIN over the entire accumulated corpus
@@ -203,16 +271,14 @@ def _commit_batch(lines: List[str], batch_label: str) -> None:
         print("No usable lines found in input (empty or all comments).")
         return
 
-    learner = _load_or_init()
-
-    before = _snapshot(learner)
+    before = _snapshot(_load_or_init())
     with open(_SNAPSHOT_PATH, "w", encoding="utf-8") as f:
         json.dump(before, f, ensure_ascii=False, indent=2)
 
-    print(f"Feeding {len(lines)} new lines ({batch_label}) — accumulates "
-          f"on top of existing state...")
-    learner.train(lines)
-    _mark_coordinator_clusters(learner)
+    print(f"Feeding {len(lines)} new lines ({batch_label}) — full single-"
+          f"call rebuild over the entire history (see _rebuild_from_"
+          f"scratch's docstring for why)...")
+    learner = _rebuild_from_scratch(lines)
     learner.save(_STATE_PATH)
 
     os.makedirs(_DATA_DIR, exist_ok=True)
