@@ -2949,3 +2949,40 @@ erupsi gunung toba 70.000 tahun lalu diduga menyebabkan musim dingin vulkanik gl
 abu vulkanik mengandung zat nutrisi yang dapat menyuburkan tanah di sekitar gunung berapi.
 aktivitas vulkanik dapat dimanfaatkan untuk pembangkit listrik tenaga panas bumi.
 ilmu yang mempelajari gunung berapi disebut vulkanologi untuk memperkirakan kemungkinan letusan.
+=== BATCH (20 lines, source=_batch_beruang.txt) ===
+beruang adalah mamalia dalam ordo carnivora dan familia ursidae.
+beruang adalah binatang buas berbulu tebal yang dapat berdiri di atas kedua kakinya.
+nama ilmiah ursidae berasal dari bahasa latin ursus yang berarti beruang.
+kehamilan beruang berlangsung enam hingga sembilan bulan termasuk implantasi yang tertunda.
+panda raksasa dapat melahirkan anak kembar tetapi hanya mampu menyusui satu anak.
+beruang memiliki indra penciuman dan pendengaran yang luar biasa baik.
+beruang memiliki lima cakar pada setiap telapak yang tidak dapat ditarik masuk.
+beruang dapat berlari mencapai kecepatan 50 kilometer per jam.
+jumlah gigi beruang bervariasi antara 32 hingga 42 gigi tergantung spesiesnya.
+beruang dapat hidup sekitar 25 hingga 40 tahun di alam liar.
+hibernasi pada beruang melibatkan penurunan metabolisme hingga 75 persen di bawah tingkat basal.
+denyut jantung beruang melambat dari 55 menjadi 9 denyut per menit saat hibernasi.
+beruang mampu mendaur ulang protein dan urin selama periode hibernasi berlangsung.
+beruang dapat berbahaya bagi manusia namun cenderung pemalu dan menghindari kontak.
+cedera yang disebabkan oleh beruang jarang terjadi tetapi sering dilaporkan secara luas.
+indonesia menetapkan beruang madu sebagai fauna langka dan dilindungi sejak tahun 1973.
+dua organisasi internasional menangani konservasi beruang yaitu iba dan bear specialist group.
+beruang digunakan sebagai maskot pada berbagai klub olahraga termasuk bayern munich.
+finlandia dan rusia menetapkan beruang sebagai hewan nasional mereka.
+balikpapan indonesia secara resmi mengangkat beruang madu sebagai maskot kota.
+=== BATCH (15 lines, source=_batch_singa.txt) ===
+singa adalah kucing besar dari genus panthera yang kini hanya tersebar di afrika sub-sahara dan india.
+singa jantan dewasa memiliki tubuh lebih besar dan surai menonjol yang menutupi telinga.
+singa menghuni padang rumput, sabana, dan semak belukar sebagai habitat utama mereka.
+singa merupakan predator puncak yang memangsa ungulata berukuran sedang seperti wildebeest dan zebra.
+singa adalah spesies sosial yang membentuk kelompok bernama kawanan.
+singa menghabiskan sebagian besar waktunya untuk beristirahat selama dua puluh jam per hari.
+nama ilmiah singa panthera leo pertama kali digunakan oleh carl linnaeus pada tahun 1758.
+singa betina biasanya berburu bersama anggota kawanan lainnya secara terkoordinasi.
+periode kehamilan singa rata-rata berlangsung sekitar 110 hari sebelum betina melahirkan.
+anak singa terlahir buta dan mata mereka baru terbuka sekitar tujuh hari setelah kelahiran.
+surai pada singa jantan mulai tumbuh saat memasuki masa remaja.
+singa telah menjadi spesies utama yang dicari untuk pameran di kebun binatang.
+status konservasi singa tercatat sebagai rentan dalam daftar merah iucn sejak tahun 1996.
+singa dapat berlari cepat dengan kecepatan maksimal 59 kilometer per jam.
+populasi singa di negara-negara afrika telah menurun sekitar 43 persen sejak awal tahun 1990-an.
