@@ -4120,6 +4120,12 @@ class PositionalClusterLearner:
                 for cid, rt in self.cluster_labels.items()
             },
             "coordinator_cluster_ids": sorted(self.coordinator_cluster_ids),
+            "particle_cluster_id_of": dict(self.particle_cluster_id_of),
+            "particle_clusters": {
+                str(cid): sorted(toks)
+                for cid, toks in self.particle_clusters.items()
+            },
+            "particle_cluster_labels": dict(self.particle_cluster_labels),
             "action_object_context_freq": {
                 action: {
                     ctx_tag: dict(objs)
@@ -4323,6 +4329,36 @@ class PositionalClusterLearner:
         for cid in raw.get("coordinator_cluster_ids", []):
             if isinstance(cid, int):
                 learner.coordinator_cluster_ids.add(cid)
+
+        # particle_cluster_id_of / particle_clusters / particle_cluster_labels
+        # Found missing entirely from save()/load() during a manual
+        # exploration session (post-round-19) — every saved state file,
+        # including the committed production one, was silently losing
+        # ALL particle-clustering results on every save/load roundtrip.
+        # This went uncaught by the test suite because _is_particle_token
+        # has redundant fallback paths (_is_soft_particle,
+        # _is_clause_coordinator) that mask the gap for many tokens.
+        # Backward-compat: older save files lack these fields entirely —
+        # empty dict/dict is the correct backfill (matches pre-fix
+        # behaviour: particle_cluster_id_of.get(token) returns None,
+        # same as it always silently did before this fix).
+        for tok, cid in raw.get("particle_cluster_id_of", {}).items():
+            if isinstance(cid, int):
+                learner.particle_cluster_id_of[tok] = cid
+        for cid_str, toks in raw.get("particle_clusters", {}).items():
+            try:
+                cid_int = int(cid_str)
+            except (TypeError, ValueError):
+                continue
+            if isinstance(toks, list):
+                learner.particle_clusters[cid_int] = set(toks)
+        for cid_str, label in raw.get("particle_cluster_labels", {}).items():
+            try:
+                cid_int = int(cid_str)
+            except (TypeError, ValueError):
+                continue
+            if isinstance(label, str):
+                learner.particle_cluster_labels[cid_int] = label
 
         # action_object_context_freq: {action: {ctx_tag: {object: count}}}
         # Backward-compat: older save files lack this field. Empty dict

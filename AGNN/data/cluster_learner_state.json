@@ -1266,6 +1266,3669 @@
     "wajib": true,
     "warna": false
   },
+  "action_object_context_freq": {
+    "adalah": {
+      "embedded_candidate": {
+        "autotrof": 1,
+        "beregu": 2,
+        "bermuatan": 1,
+        "buatan": 1,
+        "data": 1,
+        "demokrasi": 1,
+        "diri": 1,
+        "ketahanan": 1,
+        "legislatif": 1,
+        "medis": 1,
+        "mekanik": 1,
+        "moneter": 1,
+        "nabati": 2,
+        "negara": 1,
+        "pedas": 1,
+        "pencernaan": 1,
+        "penciuman": 1,
+        "saku": 1,
+        "terdistribusi": 1,
+        "tinggi": 1,
+        "unsur": 1,
+        "utang": 1
+      },
+      "plain": {
+        "aves": 4,
+        "bryophyta": 1,
+        "crustacea": 2,
+        "fungi": 2,
+        "gas": 1,
+        "invertebrata": 1,
+        "logam": 2,
+        "mamalia": 8,
+        "moluska": 2,
+        "monera": 1,
+        "nonlogam": 1,
+        "parasit": 1,
+        "pisces": 4,
+        "protista": 2,
+        "pteridophyta": 1,
+        "reptil": 6,
+        "serangga": 1,
+        "tumbuhan": 4
+      }
+    },
+    "akuatik": {
+      "plain": {
+        "": 1
+      }
+    },
+    "akun": {
+      "embedded_candidate": {
+        "phishing": 1
+      }
+    },
+    "anorganik": {
+      "plain": {
+        "": 3
+      }
+    },
+    "aroma": {
+      "embedded_candidate": {
+        "digiling": 1,
+        "menyebar": 4,
+        "tercium": 1
+      }
+    },
+    "atau": {
+      "embedded_candidate": {
+        "istirahat": 1,
+        "lari": 1,
+        "tinggal": 1,
+        "tulang": 1
+      }
+    },
+    "atmosfer": {
+      "embedded_candidate": {
+        "pohon": 2
+      }
+    },
+    "bahan": {
+      "embedded_candidate": {
+        "berdemo": 2
+      }
+    },
+    "baja": {
+      "embedded_candidate": {
+        "api": 1
+      },
+      "plain": {
+        "memudar": 2
+      }
+    },
+    "bandang": {
+      "embedded_candidate": {
+        "hanyut": 6
+      }
+    },
+    "banting": {
+      "plain": {
+        "": 1
+      }
+    },
+    "batas": {
+      "embedded_candidate": {
+        "renggang": 2
+      }
+    },
+    "begitu": {
+      "plain": {
+        "asam": 1,
+        "asin": 2,
+        "elastis": 1,
+        "hangat": 1,
+        "hijau": 1,
+        "kompleks": 1,
+        "lentur": 1,
+        "manis": 1,
+        "mulia": 1,
+        "ringan": 1,
+        "stabil": 1,
+        "terkontrol": 1
+      }
+    },
+    "bela": {
+      "plain": {
+        "diri": 2
+      }
+    },
+    "belajar": {
+      "embedded_candidate": {
+        "bermain": 2
+      }
+    },
+    "beli": {
+      "plain": {
+        "turun": 2
+      }
+    },
+    "beliung": {
+      "embedded_candidate": {
+        "tinggi": 2
+      }
+    },
+    "berakibat": {
+      "plain": {
+        "abu": 1,
+        "alkohol": 1,
+        "asap": 1,
+        "banjir": 2,
+        "dekomposisi": 1,
+        "demam": 1,
+        "diabetes": 1,
+        "gejolak": 1,
+        "gelombang": 1,
+        "genangan": 1,
+        "infeksi": 1,
+        "iritasi": 1,
+        "jatuh": 1,
+        "karat": 1,
+        "kebakaran": 1,
+        "kekeringan": 2,
+        "kelangkaan": 1,
+        "kemiskinan": 1,
+        "kepanikan": 1,
+        "keracunan": 1,
+        "kerugian": 1,
+        "kerusakan": 1,
+        "kondensasi": 1,
+        "kriminalitas": 1,
+        "kutub": 1,
+        "ledakan": 2,
+        "limbah": 1,
+        "longsor": 1,
+        "mutasi": 1,
+        "panas": 1,
+        "penyakit": 2,
+        "penyumbatan": 1,
+        "polusi": 1,
+        "reruntuhan": 1,
+        "sengatan": 1,
+        "sirosis": 1
+      }
+    },
+    "berbagai": {
+      "plain": {
+        "pihak": 1
+      }
+    },
+    "berbau": {
+      "embedded_candidate": {
+        "mulut": 3
+      }
+    },
+    "berbeda": {
+      "embedded_candidate": {
+        "amplitudo": 1,
+        "arus": 1,
+        "bakteri": 1,
+        "berat": 1,
+        "burung": 2,
+        "cahaya": 1,
+        "daya": 1,
+        "garam": 1,
+        "gelombang": 1,
+        "helium": 1,
+        "hewan": 3,
+        "ikan": 4,
+        "jamur": 1,
+        "karbon": 1,
+        "kayu": 1,
+        "listrik": 1,
+        "logam": 4,
+        "magnet": 1,
+        "panas": 1,
+        "partikel": 1,
+        "percepatan": 1,
+        "reptil": 3,
+        "serangga": 4,
+        "suhu": 1,
+        "tumbuhan": 2
+      }
+    },
+    "berbuah": {
+      "embedded_candidate": {
+        "baik": 2,
+        "turun": 4
+      }
+    },
+    "berdemo": {
+      "embedded_candidate": {
+        "naik": 2
+      }
+    },
+    "berdengung": {
+      "embedded_candidate": {
+        "mekar": 1,
+        "taman": 3
+      }
+    },
+    "beregu": {
+      "plain": {
+        "": 1
+      }
+    },
+    "bergantung": {
+      "embedded_candidate": {
+        "warga": 1
+      },
+      "plain": {
+        "air": 4,
+        "anggaran": 1,
+        "bensin": 3,
+        "besi": 2,
+        "cabai": 2,
+        "cahaya": 1,
+        "cepat": 1,
+        "darah": 2,
+        "data": 1,
+        "dokter": 1,
+        "energi": 1,
+        "glukosa": 1,
+        "guru": 1,
+        "inovasi": 1,
+        "kaldu": 1,
+        "kalsium": 2,
+        "karbon": 1,
+        "komunikasi": 1,
+        "latih": 1,
+        "likuiditas": 1,
+        "listrik": 2,
+        "makanan": 3,
+        "mangsa": 1,
+        "material": 1,
+        "modal": 3,
+        "nasabah": 1,
+        "naungan": 1,
+        "nektar": 1,
+        "nutrisi": 1,
+        "oksigen": 4,
+        "oli": 1,
+        "pajak": 1,
+        "payau": 1,
+        "pekerja": 1,
+        "pendingin": 1,
+        "protein": 1,
+        "pupuk": 1,
+        "router": 1,
+        "sinyal": 1,
+        "teh": 1,
+        "tidur": 1,
+        "udara": 2
+      }
+    },
+    "bergerak": {
+      "embedded_candidate": {
+        "turun": 1
+      }
+    },
+    "bergoyang": {
+      "plain": {
+        "": 4
+      }
+    },
+    "berhembus": {
+      "embedded_candidate": {
+        "bergoyang": 2
+      }
+    },
+    "berjalan": {
+      "embedded_candidate": {
+        "habis": 1
+      }
+    },
+    "berkali-kali": {
+      "embedded_candidate": {
+        "terkunci": 2
+      }
+    },
+    "berkategori": {
+      "embedded_candidate": {
+        "anorganik": 1,
+        "autotrof": 1,
+        "bermuatan": 1,
+        "demokrasi": 1,
+        "diri": 1,
+        "grafis": 1,
+        "hari": 1,
+        "hortikultura": 1,
+        "hukum": 1,
+        "karbohidrat": 2,
+        "kolektif": 1,
+        "komputer": 1,
+        "longitudinal": 1,
+        "merah": 1,
+        "modal": 1,
+        "motor": 1,
+        "obat": 1,
+        "organik": 1,
+        "padat": 1,
+        "pengecap": 1,
+        "raket": 1,
+        "saku": 1,
+        "saraf": 2,
+        "susu": 1,
+        "terdistribusi": 2,
+        "tinggi": 1,
+        "tubuh": 1,
+        "umum": 1,
+        "utang": 1
+      }
+    },
+    "berkembang": {
+      "embedded_candidate": {
+        "diakses": 1
+      }
+    },
+    "berkicau": {
+      "embedded_candidate": {
+        "menyingsing": 2
+      }
+    },
+    "berkurang": {
+      "embedded_candidate": {
+        "melemah": 1
+      }
+    },
+    "berlalu": {
+      "embedded_candidate": {
+        "membaik": 3
+      }
+    },
+    "berlandaskan": {
+      "embedded_candidate": {
+        "badan": 1,
+        "bisnis": 1,
+        "dioksida": 1,
+        "matahari": 1,
+        "muatan": 1,
+        "negeri": 1
+      },
+      "plain": {
+        "air": 3,
+        "bunga": 1,
+        "inovasi": 1,
+        "komunikasi": 1,
+        "lahan": 1,
+        "listrik": 1,
+        "modal": 1,
+        "nektar": 1,
+        "server": 1,
+        "stamina": 1
+      }
+    },
+    "berlawanan": {
+      "embedded_candidate": {
+        "amplitudo": 1,
+        "arus": 1,
+        "bakteri": 1,
+        "berat": 1,
+        "burung": 2,
+        "cahaya": 1,
+        "daya": 1,
+        "garam": 1,
+        "gelombang": 1,
+        "helium": 1,
+        "hewan": 3,
+        "ikan": 4,
+        "jamur": 1,
+        "karbon": 1,
+        "kayu": 1,
+        "listrik": 1,
+        "logam": 4,
+        "magnet": 1,
+        "panas": 1,
+        "partikel": 1,
+        "percepatan": 1,
+        "reptil": 3,
+        "serangga": 4,
+        "suhu": 1,
+        "tumbuhan": 2
+      }
+    },
+    "berlebih": {
+      "embedded_candidate": {
+        "asin": 5,
+        "layu": 5,
+        "manis": 3,
+        "naik": 3,
+        "otot": 2,
+        "turun": 6
+      }
+    },
+    "berlebihan": {
+      "embedded_candidate": {
+        "nyeri": 3,
+        "otot": 2
+      }
+    },
+    "bermigrasi": {
+      "embedded_candidate": {
+        "mengering": 1
+      }
+    },
+    "bermuatan": {
+      "plain": {
+        "positif": 1
+      }
+    },
+    "berpembuluh": {
+      "plain": {
+        "": 2
+      }
+    },
+    "berputar": {
+      "plain": {
+        "cepat": 3
+      }
+    },
+    "bersandar": {
+      "plain": {
+        "d": 1,
+        "darah": 1,
+        "database": 1,
+        "guru": 1,
+        "investor": 1,
+        "latih": 1,
+        "listrik": 1,
+        "magnet": 1,
+        "matahari": 1,
+        "mekanik": 1,
+        "modal": 1,
+        "muatan": 1,
+        "negeri": 1,
+        "pupuk": 1,
+        "router": 1,
+        "tinggi": 1,
+        "udara": 1
+      }
+    },
+    "bersifat": {
+      "embedded_candidate": {
+        "banting": 1
+      },
+      "plain": {
+        "asam": 1,
+        "berbahaya": 1,
+        "elastis": 1,
+        "harum": 1,
+        "kenyal": 1,
+        "kokoh": 1,
+        "lentur": 1,
+        "mulia": 1,
+        "pahit": 1,
+        "tajam": 1
+      }
+    },
+    "bersih": {
+      "embedded_candidate": {
+        "dibersihkan": 1
+      }
+    },
+    "bersorak": {
+      "embedded_candidate": {
+        "tercipta": 2
+      }
+    },
+    "bersyukur": {
+      "embedded_candidate": {
+        "gagal": 1
+      }
+    },
+    "bertepuk": {
+      "embedded_candidate": {
+        "finish": 1
+      }
+    },
+    "bertumpu": {
+      "plain": {
+        "air": 1,
+        "badan": 1,
+        "guru": 1,
+        "karyawan": 1,
+        "lentur": 1,
+        "negara": 1,
+        "payau": 1,
+        "stamina": 1,
+        "tinggi": 1,
+        "warga": 1
+      }
+    },
+    "berubah": {
+      "embedded_candidate": {
+        "muncul": 4
+      }
+    },
+    "bukanlah": {
+      "embedded_candidate": {
+        "anorganik": 1,
+        "bermuatan": 1,
+        "berpembuluh": 1,
+        "biasa": 1,
+        "cahaya": 1,
+        "darah": 1,
+        "eksekutif": 1,
+        "ekskresi": 1,
+        "hiburan": 1,
+        "jauh": 1,
+        "kepemilikan": 1,
+        "kontak": 1,
+        "mekanik": 1,
+        "terkecil": 1,
+        "tinggi": 1,
+        "tunggal": 1
+      },
+      "plain": {
+        "beregu": 1,
+        "hewan": 1,
+        "ikan": 1,
+        "manusia": 1,
+        "permen": 1,
+        "perseroan": 1,
+        "sayuran": 1,
+        "serangga": 1
+      }
+    },
+    "butuh": {
+      "embedded_candidate": {
+        "air": 1,
+        "negara": 1,
+        "radio": 1,
+        "sama": 1,
+        "seluler": 1
+      },
+      "plain": {
+        "air": 1,
+        "baterai": 1,
+        "bunga": 1,
+        "cabai": 1,
+        "devisa": 1,
+        "naungan": 1,
+        "oksigen": 1,
+        "pupuk": 1
+      }
+    },
+    "cedera": {
+      "embedded_candidate": {
+        "lapangan": 2
+      }
+    },
+    "clic": {
+      "embedded_candidate": {
+        "terkunci": 5
+      }
+    },
+    "cukup": {
+      "embedded_candidate": {
+        "banting": 1,
+        "segar": 7
+      },
+      "plain": {
+        "berat": 1,
+        "hangat": 1,
+        "kokoh": 1,
+        "kuat": 1,
+        "lambat": 1,
+        "lembap": 1,
+        "lentur": 1,
+        "manis": 1,
+        "mengikat": 1,
+        "merusak": 1,
+        "mulia": 1,
+        "pahit": 1,
+        "putih": 1,
+        "rapuh": 1,
+        "renyah": 1,
+        "rutin": 1,
+        "stabil": 1,
+        "subur": 1
+      }
+    },
+    "curah": {
+      "embedded_candidate": {
+        "jalan": 1
+      }
+    },
+    "dan": {
+      "embedded_candidate": {
+        "terbentang": 4
+      }
+    },
+    "darat": {
+      "plain": {
+        "": 3
+      }
+    },
+    "datang": {
+      "embedded_candidate": {
+        "bermekaran": 1,
+        "cepat": 1,
+        "lalu": 1
+      }
+    },
+    "deras": {
+      "embedded_candidate": {
+        "banjir": 4,
+        "basah": 2,
+        "ditunda": 2,
+        "kampung": 2,
+        "meluap": 1
+      }
+    },
+    "dibaca": {
+      "embedded_candidate": {
+        "ayah": 1,
+        "pelanggan": 1,
+        "penyair": 1,
+        "sekretaris": 1,
+        "siswa": 1
+      },
+      "plain": {
+        "adik": 1,
+        "aktor": 1,
+        "anak": 1,
+        "murid": 1,
+        "pegawai": 1
+      }
+    },
+    "dibangun": {
+      "embedded_candidate": {
+        "insinyur": 1,
+        "kontraktor": 1,
+        "perusahaan": 1,
+        "tentara": 1,
+        "tukang": 1
+      }
+    },
+    "dibekukan": {
+      "embedded_candidate": {
+        "mengeras": 4
+      }
+    },
+    "dibiaskan": {
+      "embedded_candidate": {
+        "terbentuk": 2
+      }
+    },
+    "dibuka": {
+      "embedded_candidate": {
+        "layar": 6
+      }
+    },
+    "dicetak": {
+      "embedded_candidate": {
+        "agensi": 1,
+        "pemain": 1,
+        "penerbit": 1,
+        "percetakan": 1,
+        "vendor": 1
+      }
+    },
+    "dicuci": {
+      "plain": {
+        "ayah": 1,
+        "montir": 1,
+        "pelayan": 1,
+        "pembantu": 1,
+        "tukang": 1
+      }
+    },
+    "didiamkan": {
+      "embedded_candidate": {
+        "pekat": 4
+      }
+    },
+    "dilupakan": {
+      "embedded_candidate": {
+        "otot": 5
+      }
+    },
+    "dimakan": {
+      "embedded_candidate": {
+        "burung": 1,
+        "kucing": 1,
+        "sapi": 1,
+        "sementara": 3,
+        "serigala": 1,
+        "ular": 1
+      }
+    },
+    "dimasak": {
+      "embedded_candidate": {
+        "berubah": 2,
+        "chef": 1,
+        "ibu": 1,
+        "koki": 1,
+        "nenek": 1,
+        "penjual": 1
+      },
+      "plain": {
+        "anak": 1,
+        "ibu": 1,
+        "juru": 1,
+        "pembantu": 1,
+        "tukang": 1
+      }
+    },
+    "dimulai": {
+      "embedded_candidate": {
+        "dilakukan": 1,
+        "tenang": 4
+      }
+    },
+    "dioksida": {
+      "plain": {
+        "": 1
+      }
+    },
+    "dipangkas": {
+      "embedded_candidate": {
+        "naik": 3
+      }
+    },
+    "diperbaiki": {
+      "embedded_candidate": {
+        "ahli": 1,
+        "montir": 1,
+        "teknisi": 1,
+        "tukang": 2
+      }
+    },
+    "diperiksa": {
+      "embedded_candidate": {
+        "auditor": 1,
+        "dokter": 1,
+        "petugas": 1,
+        "polisi": 1,
+        "teknisi": 1
+      }
+    },
+    "diperkirakan": {
+      "embedded_candidate": {
+        "awal": 2
+      }
+    },
+    "dipindahkan": {
+      "embedded_candidate": {
+        "naik": 4
+      }
+    },
+    "disedu": {
+      "embedded_candidate": {
+        "menguar": 3
+      }
+    },
+    "diselidiki": {
+      "embedded_candidate": {
+        "detektif": 1,
+        "jaksa": 1,
+        "petugas": 1,
+        "polisi": 1,
+        "tim": 1
+      }
+    },
+    "disiram": {
+      "embedded_candidate": {
+        "layu": 3
+      }
+    },
+    "ditambah": {
+      "embedded_candidate": {
+        "asin": 2,
+        "kental": 1
+      }
+    },
+    "ditebang": {
+      "embedded_candidate": {
+        "pekerja": 1,
+        "penebang": 1,
+        "perusahaan": 1,
+        "petani": 1,
+        "tukang": 1
+      }
+    },
+    "diterapkan": {
+      "embedded_candidate": {
+        "bergerak": 4
+      }
+    },
+    "diteteskan": {
+      "embedded_candidate": {
+        "asam": 3
+      }
+    },
+    "ditulis": {
+      "embedded_candidate": {
+        "jurnalis": 1,
+        "karyawan": 1,
+        "musisi": 1,
+        "penulis": 1,
+        "sekretaris": 1
+      }
+    },
+    "eksekutif": {
+      "plain": {
+        "": 3
+      }
+    },
+    "festival": {
+      "embedded_candidate": {
+        "berdatangan": 3
+      }
+    },
+    "global": {
+      "embedded_candidate": {
+        "anjlok": 2,
+        "massal": 5
+      }
+    },
+    "goreng": {
+      "embedded_candidate": {
+        "bawang": 6,
+        "nasi": 3
+      },
+      "plain": {
+        "bawang": 2,
+        "nasi": 1
+      }
+    },
+    "grafis": {
+      "plain": {
+        "": 1
+      }
+    },
+    "gunung": {
+      "embedded_candidate": {
+        "abu": 1,
+        "dingin": 1
+      },
+      "plain": {
+        "dingin": 2
+      }
+    },
+    "harus": {
+      "embedded_candidate": {
+        "bersih": 1,
+        "cantik": 1,
+        "kaya": 1,
+        "kuat": 1,
+        "lulus": 1,
+        "pintar": 2,
+        "rapi": 1,
+        "sayur": 1,
+        "sehat": 2
+      },
+      "plain": {
+        "belajar": 2,
+        "berdandan": 1,
+        "berolahraga": 1,
+        "dirapikan": 1,
+        "istirahat": 1,
+        "membaca": 1,
+        "menabung": 1
+      }
+    },
+    "hewani": {
+      "plain": {
+        "": 1
+      }
+    },
+    "higgs": {
+      "embedded_candidate": {
+        "massa": 4
+      }
+    },
+    "high-end": {
+      "embedded_candidate": {
+        "kuat": 4
+      },
+      "plain": {
+        "kuat": 2
+      }
+    },
+    "ihsg": {
+      "embedded_candidate": {
+        "bunga": 1
+      }
+    },
+    "internet": {
+      "embedded_candidate": {
+        "reboot": 1
+      },
+      "plain": {
+        "kembali": 3
+      }
+    },
+    "jalanan": {
+      "plain": {
+        "basah": 2,
+        "licin": 2
+      }
+    },
+    "jalar": {
+      "embedded_candidate": {
+        "biasa": 3
+      }
+    },
+    "jual": {
+      "embedded_candidate": {
+        "rugi": 2
+      }
+    },
+    "kaki": {
+      "embedded_candidate": {
+        "berlebihan": 1
+      }
+    },
+    "kaktus": {
+      "embedded_candidate": {
+        "tajam": 1
+      },
+      "plain": {
+        "tajam": 2
+      }
+    },
+    "kaldu": {
+      "plain": {
+        "": 1
+      }
+    },
+    "keliru": {
+      "embedded_candidate": {
+        "link": 2
+      }
+    },
+    "kemudian": {
+      "plain": {
+        "abu": 1,
+        "alkohol": 1,
+        "bakteri": 1,
+        "benih": 1,
+        "berbunga": 1,
+        "bunga": 1,
+        "cair": 2,
+        "dingin": 2,
+        "embun": 1,
+        "fajar": 1,
+        "gelap": 1,
+        "gelombang": 1,
+        "getaran": 1,
+        "hujan": 4,
+        "infeksi": 1,
+        "karat": 1,
+        "kering": 1,
+        "kondensasi": 1,
+        "kuncup": 1,
+        "magma": 1,
+        "malam": 1,
+        "mendung": 1,
+        "musim": 2,
+        "pagi": 2,
+        "panas": 2,
+        "perawatan": 1,
+        "radiasi": 1,
+        "senja": 1,
+        "siang": 1,
+        "sore": 1,
+        "tanam": 1,
+        "terang": 1
+      }
+    },
+    "ketahanan": {
+      "plain": {
+        "": 1
+      }
+    },
+    "ketika": {
+      "plain": {
+        "abu": 1,
+        "alkohol": 1,
+        "bakteri": 1,
+        "benih": 1,
+        "berbunga": 1,
+        "bunga": 1,
+        "cair": 2,
+        "dingin": 2,
+        "embun": 1,
+        "fajar": 1,
+        "gelap": 1,
+        "gelombang": 1,
+        "getaran": 1,
+        "hujan": 4,
+        "infeksi": 1,
+        "karat": 1,
+        "kering": 1,
+        "kondensasi": 1,
+        "kuncup": 1,
+        "magma": 1,
+        "malam": 1,
+        "mendung": 1,
+        "musim": 2,
+        "pagi": 2,
+        "panas": 2,
+        "perawatan": 1,
+        "radiasi": 1,
+        "senja": 1,
+        "siang": 1,
+        "sore": 1,
+        "tanam": 1,
+        "terang": 1
+      }
+    },
+    "klasifikasi": {
+      "embedded_candidate": {
+        "bermuatan": 1,
+        "biasa": 1,
+        "cahaya": 2,
+        "darat": 1,
+        "eksekutif": 1,
+        "harga": 1,
+        "ikan": 2,
+        "interpreter": 1,
+        "jauh": 1,
+        "ketahanan": 1,
+        "kontak": 1,
+        "liat": 1,
+        "lokal": 1,
+        "ludah": 1,
+        "pajak": 1,
+        "perairan": 1,
+        "pernapasan": 1,
+        "primer": 1,
+        "serealia": 1
+      }
+    },
+    "koheren": {
+      "plain": {
+        "": 2
+      }
+    },
+    "kokoh": {
+      "plain": {
+        "": 2
+      }
+    },
+    "kue": {
+      "embedded_candidate": {
+        "mentega": 5,
+        "telur": 6,
+        "tepung": 3
+      }
+    },
+    "lalu": {
+      "plain": {
+        "abu": 1,
+        "alkohol": 1,
+        "bakteri": 1,
+        "benih": 1,
+        "berbunga": 1,
+        "bunga": 1,
+        "cair": 2,
+        "dingin": 2,
+        "embun": 1,
+        "fajar": 1,
+        "gelap": 1,
+        "gelombang": 1,
+        "getaran": 1,
+        "hujan": 4,
+        "infeksi": 1,
+        "karat": 1,
+        "kering": 1,
+        "kondensasi": 1,
+        "kuncup": 1,
+        "magma": 1,
+        "malam": 1,
+        "mendung": 1,
+        "musim": 2,
+        "pagi": 2,
+        "panas": 2,
+        "perawatan": 1,
+        "radiasi": 1,
+        "senja": 1,
+        "siang": 1,
+        "sore": 1,
+        "tanam": 1,
+        "terang": 1
+      }
+    },
+    "lambat": {
+      "plain": {
+        "": 1
+      }
+    },
+    "lapuk": {
+      "embedded_candidate": {
+        "tumbang": 4
+      }
+    },
+    "lawas": {
+      "embedded_candidate": {
+        "lambat": 3
+      }
+    },
+    "legislatif": {
+      "plain": {
+        "": 2
+      }
+    },
+    "liat": {
+      "plain": {
+        "": 1
+      }
+    },
+    "licin": {
+      "plain": {
+        "": 2
+      }
+    },
+    "lima": {
+      "embedded_candidate": {
+        "pecah": 1
+      }
+    },
+    "longgar": {
+      "embedded_candidate": {
+        "terputus": 3
+      }
+    },
+    "luas": {
+      "plain": {
+        "": 4
+      }
+    },
+    "lusuh": {
+      "plain": {
+        "": 4
+      }
+    },
+    "makan": {
+      "plain": {
+        "nasi": 1,
+        "roti": 1
+      }
+    },
+    "masuk": {
+      "embedded_candidate": {
+        "aves": 4,
+        "badai": 1,
+        "berbulu": 1,
+        "bermuatan": 1,
+        "bocor": 7,
+        "bryophyta": 1,
+        "buatan": 1,
+        "crustacea": 2,
+        "darah": 1,
+        "diri": 1,
+        "elektromagnetik": 1,
+        "eukariotik": 1,
+        "fungi": 2,
+        "gas": 1,
+        "hari": 2,
+        "hewani": 1,
+        "hortikultura": 1,
+        "hukum": 2,
+        "karbohidrat": 3,
+        "logam": 2,
+        "magnet": 1,
+        "makroekonomi": 1,
+        "mamalia": 8,
+        "mikro": 1,
+        "modal": 1,
+        "moluska": 2,
+        "monera": 1,
+        "moneter": 2,
+        "muatan": 1,
+        "nabati": 1,
+        "negara": 2,
+        "netral": 1,
+        "non-pembuluh": 1,
+        "nonlogam": 1,
+        "obat": 2,
+        "otot": 1,
+        "padat": 1,
+        "parasit": 1,
+        "pembuluh": 1,
+        "pendengaran": 2,
+        "pengecap": 1,
+        "perkebunan": 1,
+        "pisces": 4,
+        "positif": 2,
+        "protista": 2,
+        "pteridophyta": 1,
+        "putih": 1,
+        "raket": 1,
+        "reptil": 4,
+        "saraf": 1,
+        "sementara": 1,
+        "serangga": 1,
+        "source": 1,
+        "susu": 1,
+        "terjadi": 6,
+        "tinggi": 2,
+        "tubuh": 1,
+        "tumbuhan": 4,
+        "uang": 1,
+        "vertebrata": 1
+      }
+    },
+    "melakukan": {
+      "plain": {
+        "dribble": 1,
+        "pemanasan": 1,
+        "servis": 1,
+        "smash": 1
+      }
+    },
+    "melekat": {
+      "embedded_candidate": {
+        "dinding": 2,
+        "statis": 1
+      }
+    },
+    "meluruh": {
+      "embedded_candidate": {
+        "keluar": 4,
+        "terlepas": 4
+      }
+    },
+    "memakai": {
+      "plain": {
+        "jaket": 1
+      }
+    },
+    "memakan": {
+      "plain": {
+        "biji": 1,
+        "buah": 1,
+        "daun": 1,
+        "kacang": 1,
+        "rumput": 1
+      }
+    },
+    "memancarkan": {
+      "embedded_candidate": {
+        "terlihat": 7
+      }
+    },
+    "memang": {
+      "embedded_candidate": {
+        "banting": 1
+      },
+      "plain": {
+        "dalam": 1,
+        "dingin": 1,
+        "elastis": 1,
+        "kental": 1,
+        "konduktif": 1,
+        "lembut": 1,
+        "pulen": 1,
+        "putih": 1,
+        "radioaktif": 1,
+        "ringan": 1,
+        "segar": 1,
+        "sejuk": 1,
+        "terik": 1
+      }
+    },
+    "memangsa": {
+      "embedded_candidate": {
+        "laut": 1
+      },
+      "plain": {
+        "katak": 1,
+        "rusa": 1
+      }
+    },
+    "memantau": {
+      "embedded_candidate": {
+        "kalori": 1
+      },
+      "plain": {
+        "angin": 1,
+        "awan": 1,
+        "trafik": 1
+      }
+    },
+    "memasak": {
+      "plain": {
+        "nasi": 1,
+        "sup": 1
+      }
+    },
+    "memasang": {
+      "plain": {
+        "kabel": 1,
+        "mulsa": 1
+      }
+    },
+    "membaca": {
+      "embedded_candidate": {
+        "menulis": 1,
+        "nasi": 1
+      },
+      "plain": {
+        "buku": 1
+      }
+    },
+    "membagikan": {
+      "plain": {
+        "sembako": 1,
+        "shu": 1
+      }
+    },
+    "membakar": {
+      "plain": {
+        "sate": 1
+      }
+    },
+    "membawa": {
+      "embedded_candidate": {
+        "hujan": 1
+      },
+      "plain": {
+        "buku": 1
+      }
+    },
+    "membayar": {
+      "plain": {
+        "pajak": 1,
+        "sewa": 1,
+        "tagihan": 1
+      }
+    },
+    "membeli": {
+      "plain": {
+        "baju": 1,
+        "obligasi": 1,
+        "saham": 1,
+        "valas": 1
+      }
+    },
+    "membelikan": {
+      "embedded_candidate": {
+        "baju": 1,
+        "boneka": 1,
+        "bunga": 1,
+        "permen": 1,
+        "sepeda": 1
+      }
+    },
+    "membendung": {
+      "plain": {
+        "smash": 1
+      }
+    },
+    "memberatkan": {
+      "plain": {
+        "": 1
+      }
+    },
+    "memberi": {
+      "embedded_candidate": {
+        "buku": 1,
+        "cacing": 1,
+        "mainan": 1,
+        "mengeksekusi": 1,
+        "nasihat": 1,
+        "nilai": 1,
+        "uang": 1
+      },
+      "plain": {
+        "instruksi": 1,
+        "pakan": 1,
+        "pelet": 1
+      }
+    },
+    "membersihkan": {
+      "plain": {
+        "kipas": 1,
+        "telinga": 1
+      }
+    },
+    "membuat": {
+      "embedded_candidate": {
+        "baru": 2,
+        "basi": 1,
+        "berat": 1,
+        "bergoyang": 1,
+        "diluruskan": 1,
+        "kerdil": 1,
+        "melambat": 1,
+        "melonjak": 1,
+        "memuai": 1,
+        "menguning": 2,
+        "menurun": 1,
+        "naik": 1,
+        "panda": 1,
+        "perih": 1,
+        "perut": 1,
+        "terbentuk": 1,
+        "terputus": 1,
+        "tumbang": 1
+      },
+      "plain": {
+        "abu": 1,
+        "akun": 1,
+        "alkohol": 1,
+        "asap": 1,
+        "banjir": 2,
+        "bootloop": 1,
+        "dekomposisi": 1,
+        "demam": 1,
+        "diabetes": 2,
+        "gejolak": 1,
+        "gelombang": 1,
+        "genangan": 1,
+        "hipertensi": 1,
+        "infeksi": 1,
+        "iritasi": 1,
+        "jatuh": 1,
+        "karat": 1,
+        "kebakaran": 1,
+        "kekeringan": 2,
+        "kelangkaan": 1,
+        "kemiskinan": 1,
+        "kepanikan": 1,
+        "keracunan": 3,
+        "kerugian": 1,
+        "kerusakan": 1,
+        "kondensasi": 1,
+        "kriminalitas": 1,
+        "kutub": 1,
+        "ledakan": 2,
+        "limbah": 1,
+        "longsor": 1,
+        "mutasi": 1,
+        "panas": 1,
+        "penyakit": 2,
+        "penyumbatan": 1,
+        "polusi": 1,
+        "pusing": 2,
+        "reruntuhan": 1,
+        "sengatan": 1,
+        "sirosis": 1
+      }
+    },
+    "membutuhkan": {
+      "embedded_candidate": {
+        "bisnis": 1,
+        "d": 2,
+        "latih": 1,
+        "negeri": 1,
+        "panas": 2,
+        "pencernaan": 1,
+        "penjual": 1,
+        "penuh": 1,
+        "terlarut": 1
+      },
+      "plain": {
+        "air": 5,
+        "anggaran": 1,
+        "baterai": 1,
+        "bensin": 3,
+        "besi": 1,
+        "bunga": 1,
+        "cabai": 2,
+        "cahaya": 1,
+        "darah": 2,
+        "data": 1,
+        "dokter": 1,
+        "energi": 1,
+        "guru": 1,
+        "kaldu": 1,
+        "kalsium": 2,
+        "karbon": 1,
+        "konsentrasi": 1,
+        "likuiditas": 1,
+        "listrik": 3,
+        "makanan": 2,
+        "material": 1,
+        "modal": 2,
+        "nasabah": 2,
+        "nutrisi": 1,
+        "oksigen": 6,
+        "oli": 1,
+        "pajak": 1,
+        "pekerja": 1,
+        "pendingin": 1,
+        "protein": 1,
+        "pupuk": 1,
+        "sinyal": 1,
+        "tidur": 1,
+        "udara": 2
+      }
+    },
+    "memeriksa": {
+      "plain": {
+        "cpu": 1,
+        "mata": 1,
+        "pasien": 1,
+        "tenggorokan": 1
+      }
+    },
+    "memerlukan": {
+      "embedded_candidate": {
+        "badan": 1,
+        "besi": 1,
+        "d": 1,
+        "dioksida": 1,
+        "karbohidrat": 1,
+        "nol": 1,
+        "penuh": 1,
+        "radio": 1,
+        "sama": 1,
+        "seluler": 1,
+        "terlarut": 2
+      },
+      "plain": {
+        "air": 4,
+        "anggaran": 1,
+        "bensin": 3,
+        "besi": 1,
+        "cabai": 1,
+        "cahaya": 1,
+        "darah": 1,
+        "data": 1,
+        "dokter": 1,
+        "energi": 1,
+        "guru": 1,
+        "kalsium": 1,
+        "karbon": 1,
+        "likuiditas": 1,
+        "listrik": 2,
+        "makanan": 2,
+        "material": 1,
+        "modal": 1,
+        "nasabah": 1,
+        "nektar": 1,
+        "nutrisi": 1,
+        "oksigen": 5,
+        "oli": 1,
+        "pajak": 1,
+        "pekerja": 1,
+        "pemilih": 1,
+        "pendingin": 1,
+        "protein": 1,
+        "pupuk": 1,
+        "refleks": 1,
+        "sinyal": 1,
+        "terasi": 2,
+        "tidur": 1,
+        "udara": 2
+      }
+    },
+    "memetik": {
+      "plain": {
+        "pisang": 1,
+        "tomat": 1
+      }
+    },
+    "memicu": {
+      "embedded_candidate": {
+        "api": 1,
+        "asap": 1,
+        "baru": 1,
+        "basah": 1,
+        "berkurang": 1,
+        "hati": 1,
+        "kerdil": 1,
+        "keseleo": 1,
+        "kota": 1,
+        "lemot": 1,
+        "mahal": 1,
+        "mahasiswa": 1,
+        "mati": 1,
+        "naik": 4,
+        "paru": 1,
+        "pedas": 1,
+        "pusing": 1,
+        "taman": 1,
+        "terbentuk": 2,
+        "throttling": 1
+      },
+      "plain": {
+        "abu": 1,
+        "alkohol": 1,
+        "asap": 1,
+        "banjir": 2,
+        "bootloop": 2,
+        "dekomposisi": 1,
+        "demam": 1,
+        "diabetes": 2,
+        "gejolak": 1,
+        "gelombang": 1,
+        "genangan": 1,
+        "infeksi": 1,
+        "iritasi": 1,
+        "jatuh": 1,
+        "karat": 1,
+        "kebakaran": 1,
+        "kekeringan": 2,
+        "kelangkaan": 1,
+        "kemiskinan": 1,
+        "kepanikan": 1,
+        "keracunan": 1,
+        "kerugian": 1,
+        "kerusakan": 1,
+        "kondensasi": 1,
+        "kriminalitas": 1,
+        "kutub": 1,
+        "ledakan": 2,
+        "limbah": 1,
+        "longsor": 1,
+        "mutasi": 1,
+        "panas": 1,
+        "penyakit": 2,
+        "penyumbatan": 1,
+        "polusi": 1,
+        "reruntuhan": 1,
+        "sengatan": 1,
+        "sirosis": 1
+      }
+    },
+    "memijat": {
+      "plain": {
+        "leher": 1,
+        "punggung": 1
+      }
+    },
+    "memimpin": {
+      "plain": {
+        "musyawarah": 1
+      }
+    },
+    "memori": {
+      "plain": {
+        "sementara": 1
+      }
+    },
+    "memotret": {
+      "plain": {
+        "paru-paru": 1
+      }
+    },
+    "memprediksi": {
+      "plain": {
+        "hujan": 1
+      }
+    },
+    "memproses": {
+      "plain": {
+        "dataset": 1
+      }
+    },
+    "memuai": {
+      "embedded_candidate": {
+        "naik": 1,
+        "tawar": 2
+      }
+    },
+    "memukul": {
+      "plain": {
+        "bola": 1,
+        "shuttlecock": 1
+      }
+    },
+    "memulai": {
+      "plain": {
+        "lomba": 1
+      }
+    },
+    "memunculkan": {
+      "embedded_candidate": {
+        "panda": 1,
+        "terbakar": 1,
+        "terbentuk": 1,
+        "tumbang": 1
+      },
+      "plain": {
+        "pusing": 1
+      }
+    },
+    "memutar": {
+      "plain": {
+        "kenop": 1,
+        "kompas": 1,
+        "prisma": 1,
+        "saklar": 1
+      }
+    },
+    "menabung": {
+      "plain": {
+        "uang": 1
+      }
+    },
+    "menahan": {
+      "plain": {
+        "bola": 1,
+        "jaminan": 1
+      }
+    },
+    "menambatkan": {
+      "plain": {
+        "kapal": 1
+      }
+    },
+    "menampilkan": {
+      "embedded_candidate": {
+        "boot": 1
+      }
+    },
+    "menanam": {
+      "embedded_candidate": {
+        "menjual": 1
+      },
+      "plain": {
+        "bibit": 1,
+        "padi": 1
+      }
+    },
+    "menandatangani": {
+      "plain": {
+        "kontrak": 1,
+        "surat": 1
+      }
+    },
+    "menangkap": {
+      "plain": {
+        "bola": 1,
+        "ikan": 2,
+        "pencuri": 1
+      }
+    },
+    "menarik": {
+      "plain": {
+        "jaring": 1,
+        "perahu": 1
+      }
+    },
+    "mencabut": {
+      "plain": {
+        "gigi": 1
+      }
+    },
+    "mencair": {
+      "embedded_candidate": {
+        "meluap": 2,
+        "naik": 3
+      }
+    },
+    "mencampur": {
+      "plain": {
+        "gula": 1,
+        "santan": 1
+      }
+    },
+    "mencangkok": {
+      "plain": {
+        "organ": 1
+      }
+    },
+    "mencari": {
+      "plain": {
+        "madu": 1,
+        "nektar": 1,
+        "siput": 1
+      }
+    },
+    "mencatat": {
+      "embedded_candidate": {
+        "getaran": 1,
+        "udara": 1
+      },
+      "plain": {
+        "frekuensi": 1,
+        "suhu": 1
+      }
+    },
+    "mencetak": {
+      "embedded_candidate": {
+        "lengah": 1,
+        "pointer": 1
+      },
+      "plain": {
+        "dunk": 1,
+        "gol": 3
+      }
+    },
+    "mencurigakan": {
+      "embedded_candidate": {
+        "spam": 3
+      }
+    },
+    "mendatangkan": {
+      "embedded_candidate": {
+        "naik": 1,
+        "perut": 1
+      },
+      "plain": {
+        "keracunan": 1
+      }
+    },
+    "mendekat": {
+      "embedded_candidate": {
+        "ditunda": 5,
+        "kabur": 4
+      }
+    },
+    "mendekati": {
+      "embedded_candidate": {
+        "bertepuk": 2
+      }
+    },
+    "mendengarkan": {
+      "embedded_candidate": {
+        "jantung": 1
+      },
+      "plain": {
+        "musik": 1
+      }
+    },
+    "mendesak": {
+      "embedded_candidate": {
+        "baru": 2
+      }
+    },
+    "menduduki": {
+      "plain": {
+        "gedung": 2
+      }
+    },
+    "menebal": {
+      "embedded_candidate": {
+        "hari": 3,
+        "licin": 8,
+        "menurun": 1,
+        "sebelumnya": 1
+      }
+    },
+    "menelan": {
+      "plain": {
+        "katak": 1,
+        "krill": 1,
+        "obat": 1
+      }
+    },
+    "menembak": {
+      "embedded_candidate": {
+        "alfa": 1
+      }
+    },
+    "menembus": {
+      "embedded_candidate": {
+        "terjadi": 2,
+        "terurai": 2
+      }
+    },
+    "menendang": {
+      "plain": {
+        "bola": 1,
+        "lawan": 1
+      }
+    },
+    "menerima": {
+      "plain": {
+        "dana": 2,
+        "devisa": 1,
+        "dividen": 1
+      }
+    },
+    "mengajar": {
+      "embedded_candidate": {
+        "belajar": 1
+      },
+      "plain": {
+        "siswa": 1
+      }
+    },
+    "mengajari": {
+      "embedded_candidate": {
+        "berenang": 1,
+        "matematika": 1,
+        "membaca": 1,
+        "statistik": 1,
+        "teknik": 1
+      }
+    },
+    "mengakibatkan": {
+      "embedded_candidate": {
+        "api": 1,
+        "down": 1,
+        "kerdil": 1,
+        "mahal": 1,
+        "mahasiswa": 1,
+        "mati": 1,
+        "meningkat": 1,
+        "menurun": 1,
+        "panda": 1,
+        "pantai": 1,
+        "paru": 1,
+        "terbentuk": 1,
+        "terputus": 1,
+        "turun": 2,
+        "warga": 1
+      },
+      "plain": {
+        "abu": 1,
+        "alkohol": 1,
+        "asap": 1,
+        "banjir": 2,
+        "bootloop": 1,
+        "dekomposisi": 1,
+        "demam": 1,
+        "diabetes": 2,
+        "gejolak": 1,
+        "gelombang": 1,
+        "genangan": 1,
+        "hipertensi": 1,
+        "infeksi": 1,
+        "iritasi": 1,
+        "jatuh": 1,
+        "karat": 1,
+        "kebakaran": 1,
+        "kejang": 1,
+        "kekeringan": 3,
+        "kelangkaan": 1,
+        "kemiskinan": 1,
+        "kepanikan": 1,
+        "keracunan": 1,
+        "kerugian": 1,
+        "kerusakan": 1,
+        "kondensasi": 1,
+        "kriminalitas": 1,
+        "kutub": 1,
+        "ledakan": 2,
+        "limbah": 1,
+        "longsor": 1,
+        "mutasi": 1,
+        "panas": 1,
+        "penyakit": 2,
+        "penyumbatan": 1,
+        "polusi": 1,
+        "reruntuhan": 1,
+        "sengatan": 1,
+        "sirosis": 1
+      }
+    },
+    "mengalir": {
+      "embedded_candidate": {
+        "menyala": 2
+      },
+      "plain": {
+        "terluka": 1
+      }
+    },
+    "mengamati": {
+      "embedded_candidate": {
+        "isotop": 1
+      },
+      "plain": {
+        "elektron": 1,
+        "log": 1,
+        "radar": 1
+      }
+    },
+    "mengandalkan": {
+      "embedded_candidate": {
+        "kering": 1
+      },
+      "plain": {
+        "irigasi": 1
+      }
+    },
+    "mengangkat": {
+      "plain": {
+        "kutil": 1,
+        "tumor": 1
+      }
+    },
+    "mengantri": {
+      "embedded_candidate": {
+        "turun": 1
+      }
+    },
+    "mengatur": {
+      "embedded_candidate": {
+        "lintas": 1
+      }
+    },
+    "mengejar": {
+      "plain": {
+        "tikus": 1,
+        "zebra": 1
+      }
+    },
+    "mengembang": {
+      "embedded_candidate": {
+        "dikocok": 1,
+        "sempurna": 1
+      }
+    },
+    "mengenai": {
+      "embedded_candidate": {
+        "terjadi": 5
+      }
+    },
+    "mengeras": {
+      "plain": {
+        "": 2
+      }
+    },
+    "mengering": {
+      "embedded_candidate": {
+        "bermigrasi": 1,
+        "melanda": 1
+      }
+    },
+    "menggagalkan": {
+      "plain": {
+        "tendangan": 1
+      }
+    },
+    "menggali": {
+      "plain": {
+        "pasir": 1,
+        "tanah": 1
+      }
+    },
+    "mengganti": {
+      "plain": {
+        "baterai": 1,
+        "infus": 1,
+        "ram": 1
+      }
+    },
+    "menggiling": {
+      "embedded_candidate": {
+        "kopi": 1
+      }
+    },
+    "menghasilkan": {
+      "plain": {
+        "abu": 1,
+        "alkohol": 1,
+        "asap": 1,
+        "banjir": 2,
+        "dekomposisi": 1,
+        "demam": 1,
+        "diabetes": 1,
+        "gejolak": 1,
+        "gelombang": 1,
+        "genangan": 1,
+        "infeksi": 1,
+        "iritasi": 1,
+        "jatuh": 1,
+        "karat": 1,
+        "kebakaran": 1,
+        "kekeringan": 2,
+        "kelangkaan": 1,
+        "kemiskinan": 1,
+        "kepanikan": 1,
+        "keracunan": 1,
+        "kerugian": 1,
+        "kerusakan": 1,
+        "kondensasi": 1,
+        "kriminalitas": 1,
+        "kutub": 1,
+        "ledakan": 2,
+        "limbah": 1,
+        "longsor": 1,
+        "mutasi": 1,
+        "panas": 1,
+        "penyakit": 2,
+        "penyumbatan": 1,
+        "polusi": 1,
+        "reruntuhan": 1,
+        "sengatan": 1,
+        "sirosis": 1
+      }
+    },
+    "menghindari": {
+      "embedded_candidate": {
+        "melemah": 2
+      },
+      "plain": {
+        "badai": 1,
+        "genangan": 1
+      }
+    },
+    "mengikuti": {
+      "plain": {
+        "kuliah": 1,
+        "prakiraan": 1,
+        "upacara": 1
+      }
+    },
+    "mengirim": {
+      "embedded_candidate": {
+        "dini": 1,
+        "dokumen": 1,
+        "laporan": 1,
+        "paket": 1,
+        "pemberitahuan": 1,
+        "surat": 1
+      },
+      "plain": {
+        "kontainer": 1
+      }
+    },
+    "mengkalibrasi": {
+      "plain": {
+        "alat": 1,
+        "sensor": 1
+      }
+    },
+    "menguat": {
+      "embedded_candidate": {
+        "kompetitif": 2
+      }
+    },
+    "menguji": {
+      "plain": {
+        "fitur": 1,
+        "mahasiswa": 1
+      }
+    },
+    "mengukur": {
+      "embedded_candidate": {
+        "arus": 1,
+        "hujan": 1
+      },
+      "plain": {
+        "suhu": 1,
+        "tegangan": 1,
+        "tensi": 1
+      }
+    },
+    "mengumpulkan": {
+      "plain": {
+        "cabai": 1,
+        "iuran": 1
+      }
+    },
+    "mengundang": {
+      "embedded_candidate": {
+        "naik": 2,
+        "warga": 1
+      }
+    },
+    "menguning": {
+      "embedded_candidate": {
+        "dilakukan": 3,
+        "hara": 1
+      }
+    },
+    "menguntungkan": {
+      "plain": {
+        "": 2
+      }
+    },
+    "menimbang": {
+      "plain": {
+        "ayam": 1,
+        "bayi": 1
+      }
+    },
+    "menimbulkan": {
+      "embedded_candidate": {
+        "api": 1,
+        "baru": 1,
+        "hati": 1,
+        "hutan": 1,
+        "menguning": 1,
+        "menurun": 2,
+        "naik": 2,
+        "panda": 3,
+        "paru": 1,
+        "perut": 1,
+        "terbentuk": 1,
+        "turun": 1
+      },
+      "plain": {
+        "bootloop": 1,
+        "diabetes": 1,
+        "keracunan": 1,
+        "pusing": 1,
+        "tsunami": 1
+      }
+    },
+    "meningkat": {
+      "embedded_candidate": {
+        "terbentuk": 1
+      }
+    },
+    "menjadi": {
+      "embedded_candidate": {
+        "tanah": 2
+      },
+      "plain": {
+        "empuk": 1,
+        "segar": 3
+      }
+    },
+    "menjaga": {
+      "embedded_candidate": {
+        "berbau": 2
+      }
+    },
+    "menjual": {
+      "embedded_candidate": {
+        "panen": 1
+      },
+      "plain": {
+        "barang": 1,
+        "sayur": 1
+      }
+    },
+    "menkalibrasi": {
+      "plain": {
+        "kalorimeter": 1
+      }
+    },
+    "mentimun": {
+      "plain": {
+        "menyusut": 1
+      }
+    },
+    "menulis": {
+      "embedded_candidate": {
+        "menggambar": 1
+      },
+      "plain": {
+        "kode": 1,
+        "surat": 1
+      }
+    },
+    "menumpuk": {
+      "embedded_candidate": {
+        "bangkrut": 2
+      }
+    },
+    "menunda": {
+      "plain": {
+        "panen": 1,
+        "penerbangan": 1
+      }
+    },
+    "menunjukkan": {
+      "embedded_candidate": {
+        "arah": 1,
+        "contoh": 1,
+        "foto": 1,
+        "hasil": 1,
+        "jalan": 1
+      }
+    },
+    "menurun": {
+      "embedded_candidate": {
+        "diistirahatkan": 2,
+        "terungkap": 1
+      }
+    },
+    "menusukkan": {
+      "plain": {
+        "jarum": 1
+      }
+    },
+    "menutup": {
+      "plain": {
+        "atap": 1,
+        "greenhouse": 1,
+        "port": 1
+      }
+    },
+    "menutupi": {
+      "embedded_candidate": {
+        "meluas": 1
+      },
+      "plain": {
+        "kota": 5
+      }
+    },
+    "menyajikan": {
+      "plain": {
+        "kopi": 1,
+        "makanan": 1
+      }
+    },
+    "menyala": {
+      "embedded_candidate": {
+        "dialirkan": 1,
+        "ditekan": 3
+      }
+    },
+    "menyalakan": {
+      "embedded_candidate": {
+        "pijar": 1
+      },
+      "plain": {
+        "generator": 1,
+        "laser": 1,
+        "osiloskop": 1
+      }
+    },
+    "menyambar": {
+      "embedded_candidate": {
+        "berlarian": 3,
+        "terbakar": 2,
+        "tinggi": 1
+      },
+      "plain": {
+        "ayam": 1
+      }
+    },
+    "menyarankan": {
+      "plain": {
+        "diet": 1
+      }
+    },
+    "menyebabkan": {
+      "embedded_candidate": {
+        "asap": 2,
+        "baru": 1,
+        "bawah": 1,
+        "keseleo": 1,
+        "mahal": 1,
+        "mati": 1,
+        "memerah": 1,
+        "menguning": 1,
+        "meningkat": 1,
+        "menurun": 1,
+        "naik": 1,
+        "paru": 1,
+        "pedas": 1,
+        "terbentuk": 1,
+        "terputus": 1,
+        "turun": 1
+      },
+      "plain": {
+        "abu": 1,
+        "alkohol": 1,
+        "asap": 1,
+        "banjir": 2,
+        "dekomposisi": 1,
+        "demam": 1,
+        "diabetes": 2,
+        "gejolak": 1,
+        "gelombang": 1,
+        "genangan": 1,
+        "infeksi": 1,
+        "iritasi": 1,
+        "jatuh": 1,
+        "karat": 1,
+        "kebakaran": 1,
+        "kekeringan": 3,
+        "kelangkaan": 1,
+        "kemiskinan": 1,
+        "kepanikan": 1,
+        "keracunan": 2,
+        "kerugian": 1,
+        "kerusakan": 1,
+        "kondensasi": 1,
+        "kriminalitas": 1,
+        "kutub": 1,
+        "ledakan": 2,
+        "limbah": 1,
+        "longsor": 1,
+        "mutasi": 1,
+        "panas": 1,
+        "penyakit": 2,
+        "penyumbatan": 1,
+        "polusi": 1,
+        "reruntuhan": 1,
+        "sengatan": 1,
+        "sirosis": 1
+      }
+    },
+    "menyebar": {
+      "embedded_candidate": {
+        "massal": 9,
+        "memanas": 1
+      }
+    },
+    "menyelamatkan": {
+      "embedded_candidate": {
+        "keras": 1
+      }
+    },
+    "menyelesaikan": {
+      "plain": {
+        "lomba": 1
+      }
+    },
+    "menyerang": {
+      "embedded_candidate": {
+        "gagal": 6
+      },
+      "plain": {
+        "sawah": 2
+      }
+    },
+    "menyesuaikan": {
+      "embedded_candidate": {
+        "rilis": 1
+      }
+    },
+    "menyiram": {
+      "embedded_candidate": {
+        "layu": 1
+      },
+      "plain": {
+        "lebih": 2
+      }
+    },
+    "menyita": {
+      "embedded_candidate": {
+        "macet": 1
+      },
+      "plain": {
+        "jaminan": 5
+      }
+    },
+    "menyusut": {
+      "embedded_candidate": {
+        "garam": 1
+      }
+    },
+    "merancang": {
+      "plain": {
+        "antarmuka": 1,
+        "api": 1
+      }
+    },
+    "merawat": {
+      "plain": {
+        "bibit": 1,
+        "tanaman": 1
+      }
+    },
+    "meresepkan": {
+      "plain": {
+        "antibiotik": 1
+      }
+    },
+    "merilis": {
+      "embedded_candidate": {
+        "baru": 1
+      },
+      "plain": {
+        "laporan": 1,
+        "peringatan": 1
+      }
+    },
+    "merupakan": {
+      "embedded_candidate": {
+        "akuatik": 1,
+        "alami": 1,
+        "berlapis": 1,
+        "darah": 1,
+        "demokrasi": 1,
+        "diri": 1,
+        "elektromagnetik": 1,
+        "hortikultura": 1,
+        "hukum": 1,
+        "karbohidrat": 1,
+        "kolektif": 1,
+        "medis": 1,
+        "merah": 1,
+        "nabati": 1,
+        "negara": 1,
+        "padat": 1,
+        "pengecap": 1,
+        "serealia": 1,
+        "source": 1,
+        "umum": 1
+      },
+      "plain": {
+        "aves": 4,
+        "bryophyta": 1,
+        "crustacea": 2,
+        "fungi": 2,
+        "gas": 1,
+        "logam": 2,
+        "mamalia": 9,
+        "moluska": 2,
+        "monera": 1,
+        "nonlogam": 1,
+        "parasit": 1,
+        "pisces": 4,
+        "protista": 2,
+        "pteridophyta": 1,
+        "reptil": 5,
+        "tumbuhan": 4
+      }
+    },
+    "mikro": {
+      "plain": {
+        "": 1
+      }
+    },
+    "minum": {
+      "plain": {
+        "air": 1
+      }
+    },
+    "mudah": {
+      "embedded_candidate": {
+        "berkembang": 2
+      }
+    },
+    "mulai": {
+      "embedded_candidate": {
+        "ditanam": 1
+      },
+      "plain": {
+        "tumbuh": 3
+      }
+    },
+    "mustahil": {
+      "embedded_candidate": {
+        "kota": 1
+      }
+    },
+    "mutlak": {
+      "embedded_candidate": {
+        "air": 2,
+        "bunga": 1,
+        "d": 1,
+        "darah": 2,
+        "dioksida": 2,
+        "kaldu": 1,
+        "kalsium": 2,
+        "makanan": 1,
+        "matahari": 1,
+        "pencernaan": 2,
+        "terasi": 1,
+        "terlarut": 3,
+        "udara": 1
+      }
+    },
+    "nabati": {
+      "plain": {
+        "": 1
+      }
+    },
+    "neural": {
+      "embedded_candidate": {
+        "gpu": 3
+      }
+    },
+    "nipis": {
+      "embedded_candidate": {
+        "asam": 4
+      },
+      "plain": {
+        "asam": 1
+      }
+    },
+    "olahraga": {
+      "embedded_candidate": {
+        "naik": 1
+      },
+      "plain": {
+        "kering": 2
+      }
+    },
+    "optik": {
+      "embedded_candidate": {
+        "cepat": 1
+      },
+      "plain": {
+        "cepat": 2
+      }
+    },
+    "organik": {
+      "plain": {
+        "": 3
+      }
+    },
+    "pada": {
+      "embedded_candidate": {
+        "air": 1,
+        "bunga": 1,
+        "dioksida": 1,
+        "mangsa": 1,
+        "nektar": 1,
+        "oksigen": 1,
+        "terasi": 1
+      }
+    },
+    "pemakan": {
+      "embedded_candidate": {
+        "serangga": 3
+      }
+    },
+    "pemerintah": {
+      "embedded_candidate": {
+        "aman": 3
+      },
+      "plain": {
+        "aman": 1
+      }
+    },
+    "pemutusan": {
+      "embedded_candidate": {
+        "dilakukan": 2,
+        "rugi": 1
+      }
+    },
+    "pencernaan": {
+      "plain": {
+        "": 3
+      }
+    },
+    "pendapatan": {
+      "plain": {
+        "": 1
+      }
+    },
+    "pendek": {
+      "plain": {
+        "": 2
+      }
+    },
+    "penentu": {
+      "embedded_candidate": {
+        "bersorak": 1
+      }
+    },
+    "pengumuman": {
+      "embedded_candidate": {
+        "bergerak": 2
+      }
+    },
+    "perairan": {
+      "plain": {
+        "": 1
+      }
+    },
+    "perdebatan": {
+      "embedded_candidate": {
+        "menyebar": 2
+      }
+    },
+    "pergi": {
+      "plain": {
+        "sekolah": 1
+      }
+    },
+    "perkebunan": {
+      "plain": {
+        "": 4
+      }
+    },
+    "perlu": {
+      "plain": {
+        "air": 4,
+        "anggaran": 1,
+        "bensin": 3,
+        "besi": 1,
+        "cahaya": 1,
+        "darah": 1,
+        "data": 1,
+        "dokter": 1,
+        "energi": 1,
+        "guru": 1,
+        "kalsium": 1,
+        "karbon": 1,
+        "likuiditas": 1,
+        "listrik": 2,
+        "makanan": 2,
+        "material": 1,
+        "modal": 1,
+        "nasabah": 1,
+        "nutrisi": 1,
+        "oksigen": 4,
+        "oli": 1,
+        "pajak": 1,
+        "pekerja": 1,
+        "pendingin": 1,
+        "protein": 1,
+        "pupuk": 1,
+        "sinyal": 1,
+        "tidur": 1,
+        "udara": 2
+      }
+    },
+    "perlukan": {
+      "embedded_candidate": {
+        "air": 1,
+        "bisnis": 1,
+        "d": 1,
+        "dioksida": 1,
+        "matahari": 1,
+        "minum": 1,
+        "negara": 1,
+        "pencernaan": 1,
+        "penuh": 1,
+        "terdistribusi": 1,
+        "terlarut": 1
+      },
+      "plain": {
+        "darah": 1,
+        "kaldu": 1,
+        "makanan": 1,
+        "nasabah": 1,
+        "naungan": 1,
+        "oksigen": 2,
+        "pelanggan": 1,
+        "stamina": 1
+      }
+    },
+    "pertandingan": {
+      "embedded_candidate": {
+        "panjang": 1,
+        "tangan": 1
+      },
+      "plain": {
+        "tamat": 4
+      }
+    },
+    "phishing": {
+      "embedded_candidate": {
+        "diretas": 6
+      }
+    },
+    "pollinasi": {
+      "embedded_candidate": {
+        "lebat": 1
+      }
+    },
+    "positif": {
+      "plain": {
+        "": 1
+      }
+    },
+    "primer": {
+      "plain": {
+        "": 2
+      }
+    },
+    "raksa": {
+      "embedded_candidate": {
+        "cair": 2
+      },
+      "plain": {
+        "cair": 1
+      }
+    },
+    "rakyat": {
+      "embedded_candidate": {
+        "dilaksanakan": 1,
+        "suara": 2
+      }
+    },
+    "responsif": {
+      "plain": {
+        "": 3
+      }
+    },
+    "saat": {
+      "plain": {
+        "abu": 1,
+        "alkohol": 1,
+        "bakteri": 1,
+        "benih": 1,
+        "berbunga": 1,
+        "bunga": 1,
+        "cair": 2,
+        "dingin": 2,
+        "embun": 1,
+        "fajar": 1,
+        "gelap": 1,
+        "gelombang": 1,
+        "getaran": 1,
+        "hujan": 4,
+        "infeksi": 1,
+        "karat": 1,
+        "kering": 1,
+        "kondensasi": 1,
+        "kuncup": 1,
+        "magma": 1,
+        "malam": 1,
+        "mendung": 1,
+        "musim": 2,
+        "pagi": 2,
+        "panas": 2,
+        "perawatan": 1,
+        "radiasi": 1,
+        "senja": 1,
+        "siang": 1,
+        "sore": 1,
+        "tanam": 1,
+        "terang": 1
+      }
+    },
+    "sakit": {
+      "embedded_candidate": {
+        "medis": 2,
+        "sekolah": 1
+      }
+    },
+    "saku": {
+      "plain": {
+        "": 1
+      }
+    },
+    "sama": {
+      "embedded_candidate": {
+        "air": 1,
+        "berpembuluh": 1,
+        "biasa": 1,
+        "darat": 1,
+        "hortikultura": 1,
+        "ikan": 1,
+        "kepemilikan": 1,
+        "ketahanan": 1,
+        "pajak": 1,
+        "penyimpanan": 1,
+        "pinjaman": 1,
+        "saus": 1,
+        "sayuran": 1,
+        "sirkulasi": 1,
+        "terbuka": 1,
+        "tunggal": 2
+      }
+    },
+    "sebab": {
+      "embedded_candidate": {
+        "anjlok": 1,
+        "berlebih": 1,
+        "tahun": 1,
+        "terbaru": 1,
+        "terganggu": 1
+      }
+    },
+    "sebelum": {
+      "plain": {
+        "abu": 1,
+        "alkohol": 1,
+        "bakteri": 1,
+        "benih": 1,
+        "berbunga": 1,
+        "bunga": 1,
+        "cair": 2,
+        "dingin": 2,
+        "embun": 1,
+        "fajar": 1,
+        "gelap": 1,
+        "gelombang": 1,
+        "getaran": 1,
+        "hujan": 4,
+        "infeksi": 1,
+        "karat": 1,
+        "kering": 1,
+        "kondensasi": 1,
+        "kuncup": 1,
+        "magma": 1,
+        "malam": 1,
+        "mendung": 1,
+        "musim": 2,
+        "pagi": 2,
+        "panas": 2,
+        "perawatan": 1,
+        "radiasi": 1,
+        "senja": 1,
+        "siang": 1,
+        "sore": 1,
+        "tanam": 1,
+        "terang": 1
+      }
+    },
+    "sebenarnya": {
+      "plain": {
+        "cepat": 1,
+        "destruktif": 1,
+        "halus": 1,
+        "hangat": 1,
+        "kuat": 1,
+        "lembut": 2,
+        "lentur": 1,
+        "manis": 1,
+        "mulia": 1,
+        "panas": 1
+      }
+    },
+    "segar": {
+      "plain": {
+        "": 1
+      }
+    },
+    "selesai": {
+      "embedded_candidate": {
+        "muncul": 2,
+        "restart": 1
+      }
+    },
+    "serealia": {
+      "plain": {
+        "": 4
+      }
+    },
+    "set": {
+      "embedded_candidate": {
+        "istirahat": 4
+      }
+    },
+    "setelah": {
+      "plain": {
+        "abu": 1,
+        "alkohol": 1,
+        "bakteri": 1,
+        "benih": 1,
+        "berbunga": 1,
+        "bunga": 1,
+        "cair": 2,
+        "dingin": 2,
+        "embun": 1,
+        "fajar": 1,
+        "gelap": 1,
+        "gelombang": 1,
+        "getaran": 1,
+        "hujan": 4,
+        "infeksi": 1,
+        "karat": 1,
+        "kering": 1,
+        "kondensasi": 1,
+        "kuncup": 1,
+        "magma": 1,
+        "malam": 1,
+        "mendung": 1,
+        "musim": 2,
+        "pagi": 2,
+        "panas": 2,
+        "perawatan": 1,
+        "radiasi": 1,
+        "senja": 1,
+        "siang": 1,
+        "sore": 1,
+        "tanam": 1,
+        "terang": 1
+      }
+    },
+    "siap": {
+      "embedded_candidate": {
+        "menguning": 1
+      }
+    },
+    "sistem": {
+      "embedded_candidate": {
+        "logo": 1
+      }
+    },
+    "stres": {
+      "embedded_candidate": {
+        "naik": 1
+      }
+    },
+    "sumber": {
+      "embedded_candidate": {
+        "bermigrasi": 3
+      }
+    },
+    "surya": {
+      "embedded_candidate": {
+        "cahaya": 2,
+        "listrik": 1,
+        "matahari": 2
+      }
+    },
+    "tampak": {
+      "plain": {
+        "asin": 1,
+        "harum": 1,
+        "hijau": 1,
+        "isolator": 1,
+        "kental": 1,
+        "keras": 2,
+        "kuat": 2,
+        "legal": 1,
+        "manis": 1,
+        "mengikat": 1,
+        "rutin": 1,
+        "segar": 1,
+        "stabil": 1
+      }
+    },
+    "teknis": {
+      "embedded_candidate": {
+        "air": 1,
+        "darat": 1,
+        "ekskresi": 1,
+        "hortikultura": 1,
+        "ludah": 1,
+        "manusia": 1,
+        "pajak": 1,
+        "pendapatan": 1,
+        "permanen": 1,
+        "pernapasan": 2,
+        "saraf": 1,
+        "saus": 1,
+        "sementara": 1,
+        "serealia": 1,
+        "sukarela": 1,
+        "umum": 1,
+        "utang": 1
+      }
+    },
+    "tekstur": {
+      "embedded_candidate": {
+        "dilelehkan": 1,
+        "lembut": 3
+      }
+    },
+    "terasa": {
+      "embedded_candidate": {
+        "banyak": 1,
+        "es": 2,
+        "semalaman": 1
+      },
+      "plain": {
+        "asin": 2,
+        "berat": 4,
+        "hangat": 1,
+        "koheren": 1,
+        "kompleks": 1,
+        "konduktif": 1,
+        "legal": 1,
+        "likuid": 1,
+        "menguntungkan": 1,
+        "pahit": 1,
+        "perih": 2,
+        "pusing": 3,
+        "ringan": 1,
+        "sah": 1,
+        "stabil": 1,
+        "terik": 1,
+        "vital": 1
+      }
+    },
+    "terasi": {
+      "embedded_candidate": {
+        "saus": 1
+      }
+    },
+    "terbang": {
+      "embedded_candidate": {
+        "berenang": 1
+      }
+    },
+    "terbaru": {
+      "embedded_candidate": {
+        "crash": 3
+      }
+    },
+    "terbenam": {
+      "embedded_candidate": {
+        "menjelang": 1
+      }
+    },
+    "terbentuk": {
+      "embedded_candidate": {
+        "air": 1,
+        "turun": 5
+      }
+    },
+    "terbit": {
+      "embedded_candidate": {
+        "berkicau": 2,
+        "detail": 2,
+        "naik": 2,
+        "terbenam": 1
+      }
+    },
+    "tercapai": {
+      "embedded_candidate": {
+        "ditunda": 1
+      }
+    },
+    "tercemar": {
+      "embedded_candidate": {
+        "mengapung": 2
+      }
+    },
+    "tercipta": {
+      "embedded_candidate": {
+        "bersorak": 2
+      }
+    },
+    "terdengar": {
+      "embedded_candidate": {
+        "angkasa": 1
+      }
+    },
+    "terdistribusi": {
+      "plain": {
+        "": 2
+      }
+    },
+    "terduga": {
+      "embedded_candidate": {
+        "down": 2
+      }
+    },
+    "tereksitasi": {
+      "embedded_candidate": {
+        "dipancarkan": 2
+      }
+    },
+    "terganggu": {
+      "embedded_candidate": {
+        "makan": 3
+      }
+    },
+    "tergantung": {
+      "plain": {
+        "air": 5,
+        "anggaran": 1,
+        "anggota": 1,
+        "angin": 1,
+        "bensin": 3,
+        "besi": 1,
+        "bunga": 1,
+        "cabai": 1,
+        "cahaya": 1,
+        "darah": 1,
+        "data": 1,
+        "dokter": 1,
+        "energi": 1,
+        "guru": 1,
+        "kalsium": 1,
+        "karbon": 1,
+        "likuiditas": 1,
+        "listrik": 2,
+        "makanan": 3,
+        "mangsa": 2,
+        "material": 1,
+        "modal": 1,
+        "nasabah": 1,
+        "nektar": 2,
+        "nutrisi": 1,
+        "oksigen": 5,
+        "oli": 1,
+        "pajak": 1,
+        "panas": 1,
+        "pekerja": 1,
+        "pemilih": 1,
+        "pendingin": 1,
+        "protein": 1,
+        "pupuk": 1,
+        "rendah": 1,
+        "seluler": 1,
+        "sinyal": 1,
+        "terasi": 1,
+        "tidur": 1,
+        "udara": 2
+      }
+    },
+    "tergolong": {
+      "embedded_candidate": {
+        "air": 1,
+        "alami": 1,
+        "anorganik": 1,
+        "atom": 1,
+        "barang": 1,
+        "berlapis": 1,
+        "bermuatan": 1,
+        "darah": 1,
+        "diri": 1,
+        "ekskresi": 1,
+        "eukariotik": 1,
+        "hortikultura": 1,
+        "hukum": 2,
+        "jaringan": 1,
+        "liat": 1,
+        "lokal": 1,
+        "magnet": 1,
+        "media": 1,
+        "medis": 1,
+        "mekanis": 1,
+        "mikroorganisme": 1,
+        "modal": 1,
+        "moneter": 2,
+        "motor": 1,
+        "muatan": 1,
+        "nabati": 4,
+        "negara": 1,
+        "non-pembuluh": 1,
+        "otot": 2,
+        "output": 1,
+        "pendidik": 1,
+        "penglihatan": 1,
+        "penyimpanan": 1,
+        "perkebunan": 3,
+        "pinjaman": 1,
+        "prokariotik": 2,
+        "protein": 2,
+        "raket": 2,
+        "saku": 1,
+        "serangga": 1,
+        "source": 1,
+        "sub-seluler": 1,
+        "tinggi": 1,
+        "tubuh": 1,
+        "tunggal": 1,
+        "umum": 1,
+        "utang": 1,
+        "web": 1
+      },
+      "plain": {
+        "aves": 4,
+        "bryophyta": 1,
+        "cepat": 1,
+        "cpu": 1,
+        "crustacea": 2,
+        "darat": 1,
+        "destruktif": 1,
+        "fungi": 2,
+        "gas": 1,
+        "halus": 1,
+        "ikan": 1,
+        "interpreter": 1,
+        "invertebrata": 1,
+        "keras": 1,
+        "koheren": 1,
+        "kuat": 2,
+        "lambat": 1,
+        "legal": 1,
+        "logam": 2,
+        "mamalia": 8,
+        "manis": 1,
+        "memberatkan": 1,
+        "moluska": 2,
+        "monera": 1,
+        "mulia": 2,
+        "nonlogam": 1,
+        "parasit": 1,
+        "pelindung": 1,
+        "perairan": 1,
+        "pisces": 4,
+        "protista": 2,
+        "pteridophyta": 1,
+        "reptil": 4,
+        "ringan": 1,
+        "sah": 1,
+        "salju": 1,
+        "sayuran": 1,
+        "serangga": 2,
+        "tegas": 1,
+        "teratur": 1,
+        "tumbuhan": 4
+      }
+    },
+    "terhitung": {
+      "embedded_candidate": {
+        "akuatik": 1,
+        "autotrof": 1,
+        "aves": 4,
+        "beregu": 1,
+        "berkayu": 1,
+        "bryophyta": 1,
+        "buatan": 1,
+        "crustacea": 2,
+        "elektromagnetik": 1,
+        "fungi": 2,
+        "gas": 1,
+        "grafis": 1,
+        "hewani": 1,
+        "invertebrata": 1,
+        "karbohidrat": 1,
+        "legislatif": 1,
+        "logam": 2,
+        "longitudinal": 1,
+        "mamalia": 8,
+        "mikro": 1,
+        "mikroorganisme": 1,
+        "moluska": 2,
+        "monera": 1,
+        "nabati": 2,
+        "negara": 1,
+        "negatif": 1,
+        "nonlogam": 1,
+        "organik": 1,
+        "parasit": 1,
+        "pedas": 1,
+        "penglihatan": 1,
+        "pisces": 4,
+        "protein": 1,
+        "protista": 2,
+        "pteridophyta": 1,
+        "reptil": 5,
+        "saku": 1,
+        "saraf": 1,
+        "sub-seluler": 1,
+        "tinggi": 1,
+        "tumbuhan": 4,
+        "unsur": 1
+      }
+    },
+    "terhubung": {
+      "embedded_candidate": {
+        "terputus-putus": 3
+      }
+    },
+    "terik": {
+      "embedded_candidate": {
+        "terbakar": 4
+      }
+    },
+    "terinfeksi": {
+      "embedded_candidate": {
+        "naik": 2
+      }
+    },
+    "terjadi": {
+      "embedded_candidate": {
+        "berlebih": 1,
+        "link": 1,
+        "menumpuk": 1,
+        "merah": 1,
+        "muncul": 3,
+        "risiko": 1,
+        "sosial": 1,
+        "tahun": 1,
+        "tiba": 4
+      }
+    },
+    "terlaksana": {
+      "embedded_candidate": {
+        "turun-temurun": 2
+      }
+    },
+    "terlalu": {
+      "embedded_candidate": {
+        "banting": 1,
+        "hangus": 2,
+        "kembung": 2,
+        "lama": 1,
+        "membusuk": 4,
+        "ngos-ngosan": 6
+      },
+      "plain": {
+        "cepat": 1,
+        "destruktif": 1,
+        "ekspresif": 1,
+        "hangat": 1,
+        "hijau": 1,
+        "kuat": 1,
+        "memberatkan": 1,
+        "positif": 1,
+        "sejuk": 1,
+        "terkontrol": 1
+      }
+    },
+    "terlarut": {
+      "plain": {
+        "": 1
+      }
+    },
+    "terlihat": {
+      "plain": {
+        "asin": 1,
+        "dalam": 1,
+        "destruktif": 1,
+        "harum": 1,
+        "kenyal": 1,
+        "kompleks": 1,
+        "konduktif": 1,
+        "kuat": 1,
+        "lembut": 2,
+        "lengket": 1,
+        "likuid": 1,
+        "mulia": 1,
+        "pahit": 1,
+        "rapuh": 1,
+        "responsif": 1,
+        "rutin": 1,
+        "segar": 1,
+        "sepat": 1
+      }
+    },
+    "terluka": {
+      "embedded_candidate": {
+        "mengalir": 4
+      }
+    },
+    "termasuk": {
+      "embedded_candidate": {
+        "anorganik": 1,
+        "beregu": 1,
+        "bermuatan": 1,
+        "berpembuluh": 1,
+        "biasa": 1,
+        "buatan": 1,
+        "data": 1,
+        "eksekutif": 1,
+        "ekskresi": 1,
+        "elektromagnetik": 1,
+        "hewani": 1,
+        "hiburan": 1,
+        "hortikultura": 1,
+        "hukum": 1,
+        "kepemilikan": 1,
+        "kontak": 1,
+        "lokal": 1,
+        "longitudinal": 1,
+        "motor": 1,
+        "organik": 2,
+        "otot": 1,
+        "padat": 1,
+        "pendapatan": 1,
+        "pendek": 1,
+        "pendidik": 1,
+        "perkebunan": 2,
+        "permanen": 1,
+        "positif": 1,
+        "primer": 1,
+        "saraf": 1,
+        "sementara": 1,
+        "serealia": 1,
+        "sukarela": 1,
+        "terbatas": 1,
+        "terdistribusi": 1,
+        "terkecil": 1,
+        "tomat": 1,
+        "tunggal": 2,
+        "umum": 1,
+        "web": 1
+      },
+      "plain": {
+        "amfibi": 2,
+        "amplitudo": 1,
+        "aplikasi": 2,
+        "arus": 1,
+        "aves": 4,
+        "bakteri": 1,
+        "berat": 1,
+        "beregu": 1,
+        "bryophyta": 1,
+        "burung": 2,
+        "cahaya": 1,
+        "crustacea": 2,
+        "darat": 1,
+        "daya": 1,
+        "fungi": 2,
+        "garam": 1,
+        "gas": 1,
+        "gelombang": 1,
+        "helium": 1,
+        "hewan": 3,
+        "ikan": 4,
+        "invertebrata": 1,
+        "jamur": 1,
+        "karbon": 1,
+        "kayu": 1,
+        "listrik": 1,
+        "logam": 6,
+        "magnet": 1,
+        "mamalia": 9,
+        "moluska": 2,
+        "monera": 1,
+        "nonlogam": 1,
+        "pajak": 1,
+        "panas": 1,
+        "parasit": 1,
+        "partikel": 1,
+        "perairan": 1,
+        "percepatan": 1,
+        "pisces": 4,
+        "protista": 2,
+        "pteridophyta": 1,
+        "raket": 1,
+        "rebound": 1,
+        "reptil": 8,
+        "sayuran": 2,
+        "serangga": 4,
+        "suhu": 1,
+        "tumbuhan": 6
+      }
+    },
+    "terputus-putus": {
+      "embedded_candidate": {
+        "terhubung": 2
+      }
+    },
+    "tersangkut": {
+      "embedded_candidate": {
+        "macet": 3
+      }
+    },
+    "tersebar": {
+      "embedded_candidate": {
+        "muncul": 4
+      }
+    },
+    "tersenyum": {
+      "embedded_candidate": {
+        "lelah": 1
+      }
+    },
+    "tertawa": {
+      "embedded_candidate": {
+        "menangis": 1
+      }
+    },
+    "tertinggal": {
+      "embedded_candidate": {
+        "mobil": 1
+      }
+    },
+    "terungkap": {
+      "embedded_candidate": {
+        "menurun": 2,
+        "publik": 4
+      }
+    },
+    "terus-menerus": {
+      "embedded_candidate": {
+        "longsor": 4
+      }
+    },
+    "tetap": {
+      "embedded_candidate": {
+        "hujan": 1,
+        "jauh": 1,
+        "lelah": 1,
+        "mahal": 1,
+        "sulit": 2
+      },
+      "plain": {
+        "bekerja": 1,
+        "belajar": 1,
+        "ceria": 1,
+        "membeli": 1,
+        "pergi": 1,
+        "setia": 1
+      }
+    },
+    "tiroid": {
+      "embedded_candidate": {
+        "yodium": 5
+      }
+    },
+    "tombol": {
+      "embedded_candidate": {
+        "menyala": 3,
+        "terbuka": 3,
+        "terhapus": 3
+      }
+    },
+    "tunggal": {
+      "plain": {
+        "": 3
+      }
+    },
+    "unggul": {
+      "embedded_candidate": {
+        "produktif": 2
+      },
+      "plain": {
+        "produktif": 1
+      }
+    },
+    "usb-c": {
+      "embedded_candidate": {
+        "praktis": 4
+      }
+    },
+    "uv": {
+      "embedded_candidate": {
+        "menggelap": 3
+      }
+    },
+    "video": {
+      "plain": {
+        "buffer": 4
+      }
+    },
+    "wajib": {
+      "embedded_candidate": {
+        "air": 8,
+        "anggaran": 1,
+        "bensin": 3,
+        "besi": 1,
+        "cabai": 2,
+        "cahaya": 1,
+        "darah": 1,
+        "data": 1,
+        "dokter": 1,
+        "energi": 1,
+        "glukosa": 1,
+        "guru": 1,
+        "kalsium": 2,
+        "karbon": 1,
+        "likuiditas": 1,
+        "listrik": 2,
+        "makanan": 4,
+        "material": 1,
+        "modal": 1,
+        "nasabah": 1,
+        "nutrisi": 1,
+        "oksigen": 6,
+        "oli": 1,
+        "pajak": 1,
+        "pekerja": 1,
+        "pendingin": 1,
+        "protein": 1,
+        "pupuk": 1,
+        "sinyal": 1,
+        "teh": 1,
+        "terasi": 1,
+        "tidur": 1,
+        "udara": 3
+      }
+    },
+    "warna": {
+      "embedded_candidate": {
+        "prisma": 1
+      }
+    }
+  },
   "action_object_freq": {
     "adalah": {
       "autotrof": 1,
@@ -14006,6 +17669,215 @@
       "menyala",
       "terbuka",
       "terhapus"
+    ]
+  },
+  "particle_cluster_id_of": {
+    "ada": 5,
+    "akhirnya": 8,
+    "akibatnya": 8,
+    "asupan": 10,
+    "bahasa": 8,
+    "benda": 10,
+    "besar": 10,
+    "bisa": 0,
+    "bukan": 0,
+    "cenderung": 4,
+    "cermin": 11,
+    "dapat": 0,
+    "dari": 2,
+    "dasarnya": 0,
+    "dengan": 2,
+    "deposito": 6,
+    "di": 6,
+    "digelar": 9,
+    "diklasifikasikan": 0,
+    "dipanaskan": 0,
+    "foton": 2,
+    "galah": 10,
+    "golongan": 2,
+    "hubungan": 11,
+    "iklim": 6,
+    "impor": 7,
+    "indra": 6,
+    "instrumen": 6,
+    "itu": 0,
+    "jarak": 10,
+    "justru": 10,
+    "kabut": 7,
+    "kanker": 5,
+    "karena": 3,
+    "kategori": 2,
+    "ke": 2,
+    "kekurangan": 10,
+    "kenaikan": 10,
+    "kencang": 8,
+    "kepala": 6,
+    "kerja": 10,
+    "kram": 6,
+    "kulit": 7,
+    "lantaran": 8,
+    "lemak": 6,
+    "lembaga": 6,
+    "lepas": 0,
+    "luar": 10,
+    "maka": 8,
+    "makanya": 8,
+    "mekanisme": 12,
+    "melainkan": 1,
+    "memberikan": 12,
+    "mengguyur": 11,
+    "oleh": 5,
+    "organisme": 6,
+    "pasti": 0,
+    "pemanis": 12,
+    "pemrograman": 0,
+    "penegak": 6,
+    "perangkat": 10,
+    "percikan": 12,
+    "pertama": 9,
+    "peserta": 9,
+    "ponsel": 13,
+    "power": 12,
+    "presipitasi": 6,
+    "rasa": 6,
+    "sangat": 0,
+    "sebagai": 2,
+    "sehingga": 8,
+    "sekali": 9,
+    "sel": 7,
+    "selalu": 0,
+    "sering": 4,
+    "sinarmatahari": 12,
+    "sumbangan": 10,
+    "sungai": 10,
+    "suporter": 6,
+    "tahan": 5,
+    "tak": 1,
+    "tenaga": 6,
+    "tidak": 1,
+    "tiga": 0,
+    "tingkat": 10,
+    "urea": 0,
+    "versi": 10,
+    "vitamin": 2
+  },
+  "particle_cluster_labels": {},
+  "particle_clusters": {
+    "0": [
+      "bisa",
+      "bukan",
+      "dapat",
+      "dasarnya",
+      "diklasifikasikan",
+      "dipanaskan",
+      "itu",
+      "lepas",
+      "pasti",
+      "pemrograman",
+      "sangat",
+      "selalu",
+      "tiga",
+      "urea"
+    ],
+    "1": [
+      "melainkan",
+      "tak",
+      "tidak"
+    ],
+    "10": [
+      "asupan",
+      "benda",
+      "besar",
+      "galah",
+      "jarak",
+      "justru",
+      "kekurangan",
+      "kenaikan",
+      "kerja",
+      "luar",
+      "perangkat",
+      "sumbangan",
+      "sungai",
+      "tingkat",
+      "versi"
+    ],
+    "11": [
+      "cermin",
+      "hubungan",
+      "mengguyur"
+    ],
+    "12": [
+      "mekanisme",
+      "memberikan",
+      "pemanis",
+      "percikan",
+      "power",
+      "sinarmatahari"
+    ],
+    "13": [
+      "ponsel"
+    ],
+    "2": [
+      "dari",
+      "dengan",
+      "foton",
+      "golongan",
+      "kategori",
+      "ke",
+      "sebagai",
+      "vitamin"
+    ],
+    "3": [
+      "karena"
+    ],
+    "4": [
+      "cenderung",
+      "sering"
+    ],
+    "5": [
+      "ada",
+      "kanker",
+      "oleh",
+      "tahan"
+    ],
+    "6": [
+      "deposito",
+      "di",
+      "iklim",
+      "indra",
+      "instrumen",
+      "kepala",
+      "kram",
+      "lemak",
+      "lembaga",
+      "organisme",
+      "penegak",
+      "presipitasi",
+      "rasa",
+      "suporter",
+      "tenaga"
+    ],
+    "7": [
+      "impor",
+      "kabut",
+      "kulit",
+      "sel"
+    ],
+    "8": [
+      "akhirnya",
+      "akibatnya",
+      "bahasa",
+      "kencang",
+      "lantaran",
+      "maka",
+      "makanya",
+      "sehingga"
+    ],
+    "9": [
+      "digelar",
+      "pertama",
+      "peserta",
+      "sekali"
     ]
   },
   "positional_freq": {

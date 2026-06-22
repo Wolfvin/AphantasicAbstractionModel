@@ -1605,3 +1605,54 @@ def test_action_object_context_freq_persists_through_save_load():
         )
     finally:
         os.unlink(path)
+
+
+# ----------------------------------------------------------------------
+# Particle clustering persistence (found during exploration session,
+# post-round-19) — particle_cluster_id_of/particle_clusters/
+# particle_cluster_labels were missing from save()/load() ENTIRELY.
+# ----------------------------------------------------------------------
+
+def test_particle_clustering_persists_through_save_load():
+    """particle_cluster_id_of / particle_clusters / particle_cluster_labels
+    must survive a save()/load() roundtrip.
+
+    Found by manually exploring a saved-then-loaded learner's state:
+    every existing saved state file (including the committed
+    production cluster_learner_state.json) was silently losing ALL
+    particle-clustering results on every roundtrip — these 3 fields
+    were never part of the save()/load() contract at all. This went
+    uncaught by the test suite because _is_particle_token has
+    redundant fallback paths (_is_soft_particle,
+    _is_clause_coordinator) that mask the gap for many tokens, but the
+    underlying discovery state was still being thrown away.
+    """
+    import tempfile
+    import os
+
+    learner = _train_canonical_learner()
+    assert learner.particle_clusters, (
+        "Expected particle_clusters to be non-empty on the canonical "
+        "corpus (sanity check before testing persistence)."
+    )
+    assert learner.particle_cluster_id_of, (
+        "Expected particle_cluster_id_of to be non-empty on the "
+        "canonical corpus (sanity check before testing persistence)."
+    )
+
+    with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
+        path = f.name
+    try:
+        learner.save(path)
+        loaded = PositionalClusterLearner.load(path)
+        assert loaded.particle_clusters == learner.particle_clusters, (
+            "particle_clusters did not survive the save/load roundtrip."
+        )
+        assert loaded.particle_cluster_id_of == learner.particle_cluster_id_of, (
+            "particle_cluster_id_of did not survive the save/load roundtrip."
+        )
+        assert loaded.particle_cluster_labels == learner.particle_cluster_labels, (
+            "particle_cluster_labels did not survive the save/load roundtrip."
+        )
+    finally:
+        os.unlink(path)
