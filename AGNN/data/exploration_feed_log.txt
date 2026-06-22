@@ -3022,3 +3022,45 @@ serigala bersifat teritorial dan menetapkan wilayah kekuasaan jauh lebih luas da
 pertarungan teritorial adalah salah satu penyebab utama kematian serigala.
 serigala berkomunikasi menggunakan vokalisasi, postur tubuh, aroma, sentuhan, dan rasa.
 serigala melolong untuk mengumpulkan kawanan biasanya sebelum dan sesudah berburu.
+=== BATCH (20 lines, source=_batch_gajah.txt) ===
+gajah adalah mamalia besar dari famili elephantidae dan ordo proboscidea.
+gajah tersebar di seluruh afrika sub-sahara, asia selatan, dan asia tenggara.
+gajah afrika jantan merupakan hewan darat terbesar dengan tinggi hingga 4 meter.
+gajah memiliki belalai yang digunakan untuk bernapas, mengisap air, dan mengambil benda.
+daun telinga gajah memiliki sejumlah pembuluh darah kapiler yang membantu mengeluarkan panas tubuh.
+belalai gajah memiliki kurang lebih 150.000 fasikulus otot tanpa tulang.
+gajah merupakan hewan herbivora yang dapat ditemui di sabana, hutan, dan rawa-rawa.
+gajah dianggap sebagai spesies kunci karena dampaknya terhadap lingkungan.
+gajah betina cenderung hidup dalam kelompok keluarga yang dipimpin oleh matriark.
+gajah jantan meninggalkan kelompok keluarganya saat mencapai pubertas.
+anak gajah bergantung pada induknya selama kurang lebih tiga tahun.
+gajah dapat hidup selama 70 tahun di alam bebas.
+gajah berkomunikasi melalui sentuhan, penglihatan, penciuman, dan suara.
+kecerdasan gajah telah dibandingkan dengan kecerdasan primata.
+gajah tampaknya memiliki kesadaran diri dan menunjukkan empati kepada gajah lain.
+salah satu ancaman terbesar bagi gajah adalah perdagangan gading.
+gajah digunakan sebagai hewan pekerja di asia.
+gajah sering kali dipertontonkan di kebun binatang dan sirkus.
+gajah dapat dengan mudah dikenali dan telah digambarkan dalam seni dan cerita rakyat.
+gajah dapat mengonsumsi 150 kilogram makanan dan 40 liter air dalam satu hari.
+=== BATCH (20 lines, source=_batch_burung.txt) ===
+burung adalah kelompok dinosaurus theropoda berdarah panas yang membentuk kelas aves.
+burung dicirikan oleh adanya bulu, rahang berparuh tanpa gigi, dan peletakan telur bercangkang keras.
+burung hidup di seluruh dunia dengan ukuran bervariasi dari kolibri hingga burung unta.
+terdapat lebih dari 11.000 spesies burung yang masih hidup dan terbagi ke dalam 44 ordo.
+lebih dari setengah spesies burung adalah burung pengicau.
+burung berevolusi dari theropoda purba dan merupakan satu-satunya dinosaurus yang masih hidup.
+archaeopteryx sering dianggap sebagai burung sejati tertama yang diketahui dari periode jura akhir.
+confuciusornis sanctus adalah burung tertua yang diketahui memiliki paruh.
+enantiornithes merupakan garis keturunan avialan awal yang dominan selama periode kapur.
+burung modern diperkirakan menyebar dari gondwana barat melalui dua jalur utama.
+palaeognathae mencakup ratita yang tak dapat terbang seperti burung unta.
+neognathae sangat beragam dan memuat seluruh jenis burung lainnya.
+banyak spesies burung sosial mewariskan pengetahuan lintas generasi.
+burung berkomunikasi dengan sinyal visual, panggilan, dan kicauan.
+sebagian besar spesies burung bersifat monogami sosial untuk satu musim kawin.
+burung menghasilkan keturunan dengan cara bertelur yang dibuahi melalui reproduksi seksual.
+telur burung biasanya diletakkan dalam sarang dan dierami oleh induknya.
+sekitar 120 hingga 130 spesies burung telah punah akibat aktivitas manusia.
+aktivitas manusia mengancam kepunahan sekitar 1.200 spesies burung saat ini.
+pengamatan burung rekreasi merupakan bagian penting dari industri ekowisata.
