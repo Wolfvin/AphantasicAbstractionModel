@@ -2837,3 +2837,29 @@ birokrasi dan demokrasi memiliki hubungan yang paradoksal namun saling melengkap
 ciri pemerintahan demokratis meliputi keterlibatan warga negara dan kebebasan pers.
 norwegia, islandia, denmark, dan swedia dikategorikan sebagai demokrasi penuh.
 perserikatan bangsa-bangsa menetapkan hari demokrasi internasional.
+=== BATCH (25 lines, source=_batch_bulan.txt) ===
+bulan adalah satelit alami bumi satu-satunya dan merupakan satelit terbesar kelima dalam tata surya.
+bulan memiliki diameter 27 persen dari bumi dengan massa hanya 1,23 persen dari bumi.
+bulan berada pada rotasi sinkron dengan bumi, selalu memperlihatkan sisi yang sama kepada planet ini.
+bulan diperkirakan terbentuk sekitar 4,5 miliar tahun lalu, tak lama setelah pembentukan bumi.
+hipotesis tubrukan besar menjelaskan bahwa bulan terbentuk dari serpihan ketika benda langit bertabrakan dengan proto-bumi.
+permukaan bulan menampilkan wilayah gelap bernama maria yang merupakan cekungan berisi lava basal.
+dataran tinggi bulan berwarna lebih terang dan terbentuk sekitar 4,4 miliar tahun lalu.
+basin kutub selatan aitken merupakan kawah terbesar di bulan dengan diameter sekitar 2.240 kilometer.
+diperkirakan terdapat sekitar 300.000 kawah dengan luas lebih dari 1 kilometer di sisi dekat bulan.
+bulan memiliki inti dalam berbentuk padat dengan radius sekitar 240 kilometer.
+ketebalan rata-rata kerak bulan mencapai sekitar 50 kilometer menurut teknik geofisika.
+bulan adalah satelit terpadat kedua di tata surya setelah io, satelit jupiter.
+bulan memiliki medan magnet eksternal yang sangat lemah, berkisar 1 hingga 100 nanotesla.
+atmosfer bulan sangat renggang dengan massa total kurang dari 10 ton metrik.
+unsur-unsur yang terkandung pada atmosfer bulan adalah sodium dan potasium.
+air es terdeteksi di kawah kutub selatan bulan yang gelap dan dingin secara permanen.
+bulan menyelesaikan orbit lengkap mengelilingi bumi setiap 27,3 hari.
+periode sinodik bulan mencapai sekitar 29,5 hari karena gerakan bumi mengelilingi matahari.
+ukuran bulan relatif besar dibandingkan bumi, mencapai seperempat dari diameter bumi.
+bulan adalah benda langit paling terang di langit setelah matahari.
+jarak bulan ke bumi meningkat sekitar 38 milimeter per tahun menurut pengukuran laser.
+gaya pasang surut yang ditimbulkan bulan menyebabkan dua tonjolan pasang surut di bumi.
+kemiringan sumbu bulan terhadap ekliptika hanya 1,5424 derajat.
+program luna uni soviet menjadi wahana pertama yang mencapai bulan pada tahun 1959.
+program apollo nasa amerika serikat adalah satu-satunya misi berawak yang telah mencapai bulan.
