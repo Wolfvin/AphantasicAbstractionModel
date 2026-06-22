@@ -2910,3 +2910,42 @@ pengembangan vaksin baru umumnya memerlukan waktu 15-20 tahun dari konsep hingga
 vaksin influenza, hpv, dan cacar air telah terbukti sangat efektif mencegah penyakit.
 cacar telah berhasil dimusnahkan dari seluruh dunia melalui program vaksinasi massal.
 edward jenner menemukan bahwa orang yang terinfeksi cacar sapi tidak akan terkena cacar sejati.
+=== BATCH (38 lines, source=_batch_fotosintesis2_gunungberapi2.txt) ===
+fotosintesis merupakan proses biokimia pembentukan karbohidrat dari bahan anorganik oleh tumbuhan yang mengandung klorofil.
+hampir semua makhluk hidup bergantung pada energi yang dihasilkan melalui proses fotosintesis.
+fotosintesis menghasilkan sebagian besar oksigen yang terdapat di atmosfer bumi.
+jan van helmont melakukan percobaan pada awal tahun 1600-an untuk mengetahui faktor penyebab pertambahan massa tumbuhan.
+joseph priestley menemukan bahwa tumbuhan dapat memulihkan udara yang telah rusak oleh pembakaran.
+jan ingenhousz memperlihatkan cahaya matahari berpengaruh pada tumbuhan untuk memulihkan kualitas udara.
+jean senebier menunjukkan bahwa udara yang dipulihkan adalah karbon dioksida yang diserap tumbuhan.
+fotosintesis hanya berlangsung pada sel-sel yang mengandung pigmen fotosintetik tertentu.
+panjang gelombang cahaya yang dimanfaatkan tumbuhan berada dalam kisaran 380-700 nanometer.
+klorofil a terutama menyerap cahaya biru dan merah, sedangkan klorofil b menyerap biru dan oranye.
+fotosistem satu optimal menyerap cahaya pada panjang gelombang 700 nanometer.
+fotosistem dua optimal menyerap cahaya pada panjang gelombang 680 nanometer.
+reaksi terang terjadi pada grana dan menghasilkan atp serta nadph.
+reaksi gelap terjadi di stroma melalui siklus calvin-benson.
+tumbuhan c3 menggunakan enzim rubisco untuk mengikat karbon dioksida.
+intensitas cahaya, konsentrasi karbon dioksida, suhu, dan kadar air merupakan faktor pembatas utama laju fotosintesis.
+tiga putaran siklus calvin menghasilkan satu molekul glukosa dari tiga molekul karbon dioksida.
+pada tumbuhan c4, proses fiksasi karbon dioksida memerlukan lima atp dibandingkan tiga atp pada tumbuhan c3.
+gunung berapi adalah sistem saluran fluida panas yang memanjang dari kedalaman sekitar 10 kilometer hingga permukaan bumi.
+kerak bumi terpecah menjadi 17 lempeng tektonik utama yang mengambang di atas lapisan mantel yang lebih panas.
+gunung berapi sering ditemukan di batas divergen dan konvergen dari lempeng tektonik.
+pada batas divergen, kerak samudra baru terbentuk dari keluarnya magma ke permukaan dasar laut.
+punggung tengah samudra terbentuk dari pendinginan magma yang muncul ke permukaan.
+islandia adalah contoh kepulauan vulkanik yang terbentuk dari aktivitas batas divergen.
+batas konvergen terjadi ketika dua lempeng bertemu lalu saling menekan dan mengalami subduksi.
+gunung berapi stratovulkan tersusun dari tefra dan lava hasil erupsi dengan tipe letusan berubah-ubah.
+lava dari stratovulkan mengandung lebih banyak gas dan silika daripada lava dari gunung berapi perisai.
+gunung berapi perisai memiliki lereng landai dan terdiri dari batuan bersifat basaltik.
+kerucut bara terbentuk dari abu dan pecahan kecil batuan vulkanik yang menyebar di sekeliling gunung.
+kaldera terbentuk dari ledakan yang sangat kuat yang melempar bagian atas dan tepi gunung.
+ilmuwan menganggap gunung berapi aktif jika pernah mengalami erupsi dalam 10.000 tahun terakhir.
+erupsi hawaiian menghasilkan aliran lava cair dengan sedikit tefra dan ledakan yang relatif lemah.
+gas vulkanik dapat mencapai lapisan stratosfer dan membentuk aerosol asam sulfat yang menurunkan temperatur bumi.
+abu vulkanik dapat merusak turbin mesin jet dan mengganggu sistem navigasi pesawat.
+erupsi gunung toba 70.000 tahun lalu diduga menyebabkan musim dingin vulkanik global.
+abu vulkanik mengandung zat nutrisi yang dapat menyuburkan tanah di sekitar gunung berapi.
+aktivitas vulkanik dapat dimanfaatkan untuk pembangkit listrik tenaga panas bumi.
+ilmu yang mempelajari gunung berapi disebut vulkanologi untuk memperkirakan kemungkinan letusan.
