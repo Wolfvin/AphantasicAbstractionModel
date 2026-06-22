@@ -1,0 +1,240 @@
+#!/usr/bin/env python3
+"""Exploration sandbox for PositionalClusterLearner.
+
+Separate from the production corpus/state (DEFAULT_CORPUS_PATHS,
+cluster_learner_state.json) so large-volume, less-curated text can be
+fed in to observe how AGNN's clustering evolves — WITHOUT touching the
+sprint-reviewed, test-covered production pipeline.
+
+State lives in AGNN/data/exploration_state.json (learner.save() format,
+same as production — issue #92 contract). A companion snapshot file
+(exploration_snapshot_prev.json) holds the cluster membership right
+before the most recent feed(), used by `diff` to report what changed.
+
+Usage (run from AGNN/):
+    python explore_clusters.py status
+    python explore_clusters.py feed <path-to-text-file>
+    python explore_clusters.py feed -          # read from stdin
+    python explore_clusters.py diff
+    python explore_clusters.py query "<kalimat>"
+"""
+from __future__ import annotations
+
+import json
+import os
+import sys
+from typing import Dict, List, Set
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from neocortex.bootstrap_classifier import build_labelled_cluster_learner
+from neocortex.positional_cluster_learner import PositionalClusterLearner
+
+_DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
+_STATE_PATH = os.path.join(_DATA_DIR, "exploration_state.json")
+_SNAPSHOT_PATH = os.path.join(_DATA_DIR, "exploration_snapshot_prev.json")
+_LOG_PATH = os.path.join(_DATA_DIR, "exploration_feed_log.txt")
+
+
+def _load_or_init() -> PositionalClusterLearner:
+    """Load the exploration state if it exists, else start from the
+    canonical, sprint-reviewed production corpus (same as
+    build_labelled_cluster_learner()'s default).
+    """
+    if os.path.exists(_STATE_PATH):
+        return PositionalClusterLearner.load(_STATE_PATH)
+    print("No exploration state found — bootstrapping from the canonical "
+          "production corpus as the starting point.")
+    return build_labelled_cluster_learner()
+
+
+def _snapshot(learner: PositionalClusterLearner) -> Dict[str, List[str]]:
+    """{cluster_id_as_str: sorted list of member action tokens}."""
+    return {
+        str(cid): sorted(actions)
+        for cid, actions in learner.action_clusters.items()
+    }
+
+
+def _best_match(
+    members: Set[str], other_clusters: Dict[str, List[str]],
+) -> tuple:
+    """Find the other-side cluster with the highest Jaccard overlap.
+
+    Returns (best_cid_or_None, jaccard_score). Used to track a
+    cluster's identity across a retrain even though cluster_ids are
+    just enumeration order and can shift — same "match by content, not
+    by id" principle bootstrap_classifier.py already uses for
+    RelationType labelling.
+    """
+    best_cid = None
+    best_score = 0.0
+    for cid, other_members in other_clusters.items():
+        other_set = set(other_members)
+        if not other_set and not members:
+            continue
+        union = members | other_set
+        if not union:
+            continue
+        score = len(members & other_set) / len(union)
+        if score > best_score:
+            best_score = score
+            best_cid = cid
+    return best_cid, best_score
+
+
+def cmd_status() -> None:
+    learner = _load_or_init()
+    n_tokens = len(learner.positional_freq)
+    n_actions = len(learner.action_object_freq)
+    n_clusters = len(learner.action_clusters)
+    n_particle_clusters = len(learner.particle_clusters)
+    print(f"Exploration state: {_STATE_PATH}")
+    print(f"  Total distinct tokens seen : {n_tokens}")
+    print(f"  Actions in action_object_freq : {n_actions}")
+    print(f"  Action clusters : {n_clusters}")
+    print(f"  Particle clusters : {n_particle_clusters}")
+    print(f"  Coordinator clusters marked : {sorted(learner.coordinator_cluster_ids)}")
+    if os.path.exists(_LOG_PATH):
+        with open(_LOG_PATH, encoding="utf-8") as f:
+            batches = f.read().count("=== BATCH")
+        print(f"  Feed batches so far : {batches}")
+
+
+def cmd_feed(source: str) -> None:
+    if source == "-":
+        text = sys.stdin.read()
+    else:
+        with open(source, encoding="utf-8") as f:
+            text = f.read()
+    lines = [
+        ln.strip() for ln in text.splitlines()
+        if ln.strip() and not ln.strip().startswith("#")
+    ]
+    if not lines:
+        print("No usable lines found in input (empty or all comments).")
+        return
+
+    learner = _load_or_init()
+
+    # Snapshot BEFORE this batch, for the next `diff` call.
+    before = _snapshot(learner)
+    with open(_SNAPSHOT_PATH, "w", encoding="utf-8") as f:
+        json.dump(before, f, ensure_ascii=False, indent=2)
+
+    print(f"Feeding {len(lines)} new lines (accumulates on top of "
+          f"existing state)...")
+    learner.train(lines)
+    learner.save(_STATE_PATH)
+
+    os.makedirs(_DATA_DIR, exist_ok=True)
+    with open(_LOG_PATH, "a", encoding="utf-8") as f:
+        f.write(f"=== BATCH ({len(lines)} lines) ===\n")
+        for ln in lines:
+            f.write(ln + "\n")
+
+    print(f"Saved exploration state to {_STATE_PATH}")
+    print(f"Run `python explore_clusters.py diff` to see what changed.")
+
+
+def cmd_diff() -> None:
+    if not os.path.exists(_SNAPSHOT_PATH):
+        print("No previous snapshot found — run `feed` at least once first.")
+        return
+    if not os.path.exists(_STATE_PATH):
+        print("No exploration state found — run `feed` at least once first.")
+        return
+
+    with open(_SNAPSHOT_PATH, encoding="utf-8") as f:
+        before = json.load(f)
+    learner = PositionalClusterLearner.load(_STATE_PATH)
+    after = _snapshot(learner)
+
+    before_sets = {cid: set(members) for cid, members in before.items()}
+    after_sets = {cid: set(members) for cid, members in after.items()}
+
+    print("=" * 70)
+    print("CLUSTER DIFF: before -> after most recent feed()")
+    print("=" * 70)
+
+    matched_before = set()
+    matched_after = set()
+
+    print("\n--- Stable / evolved clusters (matched by token overlap) ---")
+    for after_cid, after_members in sorted(after_sets.items(), key=lambda x: -len(x[1])):
+        best_before_cid, score = _best_match(after_members, before_sets)
+        if best_before_cid is None or score == 0.0:
+            continue
+        before_members = before_sets[best_before_cid]
+        added = after_members - before_members
+        removed = before_members - after_members
+        if not added and not removed:
+            continue  # identical, not interesting to print
+        matched_before.add(best_before_cid)
+        matched_after.add(after_cid)
+        print(f"\ncluster {best_before_cid} -> {after_cid} (overlap={score:.2f})")
+        if added:
+            print(f"  + gained: {sorted(added)}")
+        if removed:
+            print(f"  - lost:   {sorted(removed)}")
+
+    print("\n--- NEW clusters (no meaningful match in 'before') ---")
+    new_count = 0
+    for after_cid, after_members in after_sets.items():
+        if after_cid in matched_after:
+            continue
+        new_count += 1
+        print(f"  cluster {after_cid}: {sorted(after_members)}")
+    if new_count == 0:
+        print("  (none)")
+
+    print("\n--- DISAPPEARED clusters (no meaningful match in 'after') ---")
+    gone_count = 0
+    for before_cid, before_members in before_sets.items():
+        if before_cid in matched_before:
+            continue
+        gone_count += 1
+        print(f"  cluster {before_cid}: {sorted(before_members)}")
+    if gone_count == 0:
+        print("  (none)")
+
+    print(f"\nSummary: {len(before_sets)} clusters before -> "
+          f"{len(after_sets)} clusters after. "
+          f"{new_count} new, {gone_count} disappeared.")
+
+
+def cmd_query(sentence: str) -> None:
+    learner = _load_or_init()
+    print(f"Sentence: {sentence!r}")
+    print(f"  tag_sentence: {learner.tag_sentence(sentence)}")
+    print(f"  spo:          {learner.spo(sentence)}")
+    for i, clause in enumerate(learner.spo_all(sentence)):
+        print(f"  spo_all[{i}]:    {clause}")
+
+
+def main() -> None:
+    if len(sys.argv) < 2:
+        print(__doc__)
+        sys.exit(1)
+    cmd = sys.argv[1]
+    if cmd == "status":
+        cmd_status()
+    elif cmd == "feed":
+        if len(sys.argv) < 3:
+            print("Usage: explore_clusters.py feed <path-or-->")
+            sys.exit(1)
+        cmd_feed(sys.argv[2])
+    elif cmd == "diff":
+        cmd_diff()
+    elif cmd == "query":
+        if len(sys.argv) < 3:
+            print("Usage: explore_clusters.py query \"<kalimat>\"")
+            sys.exit(1)
+        cmd_query(sys.argv[2])
+    else:
+        print(__doc__)
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
