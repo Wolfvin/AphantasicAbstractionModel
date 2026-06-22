@@ -2863,3 +2863,24 @@ gaya pasang surut yang ditimbulkan bulan menyebabkan dua tonjolan pasang surut d
 kemiringan sumbu bulan terhadap ekliptika hanya 1,5424 derajat.
 program luna uni soviet menjadi wahana pertama yang mencapai bulan pada tahun 1959.
 program apollo nasa amerika serikat adalah satu-satunya misi berawak yang telah mencapai bulan.
+=== BATCH (20 lines, source=_batch_hutan_hujan.txt) ===
+hutan hujan tropika adalah bioma berupa hutan yang selalu basah di wilayah sekitar khatulistiwa.
+hutan ini ditemukan pada lintang kurang lebih sepuluh derajat ke utara dan ke selatan garis khatulistiwa.
+hutan hujan tropika tersebar di asia, australia, afrika, amerika selatan, dan kepulauan pasifik.
+hutan ini merupakan rumah untuk setengah spesies flora dan fauna di seluruh dunia.
+seperempat obat modern berasal dari tumbuhan di hutan hujan ini.
+hutan hujan tropika terbentuk di wilayah beriklim tropis dengan curah hujan tahunan minimum 1750-2000 milimeter.
+rata-rata temperatur bulanan berada di atas 18 derajat celsius di sepanjang tahun.
+hutan basah ini tumbuh di dataran rendah hingga ketinggian sekitar 1.200 meter di atas permukaan laut.
+hutan hujan tropika merupakan vegetasi paling kaya dalam jumlah jenis makhluk hidup.
+pohon-pohon membentuk tajuk berlapis-lapis dengan tinggi rata-rata 45 meter.
+lapisan teratas tajuk disebut sembulan dengan pohon yang menonjol di atas kanopi.
+lapisan kanopi hutan rata-rata memiliki tinggi antara 24-36 meter.
+kanopi hutan mendukung berbagai jenis epifit termasuk anggrek dan bromeliad.
+tajuk yang padat membuat cahaya matahari kurang mencapai lantai hutan.
+lantai hutan ditumbuhi organisme pengurai seperti kapang dan dekomposer lainnya.
+di indonesia, hutan hujan tropika dapat dijumpai di jawa, sumatera, kalimantan, sulawesi, maluku, dan papua.
+di sarawak dan brunei diperkirakan terdapat antara 1800-2300 spesies pohon.
+hutan hujan ini adalah yang paling kaya keanekaragaman hayatinya di antara jenis hutan lainnya.
+hutan tidak memiliki musim kemarau yang nyata dengan jumlah bulan kering kurang dari dua.
+ketika tajuk tersibak karena pohon yang tumbang, lantai hutan akan diinvasi berbagai jenis terna dan semak.
