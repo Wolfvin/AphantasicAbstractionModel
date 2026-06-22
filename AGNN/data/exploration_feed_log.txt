@@ -2759,3 +2759,81 @@ gawang memiliki lebar 7,32 meter dan tinggi 2,44 meter.
 wasit dapat menentukan waktu tambahan di setiap akhir babak.
 pemain yang menerima dua kartu kuning akan mendapatkan kartu merah.
 penyerang memiliki tugas utama untuk mencetak gol ke gawang lawan.
+=== BATCH (30 lines, source=_batch_gempa.txt) ===
+gempa bumi adalah peristiwa alam berupa getaran yang terjadi di permukaan tanah akibat pelepasan energi secara tiba-tiba.
+gelombang seismik yang ditimbulkan oleh gempa bumi dapat memiliki intensitas mulai dari peristiwa lemah hingga peristiwa besar.
+gempa bumi jarang membunuh manusia secara langsung.
+gempa bumi dapat terjadi secara alami atau disebabkan oleh aktivitas manusia seperti penambangan.
+titik awal pecahnya gempa bumi disebut hiposenter sedangkan permukaan tanah di atasnya disebut episentrum.
+lempeng tektonik bumi mengalami pergerakan yang per tahunnya dapat mencapai sepuluh sentimeter.
+patahan terkunci akan meningkatkan tekanan dan menyebabkan akumulasi energi tegangan.
+ada tiga jenis patahan utama yang menyebabkan gempa bumi.
+untuk setiap peningkatan satu satuan magnitudo, terdapat peningkatan sekitar tiga puluh kali lipat energi.
+gempa berkekuatan 8,6 magnitudo dapat melepaskan energi yang sama dengan sepuluh ribu bom atom.
+mayoritas gempa bumi tektonik berasal dari cincin api pasifik.
+gempa bumi dengan fokus kurang dari 70 kilometer diklasifikasikan sebagai gempa bumi fokus dangkal.
+gelombang-p adalah gelombang seismik tercepat dan pertama kali terdeteksi oleh seismograf.
+gelombang-s menggerakkan tanah ke atas, ke bawah, atau dari sisi ke sisi.
+gelombang permukaan merupakan gelombang seismik yang paling merusak saat terjadi gempa bumi.
+pencairan tanah terjadi ketika material butiran jenuh air kehilangan kekuatannya.
+guncangan tanah diukur dengan percepatan tanah puncak yang bergantung pada magnitudo gempa.
+tanah lunak dapat menyebabkan guncangan gempa menjadi lebih hebat dibandingkan batuan keras.
+gempa bumi sering kali memicu terjadinya tanah longsor yang menyebabkan kerusakan parah.
+gempa bumi juga dapat menyebabkan kebakaran dengan merusak saluran listrik.
+tsunami adalah gelombang laut yang dihasilkan oleh pergerakan air dalam jumlah besar.
+tsunami dapat bergerak dengan kecepatan 600 hingga 800 kilometer per jam.
+gempa subduksi di bawah magnitudo 7,5 biasanya tidak menyebabkan tsunami.
+masyarakat yang terkena dampak gempa cenderung terpengaruh secara psikologis.
+gempa bumi belum dapat diprediksi pada hari atau bulan tertentu.
+gempa bumi haicheng diklaim sebagai satu-satunya gempa yang berhasil diprediksi.
+diperkirakan sekitar 500 ribu gempa bumi terjadi setiap tahunnya.
+sekitar 100 ribu gempa bumi dapat dirasakan oleh manusia di berbagai wilayah.
+sebagian besar gempa bumi di dunia terjadi di zona cincin api pasifik.
+zona sabuk alpida merupakan zona seismik paling aktif kedua.
+=== BATCH (46 lines, source=_batch_internet_demokrasi.txt) ===
+internet adalah sistem jaringan komputer yang saling terhubung secara global.
+internet merupakan jaringan dari jaringan yang terdiri dari jaringan privat, publik, akademik, bisnis, dan pemerintah.
+asal-usul internet berasal dari penelitian yang ditugaskan oleh pemerintah federal amerika serikat.
+arpanet merupakan jaringan prekursor utama yang berfungsi sebagai tulang punggung interkoneksi jaringan akademik.
+pengembangan arpanet dimulai dengan dua node jaringan yang saling berhubungan.
+lima belas situs terhubung ke arpanet pada akhir tahun 1971.
+internet protocol suite distandardisasi pada tahun 1982 yang memungkinkan proliferasi jaringan interkoneksi.
+penyedia layanan internet komersial muncul pada akhir tahun 1980-an.
+arpanet dinonaktifkan pada tahun 1990 setelah infrastruktur internet berkembang pesat.
+internet berkembang pesat di eropa dan australia pada pertengahan tahun 1980-an.
+internet tidak memiliki tata kelola terpusat tunggal dalam implementasi teknologi.
+icann mengarahkan definisi melampaui batas dari dua ruang nama utama di internet.
+internet engineering task force merupakan organisasi nirlaba yang menangani dasar-dasar teknis.
+layanan populer di internet mencakup email, world wide web, file sharing, dan instant messaging.
+internet memungkinkan adanya servis terkini seperti web radio yang dapat diakses di seluruh dunia.
+perkembangan internet telah memengaruhi perkembangan ekonomi melalui transaksi jual beli.
+internet memiliki tata tertib yang dikenal dengan nama netiket.
+pelanggaran hak cipta, pornografi, dan pencurian identitas merupakan isu moral di internet.
+korea selatan memiliki akses internet terbaik dengan separuh penduduknya mempunyai akses jalur lebar.
+internet dapat diakses melalui berbagai cara termasuk komputer pribadi dan ponsel.
+tempat umum yang menyediakan layanan internet termasuk perpustakaan, warnet, dan hotspot.
+internet memberikan dampak buruk pada kemampuan membaca manusia.
+demokrasi adalah bentuk pemerintahan di mana keputusan penting didasarkan pada kesepakatan mayoritas.
+kata demokrasi berasal dari bahasa yunani kuno yang terbentuk dari demos dan kratos.
+demokrasi athena dianggap sebagai negara demokrasi pertama di dunia yang dipimpin oleh cleisthenes.
+demokrasi athena berbentuk demokrasi langsung dengan ciri pemilihan acak warga untuk jabatan administratif.
+kewarganegaraan di athena klasik tidak mencakup wanita, budak, dan orang asing.
+pemungutan suara kisaran pertama dilakukan di sparta dengan cara berteriak.
+parlemen inggris membatasi kekuasaan raja melalui magna carta.
+parlemen de montfort di inggris merupakan parlemen pertama yang dipilih oleh rakyat.
+republik korsika mengadopsi konstitusi demokrasi pertama dalam sejarah modern.
+prancis menerapkan hak suara pria universal setelah revolusi prancis.
+konstitusi amerika serikat menetapkan pemerintahan terpilih dan menjamin hak-hak sipil.
+indonesia menerapkan berbagai bentuk demokrasi sejak merdeka.
+demokrasi parlementer di indonesia kurang cocok diterapkan karena perpecahan partai politik.
+demokrasi terpimpin dicirikan oleh dominasi kekuasaan presiden.
+demokrasi pancasila menawarkan tiga komponen utama pemerintahan.
+perang dunia kedua memulai pembalikan tren demokratisasi di eropa barat.
+jumlah negara demokrasi elektoral meningkat secara signifikan menurut freedom house.
+demokrasi langsung memerlukan partisipasi tinggi masyarakat dalam setiap keputusan politik.
+demokrasi perwakilan dilaksanakan dengan sistem pemilihan wakil rakyat.
+prinsip demokrasi mencakup kedaulatan masyarakat dan persamaan di depan hukum.
+birokrasi dan demokrasi memiliki hubungan yang paradoksal namun saling melengkapi.
+ciri pemerintahan demokratis meliputi keterlibatan warga negara dan kebebasan pers.
+norwegia, islandia, denmark, dan swedia dikategorikan sebagai demokrasi penuh.
+perserikatan bangsa-bangsa menetapkan hari demokrasi internasional.
