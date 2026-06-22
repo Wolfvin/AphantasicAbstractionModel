@@ -4209,7 +4209,23 @@ class PositionalClusterLearner:
             sub_parse = self._parse_clause_spo(raw_after)
             if sub_parse is not None:
                 sub_subj_tokens, sub_action, sub_obj_tokens = sub_parse
-                if self._is_action_token(sub_action):
+                # Structural well-formedness gate (NOT a per-token
+                # fallback/exception — applies uniformly to every
+                # candidate): a genuine clause needs at least TWO of
+                # its three SPO slots filled. A single bare token that
+                # happens to pass _is_action_token (e.g. via verb
+                # morphology coincidence — see _looks_like_verb's
+                # documented "bel-" collision, "belalai" vs "belajar",
+                # a known, deliberately-accepted trade-off since Round
+                # 10, NOT something this gate tries to fix) produces
+                # subject="" AND object="" when it's the only token in
+                # raw_after — that's not a clause, it's a single
+                # mis-tagged token with nothing around it. Requiring
+                # >=2 filled slots rejects that case without touching
+                # _looks_like_verb or adding any token-specific check.
+                has_subject = bool(sub_subj_tokens)
+                has_object = bool(sub_obj_tokens)
+                if self._is_action_token(sub_action) and (has_subject or has_object):
                     sub_subject = " ".join(sub_subj_tokens)
                     embedded = EmbeddedSPO(
                         subject=sub_subject,

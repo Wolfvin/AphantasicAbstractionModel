@@ -1370,6 +1370,31 @@ def test_spo_embedded_untrained_delegates_to_fallback():
     assert result.embedded is None
 
 
+def test_spo_embedded_rejects_bare_token_false_positive():
+    """A single leftover token that happens to pass _is_action_token
+    (e.g. via the documented "bel-" verb-morphology collision —
+    "belalai" matches the same prefix as "belajar", a known,
+    deliberately-accepted trade-off since sprint Round 10) must NOT be
+    treated as an embedded clause when it has nothing else around it.
+
+    "gajah memiliki belalai" is only 3 tokens: action="memiliki",
+    object_tokens=["belalai"]. Recursing into that single-token span
+    finds "belalai" itself passes _is_action_token (morphology
+    coincidence), but _parse_clause_spo on a 1-token list returns
+    subject="" AND object="" — that's not a clause, it's a bare
+    mis-tagged token. The fix is a structural well-formedness gate
+    (>=2 of 3 SPO slots filled), not a fallback/exception for this
+    specific token — see spo_embedded's implementation for the
+    rationale.
+    """
+    learner = _train_canonical_learner()
+    result = learner.spo_embedded("gajah memiliki belalai")
+    assert result.embedded is None, (
+        f"a bare single token with no subject/object of its own should "
+        f"never be promoted to an embedded clause, got {result.embedded!r}"
+    )
+
+
 # ----------------------------------------------------------------------
 # Pronoun positional diversity (sprint round 8)
 # ----------------------------------------------------------------------
