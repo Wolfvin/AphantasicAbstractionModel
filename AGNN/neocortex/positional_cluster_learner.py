@@ -2227,269 +2227,112 @@ class PositionalClusterLearner:
 
         threshold = self.qkv_particle_similarity_threshold
 
-        # Each cluster: (set_of_tokens, seed_signature). ``seed_signature``
-        # is the signature of the FIRST (highest-frequency) token that
-        # founded the cluster, and is NEVER updated as more members
-        # join. This is a deliberate anti-chain-merge guard.
+        # Each cluster: (set_of_tokens, weighted_centroid, total_weight).
+        # ``weighted_centroid`` starts as the founding (highest-
+        # frequency) member's own signature and is updated by a
+        # FREQUENCY-WEIGHTED running mean every time a new member
+        # joins — i.e. "every new seed slightly refines the old seeds'
+        # accuracy, weighted by how much evidence each side has".
         #
-        # BUG FOUND DURING BOS REVIEW (PR #106 follow-up): the original
-        # implementation compared each new candidate against the
-        # cluster's running-mean CENTROID (recomputed every merge).
-        # On this 4-dim signature, two of the four dimensions
-        # (pre_object_3tok_rate, bucket_entropy) are 0.0 for nearly
-        # every particle candidate — e.g. 'tidak'=(0.0, 0.019, 0.433,
-        # 0.0) vs 'asupan'=(0.0, 0.2, 0.865, 0.0). Cosine similarity on
-        # vectors that are mostly-zero in the same dimensions is
-        # DEGENERATE: it measures direction, not magnitude, so two
-        # vectors with very different "how often" magnitudes but the
-        # same "which dimensions are nonzero" pattern score spuriously
-        # high (~0.98 for the tidak/asupan pair above, despite them
-        # being unrelated). As low-frequency noise tokens got admitted
-        # one at a time, the running centroid drifted toward this
-        # degenerate "mostly-zero, medium-entropy" region, and kept
-        # admitting MORE unrelated tokens — a classic chain-merge
-        # (verified: pre-fix, the cluster containing 'tidak' ballooned
-        # from a clean 2-token {melainkan, tidak} — the PR #105 result
-        # — to a noisy 29-token grab-bag including 'asupan', 'benda',
-        # 'di', 'galah', etc.).
-        #
-        # Fix: compare against the immutable SEED signature instead of
-        # a drifting mean. The seed is the highest-frequency (most
-        # statistically reliable) member of each cluster, so later
-        # low-frequency candidates are judged against a stable,
-        # trustworthy reference point rather than an average that they
-        # themselves could have helped distort.
-        clusters: List[Tuple[Set[str], Tuple[float, float, float, float]]] = []
+        # This replaces two earlier, both-rejected designs:
+        #   (1) drifting EQUAL-weight running mean (pre-PR #105) —
+        #       caused chain-merge: a low-frequency noise token moved
+        #       the centroid by the same amount as the high-frequency
+        #       founder, so noise accumulated unchecked.
+        #   (2) frozen seed, never updated (PR #106/107) — safe, but
+        #       throws away real evidence: a cluster's reference point
+        #       never gets MORE accurate as more genuine members are
+        #       observed.
+        # Frequency-weighting is the middle ground: a token with total
+        # corpus frequency f moves the centroid by
+        #   f / (existing_total_weight + f)
+        # of the distance toward its own signature — i.e. the centroid
+        # becomes a frequency-weighted average of every member's
+        # signature, not just the founder's. A noise token (low f)
+        # pulls the centroid only a little; another high-frequency
+        # genuine member pulls it more, because it brings comparably
+        # strong evidence. Distance is Euclidean (PR #105 finding:
+        # cosine is degenerate on this mostly-zero 4-dim vector).
+        clusters: List[Tuple[Set[str], Tuple[float, float, float, float], float]] = []
 
         for tok in sorted_particles:
             query = signatures[tok]
+            tok_weight = float(_total_freq(tok))
 
             if not clusters:
-                # First (highest-frequency) particle — seed the first
-                # cluster. Its signature becomes the permanent seed.
-                clusters.append(({tok}, query))
+                clusters.append(({tok}, query, tok_weight))
                 continue
 
-            # Compute similarity between Query and each existing
-            # cluster's SEED signature (not a recomputed centroid —
-            # see the anti-chain-merge note above).
-            #
-            # SECOND BUG FOUND DURING BOS REVIEW: even comparing
-            # against the (non-drifting) seed, COSINE similarity
-            # itself is the wrong metric for this signature. Cosine
-            # measures DIRECTION only, ignoring MAGNITUDE. On this
-            # 4-dim vector, two of four dimensions are 0.0 for nearly
-            # every token, so cosine effectively compares just 2
-            # dimensions — and a real negator like 'tidak'
-            # (0.0, 0.019, 0.433, 0.0) scores 0.909 cosine against an
-            # unrelated noise token like 'di' (0.0, 0.429, 0.835, 0.0)
-            # DESPITE their second dimension differing by 22x (0.019
-            # vs 0.429) — cosine only cares that both point in a
-            # "similar enough" direction, not that one token almost
-            # never sits in that position and the other often does.
-            # Euclidean distance, which IS magnitude-sensitive, gives
-            # 0.574 for the same pair (correctly far apart) — this is
-            # also the metric PR #105 validated as producing a clean
-            # {melainkan, tidak} cluster on this exact corpus.
-            #
-            # We keep the Q/K/V terminology (Query/Key roles, softmax
-            # weighting) but score similarity as negative Euclidean
-            # distance, so "higher score = more similar" still holds
-            # and the existing argmax/threshold logic below is
-            # unchanged.
             scores: List[float] = []
-            for _toks, seed_sig in clusters:
+            for _toks, centroid, _weight in clusters:
                 dist = math.sqrt(
-                    sum((query[d] - seed_sig[d]) ** 2 for d in range(4))
+                    sum((query[d] - centroid[d]) ** 2 for d in range(4))
                 )
                 scores.append(-dist)
 
-            weights = self._softmax(scores)
-            best_idx = max(range(len(weights)), key=lambda i: weights[i])
+            ranked = sorted(range(len(scores)), key=lambda i: -scores[i])
+            best_idx = ranked[0]
             best_score = scores[best_idx]
 
-            if best_score >= threshold:
-                # Assign to existing cluster. Seed signature is NOT
-                # updated — it stays anchored to the founding member.
-                member_set, _seed_sig = clusters[best_idx]
-                member_set.add(tok)
-            else:
-                # No existing cluster's seed is similar enough —
-                # create a new singleton cluster with this particle as
-                # its own (future) seed.
-                clusters.append(({tok}, query))
+            # Conflict: the new token clears the join threshold against
+            # TWO existing clusters, not just one — i.e. it sits in the
+            # overlap between two patterns the data hasn't yet shown to
+            # be distinct. Resolution: merge those two old clusters (the
+            # new evidence proves they are one pattern, not two) rather
+            # than arbitrarily picking one. This is one-directional
+            # (merge only, never split) so it can't oscillate — at most
+            # it reduces the cluster count, never increases ambiguity.
+            second_idx = ranked[1] if len(ranked) > 1 else None
+            second_score = scores[second_idx] if second_idx is not None else None
 
-        for cluster_id, (toks, _seed_sig) in enumerate(clusters):
+            centroid_consistent = False
+            if best_score >= threshold and second_score is not None and second_score >= threshold:
+                # The new token is ambiguous between two old clusters —
+                # but that alone is not proof those two clusters are
+                # one pattern. Validate independently: do the two old
+                # clusters' OWN centroids agree with each other, with
+                # no reference to this token at all? Only if BOTH the
+                # token's evidence AND the clusters' own mutual
+                # evidence agree do we merge. A token that is merely an
+                # ambiguous outlier (centroids themselves far apart)
+                # must not be allowed to force two distinct old
+                # patterns together.
+                _members_a, centroid_a, _weight_a = clusters[best_idx]
+                _members_b, centroid_b, _weight_b = clusters[second_idx]
+                centroid_dist = math.sqrt(
+                    sum((centroid_a[d] - centroid_b[d]) ** 2 for d in range(4))
+                )
+                centroid_consistent = (-centroid_dist) >= threshold
+
+            if centroid_consistent:
+                members_a, centroid_a, weight_a = clusters[best_idx]
+                members_b, centroid_b, weight_b = clusters[second_idx]
+                merged_members = members_a | members_b | {tok}
+                merged_weight = weight_a + weight_b + tok_weight
+                merged_centroid = tuple(
+                    (centroid_a[d] * weight_a + centroid_b[d] * weight_b + query[d] * tok_weight)
+                    / merged_weight
+                    for d in range(4)
+                )
+                for idx in sorted([best_idx, second_idx], reverse=True):
+                    clusters.pop(idx)
+                clusters.append((merged_members, merged_centroid, merged_weight))
+            elif best_score >= threshold:
+                member_set, centroid, total_weight = clusters[best_idx]
+                member_set.add(tok)
+                new_total = total_weight + tok_weight
+                new_centroid = tuple(
+                    (centroid[d] * total_weight + query[d] * tok_weight) / new_total
+                    for d in range(4)
+                )
+                clusters[best_idx] = (member_set, new_centroid, new_total)
+            else:
+                clusters.append(({tok}, query, tok_weight))
+
+        for cluster_id, (toks, _centroid, _weight) in enumerate(clusters):
             self.particle_clusters[cluster_id] = toks
             for tok in toks:
                 self.particle_cluster_id_of[tok] = cluster_id
-
-    def _cluster_particles_em_prototype(
-        self, merge_threshold: float = -0.15, max_rounds: int = 10
-    ) -> Dict[int, Set[str]]:
-        """PROTOTYPE — Round 42-44, NOT wired into train(), NOT called
-        anywhere in the production pipeline. Exists for isolated
-        validation only (per the scoping doc's plan: prototype first,
-        swap in only after full validation).
-
-        Investigates whether PCL's greedy-sequential clustering
-        (`_cluster_particles`) can be replaced by a genuinely
-        iterative, order-invariant process WITHOUT reopening the
-        chain-merge regression PR #105-107 fixed (verified empirically
-        in isolated Python prototypes, not yet validated against the
-        real pytest suite — that is what THIS method is for).
-
-        Algorithm (2-phase, repeated to a fixed point):
-          Phase A — token-level reassignment: every candidate particle
-            is re-scored against ALL current cluster centroids (mean
-            of CURRENT members — drifting, unlike `_cluster_particles`'
-            seed-anchored design) and moved to its best-scoring
-            cluster if that score clears ``qkv_particle_similarity_
-            threshold`` (the existing JOIN threshold, unchanged).
-          Phase B — selective cluster-pair merge: reuses the scores
-            ALREADY computed in Phase A (zero extra similarity calls)
-            — a token whose 2nd-best score ALSO clears the join
-            threshold flags its top-2 clusters as merge CANDIDATES.
-            Only candidate pairs (not all O(k^2) pairs) get a direct
-            centroid-to-centroid comparison against ``merge_threshold``
-            (a SEPARATE, stricter threshold — NOT qkv_particle_
-            similarity_threshold, see calibration note below).
-          Repeat A+B until no cluster composition changes (converged)
-          or ``max_rounds`` is hit (a hit-the-cap result is itself a
-          diagnostic: it means the process did NOT stabilize, which in
-          early testing correlated with chain-merge reopening — treat
-          it as a red flag, not "needs more rounds").
-
-        Calibration (Round 44, tested against the REAL 129-candidate
-        production particle signature set, scanning merge_threshold
-        from -0.35 to -0.10): the range **-0.20 to -0.12** is the only
-        one found so far where ALL THREE properties hold simultaneously:
-          1. Order-invariance: identical result regardless of token
-             processing order (frequency-descending, reversed,
-             shuffled all tested).
-          2. Chain-merge safety: the cluster containing "tidak" stays
-             at 4 members (within the existing regression test's <=6
-             contract).
-          3. Genuine convergence: stabilizes in 5-7 rounds, not by
-             hitting max_rounds (which DID happen at looser thresholds
-             like -0.35/-0.25, where "tidak" ballooned back to 17-25
-             members — the EXACT regression PR #105-107 fixed).
-
-        NOT YET DONE before this can replace `_cluster_particles`:
-          - Run against the actual pytest suite (this method call,
-            not a hand-rolled replica) — see test file for the
-            corresponding validation test.
-          - Verify cluster MEMBERSHIP quality, not just size (Round
-            44 flagged "menimbulkan" landing in the tidak-cluster at
-            the sweet-spot threshold — a CAUSAL verb, not a negator;
-            unresolved whether that's a genuine new pattern or noise).
-          - Decide whether this generalizes to ACTION clustering too
-            (this prototype only covers particles).
-        """
-        self_candidates: Set[str] = (
-            set(self.function_word_candidates)
-            | set(self.connector_tokens)
-            | set(self.modifier_tokens)
-        ) - set(self.action_object_freq.keys())
-
-        def _total_freq(tok: str) -> int:
-            return sum(self.fine_positional_freq.get(tok, {}).values())
-
-        clusterable = [
-            t for t in self_candidates if _total_freq(t) >= _PARTICLE_MIN_FREQ
-        ]
-        if not clusterable:
-            return {}
-
-        signatures: Dict[str, Tuple[float, float, float, float]] = {
-            tok: self._compute_particle_signature(tok) for tok in clusterable
-        }
-        token_order = sorted(clusterable, key=lambda t: (-_total_freq(t), t))
-        join_threshold = self.qkv_particle_similarity_threshold
-
-        def _dist_score(a: Tuple[float, ...], b: Tuple[float, ...]) -> float:
-            return -math.sqrt(sum((a[d] - b[d]) ** 2 for d in range(4)))
-
-        def _centroid(members: Set[str]) -> Tuple[float, float, float, float]:
-            sums = [0.0, 0.0, 0.0, 0.0]
-            for m in members:
-                sig = signatures[m]
-                for d in range(4):
-                    sums[d] += sig[d]
-            n = len(members)
-            return tuple(s / n for s in sums)  # type: ignore[return-value]
-
-        clusters: List[Set[str]] = [{t} for t in token_order]
-
-        for _round in range(max_rounds):
-            changed = False
-
-            # Phase A: reassign every token to its best-scoring CURRENT
-            # cluster (drifting mean centroid — this is the part that
-            # differs from _cluster_particles' seed-anchored design).
-            centroids = [_centroid(m) for m in clusters]
-            new_owner: Dict[str, Optional[int]] = {}
-            for tok in token_order:
-                query = signatures[tok]
-                scores = [_dist_score(query, c) for c in centroids]
-                best_idx = max(range(len(scores)), key=lambda i: scores[i])
-                new_owner[tok] = (
-                    best_idx if scores[best_idx] >= join_threshold else None
-                )
-            regrouped: Dict[int, Set[str]] = defaultdict(set)
-            leftover: Set[str] = set()
-            for tok, owner in new_owner.items():
-                if owner is None:
-                    leftover.add(tok)
-                else:
-                    regrouped[owner].add(tok)
-            new_clusters = list(regrouped.values()) + [{t} for t in leftover]
-            if {frozenset(c) for c in new_clusters} != {frozenset(c) for c in clusters}:
-                changed = True
-            clusters = new_clusters
-
-            # Phase B: selective cluster-pair merge — reuse the SAME
-            # per-token score computation (no new similarity calls
-            # beyond what Phase A already needed), flag a cluster pair
-            # as a merge candidate only when some token scores well
-            # against BOTH.
-            centroids = [_centroid(m) for m in clusters]
-            candidate_pairs: Set[Tuple[int, int]] = set()
-            for tok in token_order:
-                query = signatures[tok]
-                scored = sorted(
-                    ((i, _dist_score(query, c)) for i, c in enumerate(centroids)),
-                    key=lambda x: -x[1],
-                )
-                if (
-                    len(scored) >= 2
-                    and scored[0][1] >= join_threshold
-                    and scored[1][1] >= join_threshold
-                ):
-                    candidate_pairs.add(tuple(sorted([scored[0][0], scored[1][0]])))
-
-            parent = list(range(len(clusters)))
-
-            def _find(i: int) -> int:
-                while parent[i] != i:
-                    i = parent[i]
-                return i
-
-            for i, j in candidate_pairs:
-                if _dist_score(centroids[i], centroids[j]) >= merge_threshold:
-                    if _find(i) != _find(j):
-                        parent[_find(j)] = _find(i)
-                        changed = True
-
-            final: Dict[int, Set[str]] = defaultdict(set)
-            for i, members in enumerate(clusters):
-                final[_find(i)].update(members)
-            clusters = list(final.values())
-
-            if not changed:
-                break
-
-        return {i: members for i, members in enumerate(clusters)}
 
     def _object_context_tag(self, between_token: Optional[str]) -> str:
         """Classify an extracted (action, object) observation's
