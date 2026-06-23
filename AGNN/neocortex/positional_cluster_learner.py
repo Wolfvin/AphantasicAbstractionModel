@@ -847,6 +847,19 @@ _MODIFIER_3TOK_RATE = 0.5
 # they get cluster_id = -1, same convention as unclustered actions).
 _PARTICLE_MIN_FREQ = 3
 
+# A cluster larger than this is too diffuse to trust as a merge
+# party: its centroid is an average over many members, so it drifts
+# toward the degenerate "mostly-zero" region of this 4-dim signature
+# and can spuriously pass the merge-gate's distance check against
+# genuinely unrelated clusters (re-discovered empirically: re-feeding
+# the same corpus repeatedly let new low-frequency candidates cross
+# _PARTICLE_MIN_FREQ, swell the noise cluster, and its now-diluted
+# centroid falsely matched the clean negator cluster). Clusters at or
+# under this size may still grow via normal single-token JOIN (the
+# weighted-centroid update), but never via cluster-pair MERGE — same
+# size bound as the chain-merge regression test's contract.
+_PARTICLE_MERGE_MAX_CLUSTER_SIZE = 6
+
 
 # ----------------------------------------------------------------------
 # Learner
@@ -1094,6 +1107,22 @@ class PositionalClusterLearner:
     particle_cluster_id_of: Dict[str, int] = field(default_factory=dict)
     particle_clusters: Dict[int, Set[str]] = field(default_factory=dict)
     particle_cluster_labels: Dict[int, str] = field(default_factory=dict)
+
+    # _particle_cluster_centroids: {cluster_id: (centroid, weight)} —
+    # persisted across train() calls so that a token already locked
+    # into a cluster_id (>= 0) is NEVER re-derived from scratch on a
+    # later train() call. Without this, re-feeding the exact same
+    # corpus could still perturb the result: identical data doubles
+    # every token's count, which lets previously-too-rare candidates
+    # (below _PARTICLE_MIN_FREQ the first time) newly cross the floor,
+    # changing the candidate POOL on the second call even though the
+    # corpus itself didn't change — and a from-scratch recompute over
+    # a different pool can land anywhere. Persisting state means only
+    # genuinely NEW candidates are processed each call; everything
+    # already classified stays exactly as it was.
+    _particle_cluster_centroids: Dict[int, Tuple[Tuple[float, float, float, float], float]] = field(
+        default_factory=dict
+    )
 
     # ------------------------------------------------------------------
     # Clause coordinator clusters (found during the coordinate-clause
@@ -2169,15 +2198,23 @@ class PositionalClusterLearner:
         natively; threshold 0.5 on cosine reproduces the same
         separation with cleaner boundaries on noisy corpora.
 
-        Reset contract: overwrites particle_cluster_id_of and
-        particle_clusters from scratch on every call (cluster ids may
-        shift between train() calls, same as action cluster_id_of).
-        particle_cluster_labels is also reset, because labels assigned
-        to old cluster_ids are not meaningful for new ones — same
-        contract as cluster_labels being reset in train().
+        Persistence contract (changed from the original "reset from
+        scratch every call"): a token already locked into a REAL
+        cluster_id (>= 0) from a previous train() call is NEVER
+        reconsidered. Only tokens with no prior id, or previously
+        below the frequency floor (id == -1), are (re-)processed this
+        call. This was added after an empirical regression: re-feeding
+        the exact same corpus a second time changed cluster
+        composition, because doubling every count let some
+        previously-too-rare tokens newly cross ``_PARTICLE_MIN_FREQ``
+        — a different CANDIDATE POOL on the second call, and a
+        from-scratch recompute over a different pool can land
+        anywhere. Locking already-classified tokens means only
+        genuinely new evidence is ever processed; old, settled
+        clusters are immune to it by construction.
+        particle_cluster_labels is still reset every call, because
+        labels are a separate post-hoc step (same contract as before).
         """
-        self.particle_cluster_id_of = {}
-        self.particle_clusters = {}
         self.particle_cluster_labels = {}
 
         candidates: Set[str] = (
@@ -2197,6 +2234,28 @@ class PositionalClusterLearner:
         # every verb, since verbs are not nouns) leak into the particle
         # pool and pollute clusters with real content words.
         candidates -= set(self.action_object_freq.keys())
+
+        # Reconstruct the persisted cluster state from the previous
+        # call (empty on the very first call). Each entry tracks
+        # ``established=True`` — it existed before THIS call, so it
+        # may still grow via normal single-token JOIN, but may never
+        # again be a party to a cluster-pair MERGE (see merge-gate
+        # below). Locked tokens (cluster_id >= 0) are excluded from
+        # ``candidates`` entirely — they keep their prior membership
+        # untouched, not even re-scored.
+        locked_tokens = {
+            tok for tok, cid in self.particle_cluster_id_of.items() if cid >= 0
+        }
+        candidates -= locked_tokens
+
+        clusters: List[Tuple[Set[str], Tuple[float, float, float, float], float, bool]] = []
+        for cluster_id in sorted(self.particle_clusters.keys()):
+            members = self.particle_clusters[cluster_id]
+            centroid, weight = self._particle_cluster_centroids.get(
+                cluster_id, (self._compute_particle_signature(next(iter(members))), 1.0)
+            )
+            clusters.append((set(members), centroid, weight, True))
+
         if not candidates:
             return
 
@@ -2211,6 +2270,7 @@ class PositionalClusterLearner:
                 self.particle_cluster_id_of[tok] = -1
 
         if not clusterable:
+            self._rebuild_particle_outputs(clusters)
             return
 
         signatures: Dict[str, Tuple[float, float, float, float]] = {
@@ -2253,18 +2313,30 @@ class PositionalClusterLearner:
         # genuine member pulls it more, because it brings comparably
         # strong evidence. Distance is Euclidean (PR #105 finding:
         # cosine is degenerate on this mostly-zero 4-dim vector).
-        clusters: List[Tuple[Set[str], Tuple[float, float, float, float], float]] = []
-
+        #
+        # Each cluster tuple's 4th element, ``established``, marks
+        # whether the cluster existed BEFORE this call (came from
+        # persisted state above) or was created DURING this call. A
+        # merge may only combine two NOT-established (newly-formed
+        # this call) clusters — an established cluster can still grow
+        # via plain single-token JOIN, but can never again be a party
+        # to a cluster-pair MERGE. Without this, a brand-new
+        # low-frequency token (e.g. one that just crossed
+        # ``_PARTICLE_MIN_FREQ`` for the first time) could land
+        # ambiguously between an old, settled, PURE cluster (like the
+        # negator cluster) and an unrelated one, and drag the settled
+        # cluster into a merge it had no part in earning — exactly
+        # the regression that motivated this guard.
         for tok in sorted_particles:
             query = signatures[tok]
             tok_weight = float(_total_freq(tok))
 
             if not clusters:
-                clusters.append(({tok}, query, tok_weight))
+                clusters.append(({tok}, query, tok_weight, False))
                 continue
 
             scores: List[float] = []
-            for _toks, centroid, _weight in clusters:
+            for _toks, centroid, _weight, _est in clusters:
                 dist = math.sqrt(
                     sum((query[d] - centroid[d]) ** 2 for d in range(4))
                 )
@@ -2286,7 +2358,19 @@ class PositionalClusterLearner:
             second_score = scores[second_idx] if second_idx is not None else None
 
             centroid_consistent = False
-            if best_score >= threshold and second_score is not None and second_score >= threshold:
+            eligible_for_merge = (
+                second_idx is not None
+                and len(clusters[best_idx][0]) <= _PARTICLE_MERGE_MAX_CLUSTER_SIZE
+                and len(clusters[second_idx][0]) <= _PARTICLE_MERGE_MAX_CLUSTER_SIZE
+                and not clusters[best_idx][3]
+                and not clusters[second_idx][3]
+            )
+            if (
+                best_score >= threshold
+                and second_score is not None
+                and second_score >= threshold
+                and eligible_for_merge
+            ):
                 # The new token is ambiguous between two old clusters —
                 # but that alone is not proof those two clusters are
                 # one pattern. Validate independently: do the two old
@@ -2297,16 +2381,16 @@ class PositionalClusterLearner:
                 # ambiguous outlier (centroids themselves far apart)
                 # must not be allowed to force two distinct old
                 # patterns together.
-                _members_a, centroid_a, _weight_a = clusters[best_idx]
-                _members_b, centroid_b, _weight_b = clusters[second_idx]
+                _members_a, centroid_a, _weight_a, _est_a = clusters[best_idx]
+                _members_b, centroid_b, _weight_b, _est_b = clusters[second_idx]
                 centroid_dist = math.sqrt(
                     sum((centroid_a[d] - centroid_b[d]) ** 2 for d in range(4))
                 )
                 centroid_consistent = (-centroid_dist) >= threshold
 
             if centroid_consistent:
-                members_a, centroid_a, weight_a = clusters[best_idx]
-                members_b, centroid_b, weight_b = clusters[second_idx]
+                members_a, centroid_a, weight_a, _est_a = clusters[best_idx]
+                members_b, centroid_b, weight_b, _est_b = clusters[second_idx]
                 merged_members = members_a | members_b | {tok}
                 merged_weight = weight_a + weight_b + tok_weight
                 merged_centroid = tuple(
@@ -2316,21 +2400,37 @@ class PositionalClusterLearner:
                 )
                 for idx in sorted([best_idx, second_idx], reverse=True):
                     clusters.pop(idx)
-                clusters.append((merged_members, merged_centroid, merged_weight))
+                clusters.append((merged_members, merged_centroid, merged_weight, False))
             elif best_score >= threshold:
-                member_set, centroid, total_weight = clusters[best_idx]
+                member_set, centroid, total_weight, established = clusters[best_idx]
                 member_set.add(tok)
                 new_total = total_weight + tok_weight
                 new_centroid = tuple(
                     (centroid[d] * total_weight + query[d] * tok_weight) / new_total
                     for d in range(4)
                 )
-                clusters[best_idx] = (member_set, new_centroid, new_total)
+                clusters[best_idx] = (member_set, new_centroid, new_total, established)
             else:
-                clusters.append(({tok}, query, tok_weight))
+                clusters.append(({tok}, query, tok_weight, False))
 
-        for cluster_id, (toks, _centroid, _weight) in enumerate(clusters):
+        self._rebuild_particle_outputs(clusters)
+
+    def _rebuild_particle_outputs(
+        self,
+        clusters: List[Tuple[Set[str], Tuple[float, float, float, float], float, bool]],
+    ) -> None:
+        """Write ``clusters`` back to particle_clusters/particle_cluster_id_of
+        and persist each cluster's centroid+weight for the next train()
+        call. Cluster ids are simply the list index — established
+        clusters were appended first (in their original sorted-id
+        order) by the caller, so their ids stay stable across calls;
+        any newly-formed clusters get the next-available trailing ids.
+        """
+        self.particle_clusters = {}
+        self._particle_cluster_centroids = {}
+        for cluster_id, (toks, centroid, weight, _established) in enumerate(clusters):
             self.particle_clusters[cluster_id] = toks
+            self._particle_cluster_centroids[cluster_id] = (centroid, weight)
             for tok in toks:
                 self.particle_cluster_id_of[tok] = cluster_id
 
