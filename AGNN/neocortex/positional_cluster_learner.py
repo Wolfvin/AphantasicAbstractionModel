@@ -2324,6 +2324,173 @@ class PositionalClusterLearner:
             for tok in toks:
                 self.particle_cluster_id_of[tok] = cluster_id
 
+    def _cluster_particles_em_prototype(
+        self, merge_threshold: float = -0.15, max_rounds: int = 10
+    ) -> Dict[int, Set[str]]:
+        """PROTOTYPE — Round 42-44, NOT wired into train(), NOT called
+        anywhere in the production pipeline. Exists for isolated
+        validation only (per the scoping doc's plan: prototype first,
+        swap in only after full validation).
+
+        Investigates whether PCL's greedy-sequential clustering
+        (`_cluster_particles`) can be replaced by a genuinely
+        iterative, order-invariant process WITHOUT reopening the
+        chain-merge regression PR #105-107 fixed (verified empirically
+        in isolated Python prototypes, not yet validated against the
+        real pytest suite — that is what THIS method is for).
+
+        Algorithm (2-phase, repeated to a fixed point):
+          Phase A — token-level reassignment: every candidate particle
+            is re-scored against ALL current cluster centroids (mean
+            of CURRENT members — drifting, unlike `_cluster_particles`'
+            seed-anchored design) and moved to its best-scoring
+            cluster if that score clears ``qkv_particle_similarity_
+            threshold`` (the existing JOIN threshold, unchanged).
+          Phase B — selective cluster-pair merge: reuses the scores
+            ALREADY computed in Phase A (zero extra similarity calls)
+            — a token whose 2nd-best score ALSO clears the join
+            threshold flags its top-2 clusters as merge CANDIDATES.
+            Only candidate pairs (not all O(k^2) pairs) get a direct
+            centroid-to-centroid comparison against ``merge_threshold``
+            (a SEPARATE, stricter threshold — NOT qkv_particle_
+            similarity_threshold, see calibration note below).
+          Repeat A+B until no cluster composition changes (converged)
+          or ``max_rounds`` is hit (a hit-the-cap result is itself a
+          diagnostic: it means the process did NOT stabilize, which in
+          early testing correlated with chain-merge reopening — treat
+          it as a red flag, not "needs more rounds").
+
+        Calibration (Round 44, tested against the REAL 129-candidate
+        production particle signature set, scanning merge_threshold
+        from -0.35 to -0.10): the range **-0.20 to -0.12** is the only
+        one found so far where ALL THREE properties hold simultaneously:
+          1. Order-invariance: identical result regardless of token
+             processing order (frequency-descending, reversed,
+             shuffled all tested).
+          2. Chain-merge safety: the cluster containing "tidak" stays
+             at 4 members (within the existing regression test's <=6
+             contract).
+          3. Genuine convergence: stabilizes in 5-7 rounds, not by
+             hitting max_rounds (which DID happen at looser thresholds
+             like -0.35/-0.25, where "tidak" ballooned back to 17-25
+             members — the EXACT regression PR #105-107 fixed).
+
+        NOT YET DONE before this can replace `_cluster_particles`:
+          - Run against the actual pytest suite (this method call,
+            not a hand-rolled replica) — see test file for the
+            corresponding validation test.
+          - Verify cluster MEMBERSHIP quality, not just size (Round
+            44 flagged "menimbulkan" landing in the tidak-cluster at
+            the sweet-spot threshold — a CAUSAL verb, not a negator;
+            unresolved whether that's a genuine new pattern or noise).
+          - Decide whether this generalizes to ACTION clustering too
+            (this prototype only covers particles).
+        """
+        self_candidates: Set[str] = (
+            set(self.function_word_candidates)
+            | set(self.connector_tokens)
+            | set(self.modifier_tokens)
+        ) - set(self.action_object_freq.keys())
+
+        def _total_freq(tok: str) -> int:
+            return sum(self.fine_positional_freq.get(tok, {}).values())
+
+        clusterable = [
+            t for t in self_candidates if _total_freq(t) >= _PARTICLE_MIN_FREQ
+        ]
+        if not clusterable:
+            return {}
+
+        signatures: Dict[str, Tuple[float, float, float, float]] = {
+            tok: self._compute_particle_signature(tok) for tok in clusterable
+        }
+        token_order = sorted(clusterable, key=lambda t: (-_total_freq(t), t))
+        join_threshold = self.qkv_particle_similarity_threshold
+
+        def _dist_score(a: Tuple[float, ...], b: Tuple[float, ...]) -> float:
+            return -math.sqrt(sum((a[d] - b[d]) ** 2 for d in range(4)))
+
+        def _centroid(members: Set[str]) -> Tuple[float, float, float, float]:
+            sums = [0.0, 0.0, 0.0, 0.0]
+            for m in members:
+                sig = signatures[m]
+                for d in range(4):
+                    sums[d] += sig[d]
+            n = len(members)
+            return tuple(s / n for s in sums)  # type: ignore[return-value]
+
+        clusters: List[Set[str]] = [{t} for t in token_order]
+
+        for _round in range(max_rounds):
+            changed = False
+
+            # Phase A: reassign every token to its best-scoring CURRENT
+            # cluster (drifting mean centroid — this is the part that
+            # differs from _cluster_particles' seed-anchored design).
+            centroids = [_centroid(m) for m in clusters]
+            new_owner: Dict[str, Optional[int]] = {}
+            for tok in token_order:
+                query = signatures[tok]
+                scores = [_dist_score(query, c) for c in centroids]
+                best_idx = max(range(len(scores)), key=lambda i: scores[i])
+                new_owner[tok] = (
+                    best_idx if scores[best_idx] >= join_threshold else None
+                )
+            regrouped: Dict[int, Set[str]] = defaultdict(set)
+            leftover: Set[str] = set()
+            for tok, owner in new_owner.items():
+                if owner is None:
+                    leftover.add(tok)
+                else:
+                    regrouped[owner].add(tok)
+            new_clusters = list(regrouped.values()) + [{t} for t in leftover]
+            if {frozenset(c) for c in new_clusters} != {frozenset(c) for c in clusters}:
+                changed = True
+            clusters = new_clusters
+
+            # Phase B: selective cluster-pair merge — reuse the SAME
+            # per-token score computation (no new similarity calls
+            # beyond what Phase A already needed), flag a cluster pair
+            # as a merge candidate only when some token scores well
+            # against BOTH.
+            centroids = [_centroid(m) for m in clusters]
+            candidate_pairs: Set[Tuple[int, int]] = set()
+            for tok in token_order:
+                query = signatures[tok]
+                scored = sorted(
+                    ((i, _dist_score(query, c)) for i, c in enumerate(centroids)),
+                    key=lambda x: -x[1],
+                )
+                if (
+                    len(scored) >= 2
+                    and scored[0][1] >= join_threshold
+                    and scored[1][1] >= join_threshold
+                ):
+                    candidate_pairs.add(tuple(sorted([scored[0][0], scored[1][0]])))
+
+            parent = list(range(len(clusters)))
+
+            def _find(i: int) -> int:
+                while parent[i] != i:
+                    i = parent[i]
+                return i
+
+            for i, j in candidate_pairs:
+                if _dist_score(centroids[i], centroids[j]) >= merge_threshold:
+                    if _find(i) != _find(j):
+                        parent[_find(j)] = _find(i)
+                        changed = True
+
+            final: Dict[int, Set[str]] = defaultdict(set)
+            for i, members in enumerate(clusters):
+                final[_find(i)].update(members)
+            clusters = list(final.values())
+
+            if not changed:
+                break
+
+        return {i: members for i, members in enumerate(clusters)}
+
     def _object_context_tag(self, between_token: Optional[str]) -> str:
         """Classify an extracted (action, object) observation's
         structural context, for ``action_object_context_freq``.

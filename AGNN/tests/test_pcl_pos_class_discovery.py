@@ -958,6 +958,57 @@ def test_particle_cluster_purity_no_chain_merge_regression():
 
 
 # ----------------------------------------------------------------------
+# EM-style iterative particle clustering PROTOTYPE (sprint round 42-44)
+# ----------------------------------------------------------------------
+#
+# _cluster_particles_em_prototype() is NOT wired into train() — it is
+# an isolated candidate replacement under validation. See
+# AGNN/docs/pcl-em-clustering-scoping.md for the full design rationale
+# (user-driven: the existing greedy-sequential _cluster_particles
+# cannot retroactively merge two already-separate clusters even when
+# later data bridges them — proven in Round 41). These tests validate
+# the prototype on its own merits BEFORE any decision to swap it in.
+
+def test_em_prototype_chain_merge_safety_on_canonical_corpus():
+    """The EM prototype must not reopen the chain-merge regression
+    PR #105-107 fixed (same contract as
+    test_particle_cluster_purity_no_chain_merge_regression above, but
+    against the prototype's output, not _cluster_particles').
+    """
+    learner = _train_canonical_learner()
+    clusters = learner._cluster_particles_em_prototype(merge_threshold=-0.15)
+
+    tidak_cluster = None
+    for members in clusters.values():
+        if "tidak" in members:
+            tidak_cluster = members
+            break
+    assert tidak_cluster is not None
+    assert len(tidak_cluster) <= 6, (
+        f"EM prototype's 'tidak' cluster has {len(tidak_cluster)} "
+        f"members: {sorted(tidak_cluster)!r} — chain-merge regression."
+    )
+    unrelated = {"di", "asupan", "benda", "galah", "instrumen"}
+    leaked = unrelated & tidak_cluster
+    assert not leaked, (
+        f"Unrelated token(s) {leaked!r} leaked into the EM prototype's "
+        f"'tidak' cluster {sorted(tidak_cluster)!r}."
+    )
+
+
+def test_em_prototype_deterministic_across_repeated_calls():
+    """Calling the prototype twice on the same trained learner must
+    give byte-identical cluster composition — a minimal determinism
+    check before the stronger order-invariance claim (Round 44) is
+    trusted in production.
+    """
+    learner = _train_canonical_learner()
+    r1 = learner._cluster_particles_em_prototype(merge_threshold=-0.15)
+    r2 = learner._cluster_particles_em_prototype(merge_threshold=-0.15)
+    assert {frozenset(v) for v in r1.values()} == {frozenset(v) for v in r2.values()}
+
+
+# ----------------------------------------------------------------------
 # Passive voice (sprint round 1 — BOS-driven structural diversity test)
 # ----------------------------------------------------------------------
 
