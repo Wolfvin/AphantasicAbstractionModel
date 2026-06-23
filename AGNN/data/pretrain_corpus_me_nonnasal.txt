@@ -1,0 +1,24 @@
+# "me-" non-nasal allomorph depth corpus (sprint round 39)
+#
+# Gap found via chat_agnn.py's :trace (Round 38): verbs using the
+# bare "me-" allomorph (root starts with l/r/w/y/vowel, NO
+# nasalization — me+raung=meraung, me+lolong=melolong) never match
+# _VERB_PREFIXES (which only covers the nasalizing allomorphs
+# meng-/meny-/mem-/men-). Initially assumed this needed a risky
+# morphology fix (same false-positive risk as the "di-"/"bel-" gaps —
+# a bare 2-char "me" prefix would match ordinary words like
+# meja/merah/metode/media). User correctly pushed back: tested
+# corpus-depth FIRST (same discipline as Round 1/15/26) before
+# concluding a code fix was needed — verified empirically that 5-6
+# varied sentences are enough to cross action_bucket_anchors purely
+# via positional concentration, with ZERO morphology code touched.
+singa meraung untuk menandai wilayahnya.
+beruang meraung saat terancam oleh pemburu.
+harimau meraung di tengah malam yang sunyi.
+gorila meraung untuk menunjukkan dominasi kepada lawannya.
+macan meraung ketika marah pada penyusup.
+serigala melolong untuk memanggil seluruh kawanan.
+anjing melolong saat mendengar suara sirine.
+rubah melolong di tengah hutan yang gelap.
+serigala betina melolong untuk memanggil pejantannya.
+anjing liar melolong sepanjang malam tanpa henti.

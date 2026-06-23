@@ -15,11 +15,15 @@ Usage (run from AGNN/):
     python explore_clusters.py status
     python explore_clusters.py feed <path-to-text-file>
     python explore_clusters.py feed -          # read from stdin
+    python explore_clusters.py feed-many <file1> <file2> ... <fileN>
+                                                # read all concurrently,
+                                                # train() ONCE on the merge
     python explore_clusters.py diff
     python explore_clusters.py query "<kalimat>"
 """
 from __future__ import annotations
 
+import concurrent.futures
 import json
 import os
 import sys
@@ -27,7 +31,10 @@ from typing import Dict, List, Set
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from neocortex.bootstrap_classifier import build_labelled_cluster_learner
+from neocortex.bootstrap_classifier import (
+    DEFAULT_CORPUS_PATHS as _PRODUCTION_BASE_CORPUS_PATHS,
+    build_labelled_cluster_learner,
+)
 from neocortex.positional_cluster_learner import PositionalClusterLearner
 
 _DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
@@ -48,11 +55,25 @@ def _load_or_init() -> PositionalClusterLearner:
     return build_labelled_cluster_learner()
 
 
-def _snapshot(learner: PositionalClusterLearner) -> Dict[str, List[str]]:
-    """{cluster_id_as_str: sorted list of member action tokens}."""
+def _snapshot(learner: PositionalClusterLearner) -> Dict[str, Dict[str, List[str]]]:
+    """{"action": {cid_str: members}, "particle": {cid_str: members}}.
+
+    Both axes are snapshotted because both are full-retrain outputs of
+    train() and both can shift on any feed() call — `diff` was
+    previously blind to particle_clusters (only read action_clusters),
+    which meant a real movement (e.g. a token leaving a particle
+    cluster after corpus expansion) was invisible to the CLI even
+    though the underlying state had genuinely changed.
+    """
     return {
-        str(cid): sorted(actions)
-        for cid, actions in learner.action_clusters.items()
+        "action": {
+            str(cid): sorted(members)
+            for cid, members in learner.action_clusters.items()
+        },
+        "particle": {
+            str(cid): sorted(members)
+            for cid, members in learner.particle_clusters.items()
+        },
     }
 
 
@@ -101,35 +122,168 @@ def cmd_status() -> None:
         print(f"  Feed batches so far : {batches}")
 
 
-def cmd_feed(source: str) -> None:
+def _read_lines(source: str) -> List[str]:
     if source == "-":
         text = sys.stdin.read()
     else:
         with open(source, encoding="utf-8") as f:
             text = f.read()
-    lines = [
+    return [
         ln.strip() for ln in text.splitlines()
         if ln.strip() and not ln.strip().startswith("#")
     ]
+
+
+def _fetch_sources_concurrently(sources: List[str]) -> Dict[str, List[str]]:
+    """Read N source files CONCURRENTLY (I/O-bound — threads are safe
+    here, no shared mutable state between reads). Returns
+    {source: lines}, preserving input order on the caller side.
+
+    This is the part of the pipeline that is SAFE to parallelize:
+    independent file reads, no writes, no shared learner state. The
+    write side (train() + save()) below this is run sequentially on
+    purpose — see cmd_feed_many's docstring for why.
+    """
+    results: Dict[str, List[str]] = {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+        future_to_source = {
+            pool.submit(_read_lines, src): src for src in sources
+        }
+        for future in concurrent.futures.as_completed(future_to_source):
+            src = future_to_source[future]
+            results[src] = future.result()
+    return results
+
+
+# Same content-match set bootstrap_classifier.py uses
+# (EXPECTED_COORDINATOR_TOKENS) — re-derived here rather than imported
+# because explore_clusters.py is deliberately decoupled from the
+# production module's labelling contract (see module docstring).
+_EXPECTED_COORDINATOR_TOKENS = {"dan", "atau"}
+
+
+def _mark_coordinator_clusters(learner: PositionalClusterLearner) -> None:
+    """Auto-mark clause-coordinator clusters after every train() call.
+
+    Gap found (Round 28): every retrain here left
+    ``coordinator_cluster_ids`` empty, because nothing in this script
+    ever called ``mark_clause_coordinator_clusters()`` — unlike
+    ``bootstrap_classifier.py``, which does this automatically. Effect:
+    ``dan``/``atau`` got wrongly tagged ACTION by ``tag_sentence()`` in
+    every exploration query (verified: "dan" had
+    ``_is_action_token('dan') == True`` here vs ``False`` in
+    production). Same content-match pattern as production — mark
+    whichever cluster(s) "dan"/"atau" landed in this retrain. Missing
+    coordinators are non-fatal (same graceful-degradation contract as
+    production), and this never touches PCL's own clustering logic.
+    """
+    coordinator_cluster_ids = {
+        learner.cluster_id_of[token]
+        for token in _EXPECTED_COORDINATOR_TOKENS
+        if token in learner.cluster_id_of
+    }
+    if coordinator_cluster_ids:
+        learner.mark_clause_coordinator_clusters(coordinator_cluster_ids)
+
+
+def _read_full_history() -> List[str]:
+    """Every line ever fed to this sandbox, in feed order, PLUS the
+    production base corpus it started from. Used by
+    ``_rebuild_from_scratch`` — see that function's docstring for why
+    a full single-call retrain (not incremental train() on top of
+    loaded state) is required.
+    """
+    lines: List[str] = []
+    for p in _PRODUCTION_BASE_CORPUS_PATHS:
+        with open(p, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#"):
+                    lines.append(line)
+    if os.path.exists(_LOG_PATH):
+        with open(_LOG_PATH, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("==="):
+                    lines.append(line)
+    return lines
+
+
+def _rebuild_from_scratch(new_lines: List[str]) -> PositionalClusterLearner:
+    """Build a learner via ONE train() call over the COMPLETE history
+    (production base + every line ever fed + the new batch).
+
+    Round 33 fix — order-sensitivity bug: this sandbox used to load
+    the SAVED (digested) state and call ``train(new_lines)`` on top
+    of it. That's wrong because anchor-word discovery
+    (``function_word_candidates``/``action_bucket_anchors``, computed
+    fresh at the START of every train() call from whatever
+    ``positional_freq`` has accumulated SO FAR) only gets applied to
+    the lines passed to THAT call — earlier-fed lines were already
+    extracted using an IMMATURE anchor set and are never re-extracted
+    once later data would have produced better anchors. Verified
+    empirically: feeding the same two corpus halves in opposite orders
+    produced DIFFERENT ``action_object_freq``/``cluster_id_of`` (the
+    earlier-fed half stays locked to its own immature anchors).
+
+    A single train() call over the full history does not have this
+    problem — anchor discovery runs once against the COMPLETE
+    ``positional_freq``, then Pass 2 extracts every line with that
+    same mature anchor set. Verified: a single train() call is
+    order-invariant for line order WITHIN that call (155/157 action
+    clusters byte-identical when the same corpus is shuffled before
+    one train() call — the 2 remaining differences are a single
+    borderline token landing in either of two near-tied clusters, a
+    separate effect from feed-order, not chased here).
+
+    Cost: this re-tokenizes the ENTIRE history every feed() call
+    instead of just the new lines, but Pass 1/2 (tokenizing + counting)
+    is cheap — the dominant cost is the Q/K/V clustering step at the
+    end, which was ALREADY re-running over the full accumulated stats
+    every call (see Round 24-25's profiling). Memory cost is bounded
+    by total corpus size, same accepted trade-off ``train()``'s own
+    docstring already documents.
+    """
+    full_corpus = _read_full_history() + new_lines
+    learner = PositionalClusterLearner()
+    learner.train(full_corpus)
+    _mark_coordinator_clusters(learner)
+    return learner
+
+
+def _commit_batch(lines: List[str], batch_label: str) -> None:
+    """Shared commit logic for both cmd_feed and cmd_feed_many:
+    snapshot -> full rebuild -> save() -> append to the feed log.
+
+    train()/save() are NOT parallelized and never will be — every
+    feed() call is a FULL RETRAIN over the entire accumulated corpus
+    (Brown clustering + Q/K/V re-cluster ALL actions seen so far, not
+    just the new lines), so running two of these concurrently would
+    have both processes load the SAME state, mutate independent
+    in-memory copies, and whichever save() finishes last silently
+    discards the other's work (a classic lost-update race). The real
+    lever for speed is reducing the NUMBER of train() calls — feed
+    many sources in one call instead of one-at-a-time — which is
+    exactly what cmd_feed_many does by merging concurrently-read
+    sources into a single batch before this function ever runs.
+    """
     if not lines:
         print("No usable lines found in input (empty or all comments).")
         return
 
-    learner = _load_or_init()
-
-    # Snapshot BEFORE this batch, for the next `diff` call.
-    before = _snapshot(learner)
+    before = _snapshot(_load_or_init())
     with open(_SNAPSHOT_PATH, "w", encoding="utf-8") as f:
         json.dump(before, f, ensure_ascii=False, indent=2)
 
-    print(f"Feeding {len(lines)} new lines (accumulates on top of "
-          f"existing state)...")
-    learner.train(lines)
+    print(f"Feeding {len(lines)} new lines ({batch_label}) — full single-"
+          f"call rebuild over the entire history (see _rebuild_from_"
+          f"scratch's docstring for why)...")
+    learner = _rebuild_from_scratch(lines)
     learner.save(_STATE_PATH)
 
     os.makedirs(_DATA_DIR, exist_ok=True)
     with open(_LOG_PATH, "a", encoding="utf-8") as f:
-        f.write(f"=== BATCH ({len(lines)} lines) ===\n")
+        f.write(f"=== BATCH ({len(lines)} lines, {batch_label}) ===\n")
         for ln in lines:
             f.write(ln + "\n")
 
@@ -137,24 +291,48 @@ def cmd_feed(source: str) -> None:
     print(f"Run `python explore_clusters.py diff` to see what changed.")
 
 
-def cmd_diff() -> None:
-    if not os.path.exists(_SNAPSHOT_PATH):
-        print("No previous snapshot found — run `feed` at least once first.")
-        return
-    if not os.path.exists(_STATE_PATH):
-        print("No exploration state found — run `feed` at least once first.")
-        return
+def cmd_feed(source: str) -> None:
+    _commit_batch(_read_lines(source), batch_label=f"source={source}")
 
-    with open(_SNAPSHOT_PATH, encoding="utf-8") as f:
-        before = json.load(f)
-    learner = PositionalClusterLearner.load(_STATE_PATH)
-    after = _snapshot(learner)
 
+def cmd_feed_many(sources: List[str]) -> None:
+    """Feed MULTIPLE sources in one go: read them all CONCURRENTLY
+    (parallel I/O, safe — independent file reads), merge into a
+    single combined batch, then commit with exactly ONE train() call.
+
+    This is the formalized version of what every multi-article batch
+    in this exploration session did manually (concatenate N articles
+    into one file, then `feed` once) — now an explicit, reusable
+    feature instead of an ad-hoc Write-tool step each time.
+
+    Why this is the correct place to parallelize, and why feeding
+    each source with its own train() call would NOT be faster: see
+    _commit_batch's docstring on the full-retrain cost. N sequential
+    `feed` calls pay the full-corpus reclustering cost N times; one
+    `feed-many` call pays it ONCE for the same total amount of new
+    data.
+    """
+    print(f"Reading {len(sources)} sources concurrently...")
+    results = _fetch_sources_concurrently(sources)
+    merged: List[str] = []
+    for src in sources:  # preserve caller-specified order
+        merged.extend(results.get(src, []))
+    print(f"Merged {len(merged)} total lines from {len(sources)} sources.")
+    _commit_batch(merged, batch_label=f"{len(sources)} sources merged")
+
+
+def _print_cluster_diff(
+    before: Dict[str, List[str]], after: Dict[str, List[str]], label: str,
+) -> None:
+    """Print the before->after diff for one cluster axis (action or
+    particle). Extracted so both axes share identical diff logic —
+    see cmd_diff's docstring for why both need to run.
+    """
     before_sets = {cid: set(members) for cid, members in before.items()}
     after_sets = {cid: set(members) for cid, members in after.items()}
 
     print("=" * 70)
-    print("CLUSTER DIFF: before -> after most recent feed()")
+    print(f"{label} CLUSTER DIFF: before -> after most recent feed()")
     print("=" * 70)
 
     matched_before = set()
@@ -168,10 +346,17 @@ def cmd_diff() -> None:
         before_members = before_sets[best_before_cid]
         added = after_members - before_members
         removed = before_members - after_members
-        if not added and not removed:
-            continue  # identical, not interesting to print
+        # Mark matched BEFORE the "skip if identical" check below — a
+        # cluster that didn't change at all is still a real match (its
+        # content survived the retrain unchanged), not an absence.
+        # Bug found via the particle-axis test: identical clusters were
+        # `continue`-d before being marked, so the NEW/DISAPPEARED
+        # sections below incorrectly reported every unchanged cluster
+        # as both newly created AND disappeared.
         matched_before.add(best_before_cid)
         matched_after.add(after_cid)
+        if not added and not removed:
+            continue  # identical, nothing to print beyond the match
         print(f"\ncluster {best_before_cid} -> {after_cid} (overlap={score:.2f})")
         if added:
             print(f"  + gained: {sorted(added)}")
@@ -203,6 +388,34 @@ def cmd_diff() -> None:
           f"{new_count} new, {gone_count} disappeared.")
 
 
+def cmd_diff() -> None:
+    if not os.path.exists(_SNAPSHOT_PATH):
+        print("No previous snapshot found — run `feed` at least once first.")
+        return
+    if not os.path.exists(_STATE_PATH):
+        print("No exploration state found — run `feed` at least once first.")
+        return
+
+    with open(_SNAPSHOT_PATH, encoding="utf-8") as f:
+        before = json.load(f)
+    learner = PositionalClusterLearner.load(_STATE_PATH)
+    after = _snapshot(learner)
+
+    # Backward-compat: older snapshot files (pre-particle-tracking) are
+    # flat {cid: members} for action clusters only, with no "particle"
+    # key at all.
+    if "action" in before or "particle" in before:
+        before_action = before.get("action", {})
+        before_particle = before.get("particle", {})
+    else:
+        before_action = before
+        before_particle = {}
+
+    _print_cluster_diff(before_action, after["action"], "ACTION")
+    print()
+    _print_cluster_diff(before_particle, after["particle"], "PARTICLE")
+
+
 def cmd_query(sentence: str) -> None:
     learner = _load_or_init()
     print(f"Sentence: {sentence!r}")
@@ -224,6 +437,11 @@ def main() -> None:
             print("Usage: explore_clusters.py feed <path-or-->")
             sys.exit(1)
         cmd_feed(sys.argv[2])
+    elif cmd == "feed-many":
+        if len(sys.argv) < 3:
+            print("Usage: explore_clusters.py feed-many <file1> <file2> ...")
+            sys.exit(1)
+        cmd_feed_many(sys.argv[2:])
     elif cmd == "diff":
         cmd_diff()
     elif cmd == "query":

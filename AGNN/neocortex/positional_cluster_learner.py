@@ -148,6 +148,41 @@ from neocortex.semantic_role_classifier import (
 )
 
 
+@dataclass
+class EmbeddedSPO:
+    """SPO result where the object slot may itself be a clause.
+
+    Additive companion to ``SPO`` (same pattern as ``spo_all()``'s
+    relationship to ``spo()`` from Round 6) — does NOT modify SPO's
+    existing field shape, per Round 11's explicit decision against
+    breaking changes to that contract. See
+    :meth:`PositionalClusterLearner.spo_embedded` for the full
+    rationale.
+
+    Attributes:
+        subject:   Same as SPO.subject — the main clause's subject.
+        predicate: Same as SPO.predicate — the main clause's verb.
+        object:    Same as SPO.object — the FLAT object string
+                   (unchanged from what ``spo()`` would return).
+        embedded:  ``None`` when ``object`` is a flat noun/agent
+                   phrase. A nested ``EmbeddedSPO`` when ``object``
+                   itself decomposes into its own (subject, action,
+                   object) — i.e. it's an embedded clause, not a
+                   single argument.
+        raw:       The original input text (subject's raw) or, for a
+                   nested ``embedded`` instance, the object span text
+                   that was recursively parsed.
+        negated:   Same negation contract as SPO.
+    """
+
+    subject: str
+    predicate: str
+    object: str
+    embedded: Optional["EmbeddedSPO"]
+    raw: str
+    negated: bool
+
+
 # ----------------------------------------------------------------------
 # Position buckets
 # ----------------------------------------------------------------------
@@ -352,47 +387,17 @@ _SUBJECT_DISCOURSE_MARKER_MIN_FREQ = 10
 # synonym-copula case where action distributions have very different
 # shapes but identical support.
 
-# Brown clustering — minimum similarity for two object clusters to
-# merge. We use *weighted* Jaccard on action-count maps (same metric
-# as action clustering) rather than plain Jaccard on action sets.
-# Plain Jaccard suffers from chain-merging: two objects that share
-# ONE action out of many merge at Jaccard >= 0.13, then the merged
-# cluster's action set grows, enabling further merges via different
-# shared actions. The end result is one giant super-cluster
-# containing most of the object vocabulary, which destroys the
-# discrimination action clustering needs.
-#
-# Weighted Jaccard is more strict: it considers COUNT distributions,
-# not just set membership. Two objects that share an action but at
-# very different frequencies (e.g., 'mamalia' appears with adalah 8
-# times but 'logam' appears with adalah only 3 times) get a lower
-# similarity than two objects with matching count shapes. This breaks
-# the chain-merge: an object can merge with the growing cluster only
-# if its count distribution matches the cluster's aggregated
-# distribution, not just shares one action.
-#
-# Threshold 0.15 is calibrated to:
-#   - Merge synonyms (mamalia+logam via shared copula context)
-#     so adalah+merupakan can merge via super-cluster overlap.
-#   - NOT merge unrelated objects (hujan+panas) so CAUSAL and
-#     TEMPORAL actions stay in separate clusters.
-# 0.05 was too aggressive (CAUSAL+TEMPORAL collapsed); 0.3 was too
-# conservative (adalah+merupakan didn't merge on the single-corpus
-# test). 0.15 is the sweet spot verified on pretrain_corpus.txt,
-# pretrain_corpus_depth.txt, and the combined corpus.
-_BROWN_CLUSTER_SIMILARITY_THRESHOLD = 0.15
-
-# Brown clustering — hard cap on the number of object super-clusters.
-# The greedy agglomerative merge stops when EITHER no pair has
-# similarity >= threshold OR the number of clusters drops to this cap.
-# Prevents pathological corpora from collapsing every object into one
-# giant super-cluster (which would make action clustering useless).
-_BROWN_CLUSTER_MAX_CLUSTERS = 1  # effectively disabled - rely on threshold
-# (Set to 1 to disable the cap; the threshold alone stops merging.)
-# A non-trivial cap (e.g., 30) is recommended only for very large
-# object vocabularies (>500 tokens) where the threshold-based stop
-# might leave too many singletons. Pretrain corpus has ~500 distinct
-# objects and works well with threshold-only stop.
+# Brown clustering's original greedy weighted-Jaccard merge (and its
+# two tuning constants, _BROWN_CLUSTER_SIMILARITY_THRESHOLD=0.15 and
+# _BROWN_CLUSTER_MAX_CLUSTERS) was replaced in Round 24-25 by the same
+# sequential Q/K/V pattern action clustering uses — see
+# _DEFAULT_QKV_OBJECT_SIMILARITY_THRESHOLD above and
+# _cluster_object_vocabulary's docstring for the full rationale
+# (profiling found the greedy merge consuming 99.9% of train() time at
+# corpus scale; Q/K/V is the same algorithmic shape, ~690x faster).
+# The two constants and _weighted_jaccard's call site were removed as
+# dead code in Round 40 cleanup — _weighted_jaccard itself is kept
+# (still directly unit-tested as a pure-math helper).
 
 
 # ----------------------------------------------------------------------
@@ -552,6 +557,39 @@ _DEFAULT_QKV_ACTION_SIMILARITY_THRESHOLD = 0.3
 # qkv_particle_similarity_threshold name for API/persistence
 # continuity with this PR's field naming).
 _DEFAULT_QKV_PARTICLE_SIMILARITY_THRESHOLD = -0.35
+
+# For OBJECT vocabulary clustering (Brown clustering replacement —
+# Round 24/25), the feature is the action-context count map
+# (Dict[action_token, count]) — the same shape of feature ACTION
+# clustering uses, just transposed (objects keyed by which actions
+# they co-occur with, instead of actions keyed by which objects).
+#
+# WHY THIS REPLACED THE ORIGINAL GREEDY ALL-PAIRS MERGE: profiling
+# (Round 24) found _cluster_object_vocabulary's greedy agglomerative
+# merge consuming 99.9% of a full train() call's time (1378s of
+# 1380s on a 6346-token corpus) — 27 MILLION calls to
+# _weighted_jaccard. The original docstring assumed the action-
+# co-occurrence graph is SPARSE ("typically O(N) candidate pairs"),
+# but at this corpus scale popular objects (e.g. "air", "manusia")
+# co-occur with dozens of distinct actions, making the candidate-pair
+# graph nearly DENSE — collapsing the intended pruning and producing
+# genuine O(N^2) behavior (27M ~ N^2/2 for N~7400 objects).
+#
+# Calibration (Round 25): 0.3 (matching the full-corpus granularity —
+# 213 clusters / 111 singletons vs the original's 219 / 123) was tried
+# first but FAILED the bootstrap_classifier's depth-only-corpus subset
+# test: CAUSAL (mengakibatkan/menyebabkan/memicu/...) and TEMPORAL
+# (ketika/sebelum/setelah/...) actions merged into one action cluster,
+# because on a smaller corpus subset their object-context distributions
+# were similar enough in cosine terms to cross 0.3. Raised to 0.4 —
+# verified to cleanly separate CAUSAL from TEMPORAL on BOTH the depth-
+# only subset and the full corpus, stable through 0.8 (no further
+# leakage), while staying close to the full-corpus granularity target
+# (233 clusters / 130 singletons vs original 219 / 123). Validated
+# 690x faster on the 6346-token exploration corpus (2.0s vs 1378.5s)
+# with the SAME sequential Q/K/V pattern already proven for ACTION
+# clustering above — not a new algorithm family, a reuse of one.
+_DEFAULT_QKV_OBJECT_SIMILARITY_THRESHOLD = 0.4
 
 
 # ----------------------------------------------------------------------
@@ -809,6 +847,19 @@ _MODIFIER_3TOK_RATE = 0.5
 # they get cluster_id = -1, same convention as unclustered actions).
 _PARTICLE_MIN_FREQ = 3
 
+# A cluster larger than this is too diffuse to trust as a merge
+# party: its centroid is an average over many members, so it drifts
+# toward the degenerate "mostly-zero" region of this 4-dim signature
+# and can spuriously pass the merge-gate's distance check against
+# genuinely unrelated clusters (re-discovered empirically: re-feeding
+# the same corpus repeatedly let new low-frequency candidates cross
+# _PARTICLE_MIN_FREQ, swell the noise cluster, and its now-diluted
+# centroid falsely matched the clean negator cluster). Clusters at or
+# under this size may still grow via normal single-token JOIN (the
+# weighted-centroid update), but never via cluster-pair MERGE — same
+# size bound as the chain-merge regression test's contract.
+_PARTICLE_MERGE_MAX_CLUSTER_SIZE = 6
+
 
 # ----------------------------------------------------------------------
 # Learner
@@ -862,6 +913,9 @@ class PositionalClusterLearner:
     )
     qkv_particle_similarity_threshold: float = (
         _DEFAULT_QKV_PARTICLE_SIMILARITY_THRESHOLD
+    )
+    qkv_object_similarity_threshold: float = (
+        _DEFAULT_QKV_OBJECT_SIMILARITY_THRESHOLD
     )
 
     positional_freq: Dict[str, Dict[int, int]] = field(default_factory=dict)
@@ -1053,6 +1107,22 @@ class PositionalClusterLearner:
     particle_cluster_id_of: Dict[str, int] = field(default_factory=dict)
     particle_clusters: Dict[int, Set[str]] = field(default_factory=dict)
     particle_cluster_labels: Dict[int, str] = field(default_factory=dict)
+
+    # _particle_cluster_centroids: {cluster_id: (centroid, weight)} —
+    # persisted across train() calls so that a token already locked
+    # into a cluster_id (>= 0) is NEVER re-derived from scratch on a
+    # later train() call. Without this, re-feeding the exact same
+    # corpus could still perturb the result: identical data doubles
+    # every token's count, which lets previously-too-rare candidates
+    # (below _PARTICLE_MIN_FREQ the first time) newly cross the floor,
+    # changing the candidate POOL on the second call even though the
+    # corpus itself didn't change — and a from-scratch recompute over
+    # a different pool can land anywhere. Persisting state means only
+    # genuinely NEW candidates are processed each call; everything
+    # already classified stays exactly as it was.
+    _particle_cluster_centroids: Dict[int, Tuple[Tuple[float, float, float, float], float]] = field(
+        default_factory=dict
+    )
 
     # ------------------------------------------------------------------
     # Clause coordinator clusters (found during the coordinate-clause
@@ -1738,43 +1808,41 @@ class PositionalClusterLearner:
         BEFORE ``_cluster_actions()`` so action clustering can use
         super-cluster distributions instead of literal object tokens.
 
-        Algorithm (pure Python, no sklearn / scipy):
+        Algorithm (sequential Q/K/V — replaces the original greedy
+        all-pairs merge, see ``_DEFAULT_QKV_OBJECT_SIMILARITY_THRESHOLD``
+        for the full rationale and Round 24/25 profiling evidence):
             1. Build the object vocabulary: every token that appears
                as an object of any action in ``action_object_freq``.
             2. For each object token, build its "action context
                distribution" = {action_token: count} aggregated across
-               all (action, object) pairs.
-            3. **Inverted index**: build action -> {objects that
-               co-occur with it}. Two objects are CANDIDATES for
-               merging only if they share at least one action. This
-               prunes the O(N^2) all-pairs scan down to the
-               actually-comparable pairs (typically O(N) for sparse
-               co-occurrence graphs).
-            4. Greedy agglomerative merge: start with each object in
-               its own cluster. Repeatedly find the candidate pair
-               with the highest *weighted* Jaccard similarity of
-               their action-context COUNT maps. If similarity >=
-               ``_BROWN_CLUSTER_SIMILARITY_THRESHOLD``, merge them.
-               Stop when no pair qualifies or the cluster count drops
-               to ``_BROWN_CLUSTER_MAX_CLUSTERS``.
+               all (action, object) pairs — this is the feature
+               vector (Query/Key), the SAME shape ``_cluster_actions``
+               uses for actions, just transposed.
+            3. Sort objects by descending total observation count, so
+               the most-observed objects seed the initial clusters
+               (same rationale as ``_cluster_action_group_qkv``: a
+               rare object's count map is too noisy to trust as a
+               cluster seed).
+            4. Sequential Q/K/V assignment: for each object, compute
+               cosine similarity between its feature vector (Query)
+               and every existing cluster's centroid (mean of member
+               feature vectors). If the best score >=
+               ``qkv_object_similarity_threshold``, join that cluster
+               and update its running centroid sum. Otherwise start a
+               new singleton cluster.
             5. Assign super-cluster ids (0, 1, 2, ...) and build both
                ``object_supercluster_id`` (forward map) and
                ``object_superclusters`` (inverse map).
 
-        Why *weighted* Jaccard on count maps (not plain Jaccard on
-        sets)? Plain Jaccard suffers from chain-merging: two objects
-        that share ONE action merge at Jaccard >= 0.13, then the
-        merged cluster's action set grows, enabling further merges
-        via different shared actions. The end result is one giant
-        super-cluster containing most of the object vocabulary.
-
-        Weighted Jaccard is more strict: it considers COUNT
-        distributions, not just set membership. Two objects that
-        share an action but at very different frequencies get a lower
-        similarity than two objects with matching count shapes. This
-        breaks the chain-merge: an object can merge with the growing
-        cluster only if its count distribution matches the cluster's
-        aggregated distribution, not just shares one action.
+        Why this replaced the weighted-Jaccard greedy merge: that
+        algorithm re-scanned ALL share-an-action candidate pairs on
+        EVERY merge step, which degrades to O(N^2) once the object
+        co-occurrence graph stops being sparse (common at corpus
+        scale — popular objects like "air" co-occur with dozens of
+        actions). Sequential Q/K/V assigns each object ONCE against
+        the current cluster set (a few dozen clusters, not thousands
+        of pairs) — same algorithmic shape already proven correct and
+        fast for ACTION clustering above.
 
         Reset contract: this method overwrites both fields from
         scratch, so it is safe to call on every train() (no stale
@@ -1786,7 +1854,7 @@ class PositionalClusterLearner:
         if not self.action_object_freq:
             return
 
-        # Step 1+2: build object vocabulary and action-context distributions.
+        # Build object vocabulary and action-context distributions.
         # object_actions[obj] = {action: count}
         object_actions: Dict[str, Dict[str, int]] = defaultdict(
             lambda: defaultdict(int)
@@ -1798,97 +1866,50 @@ class PositionalClusterLearner:
         if not object_actions:
             return
 
-        # Step 3: inverted index — action -> set of object indices that
-        # co-occur with it. Used to enumerate candidate pairs (objects
-        # that share at least one action) without scanning all O(N^2)
-        # pairs.
-        obj_list: List[str] = list(object_actions.keys())
-        obj_to_idx: Dict[str, int] = {obj: i for i, obj in enumerate(obj_list)}
-        action_to_obj_indices: Dict[str, Set[int]] = defaultdict(set)
-        for obj, actions in object_actions.items():
-            for action in actions:
-                action_to_obj_indices[action].add(obj_to_idx[obj])
+        threshold = self.qkv_object_similarity_threshold
 
-        # Step 4: greedy agglomerative merge using candidate pairs.
-        # Each cluster is (set_of_object_indices, dict_of_action_counts).
-        # Track cluster-level action -> set of cluster indices for
-        # candidate generation.
-        clusters: List[Tuple[Set[int], Dict[str, int]]] = [
-            ({i}, dict(object_actions[obj]))
-            for i, obj in enumerate(obj_list)
-        ]
-        # cluster_idx_for_obj: object idx -> cluster idx that contains it.
-        cluster_idx_for_obj: List[int] = list(range(len(obj_list)))
-        # action -> set of cluster indices that contain at least one
-        # object co-occurring with this action. Updated as clusters merge.
-        action_to_cluster_indices: Dict[str, Set[int]] = {
-            action: set(action_to_obj_indices[action])
-            for action in action_to_obj_indices
-        }
+        # Sort by descending total count; ties broken alphabetically
+        # for reproducibility (same rationale as _cluster_action_group_qkv).
+        sorted_objs = sorted(
+            object_actions.keys(),
+            key=lambda o: (-sum(object_actions[o].values()), o),
+        )
 
-        threshold = _BROWN_CLUSTER_SIMILARITY_THRESHOLD
-        max_clusters = _BROWN_CLUSTER_MAX_CLUSTERS
+        # Each cluster: (set_of_object_tokens, running_sum_action_count_map).
+        clusters: List[Tuple[Set[str], Dict[str, int]]] = []
 
-        merged = True
-        while merged and len(clusters) > max(1, max_clusters):
-            merged = False
-            # Enumerate candidate pairs: clusters that share at least
-            # one action.
-            candidate_set: Set[Tuple[int, int]] = set()
-            for cluster_indices in action_to_cluster_indices.values():
-                cluster_list = sorted(cluster_indices)
-                for i in range(len(cluster_list)):
-                    for j in range(i + 1, len(cluster_list)):
-                        ci, cj = cluster_list[i], cluster_list[j]
-                        if ci < cj:
-                            candidate_set.add((ci, cj))
-                        else:
-                            candidate_set.add((cj, ci))
+        for obj in sorted_objs:
+            query = object_actions[obj]
 
-            if not candidate_set:
-                break
-
-            best_i, best_j, best_sim = -1, -1, -1.0
-            for ci, cj in candidate_set:
-                sim = self._weighted_jaccard(
-                    clusters[ci][1], clusters[cj][1]
-                )
-                if sim >= threshold and sim > best_sim:
-                    best_sim = sim
-                    best_i, best_j = ci, cj
-
-            if best_i >= 0:
-                # Merge cluster best_j into cluster best_i.
-                objs_i, acts_i = clusters[best_i]
-                objs_j, acts_j = clusters[best_j]
-                objs_i.update(objs_j)
-                for act, count in acts_j.items():
-                    acts_i[act] = acts_i.get(act, 0) + count
-                # Update cluster_idx_for_obj for objects in best_j.
-                for obj_idx in objs_j:
-                    cluster_idx_for_obj[obj_idx] = best_i
-                # Remove best_j from action_to_cluster_indices.
-                for act in acts_j:
-                    action_to_cluster_indices[act].discard(best_j)
-                    if best_i not in action_to_cluster_indices[act]:
-                        action_to_cluster_indices[act].add(best_i)
-                # Mark cluster best_j as empty (will be filtered out
-                # at the end). We use a sentinel rather than removing
-                # from clusters list to keep indices stable.
-                clusters[best_j] = (set(), {})
-                merged = True
-
-        # Step 5: assign super-cluster ids and build inverse map.
-        # Filter out empty clusters (merged into others).
-        sc_id = 0
-        for cluster_objs, _acts in clusters:
-            if not cluster_objs:
+            if not clusters:
+                clusters.append(({obj}, dict(query)))
                 continue
-            obj_set = {obj_list[i] for i in cluster_objs}
-            self.object_superclusters[sc_id] = obj_set
+
+            scores: List[float] = []
+            for _objs, action_sum in clusters:
+                cluster_size = len(_objs)
+                centroid = {
+                    k: v / cluster_size for k, v in action_sum.items()
+                }
+                scores.append(self._cosine_similarity_sparse(query, centroid))
+
+            weights = self._softmax(scores)
+            best_idx = max(range(len(weights)), key=lambda i: weights[i])
+            best_score = scores[best_idx]
+
+            if best_score >= threshold:
+                member_set, action_sum = clusters[best_idx]
+                member_set.add(obj)
+                for k, v in query.items():
+                    action_sum[k] = action_sum.get(k, 0) + v
+            else:
+                clusters.append(({obj}, dict(query)))
+
+        # Assign super-cluster ids and build the inverse map.
+        for sc_id, (obj_set, _action_sum) in enumerate(clusters):
+            self.object_superclusters[sc_id] = set(obj_set)
             for obj in obj_set:
                 self.object_supercluster_id[obj] = sc_id
-            sc_id += 1
 
     # ------------------------------------------------------------------
     # Connector-signal detection (cluster-62 fix)
@@ -2177,15 +2198,23 @@ class PositionalClusterLearner:
         natively; threshold 0.5 on cosine reproduces the same
         separation with cleaner boundaries on noisy corpora.
 
-        Reset contract: overwrites particle_cluster_id_of and
-        particle_clusters from scratch on every call (cluster ids may
-        shift between train() calls, same as action cluster_id_of).
-        particle_cluster_labels is also reset, because labels assigned
-        to old cluster_ids are not meaningful for new ones — same
-        contract as cluster_labels being reset in train().
+        Persistence contract (changed from the original "reset from
+        scratch every call"): a token already locked into a REAL
+        cluster_id (>= 0) from a previous train() call is NEVER
+        reconsidered. Only tokens with no prior id, or previously
+        below the frequency floor (id == -1), are (re-)processed this
+        call. This was added after an empirical regression: re-feeding
+        the exact same corpus a second time changed cluster
+        composition, because doubling every count let some
+        previously-too-rare tokens newly cross ``_PARTICLE_MIN_FREQ``
+        — a different CANDIDATE POOL on the second call, and a
+        from-scratch recompute over a different pool can land
+        anywhere. Locking already-classified tokens means only
+        genuinely new evidence is ever processed; old, settled
+        clusters are immune to it by construction.
+        particle_cluster_labels is still reset every call, because
+        labels are a separate post-hoc step (same contract as before).
         """
-        self.particle_cluster_id_of = {}
-        self.particle_clusters = {}
         self.particle_cluster_labels = {}
 
         candidates: Set[str] = (
@@ -2205,6 +2234,28 @@ class PositionalClusterLearner:
         # every verb, since verbs are not nouns) leak into the particle
         # pool and pollute clusters with real content words.
         candidates -= set(self.action_object_freq.keys())
+
+        # Reconstruct the persisted cluster state from the previous
+        # call (empty on the very first call). Each entry tracks
+        # ``established=True`` — it existed before THIS call, so it
+        # may still grow via normal single-token JOIN, but may never
+        # again be a party to a cluster-pair MERGE (see merge-gate
+        # below). Locked tokens (cluster_id >= 0) are excluded from
+        # ``candidates`` entirely — they keep their prior membership
+        # untouched, not even re-scored.
+        locked_tokens = {
+            tok for tok, cid in self.particle_cluster_id_of.items() if cid >= 0
+        }
+        candidates -= locked_tokens
+
+        clusters: List[Tuple[Set[str], Tuple[float, float, float, float], float, bool]] = []
+        for cluster_id in sorted(self.particle_clusters.keys()):
+            members = self.particle_clusters[cluster_id]
+            centroid, weight = self._particle_cluster_centroids.get(
+                cluster_id, (self._compute_particle_signature(next(iter(members))), 1.0)
+            )
+            clusters.append((set(members), centroid, weight, True))
+
         if not candidates:
             return
 
@@ -2219,6 +2270,7 @@ class PositionalClusterLearner:
                 self.particle_cluster_id_of[tok] = -1
 
         if not clusterable:
+            self._rebuild_particle_outputs(clusters)
             return
 
         signatures: Dict[str, Tuple[float, float, float, float]] = {
@@ -2235,100 +2287,150 @@ class PositionalClusterLearner:
 
         threshold = self.qkv_particle_similarity_threshold
 
-        # Each cluster: (set_of_tokens, seed_signature). ``seed_signature``
-        # is the signature of the FIRST (highest-frequency) token that
-        # founded the cluster, and is NEVER updated as more members
-        # join. This is a deliberate anti-chain-merge guard.
+        # Each cluster: (set_of_tokens, weighted_centroid, total_weight).
+        # ``weighted_centroid`` starts as the founding (highest-
+        # frequency) member's own signature and is updated by a
+        # FREQUENCY-WEIGHTED running mean every time a new member
+        # joins — i.e. "every new seed slightly refines the old seeds'
+        # accuracy, weighted by how much evidence each side has".
         #
-        # BUG FOUND DURING BOS REVIEW (PR #106 follow-up): the original
-        # implementation compared each new candidate against the
-        # cluster's running-mean CENTROID (recomputed every merge).
-        # On this 4-dim signature, two of the four dimensions
-        # (pre_object_3tok_rate, bucket_entropy) are 0.0 for nearly
-        # every particle candidate — e.g. 'tidak'=(0.0, 0.019, 0.433,
-        # 0.0) vs 'asupan'=(0.0, 0.2, 0.865, 0.0). Cosine similarity on
-        # vectors that are mostly-zero in the same dimensions is
-        # DEGENERATE: it measures direction, not magnitude, so two
-        # vectors with very different "how often" magnitudes but the
-        # same "which dimensions are nonzero" pattern score spuriously
-        # high (~0.98 for the tidak/asupan pair above, despite them
-        # being unrelated). As low-frequency noise tokens got admitted
-        # one at a time, the running centroid drifted toward this
-        # degenerate "mostly-zero, medium-entropy" region, and kept
-        # admitting MORE unrelated tokens — a classic chain-merge
-        # (verified: pre-fix, the cluster containing 'tidak' ballooned
-        # from a clean 2-token {melainkan, tidak} — the PR #105 result
-        # — to a noisy 29-token grab-bag including 'asupan', 'benda',
-        # 'di', 'galah', etc.).
+        # This replaces two earlier, both-rejected designs:
+        #   (1) drifting EQUAL-weight running mean (pre-PR #105) —
+        #       caused chain-merge: a low-frequency noise token moved
+        #       the centroid by the same amount as the high-frequency
+        #       founder, so noise accumulated unchecked.
+        #   (2) frozen seed, never updated (PR #106/107) — safe, but
+        #       throws away real evidence: a cluster's reference point
+        #       never gets MORE accurate as more genuine members are
+        #       observed.
+        # Frequency-weighting is the middle ground: a token with total
+        # corpus frequency f moves the centroid by
+        #   f / (existing_total_weight + f)
+        # of the distance toward its own signature — i.e. the centroid
+        # becomes a frequency-weighted average of every member's
+        # signature, not just the founder's. A noise token (low f)
+        # pulls the centroid only a little; another high-frequency
+        # genuine member pulls it more, because it brings comparably
+        # strong evidence. Distance is Euclidean (PR #105 finding:
+        # cosine is degenerate on this mostly-zero 4-dim vector).
         #
-        # Fix: compare against the immutable SEED signature instead of
-        # a drifting mean. The seed is the highest-frequency (most
-        # statistically reliable) member of each cluster, so later
-        # low-frequency candidates are judged against a stable,
-        # trustworthy reference point rather than an average that they
-        # themselves could have helped distort.
-        clusters: List[Tuple[Set[str], Tuple[float, float, float, float]]] = []
-
+        # Each cluster tuple's 4th element, ``established``, marks
+        # whether the cluster existed BEFORE this call (came from
+        # persisted state above) or was created DURING this call. A
+        # merge may only combine two NOT-established (newly-formed
+        # this call) clusters — an established cluster can still grow
+        # via plain single-token JOIN, but can never again be a party
+        # to a cluster-pair MERGE. Without this, a brand-new
+        # low-frequency token (e.g. one that just crossed
+        # ``_PARTICLE_MIN_FREQ`` for the first time) could land
+        # ambiguously between an old, settled, PURE cluster (like the
+        # negator cluster) and an unrelated one, and drag the settled
+        # cluster into a merge it had no part in earning — exactly
+        # the regression that motivated this guard.
         for tok in sorted_particles:
             query = signatures[tok]
+            tok_weight = float(_total_freq(tok))
 
             if not clusters:
-                # First (highest-frequency) particle — seed the first
-                # cluster. Its signature becomes the permanent seed.
-                clusters.append(({tok}, query))
+                clusters.append(({tok}, query, tok_weight, False))
                 continue
 
-            # Compute similarity between Query and each existing
-            # cluster's SEED signature (not a recomputed centroid —
-            # see the anti-chain-merge note above).
-            #
-            # SECOND BUG FOUND DURING BOS REVIEW: even comparing
-            # against the (non-drifting) seed, COSINE similarity
-            # itself is the wrong metric for this signature. Cosine
-            # measures DIRECTION only, ignoring MAGNITUDE. On this
-            # 4-dim vector, two of four dimensions are 0.0 for nearly
-            # every token, so cosine effectively compares just 2
-            # dimensions — and a real negator like 'tidak'
-            # (0.0, 0.019, 0.433, 0.0) scores 0.909 cosine against an
-            # unrelated noise token like 'di' (0.0, 0.429, 0.835, 0.0)
-            # DESPITE their second dimension differing by 22x (0.019
-            # vs 0.429) — cosine only cares that both point in a
-            # "similar enough" direction, not that one token almost
-            # never sits in that position and the other often does.
-            # Euclidean distance, which IS magnitude-sensitive, gives
-            # 0.574 for the same pair (correctly far apart) — this is
-            # also the metric PR #105 validated as producing a clean
-            # {melainkan, tidak} cluster on this exact corpus.
-            #
-            # We keep the Q/K/V terminology (Query/Key roles, softmax
-            # weighting) but score similarity as negative Euclidean
-            # distance, so "higher score = more similar" still holds
-            # and the existing argmax/threshold logic below is
-            # unchanged.
             scores: List[float] = []
-            for _toks, seed_sig in clusters:
+            for _toks, centroid, _weight, _est in clusters:
                 dist = math.sqrt(
-                    sum((query[d] - seed_sig[d]) ** 2 for d in range(4))
+                    sum((query[d] - centroid[d]) ** 2 for d in range(4))
                 )
                 scores.append(-dist)
 
-            weights = self._softmax(scores)
-            best_idx = max(range(len(weights)), key=lambda i: weights[i])
+            ranked = sorted(range(len(scores)), key=lambda i: -scores[i])
+            best_idx = ranked[0]
             best_score = scores[best_idx]
 
-            if best_score >= threshold:
-                # Assign to existing cluster. Seed signature is NOT
-                # updated — it stays anchored to the founding member.
-                member_set, _seed_sig = clusters[best_idx]
-                member_set.add(tok)
-            else:
-                # No existing cluster's seed is similar enough —
-                # create a new singleton cluster with this particle as
-                # its own (future) seed.
-                clusters.append(({tok}, query))
+            # Conflict: the new token clears the join threshold against
+            # TWO existing clusters, not just one — i.e. it sits in the
+            # overlap between two patterns the data hasn't yet shown to
+            # be distinct. Resolution: merge those two old clusters (the
+            # new evidence proves they are one pattern, not two) rather
+            # than arbitrarily picking one. This is one-directional
+            # (merge only, never split) so it can't oscillate — at most
+            # it reduces the cluster count, never increases ambiguity.
+            second_idx = ranked[1] if len(ranked) > 1 else None
+            second_score = scores[second_idx] if second_idx is not None else None
 
-        for cluster_id, (toks, _seed_sig) in enumerate(clusters):
+            centroid_consistent = False
+            eligible_for_merge = (
+                second_idx is not None
+                and len(clusters[best_idx][0]) <= _PARTICLE_MERGE_MAX_CLUSTER_SIZE
+                and len(clusters[second_idx][0]) <= _PARTICLE_MERGE_MAX_CLUSTER_SIZE
+                and not clusters[best_idx][3]
+                and not clusters[second_idx][3]
+            )
+            if (
+                best_score >= threshold
+                and second_score is not None
+                and second_score >= threshold
+                and eligible_for_merge
+            ):
+                # The new token is ambiguous between two old clusters —
+                # but that alone is not proof those two clusters are
+                # one pattern. Validate independently: do the two old
+                # clusters' OWN centroids agree with each other, with
+                # no reference to this token at all? Only if BOTH the
+                # token's evidence AND the clusters' own mutual
+                # evidence agree do we merge. A token that is merely an
+                # ambiguous outlier (centroids themselves far apart)
+                # must not be allowed to force two distinct old
+                # patterns together.
+                _members_a, centroid_a, _weight_a, _est_a = clusters[best_idx]
+                _members_b, centroid_b, _weight_b, _est_b = clusters[second_idx]
+                centroid_dist = math.sqrt(
+                    sum((centroid_a[d] - centroid_b[d]) ** 2 for d in range(4))
+                )
+                centroid_consistent = (-centroid_dist) >= threshold
+
+            if centroid_consistent:
+                members_a, centroid_a, weight_a, _est_a = clusters[best_idx]
+                members_b, centroid_b, weight_b, _est_b = clusters[second_idx]
+                merged_members = members_a | members_b | {tok}
+                merged_weight = weight_a + weight_b + tok_weight
+                merged_centroid = tuple(
+                    (centroid_a[d] * weight_a + centroid_b[d] * weight_b + query[d] * tok_weight)
+                    / merged_weight
+                    for d in range(4)
+                )
+                for idx in sorted([best_idx, second_idx], reverse=True):
+                    clusters.pop(idx)
+                clusters.append((merged_members, merged_centroid, merged_weight, False))
+            elif best_score >= threshold:
+                member_set, centroid, total_weight, established = clusters[best_idx]
+                member_set.add(tok)
+                new_total = total_weight + tok_weight
+                new_centroid = tuple(
+                    (centroid[d] * total_weight + query[d] * tok_weight) / new_total
+                    for d in range(4)
+                )
+                clusters[best_idx] = (member_set, new_centroid, new_total, established)
+            else:
+                clusters.append(({tok}, query, tok_weight, False))
+
+        self._rebuild_particle_outputs(clusters)
+
+    def _rebuild_particle_outputs(
+        self,
+        clusters: List[Tuple[Set[str], Tuple[float, float, float, float], float, bool]],
+    ) -> None:
+        """Write ``clusters`` back to particle_clusters/particle_cluster_id_of
+        and persist each cluster's centroid+weight for the next train()
+        call. Cluster ids are simply the list index — established
+        clusters were appended first (in their original sorted-id
+        order) by the caller, so their ids stay stable across calls;
+        any newly-formed clusters get the next-available trailing ids.
+        """
+        self.particle_clusters = {}
+        self._particle_cluster_centroids = {}
+        for cluster_id, (toks, centroid, weight, _established) in enumerate(clusters):
             self.particle_clusters[cluster_id] = toks
+            self._particle_cluster_centroids[cluster_id] = (centroid, weight)
             for tok in toks:
                 self.particle_cluster_id_of[tok] = cluster_id
 
@@ -4044,6 +4146,185 @@ class PositionalClusterLearner:
             negated=negated,
         )
 
+    def spo_embedded(self, text: str) -> "EmbeddedSPO":
+        """Like :meth:`spo`, but recursively re-parses the object span
+        as its OWN clause when it contains a real ACTION token.
+
+        Background (Round 22-23 investigation): ``spo()`` flattens
+        everything after the predicate into one object string,
+        regardless of whether it's a flat noun/agent phrase ("oleh
+        kucing" -> object="kucing") or itself a full embedded clause
+        with its own subject+predicate ("bahwa pasar perlu dikontrol"
+        -> object="pasar dikontrol secara kuat", losing the fact that
+        "pasar" is the embedded clause's OWN subject, not part of a
+        flat noun phrase). Proven empirically (Round 23) that no
+        single-token surface statistic (span-length, particle cluster
+        membership, bigram conditioning) can distinguish these two
+        cases from the PARTICLE alone — `oleh` and `bahwa` are
+        statistically identical on every signal tried. The only
+        remaining signal is STRUCTURAL: does the object span, when
+        parsed with the SAME SVO machinery, contain a real ACTION of
+        its own?
+
+        Why this is INFERENCE-time, not training-time: training-time
+        recursion (cleaning ``action_object_freq`` at extraction) was
+        considered and rejected for Round 24 scoping — Pass 2
+        extraction runs BEFORE clustering, so ``cluster_id_of`` /
+        ``_is_action_token`` (which this recursion needs) don't exist
+        yet at that point (chicken-egg). At INFERENCE time, training
+        is already complete, so no such ordering problem exists. This
+        means ``action_object_freq`` itself is NOT cleaned by this
+        method — Cluster 96-style noise in the training statistics is
+        unaffected; only the user-facing ``spo()``-shaped query result
+        gets the more accurate, structured answer.
+
+        Returns an :class:`EmbeddedSPO` with ``embedded=None`` when
+        the object span has no ACTION of its own (the `oleh`-class:
+        flat agent/noun phrase) and a nested :class:`EmbeddedSPO` when
+        it does (the `bahwa`-class: object span is itself a clause).
+        Only ONE level of recursion — Round 11's scoping found no
+        evidence of multi-level nesting in the corpus, so a second
+        recursive call is not attempted.
+
+        Implementation note — why this does NOT simply recurse on
+        ``spo(text).object``: ``_parse_clause_spo`` defensively BREAKS
+        on the first new ACTION token it meets after the predicate
+        (the assumption being the caller's anchor-split already
+        separated independent clauses, so a second ACTION inside one
+        clause means stop). For an un-anchored `bahwa`-clause (`bahwa`
+        is statistically unremarkable — see this method's docstring
+        above — so it often does NOT get recognised as a clause-anchor
+        particle), that defensive break truncates the object BEFORE
+        the embedded predicate is ever reached, so recursing on the
+        already-truncated string would never see it. This method
+        instead re-derives the RAW (untruncated) sub-clause tokens via
+        the same anchor-split pipeline ``spo()`` uses internally, and
+        recurses on everything after the predicate's position in that
+        raw token list.
+        """
+        if not self.is_trained:
+            flat = self.fallback.spo(text)
+            return EmbeddedSPO(
+                subject=flat.subject, predicate=flat.predicate,
+                object=flat.object, embedded=None, raw=flat.raw,
+                negated=flat.negated,
+            )
+
+        raw = (text or "").strip()
+        if not raw:
+            return EmbeddedSPO(
+                subject="", predicate="", object="", embedded=None,
+                raw=raw, negated=False,
+            )
+
+        normalized = re.sub(r"\s+", " ", raw.lower())
+        tokens = normalized.split(" ")
+
+        if len(tokens) < 3:
+            flat = self.fallback.spo(text)
+            return EmbeddedSPO(
+                subject=flat.subject, predicate=flat.predicate,
+                object=flat.object, embedded=None, raw=flat.raw,
+                negated=flat.negated,
+            )
+
+        # Same anchor-split pipeline as _parse_all_clauses, but keep
+        # the RAW sub-clause tokens alongside each parse result so we
+        # can recurse on the untruncated span below.
+        action_positions = self._find_action_positions(tokens)
+        particle_positions = self._find_particle_positions(tokens)
+        anchors = self._detect_clause_anchors(
+            tokens, action_positions, particle_positions,
+        )
+        boundaries = self._compute_clause_boundaries(anchors, action_positions)
+        sub_clauses = self._split_tokens_at_boundaries(tokens, boundaries)
+
+        parsed_with_raw: List[
+            Tuple[Tuple[List[str], str, List[str]], List[str]]
+        ] = []
+        for sc_tokens in sub_clauses:
+            parsed = self._parse_clause_spo(sc_tokens)
+            if parsed is not None:
+                parsed_with_raw.append((parsed, sc_tokens))
+
+        if not parsed_with_raw:
+            flat = self.fallback.spo(text)
+            return EmbeddedSPO(
+                subject=flat.subject, predicate=flat.predicate,
+                object=flat.object, embedded=None, raw=flat.raw,
+                negated=flat.negated,
+            )
+
+        # Same "most complete, ties broken by latest" selection as spo().
+        def _completeness(p: Tuple[List[str], str, List[str]]) -> int:
+            subj, _act, obj = p
+            score = 1  # action always present
+            if subj:
+                score += 1
+            if obj:
+                score += 1
+            return score
+
+        max_score = max(_completeness(p) for p, _ in parsed_with_raw)
+        main_parsed, main_raw = None, None
+        for p, sc in parsed_with_raw:
+            if _completeness(p) == max_score:
+                main_parsed, main_raw = p, sc
+        assert main_parsed is not None and main_raw is not None
+
+        subj_tokens, action_token, obj_tokens = main_parsed
+        subject = " ".join(subj_tokens)
+        flat_object = " ".join(obj_tokens)
+        negated = self._has_negation_before(subject)
+
+        # Recurse on the RAW span after the predicate's position in
+        # the sub-clause's untruncated token list — NOT on flat_object,
+        # which may already be cut short by _parse_clause_spo's
+        # defensive break (see this method's implementation note).
+        action_idx = main_raw.index(action_token)
+        raw_after = main_raw[action_idx + 1:]
+
+        embedded: Optional["EmbeddedSPO"] = None
+        if self._find_action_positions(raw_after):
+            sub_parse = self._parse_clause_spo(raw_after)
+            if sub_parse is not None:
+                sub_subj_tokens, sub_action, sub_obj_tokens = sub_parse
+                # Structural well-formedness gate (NOT a per-token
+                # fallback/exception — applies uniformly to every
+                # candidate): a genuine clause needs at least TWO of
+                # its three SPO slots filled. A single bare token that
+                # happens to pass _is_action_token (e.g. via verb
+                # morphology coincidence — see _looks_like_verb's
+                # documented "bel-" collision, "belalai" vs "belajar",
+                # a known, deliberately-accepted trade-off since Round
+                # 10, NOT something this gate tries to fix) produces
+                # subject="" AND object="" when it's the only token in
+                # raw_after — that's not a clause, it's a single
+                # mis-tagged token with nothing around it. Requiring
+                # >=2 filled slots rejects that case without touching
+                # _looks_like_verb or adding any token-specific check.
+                has_subject = bool(sub_subj_tokens)
+                has_object = bool(sub_obj_tokens)
+                if self._is_action_token(sub_action) and (has_subject or has_object):
+                    sub_subject = " ".join(sub_subj_tokens)
+                    embedded = EmbeddedSPO(
+                        subject=sub_subject,
+                        predicate=sub_action,
+                        object=" ".join(sub_obj_tokens),
+                        embedded=None,
+                        raw=" ".join(raw_after),
+                        negated=self._has_negation_before(sub_subject),
+                    )
+
+        return EmbeddedSPO(
+            subject=subject,
+            predicate=action_token,
+            object=flat_object,
+            embedded=embedded,
+            raw=raw,
+            negated=negated,
+        )
+
     # ------------------------------------------------------------------
     # Public API: persistence
     # ------------------------------------------------------------------
@@ -4098,6 +4379,7 @@ class PositionalClusterLearner:
             # reproduces the same clustering behaviour).
             "qkv_action_similarity_threshold": self.qkv_action_similarity_threshold,
             "qkv_particle_similarity_threshold": self.qkv_particle_similarity_threshold,
+            "qkv_object_similarity_threshold": self.qkv_object_similarity_threshold,
             "positional_freq": {
                 tok: {str(b): c for b, c in pos_map.items()}
                 for tok, pos_map in self.positional_freq.items()
@@ -4265,6 +4547,12 @@ class PositionalClusterLearner:
                 raw.get(
                     "qkv_particle_similarity_threshold",
                     _DEFAULT_QKV_PARTICLE_SIMILARITY_THRESHOLD,
+                )
+            ),
+            qkv_object_similarity_threshold=float(
+                raw.get(
+                    "qkv_object_similarity_threshold",
+                    _DEFAULT_QKV_OBJECT_SIMILARITY_THRESHOLD,
                 )
             ),
         )
@@ -4486,12 +4774,27 @@ class PositionalClusterLearner:
 
         Hyphens are preserved (e.g. ``"lumba-lumba"`` stays one token)
         because they're part of the word in Bahasa Indonesia.
+
+        Round 28 fix: a comma/period flanked by digits on both sides
+        (Indonesian decimal separator "7,32" or thousands separator
+        "20.000") is stripped rather than turned into a space — found
+        via held-out Wikipedia text, where "gawang memiliki lebar
+        7,32 meter" was fragmenting into separate "7" and "32" tokens,
+        each polluting OBJECT spans as spurious standalone numbers.
+        A true sentence-ending period is never digit-flanked (it's
+        followed by whitespace/end-of-string), so this doesn't affect
+        normal sentence splitting.
         """
         if not text:
             return []
+        # Merge digit-flanked comma/period into the surrounding number
+        # (decimal/thousands separator) BEFORE the general punctuation
+        # pass below, so "7,32"/"20.000" stay one token instead of
+        # fragmenting at the separator.
+        no_numeric_sep = re.sub(r"(?<=\d)[,.](?=\d)", "", text.lower())
         # Replace common punctuation with spaces (NOT hyphens, which
         # are intra-word in Indonesian: "lumba-lumba", "kupu-kupu").
-        no_punct = re.sub(r"[,\.;:!?()\[\]{}\"'/\\]", " ", text.lower())
+        no_punct = re.sub(r"[,\.;:!?()\[\]{}\"'/\\]", " ", no_numeric_sep)
         normalized = re.sub(r"\s+", " ", no_punct.strip())
         if not normalized:
             return []
