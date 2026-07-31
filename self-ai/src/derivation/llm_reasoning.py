@@ -247,7 +247,13 @@ main();
             return None
 
         try:
-            from derivation.model_registry import get_shared_qwen
+            from derivation.model_registry import get_shared_qwen, is_ollama_available, ollama_generate
+
+            # Try Ollama first (no torch dependency)
+            if is_ollama_available():
+                response = ollama_generate(prompt, max_tokens=200)
+                if response:
+                    return self._parse_response(response)
 
             model, tokenizer = get_shared_qwen()
             if model is None or tokenizer is None:

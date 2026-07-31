@@ -210,10 +210,61 @@ def get_shared_qwen():
 
 
 def is_qwen_available() -> bool:
-    """Quick check if Qwen3-0.6B is cached locally (without loading it)."""
-    return _is_model_cached('Qwen/Qwen3-0.6B')
+    """Quick check if Qwen3-0.6B is available — via transformers or Ollama."""
+    return _is_model_cached('Qwen/Qwen3-0.6B') or is_ollama_available()
 
 
 def is_embedding_model_available() -> bool:
     """Quick check if bge-m3 is cached locally (without loading it)."""
     return _is_model_cached('BAAI/bge-m3')
+
+
+# ═══════════════════════════════════════════════════════
+#  Ollama backend — fallback when transformers/torch unavailable
+# ═══════════════════════════════════════════════════════
+
+_ollama_available: bool | None = None
+OLLAMA_BASE_URL = "http://localhost:11434"
+OLLAMA_MODEL = "qwen3:0.6b"
+
+
+def is_ollama_available() -> bool:
+    """Check if Ollama is running and has qwen3:0.6b pulled."""
+    global _ollama_available
+    if _ollama_available is not None:
+        return _ollama_available
+    try:
+        import urllib.request
+        req = urllib.request.Request(f"{OLLAMA_BASE_URL}/api/tags")
+        with urllib.request.urlopen(req, timeout=2) as r:
+            import json
+            data = json.loads(r.read())
+            models = [m['name'] for m in data.get('models', [])]
+            _ollama_available = any(OLLAMA_MODEL.split(':')[0] in m for m in models)
+    except Exception:
+        _ollama_available = False
+    return _ollama_available
+
+
+def ollama_generate(prompt: str, max_tokens: int = 512) -> str | None:
+    """Generate text via Ollama HTTP API. Returns None on failure."""
+    try:
+        import urllib.request, json
+        payload = json.dumps({
+            "model": OLLAMA_MODEL,
+            "prompt": prompt,
+            "stream": False,
+            "options": {"num_predict": max_tokens, "temperature": 0.3}
+        }).encode()
+        req = urllib.request.Request(
+            f"{OLLAMA_BASE_URL}/api/generate",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST"
+        )
+        with urllib.request.urlopen(req, timeout=60) as r:
+            data = json.loads(r.read())
+            return data.get("response", "").strip()
+    except Exception as e:
+        logger.warning("Ollama generate failed: %s", e)
+        return None
